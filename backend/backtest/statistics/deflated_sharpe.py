@@ -45,9 +45,11 @@ class DSRResult:
     note: str = ""
 
     def is_significant(self, alpha: float = 0.05) -> bool:
+        """Return True if p_value is below the given significance threshold."""
         return self.p_value < alpha
 
     def to_dict(self) -> dict:
+        """Serialize DSR result to dictionary."""
         return {
             "sharpe": round(self.sharpe, 4),
             "sharpe_threshold": round(self.sharpe_threshold, 4),
@@ -62,6 +64,7 @@ class DSRResult:
 
 
 def _norm_cdf(x: float) -> float:
+    """Standard normal cumulative distribution function."""
     return 0.5 * (1 + math.erf(x / math.sqrt(2)))
 
 

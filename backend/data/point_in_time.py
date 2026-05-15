@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +45,18 @@ class PITSession:
     其他属性透传给底层 db。
     """
 
-    def __init__(self, db, as_of: str):
+    def __init__(self, db, as_of: str) -> None:
+        """Wrap db session with a point-in-time cutoff date."""
         self._db = db
         self._as_of = as_of
 
     @property
     def as_of(self) -> str:
+        """Return the as-of cutoff date string."""
         return self._as_of
 
-    def query(self, *entities, **kwargs):
+    def query(self, *entities, **kwargs) -> Any:
+        """Intercept query and apply date filter for registered PIT models."""
         q = self._db.query(*entities, **kwargs)
         for ent in entities:
             cls_name = getattr(ent, "__name__", None)
@@ -66,12 +70,13 @@ class PITSession:
                     q = q.filter(col <= self._as_of)
         return q
 
-    def __getattr__(self, name):
+    def __getattr__(self, name) -> Any:
+        """Delegate all other attribute access to the underlying db session."""
         return getattr(self._db, name)
 
 
 @contextmanager
-def pit_session(db, as_of: str):
+def pit_session(db, as_of: str) -> Iterator["PITSession"]:
     """上下文管理器版本。"""
     yield PITSession(db, as_of)
 

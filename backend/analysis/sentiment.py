@@ -36,6 +36,7 @@ _FALLBACK = {"sentiment": 0.0, "summary": "无相关新闻", "impact": "short", 
 
 
 def _titles_hash(titles: list[str]) -> str:
+    """Return MD5 hex digest of sorted title list for cache keying."""
     return hashlib.md5("|".join(sorted(titles)).encode()).hexdigest()
 
 

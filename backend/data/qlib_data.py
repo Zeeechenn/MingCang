@@ -20,6 +20,7 @@ FEATURE_COLS = [
 
 
 def _build_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute all technical factors and return the enriched DataFrame with label."""
     df = add_all_factors(df.copy())
     close = df["close"]
 

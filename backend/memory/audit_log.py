@@ -6,6 +6,7 @@ from sqlalchemy import text
 
 
 def _ensure_schema(db) -> None:
+    """Create the audit_log_fts virtual table if it does not exist."""
     bind = db.get_bind()
     with bind.begin() as conn:
         conn.execute(text("""
@@ -24,6 +25,7 @@ def audit_write(
     related_scope: str | None = None,
     timestamp: str | None = None,
 ) -> None:
+    """Append an event to the audit log FTS table."""
     _ensure_schema(db)
     ts = timestamp or datetime.utcnow().isoformat(timespec="seconds")
     db.execute(text("""
@@ -40,6 +42,7 @@ def audit_write(
 
 
 def audit_search(db, query: str, *, limit: int = 20) -> list[dict]:
+    """Full-text search the audit log and return matching rows."""
     _ensure_schema(db)
     rows = db.execute(text("""
         SELECT timestamp, event_type, content, related_symbol, related_scope

@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "stock-sage"
+version = "0.1.0"
+description = "A股辅助决策工具——量化信号 + LLM 情感分析 + 多 Agent 风控"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic-settings>=2.2.0",
+    "sqlalchemy>=2.0.0",
+    "requests>=2.31.0",
+    "akshare>=1.12.0",
+    "yfinance>=0.2.38",
+    "anthropic>=0.25.0",
+    "apscheduler>=3.10.0",
+    "feedparser>=6.0.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+    "lightgbm>=4.3.0",
+    "scikit-learn>=1.4.0",
+    "python-dotenv>=1.0.0",
+    "openai>=1.0.0",
+    "backtrader>=1.9.78.123",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long — ruff format handles this
+    "B008",  # do not perform function calls in default arguments (FastAPI pattern)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_return_any = false
+warn_unused_ignores = true
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["akshare.*", "backtrader.*", "qlib.*", "alphalens.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

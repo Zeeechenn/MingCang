@@ -18,6 +18,7 @@ router = APIRouter()
 # ── 内部工具 ─────────────────────────────────────────────────────────
 
 def _backfill_task(symbol: str, market: str) -> None:
+    """Background task: backfill price data for the given symbol."""
     from backend.data.market import backfill_if_needed
     db = SessionLocal()
     try:
@@ -27,6 +28,7 @@ def _backfill_task(symbol: str, market: str) -> None:
 
 
 def _latest_signal(symbol: str, db: Session) -> Signal | None:
+    """Return the most recent Signal row for symbol, or None."""
     return (
         db.query(Signal)
         .filter(Signal.symbol == symbol)
@@ -70,6 +72,7 @@ def _signal_to_schema(sig: Signal) -> SignalOut:
 # ── 自选股 ────────────────────────────────────────────────────────────
 
 def _label_to_schema(lt) -> LongTermLabelOut | None:
+    """Convert a LongTermLabel ORM row to the API schema, or None."""
     if lt is None:
         return None
     return LongTermLabelOut(
@@ -85,6 +88,7 @@ def _label_to_schema(lt) -> LongTermLabelOut | None:
 
 @router.get("/watchlist", response_model=list[WatchlistItem])
 def get_watchlist(db: Session = Depends(get_db)):
+    """Return all active watchlist stocks with their latest signal and long-term label."""
     from backend.agents.long_term.storage import bulk_get_labels
 
     stocks = db.query(Stock).filter(Stock.active == True).all()
@@ -131,6 +135,7 @@ def add_stock(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    """Add or reactivate a stock in the watchlist and trigger backfill."""
     if market not in ("CN", "US"):
         raise HTTPException(400, "market must be CN or US")
     existing = db.query(Stock).filter(Stock.symbol == symbol).first()
@@ -145,6 +150,7 @@ def add_stock(
 
 @router.delete("/watchlist/{symbol}")
 def remove_stock(symbol: str, db: Session = Depends(get_db)):
+    """Soft-delete a stock from the watchlist (sets active=False)."""
     stock = db.query(Stock).filter(Stock.symbol == symbol).first()
     if stock:
         stock.active = False
@@ -156,6 +162,7 @@ def remove_stock(symbol: str, db: Session = Depends(get_db)):
 
 @router.get("/signals/{symbol}/latest", response_model=SignalOut)
 def get_latest_signal(symbol: str, db: Session = Depends(get_db)):
+    """Return the most recent signal for a symbol."""
     sig = _latest_signal(symbol, db)
     if not sig:
         raise HTTPException(404, "No signal found")
@@ -164,6 +171,7 @@ def get_latest_signal(symbol: str, db: Session = Depends(get_db)):
 
 @router.get("/signals/{symbol}", response_model=list[SignalOut])
 def get_signals(symbol: str, limit: int = 30, db: Session = Depends(get_db)):
+    """Return the most recent signals for a symbol up to limit."""
     sigs = (
         db.query(Signal)
         .filter(Signal.symbol == symbol)
@@ -178,6 +186,7 @@ def get_signals(symbol: str, limit: int = 30, db: Session = Depends(get_db)):
 
 @router.get("/prices/{symbol}", response_model=list[PriceBar])
 def get_prices(symbol: str, days: int = 120, db: Session = Depends(get_db)):
+    """Return OHLCV price bars for a symbol over the past days."""
     cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
     rows = (
         db.query(Price)
@@ -201,6 +210,7 @@ def get_prices(symbol: str, days: int = 120, db: Session = Depends(get_db)):
 # ── 模型 ──────────────────────────────────────────────────────────────
 
 def _train_task() -> None:
+    """Background task: train the LightGBM Alpha model."""
     from backend.data.database import SessionLocal
     from backend.analysis.qlib_engine import train
     db = SessionLocal()
@@ -310,7 +320,8 @@ def eval_signals(symbol: str, days: int = 60, db: Session = Depends(get_db)):
                 composite_score=sig.composite_score,
             ))
 
-    def _avg(lst):
+    def _avg(lst) -> float | None:
+        """Return the rounded average of a list, or None if empty."""
         return round(sum(lst) / len(lst), 2) if lst else None
 
     return SignalEvalOut(
@@ -331,6 +342,7 @@ def eval_signals(symbol: str, days: int = 60, db: Session = Depends(get_db)):
 
 @router.get("/system/status")
 def system_status(db: Session = Depends(get_db)):
+    """Return database and long-term label status summary."""
     from backend.config import settings
     from pathlib import Path
 
@@ -418,6 +430,7 @@ def system_health(db: Session = Depends(get_db)):
 
 @router.post("/system/kill-switch/trigger")
 def trigger_kill_switch(reason: str = "manual"):
+    """Manually trigger the kill switch with a reason string."""
     from backend.ops import kill_switch
     state = kill_switch.trigger(reason=reason, metadata={"source": "api"})
     return state.to_dict()
@@ -425,6 +438,7 @@ def trigger_kill_switch(reason: str = "manual"):
 
 @router.post("/system/kill-switch/reset")
 def reset_kill_switch():
+    """Reset an active kill switch state."""
     from backend.ops import kill_switch
     kill_switch.reset()
     return {"reset": True}
@@ -434,6 +448,7 @@ def reset_kill_switch():
 
 @router.get("/news/{symbol}", response_model=list[NewsOut])
 def get_news(symbol: str, hours: int = 48, db: Session = Depends(get_db)):
+    """Return recent news items for a symbol within the past hours."""
     cutoff = datetime.utcnow() - timedelta(hours=hours)
     rows = (
         db.query(NewsItem)

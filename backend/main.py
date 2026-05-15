@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 from pathlib import Path
+from typing import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.api.routes import router
@@ -12,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """FastAPI lifespan: initialize DB and scheduler on startup, shut down on exit."""
     init_db()
     from backend.config import settings
     os.environ.setdefault("MPLCONFIGDIR", str(Path.home() / ".matplotlib"))
@@ -37,5 +39,6 @@ app.include_router(router, prefix="/api")
 
 
 @app.get("/health")
-def health():
+def health() -> dict:
+    """Simple liveness check endpoint."""
     return {"status": "ok"}

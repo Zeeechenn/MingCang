@@ -19,6 +19,7 @@ LONG_RECS = set(entry_recommendations(include_legacy=True))
 
 
 def _prices(db, symbol: str, as_of_end: str | None = None) -> list[Price]:
+    """Fetch price rows for a symbol, optionally capped at as_of_end."""
     q = db.query(Price).filter(Price.symbol == symbol)
     if as_of_end:
         q = q.filter(Price.date <= as_of_end)
@@ -26,15 +27,18 @@ def _prices(db, symbol: str, as_of_end: str | None = None) -> list[Price]:
 
 
 def _price_index(rows: list[Price]) -> dict[str, int]:
+    """Build a date-to-index lookup map from a price row list."""
     return {row.date: i for i, row in enumerate(rows)}
 
 
-def _exit_fixed(rows, start_idx: int, hold_days: int):
+def _exit_fixed(rows, start_idx: int, hold_days: int) -> tuple[int, str]:
+    """Exit after a fixed number of hold days."""
     idx = min(start_idx + hold_days, len(rows) - 1)
     return idx, f"fixed_{hold_days}d"
 
 
-def _exit_atr_bracket(rows, start_idx: int, stop_mult: float, take_mult: float):
+def _exit_atr_bracket(rows, start_idx: int, stop_mult: float, take_mult: float) -> tuple[int, str]:
+    """Exit when price hits ATR-based stop or take-profit bracket."""
     entry = rows[start_idx].close
     atr = rows[start_idx].atr14 or entry * 0.03
     stop = entry - atr * stop_mult
@@ -47,7 +51,8 @@ def _exit_atr_bracket(rows, start_idx: int, stop_mult: float, take_mult: float):
     return len(rows) - 1, "end"
 
 
-def _exit_trailing(rows, start_idx: int, atr_mult: float):
+def _exit_trailing(rows, start_idx: int, atr_mult: float) -> tuple[int, str]:
+    """Exit using a dynamic trailing stop based on ATR."""
     entry = rows[start_idx].close
     atr = rows[start_idx].atr14 or entry * 0.03
     trailing = entry - atr * atr_mult
@@ -58,7 +63,8 @@ def _exit_trailing(rows, start_idx: int, atr_mult: float):
     return len(rows) - 1, "end"
 
 
-def _exit_signal_reverse(rows, start_idx: int, signal_by_date: dict[str, Signal]):
+def _exit_signal_reverse(rows, start_idx: int, signal_by_date: dict[str, Signal]) -> tuple[int, str]:
+    """Exit when a subsequent signal indicates a composite score below -15."""
     for idx in range(start_idx + 1, len(rows)):
         sig = signal_by_date.get(rows[idx].date)
         if sig and sig.composite_score < -15:
@@ -67,6 +73,7 @@ def _exit_signal_reverse(rows, start_idx: int, signal_by_date: dict[str, Signal]
 
 
 def _metrics(returns: list[float], reasons: list[str]) -> dict:
+    """Compute trade performance metrics from a list of returns."""
     if not returns:
         return {"trades": 0}
     wins = [r for r in returns if r > 0]
@@ -129,6 +136,7 @@ def _run_scan(
     as_of_start: str | None = None,
     as_of_end: str | None = None,
 ) -> dict[str, dict]:
+    """Scan all signals across all exit strategies and return per-strategy metrics."""
     symbols = [r[0] for r in db.query(Signal.symbol).distinct().all()]
     experiments = {
         "fixed_5d": lambda rows, idx, sigs: _exit_fixed(rows, idx, 5),
@@ -212,7 +220,8 @@ def walk_forward_eval(
 
     windows = generate_windows(start, end, train_days, test_days, step_days)
 
-    def evaluator(window):
+    def evaluator(window) -> dict:
+        """Select best strategy in train window and evaluate it on test window."""
         train_res = run(as_of_start=window.train_start,
                         as_of_end=window.train_end, db=db)
         valid = {n: m for n, m in train_res.items() if m.get("trades", 0) > 0}

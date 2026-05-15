@@ -148,6 +148,7 @@ settings = Settings()
 
 
 def _parse_date(value: str) -> date:
+    """Parse an ISO date string to a date object."""
     return date.fromisoformat(value)
 
 

@@ -13,6 +13,7 @@ NEGATIVE_HINTS = (
 
 
 def should_remember(text: str, *, category: str | None = None) -> bool:
+    """Heuristically decide whether a piece of text should be persisted to memory."""
     normalized = text.strip().lower()
     if not normalized:
         return False

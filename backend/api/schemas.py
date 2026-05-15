@@ -39,7 +39,7 @@ class SignalOut(BaseModel):
 
     @field_validator("llm_arbitration", mode="before")
     @classmethod
-    def parse_llm_rationale(cls, v):
+    def parse_llm_rationale(cls, v) -> dict | None:
         """llm_rationale 字段存的是 JSON 字符串，自动反序列化"""
         if v is None:
             return None

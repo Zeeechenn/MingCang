@@ -10,9 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 def _retry(max_attempts: int = 3, delay: float = 1.0):
+    """Retry decorator factory with exponential backoff for news fetchers."""
     def decorator(fn):
+        """Inner decorator."""
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
+            """Wrapped function with retry logic."""
             for attempt in range(max_attempts):
                 try:
                     return fn(*args, **kwargs)

@@ -120,7 +120,8 @@ def _compute_price_moves(symbol: str, db) -> dict:
     closes = [r[1] for r in rows]
     cur = closes[0]
 
-    def _move(n):
+    def _move(n) -> float | None:
+        """Calculate price move percentage over n bars."""
         if len(closes) <= n:
             return None
         prev = closes[n]
@@ -163,6 +164,7 @@ def _fetch_supply_chain_evidence(industry: str, name: str) -> list[str]:
 
 def _build_prompt(symbol: str, name: str, industry: str | None,
                   moves: dict, evidence: list[str]) -> str:
+    """Build the user prompt for A-teacher five-layer analysis."""
     today = datetime.utcnow().strftime("%Y-%m-%d")
     move_txt = ""
     if moves:

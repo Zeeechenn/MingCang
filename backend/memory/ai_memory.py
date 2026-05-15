@@ -6,10 +6,12 @@ from sqlalchemy import text
 
 
 def _utc_now() -> datetime:
+    """Return the current UTC datetime."""
     return datetime.utcnow()
 
 
 def _ensure_schema(db) -> None:
+    """Create the ai_memory table and index if they do not exist."""
     bind = db.get_bind()
     with bind.begin() as conn:
         conn.execute(text("""
@@ -32,6 +34,7 @@ def _ensure_schema(db) -> None:
 
 
 def _is_active(row, now: datetime) -> bool:
+    """Return True if the memory row has not yet expired."""
     ttl_days = row.ttl_days
     if ttl_days is None:
         return True
@@ -48,6 +51,7 @@ def remember(
     scope: str = "global",
     ttl_days: int | None = None,
 ) -> None:
+    """Upsert a key-value memory entry with optional TTL."""
     _ensure_schema(db)
     now = _utc_now().isoformat(timespec="seconds")
     db.execute(text("""
@@ -70,6 +74,7 @@ def remember(
 
 
 def recall(db, key: str, *, scope: str = "global") -> str | None:
+    """Retrieve a memory value by key and scope, or None if absent or expired."""
     _ensure_schema(db)
     row = db.execute(text("""
         SELECT key, value, category, scope, ttl_days, updated_at
@@ -82,6 +87,7 @@ def recall(db, key: str, *, scope: str = "global") -> str | None:
 
 
 def forget(db, key: str, *, scope: str = "global") -> bool:
+    """Delete a memory entry by key and scope; return True if a row was removed."""
     _ensure_schema(db)
     result = db.execute(text("""
         DELETE FROM ai_memory WHERE key = :key AND scope = :scope
@@ -96,6 +102,7 @@ def list_active(
     scope: str | None = None,
     category: str | None = None,
 ) -> list[dict]:
+    """Return all non-expired memory entries, optionally filtered by scope and category."""
     _ensure_schema(db)
     clauses = []
     params = {}

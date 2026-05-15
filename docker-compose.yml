@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: .
+      target: backend
+    volumes:
+      - ./stock-sage.db:/app/stock-sage.db
+      - ~/.stock-sage:/root/.stock-sage
+    env_file: .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      target: frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

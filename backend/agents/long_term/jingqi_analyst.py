@@ -80,6 +80,7 @@ def _apply_bonuses(score: float, deltas: dict) -> float:
 
 
 def _score_to_label_vote(score: float, deltas: dict, pctile: dict) -> str:
+    """Map composite score and percentile to a label vote string."""
     base_signals = [p for p in pctile.values() if p is not None]
     avg_pctile = sum(base_signals) / len(base_signals) if base_signals else None
 
@@ -95,6 +96,7 @@ def _score_to_label_vote(score: float, deltas: dict, pctile: dict) -> str:
 
 
 def _build_findings(deltas: dict, pctile: dict, score: float) -> list[str]:
+    """Build key findings list from delta and percentile data."""
     findings = []
     dnp = deltas.get("delta_net_profit_yoy")
     drev = deltas.get("delta_revenue_yoy")
@@ -119,6 +121,7 @@ def _build_findings(deltas: dict, pctile: dict, score: float) -> list[str]:
 
 
 def analyze(symbol: str, db) -> LongTermReport:
+    """Run jingqi (boom) long-term analysis for a symbol."""
     if not settings.long_term_jingqi_enabled:
         return LongTermReport(
             role="boom", score=0, confidence=0,

@@ -18,6 +18,7 @@ class LongTermReport:
     horizon: str = "long"
 
     def to_dict(self) -> dict:
+        """Serialize report to dictionary."""
         return asdict(self)
 
 
@@ -33,6 +34,7 @@ class LongTermLabel:
     expires_at: str            # "2026-05-27"
 
     def to_dict(self) -> dict:
+        """Serialize label to dictionary."""
         return {
             "symbol": self.symbol,
             "date": self.date,

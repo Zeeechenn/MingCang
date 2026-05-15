@@ -22,9 +22,11 @@ class ICSignificance:
     p_value_two_sided: float
 
     def is_significant(self, alpha: float = 0.05) -> bool:
+        """Return True if the two-sided p-value is below alpha."""
         return self.p_value_two_sided < alpha
 
     def verdict(self) -> str:
+        """Return a human-readable significance verdict string."""
         if self.p_value_two_sided < 0.01:
             return "极显著"
         if self.p_value_two_sided < 0.05:
@@ -34,6 +36,7 @@ class ICSignificance:
         return "不显著"
 
     def to_dict(self) -> dict:
+        """Serialize IC significance result to dictionary."""
         return {
             "ic": round(self.ic, 4),
             "n": self.n,
@@ -45,6 +48,7 @@ class ICSignificance:
 
 
 def _norm_sf(x: float) -> float:
+    """Standard normal survival function (1 - CDF)."""
     return 0.5 * math.erfc(x / math.sqrt(2))
 
 

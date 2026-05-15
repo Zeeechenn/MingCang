@@ -13,8 +13,10 @@ logger = logging.getLogger(__name__)
 def _retry(max_attempts: int = 3, delay: float = 1.0):
     """简单指数退避重试装饰器（AkShare/yfinance 偶发网络超时用）"""
     def decorator(fn):
+        """Retry decorator factory."""
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
+            """Wrapped call with retry and exponential backoff."""
             for attempt in range(max_attempts):
                 try:
                     return fn(*args, **kwargs)
@@ -33,6 +35,7 @@ BACKFILL_THRESHOLD_DAYS = 1   # 最新数据距今超过此天数才触发回填
 
 
 def _cn_market_prefix(symbol: str) -> str:
+    """Return the east-money market prefix digit for a CN stock symbol."""
     return "1" if symbol[:2] in ("60", "68", "11") else "0"
 
 
@@ -89,6 +92,7 @@ def fetch_us_daily(symbol: str, days: int = 365) -> pd.DataFrame:
 
 
 def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
+    """Dispatch to the appropriate market data fetcher based on market."""
     if market == "CN":
         return fetch_cn_daily(symbol, days)
     elif market == "US":

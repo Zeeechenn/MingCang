@@ -96,6 +96,7 @@ class LongTermTeam:
     """长期分析师团（封装三路分析师 + 聚合逻辑）"""
 
     def run(self, symbol: str, name: str, db) -> LongTermLabel:
+        """Run all long-term analysts and aggregate into a LongTermLabel."""
         reports: dict[str, LongTermReport] = {}
 
         if settings.long_term_a_teacher_enabled:

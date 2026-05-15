@@ -44,7 +44,8 @@ class AShareCommission(bt.CommInfoBase):
         ("commtype", bt.CommInfoBase.COMM_PERC),
     )
 
-    def _getcommission(self, size, price, pseudoexec):
+    def _getcommission(self, size, price, pseudoexec) -> float:
+        """Return commission for A-share trades including stamp tax on sells."""
         notional = abs(size) * price
         if size > 0:
             return notional * self.p.commission
@@ -89,7 +90,8 @@ class TechSignalStrategy(bt.Strategy):
         ("long_term_label", None),
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize strategy indicators and state variables."""
         self.score = self.datas[0].tech_score
         self.atr = self.datas[0].atr14
         self.entry_bar = None
@@ -98,7 +100,8 @@ class TechSignalStrategy(bt.Strategy):
         self.entry_atr = None
         self.highest_close = None
 
-    def next(self):
+    def next(self) -> None:
+        """Execute strategy logic on each bar: manage open positions or scan for entry."""
         price = self.data.close[0]
         low = self.data.low[0]
         high = self.data.high[0]
@@ -185,6 +188,7 @@ def compute_tech_scores(df_factored: pd.DataFrame, apply_adx_filter: bool = True
 
 
 def load_data(symbol: str, db, as_of_end: str | None = None) -> pd.DataFrame:
+    """Load OHLCV price rows from DB into a datetime-indexed DataFrame."""
     q = db.query(Price).filter(Price.symbol == symbol)
     if as_of_end:
         q = q.filter(Price.date <= as_of_end)
@@ -204,6 +208,7 @@ def load_data(symbol: str, db, as_of_end: str | None = None) -> pd.DataFrame:
 
 def run_one(symbol: str, name: str, df_raw: pd.DataFrame, start: str, end: str,
             cfg: dict, long_term_label: str | None = None) -> dict | None:
+    """Run a single-stock Backtrader backtest and return summary metrics or None."""
     df_factored = add_all_factors(df_raw)
     df_factored["tech_score"] = compute_tech_scores(df_factored, apply_adx_filter=cfg["adx_filter"])
 
@@ -257,7 +262,8 @@ def run_one(symbol: str, name: str, df_raw: pd.DataFrame, start: str, end: str,
 
 # ── 主循环 ────────────────────────────────────────────────────────────
 
-def run_suite(stocks, db, start, end, cfg, label, mock_labels: dict | None = None):
+def run_suite(stocks, db, start, end, cfg, label, mock_labels: dict | None = None) -> None:
+    """Run backtest across all stocks and print a comparison table with aggregates."""
     print()
     print("=" * 94)
     print(f"  Backtrader 严肃回测  [{label}]")
@@ -337,7 +343,8 @@ def run_suite(stocks, db, start, end, cfg, label, mock_labels: dict | None = Non
     return summary
 
 
-def main():
+def main() -> None:
+    """CLI entry point for the Backtrader evaluation suite."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", default="2025-11-01")
     ap.add_argument("--end", default="2026-05-14")

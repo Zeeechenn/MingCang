@@ -22,10 +22,12 @@ RECOMMENDATION_MAP = [
 
 
 def _score_to_recommendation(score: float) -> str:
+    """Delegate score to recommendation string via signal_policy."""
     return score_to_recommendation(score)
 
 
 def _score_to_confidence(score: float) -> str:
+    """Map absolute composite score to a confidence label string."""
     abs_score = abs(score)
     if abs_score >= 60:
         return "高"

@@ -21,6 +21,7 @@ Qlib (LightGBM Alpha) 有效性硬验证 — 阶段A 决策点
 from __future__ import annotations
 import argparse
 import warnings
+from typing import Any
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
@@ -59,7 +60,8 @@ def load_panel(db) -> pd.DataFrame:
     return panel
 
 
-def train_lgbm(X_train, y_train, X_val, y_val):
+def train_lgbm(X_train, y_train, X_val, y_val) -> Any:
+    """Train a LightGBM regressor with early stopping on the validation set."""
     try:
         import lightgbm as lgb
     except ImportError:
@@ -101,7 +103,8 @@ def quantile_returns(predictions: pd.DataFrame, n_groups: int = 5) -> pd.DataFra
     return pd.DataFrame(rows)
 
 
-def report(predictions: pd.DataFrame, label: str = ""):
+def report(predictions: pd.DataFrame, label: str = "") -> None:
+    """Print IC, ICIR, quantile returns, and verdict for a predictions DataFrame."""
     ic = cross_sectional_ic(predictions)
     if len(ic) < 5:
         print(f"  [{label}] IC 样本不足({len(ic)} 个交易日)，无法评估")
@@ -141,7 +144,7 @@ def report(predictions: pd.DataFrame, label: str = ""):
     print(f"\n    建议: {verdict}")
 
 
-def single_split(panel: pd.DataFrame, split_ratio: float = 0.8):
+def single_split(panel: pd.DataFrame, split_ratio: float = 0.8) -> None:
     """单次时间切分：前 80% 训练，后 20% 评估"""
     panel = panel.sort_values("date").reset_index(drop=True)
     split = int(len(panel) * split_ratio)
@@ -165,7 +168,7 @@ def single_split(panel: pd.DataFrame, split_ratio: float = 0.8):
     report(preds, label="时序切分 80/20")
 
 
-def walk_forward(panel: pd.DataFrame, train_months: int = 12, test_months: int = 2):
+def walk_forward(panel: pd.DataFrame, train_months: int = 12, test_months: int = 2) -> pd.DataFrame:
     """滚动训练-测试，更接近实盘 walk-forward"""
     panel = panel.sort_values("date").reset_index(drop=True)
     start = panel["date"].min()
@@ -200,7 +203,8 @@ def walk_forward(panel: pd.DataFrame, train_months: int = 12, test_months: int =
     report(pd.concat(all_preds, ignore_index=True), label="Walk-Forward")
 
 
-def main():
+def main() -> None:
+    """CLI entry point: load panel data and run Qlib validation."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--walk-forward", action="store_true")
     args = ap.parse_args()

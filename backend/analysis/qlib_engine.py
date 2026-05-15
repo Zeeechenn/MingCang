@@ -21,7 +21,8 @@ MODEL_DIR = Path.home() / ".stock-sage" / "models"
 MODEL_PATH = MODEL_DIR / "lgbm_alpha.pkl"
 
 
-def _load_model():
+def _load_model() -> object | None:
+    """Load LightGBM model from disk, returning None if missing or corrupt."""
     if MODEL_PATH.exists():
         try:
             with open(MODEL_PATH, "rb") as f:

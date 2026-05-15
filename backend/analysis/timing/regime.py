@@ -27,6 +27,7 @@ class RegimeReport:
     reason: str
 
     def to_dict(self) -> dict:
+        """Serialize regime report to dictionary."""
         return {
             "rsrs_z": round(self.rsrs_z, 3) if self.rsrs_z is not None else None,
             "diffusion": round(self.diffusion, 3) if self.diffusion is not None else None,

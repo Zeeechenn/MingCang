@@ -40,6 +40,7 @@ class TrailingStopTracker:
     @classmethod
     def open(cls, symbol: str, entry_date: str, entry_price: float, atr: float,
              atr_mult: float | None = None, rr: float | None = None) -> "TrailingStopTracker":
+        """Create a new open position tracker with initial stop and take-profit levels."""
         atr_mult = atr_mult or settings.atr_multiplier
         rr = rr or settings.risk_reward_ratio
         stop = entry_price - atr * atr_mult
@@ -97,6 +98,7 @@ def update_trailing_stop(pos: TrailingStopTracker, current_high: float,
 
 
 def save_positions(positions: list[TrailingStopTracker]) -> None:
+    """Persist position list to disk as JSON."""
     POSITIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
     POSITIONS_PATH.write_text(
         json.dumps([asdict(p) for p in positions], ensure_ascii=False, indent=2),
@@ -105,6 +107,7 @@ def save_positions(positions: list[TrailingStopTracker]) -> None:
 
 
 def load_positions() -> list[TrailingStopTracker]:
+    """Load persisted positions from disk, returning empty list if not found."""
     if not POSITIONS_PATH.exists():
         return []
     data = json.loads(POSITIONS_PATH.read_text(encoding="utf-8"))

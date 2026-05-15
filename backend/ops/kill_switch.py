@@ -44,6 +44,7 @@ class KillSwitchState:
 
 
 def _read_state() -> KillSwitchState | None:
+    """Read kill switch state from disk, returning None if absent or corrupt."""
     if not STATE_PATH.exists():
         return None
     try:
@@ -55,6 +56,7 @@ def _read_state() -> KillSwitchState | None:
 
 
 def _write_state(state: KillSwitchState | None) -> None:
+    """Write kill switch state to disk, or delete the file if state is None."""
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     if state is None:
         if STATE_PATH.exists():
@@ -67,11 +69,13 @@ def _write_state(state: KillSwitchState | None) -> None:
 
 
 def is_active() -> bool:
+    """Return True if the kill switch is currently active."""
     state = _read_state()
     return bool(state and state.active)
 
 
 def current_state() -> dict | None:
+    """Return the current kill switch state as a dict, or None if not triggered."""
     state = _read_state()
     return state.to_dict() if state else None
 
@@ -128,6 +132,7 @@ def check_consecutive_losses(
     trade_returns: Iterable[float],
     threshold: int = DEFAULT_CONSECUTIVE_LOSSES,
 ) -> KillSwitchState | None:
+    """Trigger kill switch if consecutive losses meet or exceed threshold."""
     streak = detect_consecutive_losses(trade_returns, threshold)
     if streak >= threshold:
         return trigger(
@@ -141,7 +146,7 @@ def check_daily_drawdown(
     drawdown_pct: float,
     threshold_pct: float = DEFAULT_DRAWDOWN_PCT,
 ) -> KillSwitchState | None:
-    """drawdown_pct 为正数（如 6.5 表示 -6.5%）"""
+    """Trigger kill switch if daily drawdown exceeds threshold; drawdown_pct is a positive number."""
     if drawdown_pct >= threshold_pct:
         return trigger(
             reason=f"单日回撤 {drawdown_pct:.2f}% ≥ 阈值 {threshold_pct:.2f}%",
@@ -155,7 +160,7 @@ def check_data_staleness(
     today: datetime | None = None,
     threshold_days: int = DEFAULT_DATA_STALE_DAYS,
 ) -> KillSwitchState | None:
-    """latest_price_date 形如 '2026-05-15'。若 None 或过旧 → 触发"""
+    """Trigger kill switch if latest_price_date is None or older than threshold_days."""
     if not latest_price_date:
         return trigger(reason="DB 中无价格数据",
                        metadata={"latest_price_date": None})

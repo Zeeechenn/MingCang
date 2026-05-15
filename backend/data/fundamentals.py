@@ -315,6 +315,7 @@ PIOTROSKI_FACTORS = [
 
 
 def _roa(metric: FinancialMetric) -> float | None:
+    """Compute return on assets from a FinancialMetric row."""
     if metric.net_profit is None or not metric.total_assets:
         return None
     return metric.net_profit / metric.total_assets
@@ -418,7 +419,8 @@ def compute_jingqi_deltas(symbol: str, db, peers: Iterable[str] | None = None) -
 
     cur, prev = rows[0], rows[1]
 
-    def _delta(field):
+    def _delta(field) -> float | None:
+        """Compute period-over-period delta for a metric field."""
         v_cur = getattr(cur, field)
         v_prev = getattr(prev, field)
         if v_cur is None or v_prev is None:
@@ -464,7 +466,8 @@ def compute_jingqi_deltas(symbol: str, db, peers: Iterable[str] | None = None) -
                 if vc is not None and vp is not None:
                     peer_deltas[k].append(vc - vp)
 
-        def _pctile(value, arr):
+        def _pctile(value, arr) -> float | None:
+            """Return the fraction of arr values strictly below value."""
             if value is None or not arr:
                 return None
             below = sum(1 for x in arr if x < value)

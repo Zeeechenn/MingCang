@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def run() -> None:
+    """Apply AI memory schema migration (idempotent)."""
     init_db()
     with engine.begin() as conn:
         conn.execute(text("""

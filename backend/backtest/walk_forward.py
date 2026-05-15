@@ -35,14 +35,17 @@ class WalkWindow:
     label: str = ""
 
     def to_dict(self) -> dict:
+        """Serialize walk window to dictionary."""
         return asdict(self)
 
 
 def _parse(d: str) -> date:
+    """Parse an ISO date string to a date object."""
     return datetime.strptime(d, "%Y-%m-%d").date()
 
 
 def _fmt(d: date) -> str:
+    """Format a date object as an ISO date string."""
     return d.strftime("%Y-%m-%d")
 
 
@@ -158,6 +161,7 @@ def holdout_window(start: str = HOLDOUT_START,
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for walk-forward or holdout evaluation modes."""
     import argparse
     import json
 

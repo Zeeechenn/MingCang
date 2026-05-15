@@ -7,6 +7,7 @@ import numpy as np
 
 
 def calc_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Calculate Average True Range over the given period."""
     high, low, close = df["high"], df["low"], df["close"]
     prev_close = close.shift(1)
     tr = pd.concat([
@@ -18,6 +19,7 @@ def calc_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
 
 def calc_rsi(close: pd.Series, period: int = 14) -> pd.Series:
+    """Calculate Relative Strength Index over the given period."""
     delta = close.diff().fillna(0.0)
     gain = delta.clip(lower=0).ewm(alpha=1 / period, adjust=False).mean()
     loss = (-delta.clip(upper=0)).ewm(alpha=1 / period, adjust=False).mean()
@@ -33,7 +35,8 @@ def calc_rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return rsi
 
 
-def calc_macd(close: pd.Series, fast=12, slow=26, signal=9):
+def calc_macd(close: pd.Series, fast=12, slow=26, signal=9) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Calculate MACD, signal line, and histogram."""
     ema_fast = close.ewm(span=fast, adjust=False).mean()
     ema_slow = close.ewm(span=slow, adjust=False).mean()
     macd = ema_fast - ema_slow
@@ -41,13 +44,14 @@ def calc_macd(close: pd.Series, fast=12, slow=26, signal=9):
     return macd, sig, macd - sig
 
 
-def calc_bollinger(close: pd.Series, period: int = 20, std_mult: float = 2.0):
+def calc_bollinger(close: pd.Series, period: int = 20, std_mult: float = 2.0) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """Calculate Bollinger Bands: upper, mid, lower."""
     mid = close.rolling(period).mean()
     std = close.rolling(period).std()
     return mid + std_mult * std, mid, mid - std_mult * std
 
 
-def calc_stop_take(close: float, atr: float, atr_mult: float = 2.0, rr: float = 2.0):
+def calc_stop_take(close: float, atr: float, atr_mult: float = 2.0, rr: float = 2.0) -> tuple[float, float]:
     """返回 (stop_loss, take_profit)"""
     risk = atr * atr_mult
     stop_loss = close - risk
@@ -55,7 +59,7 @@ def calc_stop_take(close: float, atr: float, atr_mult: float = 2.0, rr: float = 
     return round(stop_loss, 3), round(take_profit, 3)
 
 
-def calc_adx(df: pd.DataFrame, period: int = 14):
+def calc_adx(df: pd.DataFrame, period: int = 14) -> tuple[pd.Series, pd.Series, pd.Series]:
     """
     ADX/+DI/-DI（Wilder DMI 指标）— 阶段B 新增
     ADX < 20: 震荡市；20-40: 趋势市；> 40: 强趋势。
@@ -96,6 +100,7 @@ def calc_icu_ma(close: pd.Series, fast: int = 13, slow: int = 26) -> tuple[pd.Se
 
 
 def add_all_factors(df: pd.DataFrame, atr_period: int = 14) -> pd.DataFrame:
+    """Compute and add all technical factor columns to a copy of df."""
     df = df.copy()
     df["atr14"] = calc_atr(df, atr_period)
     df["rsi14"] = calc_rsi(df["close"])

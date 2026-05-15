@@ -28,11 +28,13 @@ _SHORT_TERM: dict[str, list[dict]] = {}  # symbol → list of recent decisions
 _MAX_SHORT_TERM = 7
 
 
-def _ensure_dir():
+def _ensure_dir() -> None:
+    """Ensure the layered memory directory exists."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _medium_path(symbol: str) -> Path:
+    """Return the path to the medium-term memory file for a symbol."""
     return MEMORY_DIR / f"medium_{symbol}.md"
 
 
@@ -85,6 +87,7 @@ def save_decision_layered(symbol: str, date: str, signal: dict) -> None:
 
 
 def get_short_term_context(symbol: str) -> str:
+    """Return formatted string of recent in-session decisions for a symbol."""
     arr = _SHORT_TERM.get(symbol, [])
     if not arr:
         return ""

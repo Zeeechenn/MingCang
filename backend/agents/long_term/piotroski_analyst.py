@@ -41,6 +41,7 @@ _FACTOR_LABELS = {
 
 
 def _score_to_label_vote(score: int) -> str:
+    """Map F-score integer to a label vote string."""
     if score >= settings.piotroski_strong_threshold:
         return "值得持有"
     if score <= settings.piotroski_weak_threshold:

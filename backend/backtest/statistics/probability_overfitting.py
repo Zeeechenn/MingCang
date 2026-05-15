@@ -26,6 +26,7 @@ class PBOResult:
     note: str = ""
 
     def to_dict(self) -> dict:
+        """Serialize PBO result to dictionary."""
         return {
             "pbo": round(self.pbo, 4),
             "n_splits": self.n_splits,

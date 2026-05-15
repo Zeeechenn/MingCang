@@ -16,6 +16,7 @@ class AnalystReport:
     raw: dict               # 原始数据（debug 用）
 
     def to_dict(self) -> dict:
+        """Serialize report to dictionary."""
         return asdict(self)
 
 

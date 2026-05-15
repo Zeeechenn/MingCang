@@ -110,6 +110,7 @@ def _evaluate(history: dict[str, list[dict]]) -> dict:
 
 
 def _triggers_avoid(stats: dict) -> bool:
+    """Return True if aggregated QFII stats cross the avoid-trigger thresholds."""
     return (
         stats["distinct_holders_dropping"] >= settings.qfii_flow_min_holders
         and stats["max_consecutive_drop"] >= settings.qfii_flow_min_drop_quarters

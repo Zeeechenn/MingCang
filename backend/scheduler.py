@@ -11,6 +11,7 @@ scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
 
 
 def _use_multi_agent_decision() -> bool:
+    """Return True if the current signal profile uses multi-agent aggregation."""
     from backend.config import active_signal_weights
 
     return active_signal_weights().use_multi_agent
@@ -76,7 +77,7 @@ def _run_kill_switch_checks(db) -> None:
         logger.error("kill_switch auto checks failed: %s", e)
 
 
-def job_premarket():
+def job_premarket() -> None:
     """盘前任务：同步行情 + 个股新闻 + 沪深300指数"""
     if _kill_switch_guard("premarket"):
         return
@@ -115,7 +116,7 @@ def job_premarket():
         db.close()
 
 
-def _build_regime(db, stocks):
+def _build_regime(db, stocks) -> dict:
     """阶段A: 一次性构建大盘+板块 regime（盘后所有股票共用）"""
     from backend.data.database import IndexPrice, Price
     from backend.analysis.timing.regime import market_regime
@@ -148,7 +149,7 @@ def _build_regime(db, stocks):
     return market_regime(index_df, sector_dfs)
 
 
-def job_postmarket():
+def job_postmarket() -> None:
     """盘后任务：量化 + 技术 + 情感 → 聚合 → 写 Signal 表 → 存决策记忆"""
     if _kill_switch_guard("postmarket"):
         return
@@ -270,7 +271,7 @@ def job_postmarket():
         db.close()
 
 
-def job_stoploss_check():
+def job_stoploss_check() -> None:
     """
     盘中止损预警（每天 14:30 运行）：
     取最近一次正向信号，比对当日最新价是否触及止损线，
@@ -326,7 +327,7 @@ def job_stoploss_check():
         db.close()
 
 
-def job_train_model():
+def job_train_model() -> None:
     """每周六重训 LightGBM Alpha 模型（数据不足时自动跳过）"""
     from backend.data.database import SessionLocal
     from backend.analysis.qlib_engine import train
@@ -344,7 +345,7 @@ def job_train_model():
         db.close()
 
 
-def job_weekly_longterm():
+def job_weekly_longterm() -> None:
     """
     长期分析师团 first batch：每周日 11:00
     同步 industry + 5 年财报 → 跑 LongTermTeam → save_label
@@ -390,7 +391,8 @@ def job_weekly_longterm():
         db.close()
 
 
-def start():
+def start() -> None:
+    """Register all cron jobs and start the background scheduler."""
     pre_h, pre_m = settings.schedule_premarket.split(":")
     post_h, post_m = settings.schedule_postmarket.split(":")
 
@@ -427,5 +429,6 @@ def start():
                 settings.schedule_premarket, settings.schedule_postmarket)
 
 
-def stop():
+def stop() -> None:
+    """Shut down the background scheduler without waiting for jobs to finish."""
     scheduler.shutdown(wait=False)

@@ -125,10 +125,12 @@ def _fetch_single_quarter(symbol: str, report_date: str) -> list[dict]:
 
 
 def _cache_path(symbol: str) -> Path:
+    """Return the cache file path for a symbol's QFII holdings."""
     return CACHE_DIR / f"{symbol}.json"
 
 
 def _read_cache(symbol: str) -> dict[str, list[dict]]:
+    """Read cached QFII holdings for a symbol, returning empty dict on miss."""
     p = _cache_path(symbol)
     if not p.exists():
         return {}
@@ -139,6 +141,7 @@ def _read_cache(symbol: str) -> dict[str, list[dict]]:
 
 
 def _write_cache(symbol: str, data: dict[str, list[dict]]) -> None:
+    """Write QFII holdings data to the cache file for a symbol."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     _cache_path(symbol).write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"

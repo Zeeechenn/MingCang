@@ -11,7 +11,8 @@ _MODELS = {
 
 
 class AnthropicProvider(LLMProvider):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str) -> None:
+        """Initialize Anthropic client with the given API key."""
         self._client = anthropic.Anthropic(api_key=api_key)
 
     def complete_structured(
@@ -22,6 +23,7 @@ class AnthropicProvider(LLMProvider):
         max_tokens: int = 400,
         model_tier: str = "fast",
     ) -> dict:
+        """Call Anthropic tool-use API and return the tool input dict."""
         try:
             kwargs = dict(
                 model=_MODELS.get(model_tier, _MODELS["fast"]),

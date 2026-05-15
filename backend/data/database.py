@@ -9,7 +9,7 @@ SessionLocal = sessionmaker(bind=engine)
 
 
 @event.listens_for(engine, "connect")
-def _set_wal_mode(dbapi_conn, _):
+def _set_wal_mode(dbapi_conn, _) -> None:
     """开启 WAL 模式，避免 APScheduler + FastAPI 并发写锁冲突"""
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
@@ -144,7 +144,7 @@ def get_latest_price_date(symbol: str, db) -> str | None:
     return result[0] if result else None
 
 
-def _ensure_runtime_schema():
+def _ensure_runtime_schema() -> None:
     """SQLite create_all 不会补既有表字段，这里做轻量幂等迁移。"""
     with engine.begin() as conn:
         signal_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(signals)")).fetchall()]
@@ -177,12 +177,14 @@ def _ensure_runtime_schema():
         """))
 
 
-def init_db():
+def init_db() -> None:
+    """Create all ORM tables and apply runtime schema patches."""
     Base.metadata.create_all(engine)
     _ensure_runtime_schema()
 
 
 def get_db():
+    """FastAPI dependency: yield a DB session and close it when done."""
     db = SessionLocal()
     try:
         yield db

@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def run() -> None:
+    """Apply long-term analyst team schema migration (idempotent)."""
     # Step 1: stocks.industry 列
     with engine.begin() as conn:
         cols = [r[1] for r in conn.execute(text("PRAGMA table_info(stocks)")).fetchall()]

@@ -17,7 +17,8 @@ class OpenAIProvider(LLMProvider):
     base_url 留空时使用 OpenAI 官方地址。
     """
 
-    def __init__(self, api_key: str, base_url: str = ""):
+    def __init__(self, api_key: str, base_url: str = "") -> None:
+        """Initialize OpenAI-compatible client with API key and optional base URL."""
         try:
             from openai import OpenAI
         except ImportError:
@@ -40,6 +41,7 @@ class OpenAIProvider(LLMProvider):
         max_tokens: int = 400,
         model_tier: str = "fast",
     ) -> dict:
+        """Call OpenAI function-calling API and return the parsed arguments dict."""
         # Anthropic input_schema 与 OpenAI function parameters 使用相同的 JSON Schema 格式
         function_def = {
             "name": tool["name"],
