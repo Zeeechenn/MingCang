@@ -1,28 +1,29 @@
 import { useEffect, useRef } from 'react'
 import { createChart, CrosshairMode, LineStyle } from 'lightweight-charts'
 
-export default function Chart({ prices, signal }) {
+export default function Chart({ prices, signal, theme = 'dark' }) {
   const containerRef = useRef(null)
   const chartRef = useRef(null)
 
   useEffect(() => {
     if (!containerRef.current || !prices?.length) return
+    const isDark = theme === 'dark'
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: 380,
       layout: {
-        background: { color: '#0f172a' },
-        textColor: '#94a3b8',
+        background: { color: isDark ? '#1d232e' : '#faf6ec' },
+        textColor: isDark ? '#a4adbf' : '#5d5849',
       },
       grid: {
-        vertLines: { color: '#1e293b' },
-        horzLines: { color: '#1e293b' },
+        vertLines: { color: isDark ? '#303847' : '#e4dcc8' },
+        horzLines: { color: isDark ? '#303847' : '#e4dcc8' },
       },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#1e293b' },
+      rightPriceScale: { borderColor: isDark ? '#303847' : '#d6cdb8' },
       timeScale: {
-        borderColor: '#1e293b',
+        borderColor: isDark ? '#303847' : '#d6cdb8',
         timeVisible: true,
       },
     })
@@ -89,18 +90,18 @@ export default function Chart({ prices, signal }) {
       chart.remove()
       chartRef.current = null
     }
-  }, [prices, signal])
+  }, [prices, signal, theme])
 
   if (!prices?.length) {
     return (
-      <div className="bg-gray-900 border border-gray-800 rounded-xl h-96 flex items-center justify-center text-gray-500">
+      <div className="flex h-96 items-center justify-center rounded-sm border border-stone-300 bg-[#faf6ec] text-stone-500 dark:border-slate-700 dark:bg-[#1d232e] dark:text-slate-500">
         暂无行情数据
       </div>
     )
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    <div className="overflow-hidden rounded-sm border border-stone-300 bg-[#faf6ec] dark:border-slate-700 dark:bg-[#1d232e]">
       <div ref={containerRef} />
     </div>
   )

@@ -1,8 +1,9 @@
 """
 多 Agent 决策流水线编排器
 
-调用顺序：
-  Analysts (并行 4 路) → Researcher (分歧时辩论) → Trader → RiskManager
+调用顺序（M4.2 起）：
+  Analysts (并行 4 路) → Director (评估质量+下达议题) → Researcher (分歧时辩论)
+  → Trader → RiskManager
 """
 from __future__ import annotations
 from dataclasses import dataclass, asdict
@@ -14,6 +15,7 @@ from backend.agents.analyst import (
     news_analyst,
     AnalystReport,
 )
+from backend.agents.director import assess, assessment_to_dict, DirectorAssessment
 from backend.agents.researcher import debate, has_divergence, quick_consensus
 from backend.agents.trader import propose, TraderProposal
 from backend.agents.risk_manager import review, RiskDecision
@@ -31,6 +33,7 @@ class AgentDecision:
     position_pct: float
     breakdown: dict
     analysts: dict           # role → AnalystReport.to_dict()
+    director: dict           # DirectorAssessment fields (M4.2)
     researcher: dict         # ResearcherConclusion fields
     risk: dict               # RiskDecision fields
     regime: dict | None
@@ -38,6 +41,15 @@ class AgentDecision:
 
     def to_signal_dict(self) -> dict:
         """转回 aggregator 兼容格式（用于写 Signal 表）"""
+        arbitration = {
+            "bull_points": self.researcher.get("bull_points", []),
+            "bear_points": self.researcher.get("bear_points", []),
+            "action_bias": self.researcher.get("action_bias", "中性"),
+            "rationale": self.researcher.get("rationale", ""),
+        }
+        # M4.1 透传多轮辩论记录
+        if self.researcher.get("rounds"):
+            arbitration["rounds"] = self.researcher["rounds"]
         return {
             "composite_score": self.composite_score,
             "recommendation": self.recommendation,
@@ -47,12 +59,8 @@ class AgentDecision:
             "breakdown": self.breakdown,
             "position_pct": self.position_pct,
             "limit_status": self.risk.get("limit_status", "normal"),
-            "llm_arbitration": {
-                "bull_points": self.researcher.get("bull_points", []),
-                "bear_points": self.researcher.get("bear_points", []),
-                "action_bias": self.researcher.get("action_bias", "中性"),
-                "rationale": self.researcher.get("rationale", ""),
-            },
+            "llm_arbitration": arbitration,
+            "director": self.director,
             "risk_notes": self.risk.get("risk_notes", []),
             "veto_reason": self.risk.get("veto_reason"),
             "regime": self.regime,
@@ -87,9 +95,15 @@ def run_pipeline(
         "sentiment": sentiment_analyst(sentiment_result),
         "news": news_analyst(sentiment_result),
     }
-
-    # 2. Researcher
     report_list = list(reports.values())
+
+    # 2. Research Director (M4.2): 评估质量+下达辩论议题
+    if settings.research_director_enabled:
+        director_assessment: DirectorAssessment = assess(report_list)
+    else:
+        director_assessment = assess([])   # 空评估，保证 dict 字段一致
+
+    # 3. Researcher
     if has_divergence(report_list):
         researcher = debate(report_list, llm_arbitration)
     else:
@@ -126,6 +140,8 @@ def run_pipeline(
         reasoning += f" 风控否决: {risk.veto_reason}。"
     if risk.risk_notes:
         reasoning += " 风控提示: " + "; ".join(risk.risk_notes)
+    if director_assessment.quality_notes:
+        reasoning += " Director: " + "; ".join(director_assessment.quality_notes[:2])
 
     return AgentDecision(
         composite_score=proposal.composite_score,
@@ -136,12 +152,22 @@ def run_pipeline(
         position_pct=final_pos,
         breakdown=proposal.breakdown,
         analysts={k: v.to_dict() for k, v in reports.items()},
+        director=assessment_to_dict(director_assessment),
         researcher={
             "bull_points": researcher.bull_points,
             "bear_points": researcher.bear_points,
             "action_bias": researcher.action_bias,
             "rationale": researcher.rationale,
             "used_llm": researcher.used_llm,
+            "rounds": [
+                {
+                    "round_num": r.round_num,
+                    "speaker": r.speaker,
+                    "points": r.points,
+                    "references": r.references,
+                }
+                for r in (researcher.rounds or [])
+            ],
         },
         risk={
             "approved": risk.approved,

@@ -12,10 +12,11 @@
 | M1 | 严肃化与质量门槛 | ✅ 完成 |
 | M2 | 纸上交易验证 | ⏳ 进行中 |
 | M3 | 可信度审计层 | ✅ 完成 |
-| M4 | 多 Agent 决策深化 | 🟡 部分（长期团 + risk_manager 已上线） |
+| M4 | 多 Agent 决策深化 | 🟡 大部分（M4.1/4.2/4.3/4.6 完成 2026-05-16；M4.4/4.5 暂缓） |
 | M5 | 自动化执行 | 🔲 后置 |
-| M6 | 持续迭代与扩展 | 🔲 持续 |
+| M6 | 持续迭代与扩展 | ✅ M6.1 当前范围完成，Qlib 暂不恢复权重 |
 | M7 | 工程化与开源就绪 | ✅ 完成（A/B/C 全 + .editorconfig + Makefile + pyproject 单一真理源） |
+| M8 | 深度研究与来源审计层 | ✅ 完成（轻量新闻审计 + 手动专题研究，不进入日常信号） |
 
 ---
 
@@ -27,6 +28,14 @@
 | `new_framework` | 0.0 | 0.6 | 0.4 | 25 | 测试 2 起 / 生产默认 |
 
 综合评分范围：-100（规避）→ +100（可小仓试错）
+
+> Qlib 量化层已加入 point-in-time 基本面因子与可选 LambdaRank 训练入口。2026-05-16 工程扩容验证（70 只 / 51,439 行面板）显示 walk-forward IC=+0.0026、ICIR=+0.009、分层非单调，因此生产默认 quant 权重继续保持 0，暂不启用 Ranker。
+
+当前数据覆盖快照：active 70 / 价格覆盖 70 / 2 年价格覆盖 69 / 财报覆盖 10 / 24h 新闻覆盖 0。覆盖报表 API：`GET /api/system/data-coverage`。
+
+专题研究入口：`POST /api/research/deep/run` 或
+`PYTHONPATH=. python3 -m backend.research.deep_research --topic "AI算力产业链" --symbols 300308,300394`。
+专题研究只在明确触发时运行，不创建 `Signal`，不参与日常复盘信号。
 
 ---
 
@@ -66,7 +75,7 @@
 
 ## 测试套件
 
-- `PYTHONPATH=. pytest -q` → **103 passed**（2026-05-16 复验）
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **217 passed**（2026-05-17 M8 完成后）
 - `python3 -m compileall backend tests` → 通过
 - `cd frontend && npm run build` → 通过（47 modules，347 KB / gzip 111 KB）
 
@@ -92,6 +101,7 @@ cd frontend && npm run dev                        # 前端（另开终端）
 
 ```bash
 PYTHONPATH=. python3 -m backend.analysis.qlib_engine --train
+PYTHONPATH=. python3 -m backend.analysis.qlib_engine --train --ranker
 PYTHONPATH=. python3 -m backend.backtest.walk_forward --start 2024-01-01 --end 2026-05-15
 curl http://localhost:8000/api/system/health
 curl -X POST http://localhost:8000/api/system/kill-switch/reset

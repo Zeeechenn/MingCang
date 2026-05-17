@@ -7,11 +7,13 @@
 """
 import math
 import statistics
+import logging
 from backend.config import settings, active_signal_weights
 from backend.analysis.factors import calc_stop_take
 from backend.decision.signal_policy import score_to_recommendation
 from backend.llm import get_provider
 
+logger = logging.getLogger(__name__)
 
 RECOMMENDATION_MAP = [
     (25,  "可小仓试错"),
@@ -246,35 +248,59 @@ def aggregate_v2(
     regime: RegimeReport | None — 由调用方提前算好（scheduler 注入）
     reflection_context: 分层记忆文本（阶段C memory_layered.get_layered_context）
 
-    生命周期内可能调用 _bull_bear_debate 触发 LLM；只在分歧时触发以控成本。
+    生命周期内可能调用 _bull_bear_debate 或 multi_round_debate 触发 LLM；
+    只在分歧时触发以控成本。
+    M4.1 启用 multi_round_debate_enabled 时升级为 3 轮辩论。
     """
     from backend.agents import run_pipeline
     from backend.agents.analyst import (
         technical_analyst, quant_analyst, sentiment_analyst, news_analyst,
     )
-    from backend.agents.researcher import has_divergence
+    from backend.agents.director import assess as director_assess
+    from backend.agents.researcher import (
+        has_divergence,
+        multi_round_debate,
+        conclusion_to_arbitration_dict,
+    )
 
     # 与旧版一致的 quant 层混合（Kronos 等可选模块仍可参与）
     blended_quant_score, kronos_info = _blend_quant(quant_result.get("score", 0), None)
     quant_result_merged = {**quant_result, "score": blended_quant_score}
 
-    # 分歧检测：如有则触发 LLM 辩论（保留原 _bull_bear_debate 工具调用）
+    # 分歧检测：如有则触发 LLM 辩论
     reports = [
         technical_analyst(technical_result),
         quant_analyst(quant_result_merged),
         sentiment_analyst(sentiment_result),
         news_analyst(sentiment_result),
     ]
+    # M4.2 Director 评估（零 LLM）→ 取 debate_topic
+    director = director_assess(reports) if settings.research_director_enabled else None
+    debate_topic = director.debate_topic if director else ""
+
     llm_arb = None
     if has_divergence(reports):
-        llm_arb = _bull_bear_debate(
-            composite_score=sum(r.score for r in reports) / len(reports),
-            quant_score=blended_quant_score,
-            tech_result=technical_result,
-            sentiment_result=sentiment_result,
-            close=close, stop_loss=0, take_profit=0,
-            reflection_context=reflection_context,
-        ) or None
+        if settings.multi_round_debate_enabled:
+            # M4.1 三轮辩论（接受 M4.2 Director 议题）
+            avg_score = sum(r.score for r in reports) / len(reports)
+            conclusion = multi_round_debate(
+                reports,
+                composite_hint=avg_score,
+                reflection_context=reflection_context,
+                debate_topic=debate_topic,
+            )
+            if conclusion.used_llm:
+                llm_arb = conclusion_to_arbitration_dict(conclusion)
+        if llm_arb is None:
+            # 多轮未触发或失败 → 回退到单轮
+            llm_arb = _bull_bear_debate(
+                composite_score=sum(r.score for r in reports) / len(reports),
+                quant_score=blended_quant_score,
+                tech_result=technical_result,
+                sentiment_result=sentiment_result,
+                close=close, stop_loss=0, take_profit=0,
+                reflection_context=reflection_context,
+            ) or None
 
     decision = run_pipeline(
         technical_result=technical_result,
@@ -352,3 +378,23 @@ def save_signal(symbol: str, date: str, result: dict, db) -> None:
             data_timestamp=data_timestamp,
         ))
     db.commit()
+
+    try:
+        from backend.decision.harness import record_decision_run
+
+        record_decision_run(
+            db,
+            run_type="postmarket",
+            symbol=symbol,
+            as_of=date,
+            result=result,
+            input_snapshot={
+                "data_timestamp": data_timestamp,
+                "breakdown": result.get("breakdown", {}),
+                "limit_status": result.get("limit_status", "normal"),
+                "news_audit": result.get("news_audit", []),
+            },
+        )
+    except Exception as e:
+        # Harness persistence is observability; a write failure must not block signals.
+        logger.warning("decision harness write failed for %s %s: %s", symbol, date, e)

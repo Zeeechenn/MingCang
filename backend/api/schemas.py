@@ -111,3 +111,65 @@ class NewsOut(BaseModel):
     sentiment_score: Optional[float] = None
 
     model_config = {"from_attributes": True}
+
+
+class DecisionRunOut(BaseModel):
+    run_id: str
+    run_type: str
+    symbol: Optional[str] = None
+    as_of: Optional[str] = None
+    profile: Optional[str] = None
+    rule_version: Optional[str] = None
+    recommendation: Optional[str] = None
+    composite_score: Optional[float] = None
+    input_snapshot: dict = {}
+    agent_outputs: dict = {}
+    risk_decision: dict = {}
+    final_action: dict = {}
+    eval_result: Optional[dict] = None
+    notes: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class ResearchStateOut(BaseModel):
+    symbol: str
+    thesis: str = ""
+    risks: list[str] = []
+    open_questions: list[str] = []
+    last_signal_summary: str = ""
+    last_review: Optional[dict] = None
+    updated_at: Optional[str] = None
+
+
+class DataCoverageStockOut(BaseModel):
+    symbol: str
+    name: Optional[str] = None
+    market: Optional[str] = None
+    industry: Optional[str] = None
+    price_rows: int = 0
+    first_price_date: Optional[str] = None
+    latest_price_date: Optional[str] = None
+    latest_financial_report: Optional[str] = None
+    news_24h_count: int = 0
+
+
+class DataCoverageOut(BaseModel):
+    summary: dict = {}
+    provider_health: dict = {}
+    stocks: list[DataCoverageStockOut] = []
+
+
+class DeepResearchRequest(BaseModel):
+    topic: str
+    symbols: list[str] = []
+    as_of: Optional[str] = None
+
+
+class DeepResearchResponse(BaseModel):
+    topic: str
+    symbols: list[str] = []
+    as_of: str
+    summary: str
+    report_path: Optional[str] = None
+    source_count: int = 0
+    risk_flags: list[str] = []

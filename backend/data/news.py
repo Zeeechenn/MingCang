@@ -239,6 +239,33 @@ def get_recent_titles(symbol: str, db, hours: int = 24) -> list[str]:
     return [r[0] for r in rows]
 
 
+def get_recent_news_items(symbol: str, db, hours: int = 24) -> list[RawNews]:
+    """
+    读取该股最近 hours 小时内的新闻条目，保留 URL/source/time 供来源审计。
+    最多返回 30 条。
+    """
+    from backend.data.database import NewsItem
+
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    rows = (
+        db.query(NewsItem)
+        .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
+        .order_by(NewsItem.published_at.desc())
+        .limit(30)
+        .all()
+    )
+    return [
+        RawNews(
+            title=r.title,
+            url=r.url,
+            published_at=r.published_at,
+            source=r.source,
+            symbol=r.symbol,
+        )
+        for r in rows
+    ]
+
+
 def search_titles_tavily(query: str, days: int = 1, max_results: int = 5) -> list[str]:
     """
     用 Tavily Search API 搜索任意 query 的最新资讯标题。

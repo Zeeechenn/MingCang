@@ -1,0 +1,47 @@
+# 回填 2026-03-01 ~ 2026-05-08 every_n_days=1
+# 生成 460 个 SignalInput
+{
+  "path_a": {
+    "path_name": "aggregator_v1",
+    "trades": 35,
+    "wins": 20,
+    "losses": 15,
+    "win_rate": 57.1,
+    "avg_return": 4.72,
+    "sharpe": 2.46,
+    "profit_loss": 2.05,
+    "total_return": 280.1,
+    "max_drawdown": -49.35,
+    "entry_signal_count": 35,
+    "notes": []
+  },
+  "path_b": {
+    "path_name": "multi_agent_v2",
+    "trades": 35,
+    "wins": 20,
+    "losses": 15,
+    "win_rate": 57.1,
+    "avg_return": 4.72,
+    "sharpe": 2.46,
+    "profit_loss": 2.05,
+    "total_return": 280.1,
+    "max_drawdown": -49.35,
+    "entry_signal_count": 35,
+    "notes": []
+  },
+  "delta": {
+    "trades": 0,
+    "sharpe": 0.0,
+    "win_rate": 0.0,
+    "avg_return": 0.0,
+    "total_return": 0.0,
+    "max_drawdown": 0.0
+  },
+  "recommendation": "条件性推进 M4.4 / M4.5",
+  "rationale": "指标差异不显著（Sharpe +0.00, 胜率 +0.0%）。建议先做 M4.4 增强辩论质量，再观察",
+  "news_coverage": {
+    "total_signals": 460,
+    "with_key_events": 70,
+    "coverage_pct": 15.2
+  }
+}

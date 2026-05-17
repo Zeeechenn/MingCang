@@ -21,6 +21,43 @@ MODEL_DIR = Path.home() / ".stock-sage" / "models"
 MODEL_PATH = MODEL_DIR / "lgbm_alpha.pkl"
 
 
+def daily_rank_groups(df: pd.DataFrame) -> list[int]:
+    """Return LightGBM rank group sizes in current row order, grouped by date."""
+    if "date" not in df.columns:
+        return [len(df)]
+    return df.groupby("date", sort=False).size().astype(int).tolist()
+
+
+def make_rank_labels(df: pd.DataFrame) -> pd.Series:
+    """Convert forward returns into per-date ordinal labels for LambdaRank."""
+    if "date" not in df.columns:
+        return df["label"].rank(method="first").sub(1).astype(int)
+    return (
+        df.groupby("date", sort=False)["label"]
+        .rank(method="first")
+        .sub(1)
+        .astype(int)
+    )
+
+
+def _time_split(df: pd.DataFrame, split_ratio: float = 0.8) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split by date so a trading day is never split across train/validation."""
+    if "date" not in df.columns:
+        split = int(len(df) * split_ratio)
+        return df.iloc[:split], df.iloc[split:]
+
+    ordered = df.sort_values(["date", "symbol"] if "symbol" in df.columns else ["date"])
+    dates = pd.Series(ordered["date"].drop_duplicates().values)
+    split_idx = max(1, int(len(dates) * split_ratio))
+    split_date = dates.iloc[split_idx - 1]
+    train_df = ordered[ordered["date"] <= split_date]
+    val_df = ordered[ordered["date"] > split_date]
+    if val_df.empty:
+        split = int(len(ordered) * split_ratio)
+        return ordered.iloc[:split], ordered.iloc[split:]
+    return train_df, val_df
+
+
 def _load_model() -> object | None:
     """Load LightGBM model from disk, returning None if missing or corrupt."""
     if MODEL_PATH.exists():
@@ -47,7 +84,7 @@ def _momentum_fallback(df: pd.DataFrame) -> dict:
     }
 
 
-def qlib_score(df_raw: pd.DataFrame) -> dict:
+def qlib_score(df_raw: pd.DataFrame, symbol: str | None = None, db=None) -> dict:
     """
     输入日线 OHLCV DataFrame，返回量化信号得分字典。
     score: -100 ~ +100
@@ -58,7 +95,7 @@ def qlib_score(df_raw: pd.DataFrame) -> dict:
         return _momentum_fallback(df_raw)
 
     try:
-        feats = build_inference_features(df_raw)
+        feats = build_inference_features(df_raw, symbol=symbol, db=db)
         if feats.isnull().any():
             logger.debug("inference features contain NaN, using fallback")
             return _momentum_fallback(df_raw)
@@ -77,7 +114,12 @@ def qlib_score(df_raw: pd.DataFrame) -> dict:
         return _momentum_fallback(df_raw)
 
 
-def train(db, n_estimators: int = 300, learning_rate: float = 0.05) -> bool:
+def train(
+    db,
+    n_estimators: int = 300,
+    learning_rate: float = 0.05,
+    model_type: str = "regression",
+) -> bool:
     """
     训练 LightGBM Alpha 模型并保存到磁盘。
     调用方：
@@ -105,39 +147,63 @@ def train(db, n_estimators: int = 300, learning_rate: float = 0.05) -> bool:
         )
         return False
 
-    X = df[FEATURE_COLS]
-    y = df["label"]
+    train_df, val_df = _time_split(df)
+    X_train, X_val = train_df[FEATURE_COLS], val_df[FEATURE_COLS]
 
-    # 时序分割：前 80% 训练，后 20% 验证
-    split = int(len(df) * 0.8)
-    X_train, X_val = X.iloc[:split], X.iloc[split:]
-    y_train, y_val = y.iloc[:split], y.iloc[split:]
-
-    model = lgb.LGBMRegressor(
-        n_estimators=n_estimators,
-        learning_rate=learning_rate,
-        num_leaves=31,
-        min_child_samples=20,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        random_state=42,
-        n_jobs=-1,
-    )
-    model.fit(
-        X_train, y_train,
-        eval_set=[(X_val, y_val)],
-        callbacks=[
-            lgb.early_stopping(stopping_rounds=30, verbose=False),
-            lgb.log_evaluation(period=0),
-        ],
-    )
+    if model_type == "ranker":
+        y_train = make_rank_labels(train_df)
+        y_val = make_rank_labels(val_df)
+        model = lgb.LGBMRanker(
+            objective="lambdarank",
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            num_leaves=63,
+            min_child_samples=50,
+            subsample=0.8,
+            colsample_bytree=0.7,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
+            random_state=42,
+            n_jobs=-1,
+        )
+        model.fit(
+            X_train,
+            y_train,
+            group=daily_rank_groups(train_df),
+            eval_set=[(X_val, y_val)],
+            eval_group=[daily_rank_groups(val_df)],
+            callbacks=[
+                lgb.early_stopping(stopping_rounds=30, verbose=False),
+                lgb.log_evaluation(period=0),
+            ],
+        )
+    else:
+        y_train, y_val = train_df["label"], val_df["label"]
+        model = lgb.LGBMRegressor(
+            n_estimators=n_estimators,
+            learning_rate=learning_rate,
+            num_leaves=31,
+            min_child_samples=20,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=42,
+            n_jobs=-1,
+        )
+        model.fit(
+            X_train, y_train,
+            eval_set=[(X_val, y_val)],
+            callbacks=[
+                lgb.early_stopping(stopping_rounds=30, verbose=False),
+                lgb.log_evaluation(period=0),
+            ],
+        )
 
     # Information Coefficient（预测与实际收益的相关性）
     preds = model.predict(X_val)
-    ic = float(pd.Series(preds).corr(pd.Series(y_val.values)))
+    ic = float(pd.Series(preds).corr(pd.Series(val_df["label"].values)))
     logger.info(
-        "训练完成 | 样本: %d 行（训练 %d / 验证 %d）| IC = %.4f",
-        len(df), split, len(df) - split, ic,
+        "训练完成 | 模型: %s | 样本: %d 行（训练 %d / 验证 %d）| IC = %.4f",
+        model_type, len(df), len(train_df), len(val_df), ic,
     )
 
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -156,10 +222,10 @@ if __name__ == "__main__":
         from backend.data.database import SessionLocal
         db = SessionLocal()
         try:
-            ok = train(db)
+            ok = train(db, model_type="ranker" if "--ranker" in sys.argv else "regression")
             sys.exit(0 if ok else 1)
         finally:
             db.close()
     else:
-        print("用法: python3 -m backend.analysis.qlib_engine --train")
+        print("用法: python3 -m backend.analysis.qlib_engine --train [--ranker]")
         sys.exit(1)

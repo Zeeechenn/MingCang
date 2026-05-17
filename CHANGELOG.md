@@ -5,6 +5,81 @@
 
 ---
 
+## [M8] 深度研究与来源审计层 ✅（2026-05-17）
+
+### Added
+- `backend/data/news_audit.py`：轻量新闻来源审计，按来源可信度、URL 可追溯性、时效性和重复标题打分。
+- `backend/data/news.py::get_recent_news_items()`：保留 `title/url/source/published_at`，供情感分析前做证据审计。
+- `backend/scheduler.py`：盘后情感路径先审计本地 24h 新闻，再按原逻辑用 Tavily 补足标题；审计结果写入 `DecisionRun.input_snapshot.news_audit`。
+- `backend/research/deep_research.py`：手动专题研究流程，支持 CLI：
+  `PYTHONPATH=. python3 -m backend.research.deep_research --topic "AI算力产业链" --symbols 300308,300394`
+- `backend/research/agents.py`：专题研究角色模板（行业研究员、公司研究员、风险复核员、来源审计员、研究写作员）。
+- `POST /api/research/deep/run`：同步生成专题研究报告，返回报告路径、摘要、来源数量和风险标记。
+- `backend/memory/research_memory.py`：将深度研究报告以结构化 JSON 指针写入 `ai_memory(scope="research", category="deep_research")`。
+- 新增测试：
+  - `tests/test_news_audit.py`
+  - `tests/test_deep_research.py`
+
+### Changed
+- 深度研究写入 `DecisionRun(run_type="deep_research")` 和 `ResearchState`，但不创建 `Signal`，不进入日常盘后信号流水线。
+- 新闻情感输入从“纯标题列表”升级为“审计后的可用标题 + 可追溯审计记录”，不增加 LLM 成本。
+
+### Notes
+- 深度研究默认输出到 `docs/research/YYYY-MM-DD-主题.md`。
+- 当前深度研究为本地数据库优先的确定性流程；后续如接入 OpenAI `web_search` 或 Local Deep Research MCP，应保持手动触发，不接入 `job_postmarket()`。
+- 验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider tests/test_news_audit.py tests/test_deep_research.py` → **8 passed, 1 warning**
+- 验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **217 passed, 1 warning**
+
+---
+
+## [M6.1] 量化升级第一阶段 ✅（2026-05-16）
+
+### Added
+- `backend/data/qlib_data.py`：LightGBM 特征列加入 point-in-time 基本面因子：
+  `roe` / `revenue_yoy` / `net_profit_yoy` / `gross_margin` / `asset_turnover`
+- `build_training_data()`：按价格日期只合并当时已知的最近一期 `FinancialMetric`，避免直接使用未来季度数据
+- `build_inference_features(df, symbol, db)` 与 `qlib_score(df, symbol, db)`：推理侧可使用同一套基本面特征口径
+- `backend/analysis/qlib_engine.py`：新增可选 LambdaRank 训练入口
+  - `daily_rank_groups()`：按交易日生成 LightGBM rank group
+  - `make_rank_labels()`：按交易日生成横截面排序标签
+  - `train(..., model_type="ranker")` / CLI `--ranker`
+- `backend/data/universe.py`：新增 `filter_universe()`，支持按市值和日均成交额过滤候选股票池
+- `backend/data/market.py`：新增 `yfinance_cn` A 股日线 fallback（`.SZ` / `.SS` 后缀），用于东方财富接口断连时继续回填工程验证样本
+- `backend/data/quality.py`：新增数据覆盖报表，统计 active 股票、价格覆盖、2 年价格覆盖、财报覆盖、24h 新闻覆盖和 provider health
+- `backend/data/providers.py`：新增 provider health 计数（成功、失败、最近错误）
+- `backend/data/database.py`：新增 `FinancialMetric.disclosure_date` 和 `MarketSnapshot` 日频市值/股本/资金流快照表
+- `backend/data/market_features.py`：新增 point-in-time 市值/资金流 join helper
+- `backend/backtest/alphalens_qlib.py`：新增 `build_validation_report()` 标准化验证报告和 `--json-output`
+- `GET /api/system/data-coverage`：返回数据覆盖与 provider 可靠性摘要
+- 前端 `EvidenceCard`：展示数据覆盖摘要和当前标的数据覆盖
+- 新增测试：
+  - `tests/test_qlib_ranker.py`
+  - `tests/test_qlib_validation_panel.py`
+  - `tests/test_m6_data_quality.py`
+  - `tests/test_m6_market_features.py`
+  - `tests/test_m6_backtest_report.py`
+  - `tests/test_m6_api.py`
+
+### Changed
+- `backend/backtest/alphalens_qlib.py`：验证面板改为复用 `build_training_data()`，确保 IC/ICIR/分层回测与训练管线使用同一套特征
+- `backend/scheduler.py` / `backend/backtest/backfill_signals.py`：调用 `qlib_score()` 时传入 `symbol` 和 `db`
+- `qlib_data.py`：若 `FinancialMetric.disclosure_date` 存在，则训练/推理按披露日做 point-in-time join；缺失时才回退 `report_date`
+- `FEATURE_COLS` 加入市值/资金流派生特征：`log_market_cap`、`log_float_market_cap`、`north_net_buy`、`margin_balance`、`large_order_net_inflow`
+- Qlib 默认训练模式仍保持 regression；Ranker 需要显式 `--ranker`，避免未验证前改变生产行为
+
+### Notes
+- 当前 schema 只有 `FinancialMetric.report_date`，尚无真实披露日字段；后续如接入披露日，应把 point-in-time join 从报告期切到披露日
+- 由于 `FEATURE_COLS` 变化，旧本地 LightGBM 模型需重训；在重新验证前，生产默认 quant 权重仍保持 0
+- 工程验证样本扩容（当前 HS300 成分股，存在幸存者偏差）：active CN 70 只，其中 69 只满足 ≥480 行；验证面板 51,439 行 × 23 特征，股票数 70
+- 扩容后 Qlib regression 验证未通过：80/20 IC=-0.0074、ICIR=-0.034；walk-forward IC=+0.0026、ICIR=+0.009，Top-Bottom=-0.0011，分层非单调
+- 决策：暂不恢复 quant 权重，暂不启用 Ranker；先补真实披露日/资金流/市值等更强因子，再考虑 100–300 只 × 3–5 年可信验证
+- 数据覆盖快照：active 70 / price covered 70 / two-year price covered 69 / financial covered 10 / news 24h covered 0
+- 验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **208 passed, 1 warning**
+- 验证：`PYTHONDONTWRITEBYTECODE=1 python3 -m compileall backend tests` → 通过
+- 验证：`cd frontend && npm run build` → 通过
+
+---
+
 ## [M7] 工程化与开源就绪 ✅（2026-05-16）
 
 ### Changed / Fixed — 收尾（2026-05-16）

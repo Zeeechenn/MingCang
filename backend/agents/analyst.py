@@ -92,22 +92,65 @@ def sentiment_analyst(sentiment_result: dict) -> AnalystReport:
     )
 
 
+_NEWS_POS_KW = (
+    "利好", "上调", "增长", "突破", "签约", "中标", "回购",
+    "新高", "上涨", "看好", "净流入", "增持", "扩产",
+    "订单", "超预期", "强势", "受益", "买入评级", "涨",
+)
+_NEWS_NEG_KW = (
+    "利空", "下调", "暴跌", "亏损", "处罚", "退市", "减持",
+    "新低", "下跌", "看空", "净流出", "套现", "立案", "踩雷",
+    "违约", "暴雷", "差于预期", "弱于", "跌",
+)
+
+
 def news_analyst(sentiment_result: dict) -> AnalystReport:
-    """从情感结果中提取 key_events，专注事件影响"""
+    """
+    事件驱动分析师（M4.7 修复）。
+
+    设计：
+      • 无 key_events → score=0, confidence=0.1（不能给方向）
+      • 有 events → 用 LLM sentiment (-1~+1) × 80 作基线
+                   + 关键词命中每条 ±10 作微调
+                   → 总分截到 ±100
+      • 关键词列表大幅扩充，覆盖 A 股常见新闻语料（新高/新低、净流入/出、订单等）
+
+    与 sentiment_analyst 的区别：
+      • sentiment_analyst = 纯 sentiment × 100（连续，方向）
+      • news_analyst    = events-gated（事件触发） + 关键词强化（事件强度）
+      • 无事件时 news_analyst 归零，避免重复加权 sentiment 信号
+    """
     events = sentiment_result.get("key_events", []) or []
-    score = 0.0
-    pos_kw = ("利好", "上调", "增长", "突破", "签约", "中标", "回购")
-    neg_kw = ("利空", "下调", "暴跌", "亏损", "处罚", "退市", "减持")
+    if not events:
+        return AnalystReport(
+            role="news",
+            score=0.0,
+            confidence=0.1,
+            key_findings=["无关键事件"],
+            raw={"events": []},
+        )
+
+    overall_sent = sentiment_result.get("sentiment", 0.0) or 0.0
+    base = overall_sent * 80      # ±80 留 ±20 给关键词
+
+    bonus = 0
     for e in events:
-        if any(k in e for k in pos_kw):
-            score += 20
-        if any(k in e for k in neg_kw):
-            score -= 20
-    score = max(-100, min(100, score))
+        if any(k in e for k in _NEWS_POS_KW):
+            bonus += 10
+        if any(k in e for k in _NEWS_NEG_KW):
+            bonus -= 10
+
+    score = max(-100.0, min(100.0, base + bonus))
+    confidence = min(1.0, abs(score) / 60)
+
     return AnalystReport(
         role="news",
         score=round(score, 1),
-        confidence=0.5 if events else 0.1,
-        key_findings=events[:3] or ["无关键事件"],
-        raw={"events": events},
+        confidence=round(confidence, 2),
+        key_findings=events[:3],
+        raw={
+            "events": events,
+            "base_from_sentiment": round(base, 1),
+            "keyword_bonus": bonus,
+        },
     )

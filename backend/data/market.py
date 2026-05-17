@@ -39,6 +39,12 @@ def _cn_market_prefix(symbol: str) -> str:
     return "1" if symbol[:2] in ("60", "68", "11") else "0"
 
 
+def cn_yfinance_ticker(symbol: str) -> str:
+    """Map an A-share symbol to a Yahoo Finance ticker suffix."""
+    suffix = "SS" if symbol[:2] in ("60", "68", "11") else "SZ"
+    return f"{symbol}.{suffix}"
+
+
 @_retry(max_attempts=3, delay=1.0)
 def fetch_cn_daily(symbol: str, days: int = 365) -> pd.DataFrame:
     """拉取A股日线数据，返回 OHLCV DataFrame（index=date str）。
@@ -82,6 +88,18 @@ def fetch_cn_daily(symbol: str, days: int = 365) -> pd.DataFrame:
 
 
 @_retry(max_attempts=3, delay=1.0)
+def fetch_cn_daily_yfinance(symbol: str, days: int = 365) -> pd.DataFrame:
+    """Fallback A-share daily data via Yahoo Finance suffixes."""
+    ticker = yf.Ticker(cn_yfinance_ticker(symbol))
+    df = ticker.history(period=f"{days}d", interval="1d", auto_adjust=True)
+    if df.empty:
+        raise ValueError(f"No yfinance data for {symbol}")
+    df.index = df.index.strftime("%Y-%m-%d")
+    df.index.name = "date"
+    return df[["Open", "High", "Low", "Close", "Volume"]].rename(columns=str.lower)
+
+
+@_retry(max_attempts=3, delay=1.0)
 def fetch_us_daily(symbol: str, days: int = 365) -> pd.DataFrame:
     """拉取美股日线数据"""
     ticker = yf.Ticker(symbol)
@@ -93,11 +111,15 @@ def fetch_us_daily(symbol: str, days: int = 365) -> pd.DataFrame:
 
 def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
     """Dispatch to the appropriate market data fetcher based on market."""
-    if market == "CN":
-        return fetch_cn_daily(symbol, days)
-    elif market == "US":
-        return fetch_us_daily(symbol, days)
-    raise ValueError(f"Unknown market: {market}")
+    from backend.data.providers import fetch_daily_with_fallback, register_daily_provider
+
+    register_daily_provider("eastmoney_cn", {"CN"}, fetch_cn_daily)
+    register_daily_provider("yfinance_cn", {"CN"}, fetch_cn_daily_yfinance)
+    register_daily_provider("yfinance_us", {"US"}, fetch_us_daily)
+    df, provider = fetch_daily_with_fallback(symbol, market, days)
+    logger.debug("fetch_daily provider=%s symbol=%s market=%s rows=%d",
+                 provider, symbol, market, len(df))
+    return df
 
 
 def fetch_cn_index(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFrame:
@@ -166,7 +188,7 @@ def sync_index_to_db(db, index_symbol: str = "sh000300", days: int = 365) -> int
     return len(records)
 
 
-def backfill_if_needed(symbol: str, market: str, db) -> int:
+def backfill_if_needed(symbol: str, market: str, db, years: int | None = None) -> int:
     """
     检查该股历史数据是否充足。若最新记录距今超过阈值（或无记录），
     自动从 AkShare/yfinance 回填最多 BACKFILL_YEARS 年数据。
@@ -183,7 +205,7 @@ def backfill_if_needed(symbol: str, market: str, db) -> int:
             return 0
         fetch_days = days_old + 10
     else:
-        fetch_days = BACKFILL_YEARS * 365 + 10
+        fetch_days = (years or BACKFILL_YEARS) * 365 + 10
 
     df = fetch_daily(symbol, market, days=fetch_days)
 

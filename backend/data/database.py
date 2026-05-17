@@ -101,6 +101,7 @@ class FinancialMetric(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     symbol = Column(String, index=True)
     report_date = Column(String, index=True)        # "2024-09-30"
+    disclosure_date = Column(String, index=True, nullable=True)  # 实际披露日，缺失时回退 report_date
     period_type = Column(String, nullable=True)     # "Q1"/"Q2"/"Q3"/"Annual"
     revenue = Column(Float, nullable=True)
     revenue_yoy = Column(Float, nullable=True)      # 营业总收入同比 %
@@ -116,6 +117,27 @@ class FinancialMetric(Base):
     roe = Column(Float, nullable=True)              # 计算: 净利润 / 净资产
     asset_turnover = Column(Float, nullable=True)   # 计算: 收入 / 总资产
     raw_json = Column(Text, nullable=True)          # 完整原始字段备份
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MarketSnapshot(Base):
+    """
+    日频市值/股本/资金流快照。
+
+    作为 M6.1 数据底座，字段可由 Tushare/AkShare/yfinance 等来源逐步填充。
+    """
+    __tablename__ = "market_snapshots"
+    __table_args__ = (UniqueConstraint("symbol", "date", name="uq_ms_symbol_date"),)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String, index=True)
+    date = Column(String, index=True)
+    market_cap = Column(Float, nullable=True)
+    float_market_cap = Column(Float, nullable=True)
+    shares_outstanding = Column(Float, nullable=True)
+    north_net_buy = Column(Float, nullable=True)
+    margin_balance = Column(Float, nullable=True)
+    large_order_net_inflow = Column(Float, nullable=True)
+    source = Column(String, nullable=True)
     fetched_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -137,6 +159,51 @@ class LongTermLabel(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class DecisionRun(Base):
+    """
+    统一决策/实验 harness 记录。
+
+    用于回放一次信号或实验当时的输入、规则版本、Agent 输出、风控和复盘结果。
+    """
+    __tablename__ = "decision_runs"
+    __table_args__ = (UniqueConstraint("run_id", name="uq_decision_run_id"),)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String, index=True)
+    run_type = Column(String, index=True)          # postmarket/backtest/paper_trade/...
+    symbol = Column(String, index=True, nullable=True)
+    as_of = Column(String, index=True, nullable=True)
+    profile = Column(String, nullable=True)
+    rule_version = Column(String, nullable=True)
+    recommendation = Column(String, nullable=True)
+    composite_score = Column(Float, nullable=True)
+    input_snapshot_json = Column(Text, nullable=True)
+    agent_outputs_json = Column(Text, nullable=True)
+    risk_decision_json = Column(Text, nullable=True)
+    final_action_json = Column(Text, nullable=True)
+    eval_result_json = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ResearchState(Base):
+    """
+    单股研究状态。
+
+    持久化 thesis、风险、待验证假设和系统复盘摘要，供后续 Agent/前端复用。
+    """
+    __tablename__ = "research_states"
+    __table_args__ = (UniqueConstraint("symbol", name="uq_research_state_symbol"),)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String, index=True)
+    thesis = Column(Text, nullable=True)
+    risks_json = Column(Text, nullable=True)
+    open_questions_json = Column(Text, nullable=True)
+    last_signal_summary = Column(Text, nullable=True)
+    last_review_json = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def get_latest_price_date(symbol: str, db) -> str | None:
     """返回该股最新一条价格记录的日期字符串，无数据时返回 None"""
     result = db.query(Price.date).filter(Price.symbol == symbol)\
@@ -152,6 +219,10 @@ def _ensure_runtime_schema() -> None:
             conn.execute(text("ALTER TABLE signals ADD COLUMN rule_version TEXT"))
         if "data_timestamp" not in signal_cols:
             conn.execute(text("ALTER TABLE signals ADD COLUMN data_timestamp TEXT"))
+
+        fm_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(financial_metrics)")).fetchall()]
+        if "disclosure_date" not in fm_cols:
+            conn.execute(text("ALTER TABLE financial_metrics ADD COLUMN disclosure_date TEXT"))
 
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS ai_memory (
@@ -174,6 +245,64 @@ def _ensure_runtime_schema() -> None:
             CREATE VIRTUAL TABLE IF NOT EXISTS audit_log_fts USING fts5(
                 timestamp, event_type, content, related_symbol, related_scope
             )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS decision_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT,
+                run_type TEXT,
+                symbol TEXT,
+                as_of TEXT,
+                profile TEXT,
+                rule_version TEXT,
+                recommendation TEXT,
+                composite_score REAL,
+                input_snapshot_json TEXT,
+                agent_outputs_json TEXT,
+                risk_decision_json TEXT,
+                final_action_json TEXT,
+                eval_result_json TEXT,
+                notes TEXT,
+                created_at DATETIME,
+                UNIQUE(run_id)
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_decision_runs_symbol_as_of
+            ON decision_runs(symbol, as_of)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS research_states (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT UNIQUE,
+                thesis TEXT,
+                risks_json TEXT,
+                open_questions_json TEXT,
+                last_signal_summary TEXT,
+                last_review_json TEXT,
+                updated_at DATETIME,
+                created_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS market_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT,
+                date TEXT,
+                market_cap REAL,
+                float_market_cap REAL,
+                shares_outstanding REAL,
+                north_net_buy REAL,
+                margin_balance REAL,
+                large_order_net_inflow REAL,
+                source TEXT,
+                fetched_at DATETIME,
+                UNIQUE(symbol, date)
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_market_snapshots_symbol_date
+            ON market_snapshots(symbol, date)
         """))
 
 

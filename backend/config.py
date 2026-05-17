@@ -91,6 +91,19 @@ class Settings(BaseSettings):
     risk_manager_enabled: bool = True         # 风险经理对最终建议有否决权
     layered_memory_enabled: bool = True       # FinMem 风格分层记忆
 
+    # M4.1 多轮辩论（bull→bear反驳→bull回应→裁定）
+    # 在 multi_agent_enabled=True 时生效，仅分歧 >= min_divergence 时触发
+    multi_round_debate_enabled: bool = True
+    multi_round_debate_min_divergence: float = 20.0   # 分析师分数标准差阈值
+    multi_round_debate_max_rounds: int = 3            # 最多 3 轮（bull/bear/bull-final）
+
+    # M4.2 Research Director（评估分析师报告质量 + 下达辩论议题）
+    research_director_enabled: bool = True
+    director_min_confidence: float = 0.25     # 平均置信度低于此值发出"数据不足"警告
+
+    # M4.3 Portfolio Manager（组合层仓位统筹）
+    portfolio_manager_enabled: bool = True
+
     # 长期分析师团 first batch（周频运行）
     long_term_team_enabled: bool = True
     long_term_a_teacher_enabled: bool = True

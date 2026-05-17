@@ -1,7 +1,7 @@
 """FastAPI 路由"""
 from __future__ import annotations
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -9,10 +9,66 @@ from backend.data.database import get_db, SessionLocal, Stock, Signal, Price, Ne
 from backend.api.schemas import (
     WatchlistItem, SignalOut, PriceBar, NewsOut,
     SignalEvalOut, SignalEvalRecord, LongTermLabelOut,
+    DecisionRunOut, ResearchStateOut, DataCoverageOut,
+    DeepResearchRequest, DeepResearchResponse,
 )
 from backend.decision.signal_policy import is_entry_signal
 
 router = APIRouter()
+
+
+TEST1_POSITIONS = [
+    {
+        "symbol": "300308",
+        "name": "中际旭创",
+        "entry_date": "2026-05-13",
+        "entry_price": 999.68,
+        "stop_loss": 990.15,
+        "take_profit": 1262.49,
+        "status": "持有中",
+        "pnl_pct": 8.13,
+    },
+    {
+        "symbol": "603986",
+        "name": "兆易创新",
+        "entry_date": "2026-05-13",
+        "entry_price": 344.00,
+        "stop_loss": 323.28,
+        "take_profit": 425.31,
+        "status": "持有中",
+        "pnl_pct": 3.86,
+    },
+    {
+        "symbol": "300750",
+        "name": "宁德时代",
+        "entry_date": "2026-05-14",
+        "entry_price": 449.38,
+        "stop_loss": 395.57,
+        "take_profit": 493.69,
+        "status": "持有中⚠️",
+        "pnl_pct": -4.70,
+    },
+    {
+        "symbol": "300394",
+        "name": "天孚通信",
+        "entry_date": "2026-05-15",
+        "entry_price": 394.52,
+        "stop_loss": 358.23,
+        "take_profit": 498.61,
+        "status": "持有中",
+        "pnl_pct": 2.66,
+    },
+]
+
+TEST2_UNIVERSE = [
+    {"symbol": "600547", "name": "山东黄金", "sector": "黄金矿业"},
+    {"symbol": "688008", "name": "澜起科技", "sector": "AI 算力 / 半导体"},
+    {"symbol": "603993", "name": "洛阳钼业", "sector": "有色金属"},
+    {"symbol": "300308", "name": "中际旭创", "sector": "AI 算力 / 光模块"},
+    {"symbol": "603986", "name": "兆易创新", "sector": "半导体 / 存储"},
+    {"symbol": "601088", "name": "中国神华", "sector": "能源矿业"},
+    {"symbol": "300394", "name": "天孚通信", "sector": "AI 算力 / 光模块"},
+]
 
 
 # ── 内部工具 ─────────────────────────────────────────────────────────
@@ -340,6 +396,89 @@ def eval_signals(symbol: str, days: int = 60, db: Session = Depends(get_db)):
 
 # ── 系统状态 ─────────────────────────────────────────────────────────
 
+RUNTIME_CONFIG_KEYS = {
+    "paper_trading_profile",
+    "new_framework_entry_threshold",
+    "test1_entry_threshold",
+    "weight_quant",
+    "weight_technical",
+    "weight_sentiment",
+    "adx_filter_enabled",
+    "regime_filter_enabled",
+    "multi_agent_enabled",
+    "risk_manager_enabled",
+    "director_min_confidence",
+    "long_term_team_enabled",
+    "trailing_stop_enabled",
+    "max_position_per_stock",
+    "max_position_per_sector",
+    "max_total_equity_pct",
+}
+
+
+def _runtime_config_payload() -> dict:
+    """Return editable runtime settings for the Admin UI."""
+    from backend.config import active_signal_weights, settings
+    from backend.ops import kill_switch
+
+    weights = active_signal_weights()
+    ks_state = kill_switch.current_state()
+    return {
+        "persisted": False,
+        "note": "运行时配置只影响当前 FastAPI 进程，重启后按 .env 恢复。",
+        "profile": settings.paper_trading_profile,
+        "active_profile": weights.profile,
+        "entry_threshold": weights.entry_threshold,
+        "new_framework_entry_threshold": settings.new_framework_entry_threshold,
+        "test1_entry_threshold": settings.test1_entry_threshold,
+        "weights": {
+            "quant": weights.quant,
+            "technical": weights.technical,
+            "sentiment": weights.sentiment,
+        },
+        "raw_weights": {
+            "weight_quant": settings.weight_quant,
+            "weight_technical": settings.weight_technical,
+            "weight_sentiment": settings.weight_sentiment,
+            "test1_weight_quant": settings.test1_weight_quant,
+            "test1_weight_technical": settings.test1_weight_technical,
+            "test1_weight_sentiment": settings.test1_weight_sentiment,
+        },
+        "adx_filter_enabled": settings.adx_filter_enabled,
+        "regime_filter_enabled": settings.regime_filter_enabled,
+        "multi_agent_enabled": settings.multi_agent_enabled,
+        "risk_manager_enabled": settings.risk_manager_enabled,
+        "director_min_confidence": settings.director_min_confidence,
+        "long_term_team_enabled": settings.long_term_team_enabled,
+        "trailing_stop_enabled": settings.trailing_stop_enabled,
+        "max_position_per_stock": settings.max_position_per_stock,
+        "max_position_per_sector": settings.max_position_per_sector,
+        "max_total_equity_pct": settings.max_total_equity_pct,
+        "kill_switch_active": bool(ks_state and ks_state.get("active")),
+    }
+
+
+@router.get("/system/runtime-config")
+def get_runtime_config():
+    """Return editable runtime configuration for the Admin UI."""
+    return _runtime_config_payload()
+
+
+@router.patch("/system/runtime-config")
+def update_runtime_config(payload: dict):
+    """Update a safe whitelist of runtime settings for the current process."""
+    from backend.config import settings
+
+    for key in payload:
+        if key not in RUNTIME_CONFIG_KEYS:
+            raise HTTPException(400, f"Unsupported runtime config key: {key}")
+
+    for key, value in payload.items():
+        setattr(settings, key, value)
+
+    return _runtime_config_payload()
+
+
 @router.get("/system/status")
 def system_status(db: Session = Depends(get_db)):
     """Return database and long-term label status summary."""
@@ -357,6 +496,14 @@ def system_status(db: Session = Depends(get_db)):
         "long_term_labels_count": db.query(LongTermLabel).count(),
         "latest_long_term_label_date": latest_label_date[0] if latest_label_date else None,
     }
+
+
+@router.get("/system/data-coverage", response_model=DataCoverageOut)
+def data_coverage(db: Session = Depends(get_db)):
+    """Return data coverage and provider reliability report."""
+    from backend.data.quality import build_data_coverage_report
+
+    return build_data_coverage_report(db)
 
 
 @router.get("/system/health")
@@ -444,6 +591,91 @@ def reset_kill_switch():
     return {"reset": True}
 
 
+@router.get("/dashboard/summary")
+def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
+    """Return a read-only dashboard snapshot for the StockSage cockpit."""
+    from backend.config import active_signal_weights, settings
+    from backend.data.quality import build_data_coverage_report
+    from backend.ops import kill_switch
+
+    today = date.fromisoformat(as_of) if as_of else date.today()
+    test1_start = date.fromisoformat(settings.test1_start_date)
+    test1_end = date.fromisoformat(settings.test1_end_date)
+    if test1_start <= today <= test1_end:
+        active_test = "test1"
+    elif date(2026, 5, 21) <= today <= date(2026, 7, 21):
+        active_test = "test2"
+    else:
+        active_test = "between_tests"
+
+    coverage = build_data_coverage_report(db)
+    weights = active_signal_weights(today)
+    latest_price_date = db.query(Price.date).order_by(Price.date.desc()).first()
+    latest_signal_date = db.query(Signal.date).order_by(Signal.date.desc()).first()
+    latest_date = latest_signal_date[0] if latest_signal_date else None
+    latest_signals = []
+    entry_count = 0
+    if latest_date:
+        rows = (
+            db.query(Signal)
+            .filter(Signal.date == latest_date)
+            .order_by(Signal.composite_score.desc())
+            .limit(12)
+            .all()
+        )
+        latest_signals = [_signal_to_schema(row).model_dump() for row in rows]
+        entry_count = sum(1 for row in rows if is_entry_signal(row.recommendation, include_legacy=True))
+
+    db_path = settings.database_url.removeprefix("sqlite:///")
+    return {
+        "system": {
+            "database_ok": True,
+            "database_path": db_path,
+            "latest_price_date": latest_price_date[0] if latest_price_date else None,
+            "kill_switch": kill_switch.current_state(),
+            "profile": weights.profile,
+            "entry_threshold": weights.entry_threshold,
+            "weights": {
+                "quant": weights.quant,
+                "technical": weights.technical,
+                "sentiment": weights.sentiment,
+            },
+        },
+        "paper_trading": {
+            "active_test": active_test,
+            "test1": {
+                "period": "2026-05-13 ~ 2026-05-20",
+                "rule_version": "test1_legacy_qlib",
+                "entry_threshold": settings.test1_entry_threshold,
+                "forced_exit": True,
+                "forced_exit_unit": "5 个 A 股交易日",
+                "positions": len(TEST1_POSITIONS),
+                "position_pct": 0.20,
+                "total_position_pct": 0.80,
+                "holdings": TEST1_POSITIONS,
+            },
+            "test2": {
+                "period": "2026-05-21 ~ 2026-07-21",
+                "rule_version": "new_framework",
+                "entry_threshold": settings.new_framework_entry_threshold,
+                "forced_exit": False,
+                "position_pct": settings.max_position_per_stock,
+                "max_positions": 3,
+                "total_position_pct": 0.45,
+                "universe": TEST2_UNIVERSE,
+                "trailing_stop_enabled": settings.trailing_stop_enabled,
+                "trailing_atr_mult": settings.trailing_atr_mult,
+            },
+        },
+        "coverage": coverage,
+        "signals": {
+            "latest_date": latest_date,
+            "entry_count": entry_count,
+            "latest": latest_signals,
+        },
+    }
+
+
 # ── 新闻 ──────────────────────────────────────────────────────────────
 
 @router.get("/news/{symbol}", response_model=list[NewsOut])
@@ -468,3 +700,60 @@ def get_news(symbol: str, hours: int = 48, db: Session = Depends(get_db)):
         )
         for r in rows
     ]
+
+
+# ── 决策证据链 / 研究状态 ────────────────────────────────────────────
+
+@router.get("/signals/{symbol}/evidence", response_model=list[DecisionRunOut])
+def get_signal_evidence(symbol: str, limit: int = 10, db: Session = Depends(get_db)):
+    """Return recent decision harness records for a symbol."""
+    from backend.decision.harness import get_decision_evidence
+
+    return get_decision_evidence(db, symbol, limit=limit)
+
+
+@router.get("/research/{symbol}", response_model=ResearchStateOut)
+def get_symbol_research_state(symbol: str, db: Session = Depends(get_db)):
+    """Return the persistent research state for a symbol."""
+    from backend.decision.harness import get_research_state
+
+    return get_research_state(db, symbol)
+
+
+@router.post("/research/{symbol}/review")
+def review_symbol_latest_signal(symbol: str, db: Session = Depends(get_db)):
+    """Run a lightweight attribution review for the latest evaluable signal."""
+    from backend.decision.harness import review_latest_signal
+
+    review = review_latest_signal(db, symbol)
+    if review is None:
+        raise HTTPException(404, "No evaluable signal found")
+    return review
+
+
+@router.post("/research/deep/run", response_model=DeepResearchResponse)
+def run_deep_research_endpoint(
+    request: DeepResearchRequest,
+    db: Session = Depends(get_db),
+):
+    """Run a manual deep research report. This never creates daily signals."""
+    from backend.research.deep_research import run_deep_research
+
+    if not request.topic.strip():
+        raise HTTPException(400, "topic is required")
+    report = run_deep_research(
+        topic=request.topic.strip(),
+        symbols=request.symbols,
+        db=db,
+        as_of=request.as_of,
+        persist=True,
+    )
+    return DeepResearchResponse(
+        topic=report.topic,
+        symbols=report.symbols,
+        as_of=report.as_of,
+        summary=report.summary,
+        report_path=str(report.path) if report.path else None,
+        source_count=report.source_count,
+        risk_flags=report.risk_flags,
+    )

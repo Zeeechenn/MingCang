@@ -155,7 +155,8 @@ def job_postmarket() -> None:
         return
     from backend.data.database import SessionLocal, Stock
     from backend.data.market import load_price_df
-    from backend.data.news import get_recent_titles, fetch_titles_tavily
+    from backend.data.news import get_recent_news_items, fetch_titles_tavily
+    from backend.data.news_audit import audited_titles
     from backend.analysis.technical import technical_score
     from backend.analysis.qlib_engine import qlib_score
     from backend.analysis.sentiment import analyze_news
@@ -202,11 +203,12 @@ def job_postmarket() -> None:
                 date_str = df.index[-1]
 
                 # 量化信号：LightGBM Alpha（未训练时退化为动量占位）
-                quant_result = qlib_score(df)
+                quant_result = qlib_score(df, symbol=stock.symbol, db=db)
                 quant = quant_result["score"]
 
-                # 情感信号：DB 24h内新闻 + Tavily实时补充（不足阈值时触发）
-                titles = get_recent_titles(stock.symbol, db, hours=24)
+                # 情感信号：DB 24h 内新闻先做轻量来源审计；Tavily 只作不足时补充
+                news_items = get_recent_news_items(stock.symbol, db, hours=24)
+                titles, news_audits = audited_titles(news_items)
                 if len(titles) < settings.tavily_supplement_threshold:
                     tavily_titles = fetch_titles_tavily(stock.symbol, stock.name)
                     if tavily_titles:
@@ -214,6 +216,17 @@ def job_postmarket() -> None:
                         logger.info("Tavily补充 %s: +%d条 (DB=%d条)",
                                     stock.symbol, len(tavily_titles), len(titles) - len(tavily_titles))
                 sentiment_result = analyze_news(titles, symbol=stock.symbol)
+                sentiment_result["news_audit"] = [
+                    {
+                        "title": audit.title,
+                        "score": audit.score,
+                        "usable": audit.usable,
+                        "risk_flags": audit.risk_flags,
+                        "source": audit.news.source,
+                        "url": audit.news.url,
+                    }
+                    for audit in news_audits[:10]
+                ]
 
                 reflection = get_layered_context(stock.symbol, db)
                 lt_label = long_term_labels.get(stock.symbol)
@@ -238,11 +251,17 @@ def job_postmarket() -> None:
                         sentiment_result=sentiment_result,
                         reflection_context=reflection,
                     )
+                result["news_audit"] = sentiment_result.get("news_audit", [])
 
                 save_signal(stock.symbol, date_str, result, db)
                 save_decision(stock.symbol, date_str, result)
                 if settings.layered_memory_enabled:
                     save_decision_layered(stock.symbol, date_str, result)
+                try:
+                    from backend.decision.harness import review_latest_signal
+                    review_latest_signal(db, stock.symbol)
+                except Exception as e:
+                    logger.warning("auto review failed %s: %s", stock.symbol, e)
                 logger.info(
                     "signal saved: %s %s %s(%.0f) quant=%.1f tech=%.1f sentiment=%.2f model=%s",
                     stock.symbol, date_str, result["recommendation"],
