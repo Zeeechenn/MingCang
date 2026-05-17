@@ -721,7 +721,7 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
     test1_end = date.fromisoformat(settings.test1_end_date)
     if test1_start <= today <= test1_end:
         active_test = "test1"
-    elif date(2026, 5, 21) <= today <= date(2026, 7, 21):
+    elif date(2026, 5, 18) <= today <= date(2026, 7, 18):
         active_test = "test2"
     else:
         active_test = "between_tests"
@@ -762,7 +762,7 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
         "paper_trading": {
             "active_test": active_test,
             "test1": {
-                "period": "2026-05-13 ~ 2026-05-20",
+                "period": "2026-05-13 ~ 2026-05-17",
                 "rule_version": "test1_legacy_qlib",
                 "entry_threshold": settings.test1_entry_threshold,
                 "forced_exit": True,
@@ -773,7 +773,7 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
                 "holdings": TEST1_POSITIONS,
             },
             "test2": {
-                "period": "2026-05-21 ~ 2026-07-21",
+                "period": "2026-05-18 ~ 2026-07-18",
                 "rule_version": "new_framework",
                 "entry_threshold": settings.new_framework_entry_threshold,
                 "forced_exit": False,

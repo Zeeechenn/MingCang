@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # 纸上交易验证轨：测试1保留旧三路框架，测试2回到新框架。
     paper_trading_profile: str = "auto"  # auto / test1_legacy_qlib / new_framework
     test1_start_date: str = "2026-05-13"
-    test1_end_date: str = "2026-05-20"
+    test1_end_date: str = "2026-05-17"
     test1_multi_agent_enabled: bool = False
     test1_weight_quant: float = 0.45
     test1_weight_technical: float = 0.40
