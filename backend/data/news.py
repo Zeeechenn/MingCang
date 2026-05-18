@@ -94,9 +94,16 @@ def _fetch_news_df(symbol: str):
     except Exception as e:
         logger.warning("direct news API failed for %s: %s, fallback to AkShare", symbol, e)
 
-    # fallback
+    # fallback with retry
     import akshare as ak
-    return ak.stock_news_em(symbol=symbol)
+    for attempt in range(3):
+        try:
+            return ak.stock_news_em(symbol=symbol)
+        except Exception as e2:
+            if attempt == 2:
+                logger.warning("AkShare news fallback also failed for %s: %s", symbol, e2)
+                return None
+            time.sleep(1.5 * (2 ** attempt))
 
 
 def fetch_stock_news_cn(symbol: str, limit: int = 20) -> list[RawNews]:

@@ -104,7 +104,13 @@ def _load_skill_system_prompt() -> str:
     """读 ~/.claude/skills/a-teacher/SKILL.md 作 system prompt，失败用兜底"""
     try:
         if SKILL_MD_PATH.exists():
-            return SKILL_MD_PATH.read_text(encoding="utf-8")
+            raw = SKILL_MD_PATH.read_text(encoding="utf-8")
+            # 剥离 YAML frontmatter（避免 `---` 开头让 CLI argparser 把整段当 option）
+            if raw.startswith("---"):
+                end = raw.find("\n---", 3)
+                if end != -1:
+                    raw = raw[end + 4:].lstrip()
+            return raw
     except Exception as e:
         logger.warning("读取 SKILL.md 失败: %s", e)
     return _FALLBACK_SYSTEM

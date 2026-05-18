@@ -21,7 +21,11 @@ def get_provider() -> LLMProvider:
 
     provider = settings.ai_provider.lower()
 
-    if provider == "openai":
+    if provider == "local_cli":
+        from backend.llm.local_cli_provider import LocalCLIProvider
+        _instance = LocalCLIProvider()
+        logger.info("LLM provider: LocalCLI (claude -p subprocess, no API key needed)")
+    elif provider == "openai":
         from backend.llm.openai_provider import OpenAIProvider
         _instance = OpenAIProvider(
             api_key=settings.openai_api_key,

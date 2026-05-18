@@ -47,31 +47,29 @@ def cn_yfinance_ticker(symbol: str) -> str:
 
 @_retry(max_attempts=3, delay=1.0)
 def fetch_cn_daily(symbol: str, days: int = 365) -> pd.DataFrame:
-    """拉取A股日线数据，返回 OHLCV DataFrame（index=date str）。
-    直连东方财富 API 绕过系统代理（proxies=None），无需修改代理配置。"""
-    import requests as _req
+    """拉取A股日线数据，返回 OHLCV DataFrame（index=date str）。"""
     start = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
     secid = f"{_cn_market_prefix(symbol)}.{symbol}"
-    resp = _req.get(
-        "https://push2his.eastmoney.com/api/qt/stock/kline/get",
-        params={
-            "secid": secid,
-            "fields1": "f1,f2,f3,f4,f5,f6",
-            "fields2": "f51,f52,f53,f54,f55,f56",
-            "klt": "101",    # 日线
-            "fqt": "1",      # 前复权
-            "beg": start,
-            "end": "20500101",
-            "ut": "7eea3edcaed734bea9cbfc24409ed989",
-        },
-        proxies={"http": None, "https": None},  # 直连，绕过系统代理
-        timeout=10,
+    import subprocess as _sp, json as _json
+    # eastmoney API 要求逗号不能 URL 编码（%2C 会触发空响应），直接拼 URL
+    url = (
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        f"?secid={secid}"
+        "&fields1=f1,f2,f3,f4,f5,f6"
+        "&fields2=f51,f52,f53,f54,f55,f56"
+        "&klt=101&fqt=1"
+        f"&beg={start}&end=20500101"
+        "&ut=7eea3edcaed734bea9cbfc24409ed989"
     )
-    resp.raise_for_status()
-    klines = (resp.json().get("data") or {}).get("klines") or []
+    # curl 走 Clash TUN，绕开 Python requests 与 TUN 的 SSL 握手问题
+    result = _sp.run(["curl", "-s", "--max-time", "10", url],
+                     capture_output=True, text=True)
+    if result.returncode != 0:
+        raise ConnectionError(f"curl failed: {result.stderr}")
+    data = _json.loads(result.stdout)
+    klines = (data.get("data") or {}).get("klines") or []
     if not klines:
         raise ValueError(f"No kline data for {symbol}")
-
     rows = []
     for line in klines:
         parts = line.split(",")
@@ -83,8 +81,8 @@ def fetch_cn_daily(symbol: str, days: int = 365) -> pd.DataFrame:
             "low":    float(parts[4]),
             "volume": float(parts[5]),
         })
-    df = pd.DataFrame(rows).set_index("date")
-    return df[["open", "high", "low", "close", "volume"]]
+    df_result = pd.DataFrame(rows).set_index("date")
+    return df_result[["open", "high", "low", "close", "volume"]]
 
 
 @_retry(max_attempts=3, delay=1.0)
@@ -122,6 +120,7 @@ def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
     return df
 
 
+@_retry(max_attempts=3, delay=1.0)
 def fetch_cn_index(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFrame:
     """
     拉取A股指数日线数据，默认沪深300。

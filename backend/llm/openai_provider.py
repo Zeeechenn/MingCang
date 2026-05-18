@@ -1,8 +1,29 @@
 import json
 import logging
+import time
+import functools
 from backend.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _llm_retry(max_attempts: int = 3, delay: float = 2.0):
+    """LLM 调用指数退避重试（网络错误 / 限速 / 服务端 5xx）"""
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                result = fn(*args, **kwargs)
+                if result:  # 非空 dict 表示成功
+                    return result
+                if attempt < max_attempts - 1:
+                    wait = delay * (2 ** attempt)
+                    logger.warning("%s 返回空结果（第%d次），%.1fs后重试",
+                                   fn.__qualname__, attempt + 1, wait)
+                    time.sleep(wait)
+            return {}
+        return wrapper
+    return decorator
 
 _MODELS = {
     "fast":    "anthropic/claude-sonnet-4.6",
@@ -33,6 +54,7 @@ class OpenAIProvider(LLMProvider):
             }
         self._client = OpenAI(**kwargs)
 
+    @_llm_retry(max_attempts=3, delay=2.0)
     def complete_structured(
         self,
         prompt: str,

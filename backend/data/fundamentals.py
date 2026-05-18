@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import functools
 from datetime import datetime
 from typing import Iterable
 
@@ -29,6 +30,26 @@ import pandas as pd
 from backend.data.database import FinancialMetric, Stock, SessionLocal
 
 logger = logging.getLogger(__name__)
+
+
+def _akshare_retry(max_attempts: int = 3, delay: float = 1.5):
+    """AkShare 网络调用指数退避重试"""
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    return fn(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_attempts - 1:
+                        logger.warning("%s 最终失败: %s", fn.__name__, e)
+                        return pd.DataFrame()
+                    wait = delay * (2 ** attempt)
+                    logger.warning("%s 失败（第%d次），%.1fs后重试: %s",
+                                   fn.__name__, attempt + 1, wait, e)
+                    time.sleep(wait)
+        return wrapper
+    return decorator
 
 
 # ── 工具 ──────────────────────────────────────────────────────────────
@@ -113,24 +134,18 @@ def sync_industry(db) -> int:
 
 # ── 财报同步 ──────────────────────────────────────────────────────────
 
+@_akshare_retry(max_attempts=3, delay=1.5)
 def _fetch_abstract(ak, symbol: str) -> pd.DataFrame:
     """财务摘要（含历史多期，列 = 报告期，行 = 指标）"""
-    try:
-        return ak.stock_financial_abstract(symbol=symbol)
-    except Exception as e:
-        logger.warning("stock_financial_abstract %s: %s", symbol, e)
-        return pd.DataFrame()
+    return ak.stock_financial_abstract(symbol=symbol)
 
 
+@_akshare_retry(max_attempts=3, delay=1.5)
 def _fetch_indicator(ak, symbol: str, years: int = 5) -> pd.DataFrame:
     """财务指标（含 ROE、资产周转率等衍生指标）。必须传 start_year 否则返回空。"""
-    try:
-        from datetime import datetime
-        start_year = str(datetime.now().year - years)
-        return ak.stock_financial_analysis_indicator(symbol=symbol, start_year=start_year)
-    except Exception as e:
-        logger.warning("stock_financial_analysis_indicator %s: %s", symbol, e)
-        return pd.DataFrame()
+    from datetime import datetime
+    start_year = str(datetime.now().year - years)
+    return ak.stock_financial_analysis_indicator(symbol=symbol, start_year=start_year)
 
 
 def _row_lookup(df: pd.DataFrame, *needles: str) -> pd.Series | None:
