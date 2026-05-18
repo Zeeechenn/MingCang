@@ -9,6 +9,11 @@ from backend.data.market_features import MARKET_FEATURE_COLS, attach_market_feat
 logger = logging.getLogger(__name__)
 
 # LightGBM 使用的特征列（推理时必须与训练完全一致）
+#
+# 注：以下市场端特征因数据源不可得已剔除（详见 market_snapshots.py 文档）：
+#   - log_float_market_cap：无独立流通市值历史源，与 log_market_cap 完全相关
+#   - north_net_buy：2024-08 后个股北向数据政策性下架
+#   - large_order_net_inflow：fflow daykline 端点在本机 Clash TUN 下空响应
 FEATURE_COLS = [
     "mom_5", "mom_20", "mom_60",
     "rev_10", "rev_20",
@@ -31,10 +36,7 @@ FEATURE_COLS = [
     "gross_margin",
     "asset_turnover",
     "log_market_cap",
-    "log_float_market_cap",
-    "north_net_buy",
     "margin_balance",
-    "large_order_net_inflow",
 ]
 
 FUNDAMENTAL_COLS = [
@@ -47,10 +49,7 @@ FUNDAMENTAL_COLS = [
 
 QLIB_MARKET_FEATURE_COLS = [
     "log_market_cap",
-    "log_float_market_cap",
-    "north_net_buy",
     "margin_balance",
-    "large_order_net_inflow",
 ]
 
 
