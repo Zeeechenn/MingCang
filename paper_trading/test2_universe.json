@@ -1,0 +1,31 @@
+{
+  "version": "2026-05-18",
+  "source": "paper_trading/test2.md 股票池（25 只，原始回测池 + 分享报告导入池）",
+  "stocks": [
+    {"symbol": "600547", "name": "山东黄金",   "sector": "黄金矿业",            "origin": "original"},
+    {"symbol": "688008", "name": "澜起科技",   "sector": "AI 算力 / 半导体",     "origin": "original"},
+    {"symbol": "603993", "name": "洛阳钼业",   "sector": "有色金属",             "origin": "original"},
+    {"symbol": "300308", "name": "中际旭创",   "sector": "AI 算力 / 光模块",     "origin": "original"},
+    {"symbol": "603986", "name": "兆易创新",   "sector": "半导体 / 存储",        "origin": "original"},
+    {"symbol": "601088", "name": "中国神华",   "sector": "能源矿业",             "origin": "original"},
+    {"symbol": "300394", "name": "天孚通信",   "sector": "AI 算力 / 光模块",     "origin": "original"},
+    {"symbol": "002371", "name": "北方华创",   "sector": "半导体设备",           "origin": "report_r1"},
+    {"symbol": "600584", "name": "长电科技",   "sector": "半导体封测",           "origin": "report_r1"},
+    {"symbol": "600900", "name": "长江电力",   "sector": "水电 / 公用事业",       "origin": "report_r1"},
+    {"symbol": "601689", "name": "拓普集团",   "sector": "机器人执行器",         "origin": "report_r1"},
+    {"symbol": "300274", "name": "阳光电源",   "sector": "新能源 / 储能",        "origin": "report_r1"},
+    {"symbol": "600160", "name": "巨化股份",   "sector": "氟化工",               "origin": "report_r1"},
+    {"symbol": "600036", "name": "招商银行",   "sector": "银行",                 "origin": "report_r1"},
+    {"symbol": "000858", "name": "五粮液",     "sector": "白酒",                 "origin": "report_r1"},
+    {"symbol": "300124", "name": "汇川技术",   "sector": "机器人 / 工控",        "origin": "report_r2"},
+    {"symbol": "601899", "name": "紫金矿业",   "sector": "有色 / 资源",          "origin": "report_r2"},
+    {"symbol": "601318", "name": "中国平安",   "sector": "保险",                 "origin": "report_r2"},
+    {"symbol": "688111", "name": "金山办公",   "sector": "AI 应用 / 软件",       "origin": "report_r2"},
+    {"symbol": "600406", "name": "国电南瑞",   "sector": "电网自动化",           "origin": "report_r2"},
+    {"symbol": "603259", "name": "药明康德",   "sector": "CXO / 医药",          "origin": "report_r2"},
+    {"symbol": "300750", "name": "宁德时代",   "sector": "动力电池",             "origin": "report_r2"},
+    {"symbol": "002050", "name": "三花智控",   "sector": "机器人 / 热管理",      "origin": "report_r2"},
+    {"symbol": "000568", "name": "泸州老窖",   "sector": "白酒",                 "origin": "report_r2"},
+    {"symbol": "002475", "name": "立讯精密",   "sector": "消费电子",             "origin": "report_r2"}
+  ]
+}

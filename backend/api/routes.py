@@ -1,9 +1,13 @@
 """FastAPI 路由"""
 from __future__ import annotations
 import json
+import logging
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from backend.data.database import get_db, SessionLocal, Stock, Signal, Price, NewsItem, FinancialMetric, LongTermLabel
 from backend.api.schemas import (
@@ -60,15 +64,27 @@ TEST1_POSITIONS = [
     },
 ]
 
-TEST2_UNIVERSE = [
-    {"symbol": "600547", "name": "山东黄金", "sector": "黄金矿业"},
-    {"symbol": "688008", "name": "澜起科技", "sector": "AI 算力 / 半导体"},
-    {"symbol": "603993", "name": "洛阳钼业", "sector": "有色金属"},
-    {"symbol": "300308", "name": "中际旭创", "sector": "AI 算力 / 光模块"},
-    {"symbol": "603986", "name": "兆易创新", "sector": "半导体 / 存储"},
-    {"symbol": "601088", "name": "中国神华", "sector": "能源矿业"},
-    {"symbol": "300394", "name": "天孚通信", "sector": "AI 算力 / 光模块"},
-]
+TEST2_UNIVERSE_PATH = Path(__file__).resolve().parents[2] / "paper_trading" / "test2_universe.json"
+
+
+def _load_test2_universe() -> list[dict]:
+    """Single source of truth for the test2 paper-trading universe.
+
+    Falls back to an empty list with a logged warning rather than crashing the
+    dashboard route, since the universe is informational metadata.
+    """
+    try:
+        data = json.loads(TEST2_UNIVERSE_PATH.read_text(encoding="utf-8"))
+        return data.get("stocks", [])
+    except FileNotFoundError:
+        logger.warning("test2_universe.json missing at %s", TEST2_UNIVERSE_PATH)
+        return []
+    except Exception as e:
+        logger.warning("test2_universe.json load failed: %s", e)
+        return []
+
+
+TEST2_UNIVERSE = _load_test2_universe()
 
 
 # ── 内部工具 ─────────────────────────────────────────────────────────
@@ -78,7 +94,7 @@ def _backfill_task(symbol: str, market: str) -> None:
     from backend.data.market import backfill_if_needed
     db = SessionLocal()
     try:
-        backfill_if_needed(symbol, market, db)
+        backfill_if_needed(symbol, market, db, refresh_today=True)
     finally:
         db.close()
 
@@ -780,7 +796,7 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
                 "position_pct": settings.max_position_per_stock,
                 "max_positions": 3,
                 "total_position_pct": 0.45,
-                "universe": TEST2_UNIVERSE,
+                "universe": _load_test2_universe(),
                 "trailing_stop_enabled": settings.trailing_stop_enabled,
                 "trailing_atr_mult": settings.trailing_atr_mult,
             },

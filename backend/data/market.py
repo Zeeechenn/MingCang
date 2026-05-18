@@ -187,11 +187,20 @@ def sync_index_to_db(db, index_symbol: str = "sh000300", days: int = 365) -> int
     return len(records)
 
 
-def backfill_if_needed(symbol: str, market: str, db, years: int | None = None) -> int:
+REFRESH_WINDOW_DAYS = 5  # refresh_today=True 时覆盖回写的最近窗口
+
+
+def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
+                       refresh_today: bool = False) -> int:
     """
     检查该股历史数据是否充足。若最新记录距今超过阈值（或无记录），
     自动从 AkShare/yfinance 回填最多 BACKFILL_YEARS 年数据。
-    返回新写入的记录条数。
+
+    refresh_today=True 时绕过阈值短路，强制重抓最近 REFRESH_WINDOW_DAYS 天并
+    覆盖写入，用于盘前/盘后任务校正当日已有价格（避免被 provider 修正前的脏数据
+    污染下游技术分/ATR/止损止盈）。
+
+    返回新写入或更新的记录条数。
     """
     from backend.data.database import Price, get_latest_price_date
     from backend.analysis.factors import add_all_factors
@@ -200,21 +209,34 @@ def backfill_if_needed(symbol: str, market: str, db, years: int | None = None) -
 
     if latest_date_str:
         days_old = (date.today() - date.fromisoformat(latest_date_str)).days
-        if days_old < BACKFILL_THRESHOLD_DAYS:
+        if days_old < BACKFILL_THRESHOLD_DAYS and not refresh_today:
             return 0
-        fetch_days = days_old + 10
+        fetch_days = max(days_old + 10, REFRESH_WINDOW_DAYS + 2 if refresh_today else 0)
     else:
         fetch_days = (years or BACKFILL_YEARS) * 365 + 10
 
     df = fetch_daily(symbol, market, days=fetch_days)
 
-    if latest_date_str:
-        df = df[df.index > latest_date_str]
-
     if df.empty:
         return 0
 
     df_factors = add_all_factors(df)
+
+    if refresh_today and latest_date_str:
+        window_start = (date.today() - timedelta(days=REFRESH_WINDOW_DAYS)).isoformat()
+        df_factors = df_factors[df_factors.index >= window_start]
+    elif latest_date_str:
+        df_factors = df_factors[df_factors.index > latest_date_str]
+
+    if df_factors.empty:
+        return 0
+
+    if refresh_today:
+        dates_to_replace = list(df_factors.index)
+        db.query(Price).filter(
+            Price.symbol == symbol,
+            Price.date.in_(dates_to_replace),
+        ).delete(synchronize_session=False)
 
     records = []
     for date_str, row in df_factors.iterrows():

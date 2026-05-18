@@ -58,15 +58,46 @@ def _time_split(df: pd.DataFrame, split_ratio: float = 0.8) -> tuple[pd.DataFram
     return train_df, val_df
 
 
+_MODEL_CACHE: dict = {"path_mtime": None, "model": None, "disabled_reason": None}
+
+
 def _load_model() -> object | None:
-    """Load LightGBM model from disk, returning None if missing or corrupt."""
-    if MODEL_PATH.exists():
-        try:
-            with open(MODEL_PATH, "rb") as f:
-                return pickle.load(f)
-        except Exception as e:
-            logger.warning("load model failed: %s", e)
-    return None
+    """Load LightGBM model from disk, returning None if missing/corrupt/dim-mismatch.
+
+    Caches result (keyed by mtime) and only warns once per model version so a
+    stale feature-dim model doesn't spam logs on every inference call.
+    """
+    if not MODEL_PATH.exists():
+        return None
+
+    mtime = MODEL_PATH.stat().st_mtime
+    if _MODEL_CACHE["path_mtime"] == mtime:
+        return _MODEL_CACHE["model"]
+
+    _MODEL_CACHE["path_mtime"] = mtime
+    _MODEL_CACHE["model"] = None
+    _MODEL_CACHE["disabled_reason"] = None
+
+    try:
+        with open(MODEL_PATH, "rb") as f:
+            model = pickle.load(f)
+    except Exception as e:
+        _MODEL_CACHE["disabled_reason"] = f"load_error: {e}"
+        logger.warning("load model failed: %s — falling back to momentum", e)
+        return None
+
+    expected = len(FEATURE_COLS)
+    actual = getattr(model, "n_features_in_", getattr(model, "n_features_", None))
+    if actual is not None and actual != expected:
+        _MODEL_CACHE["disabled_reason"] = f"dim_mismatch: model={actual} cols={expected}"
+        logger.warning(
+            "Qlib 模型特征维度不匹配 (model=%d, FEATURE_COLS=%d)，已禁用模型并使用动量 fallback；请重训模型",
+            actual, expected,
+        )
+        return None
+
+    _MODEL_CACHE["model"] = model
+    return model
 
 
 def _momentum_fallback(df: pd.DataFrame) -> dict:

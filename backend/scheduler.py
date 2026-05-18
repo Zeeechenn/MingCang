@@ -93,7 +93,7 @@ def job_premarket() -> None:
         for stock in stocks:
             # 行情回填
             try:
-                price_rows += backfill_if_needed(stock.symbol, stock.market, db)
+                price_rows += backfill_if_needed(stock.symbol, stock.market, db, refresh_today=True)
             except Exception as e:
                 logger.error("backfill failed %s: %s", stock.symbol, e)
 
