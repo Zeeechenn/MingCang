@@ -20,7 +20,7 @@ def test_signal_policy_separates_watch_from_entry():
 def test_test1_uses_legacy_qlib_weights_and_test2_uses_new_weights():
     from backend.config import active_signal_weights
 
-    test1_weights = active_signal_weights(date(2026, 5, 18))
+    test1_weights = active_signal_weights(date(2026, 5, 16))
     assert test1_weights.quant == 0.45
     assert test1_weights.technical == 0.40
     assert test1_weights.sentiment == 0.15
@@ -28,7 +28,7 @@ def test_test1_uses_legacy_qlib_weights_and_test2_uses_new_weights():
     assert test1_weights.profile == "test1_legacy_qlib"
     assert test1_weights.use_multi_agent is False
 
-    test2_weights = active_signal_weights(date(2026, 5, 21))
+    test2_weights = active_signal_weights(date(2026, 5, 18))
     assert test2_weights.quant == 0.0
     assert test2_weights.technical == 0.6
     assert test2_weights.sentiment == 0.4
