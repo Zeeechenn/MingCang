@@ -38,6 +38,17 @@ app.add_middleware(
 app.include_router(router, prefix="/api")
 
 
+@app.get("/")
+def root():
+    """Small landing payload for users opening the backend URL directly."""
+    return {
+        "name": "StockSage API",
+        "docs": "/docs",
+        "api_prefix": "/api",
+        "health": "/api/system/health",
+    }
+
+
 @app.get("/health")
 def health() -> dict:
     """Simple liveness check endpoint."""

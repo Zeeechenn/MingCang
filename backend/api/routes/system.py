@@ -39,6 +39,17 @@ RUNTIME_CONFIG_KEYS = {
     "max_position_per_stock",
     "max_position_per_sector",
     "max_total_equity_pct",
+    "financial_backfill_years",
+    "tavily_supplement_threshold",
+    "anspire_news_days",
+    "anspire_news_max_results",
+    "anspire_news_max_add",
+    "anspire_news_min_score",
+    "schedule_daily_review_time",
+    "schedule_longterm_monday_dow",
+    "schedule_longterm_monday_time",
+    "schedule_longterm_friday_dow",
+    "schedule_longterm_friday_time",
 }
 
 
@@ -80,6 +91,21 @@ def _runtime_config_payload() -> dict:
         "max_position_per_stock": settings.max_position_per_stock,
         "max_position_per_sector": settings.max_position_per_sector,
         "max_total_equity_pct": settings.max_total_equity_pct,
+        "data_draft": {
+            "financial_backfill_years": settings.financial_backfill_years,
+            "tavily_supplement_threshold": settings.tavily_supplement_threshold,
+            "anspire_news_days": settings.anspire_news_days,
+            "anspire_news_max_results": settings.anspire_news_max_results,
+            "anspire_news_max_add": settings.anspire_news_max_add,
+            "anspire_news_min_score": settings.anspire_news_min_score,
+        },
+        "schedule": {
+            "daily_review_time": settings.schedule_daily_review_time,
+            "longterm_monday_dow": settings.schedule_longterm_monday_dow,
+            "longterm_monday_time": settings.schedule_longterm_monday_time,
+            "longterm_friday_dow": settings.schedule_longterm_friday_dow,
+            "longterm_friday_time": settings.schedule_longterm_friday_time,
+        },
         "kill_switch_active": bool(ks_state and ks_state.get("active")),
     }
 

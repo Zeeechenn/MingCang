@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getDashboardSummary, getWatchlist, addStock, removeStock } from '../api'
+import { getDashboardSummary, getWatchlist, addStock, removeStock, searchStocks } from '../api'
 
 const REC_STYLE = {
   可小仓试错: 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-200',
@@ -26,6 +26,11 @@ function signed(value, digits = 1) {
 function pct(value, digits = 2) {
   if (value === null || value === undefined) return '-'
   return `${signed(value, digits)}%`
+}
+
+function money(value) {
+  if (value === null || value === undefined) return '-'
+  return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
 function recClass(rec) {
@@ -66,8 +71,9 @@ function Section({ title, eyebrow, right, children }) {
 
 function ScoreArc({ score }) {
   const clamped = Math.max(-100, Math.min(100, Number(score || 0)))
-  const pctWidth = ((clamped + 100) / 200) * 100
   const color = clamped > 20 ? 'bg-red-500' : clamped < -20 ? 'bg-emerald-500' : 'bg-amber-500'
+  const width = `${Math.abs(clamped) / 2}%`
+  const left = clamped < 0 ? `${50 - Math.abs(clamped) / 2}%` : '50%'
   return (
     <div>
       <div className="flex items-end justify-between">
@@ -83,7 +89,7 @@ function ScoreArc({ score }) {
         </div>
       </div>
       <div className="relative mt-4 h-2 rounded-full bg-stone-300 dark:bg-slate-800">
-        <div className={`h-2 rounded-full ${color}`} style={{ width: `${pctWidth}%` }} />
+        <div className={`absolute top-0 h-2 rounded-full ${color}`} style={{ left, width }} />
         <div className="absolute left-1/2 top-[-4px] h-4 w-px bg-stone-500 dark:bg-slate-500" />
       </div>
     </div>
@@ -204,24 +210,27 @@ function DebateColumn({ title, items, tone }) {
   )
 }
 
-function ActivityLedger({ summary }) {
+function ActivityLedger({ summary, watchlist = [] }) {
   const signals = summary?.signals?.latest || []
-  const holdings = summary?.paper_trading?.test1?.holdings || []
+  const holdings = summary?.positions?.items || []
+  const nameBySymbol = new Map([
+    ...signals.map((sig) => [sig.symbol, sig.name || sig.symbol]),
+    ...watchlist.map((item) => [item.symbol, item.name || item.symbol]),
+    ...holdings.map((h) => [h.symbol, h.name || h.symbol]),
+  ])
   const items = [
     ...signals.slice(0, 5).map((sig) => ({
       time: sig.date,
       kind: '信号',
-      headline: `${sig.symbol} ${sig.recommendation}`,
+      headline: `${nameBySymbol.get(sig.symbol) || sig.symbol} ${sig.recommendation}`,
       detail: `综合分 ${signed(sig.composite_score, 1)} · 技术 ${signed(sig.technical_score, 1)} · 情感 ${signed(sig.sentiment_score, 2)}`,
     })),
     ...holdings.slice(0, 3).map((h) => ({
       time: h.entry_date,
       kind: '持仓',
-      headline: `${h.name} ${pct(h.pnl_pct)}`,
+      headline: `${h.name || h.symbol} ${pct(h.pnl_pct)}`,
       detail: `止损 ${h.stop_loss} · 止盈 ${h.take_profit}`,
     })),
-    { time: '05-20', kind: '节点', headline: 'M2.3 测试 1 收盘后汇总', detail: '汇总持仓、信号准确率、系统建议对照' },
-    { time: '05-21', kind: '节点', headline: 'M2.4 测试 2 启动', detail: 'new_framework · 阈值 25 · 无 5 日强平' },
   ]
   return (
     <Section title="活动流水" eyebrow="事件时间线">
@@ -241,34 +250,56 @@ function ActivityLedger({ summary }) {
   )
 }
 
-function SystemPulse({ summary }) {
-  const test1 = summary?.paper_trading?.test1 || {}
-  const test2 = summary?.paper_trading?.test2 || {}
-  const coverage = summary?.coverage?.summary || {}
-  const milestones = [
-    ['M2.1', '测试 1 进行中', 'done'],
-    ['M2.2', '测试 2 规则固化', 'done'],
-    ['M2.3', '测试 1 汇总', 'active'],
-    ['M2.4', '测试 2 启动', 'next'],
-  ]
+function PositionOverview({ summary }) {
+  const positions = summary?.positions || {}
+  const items = positions.items || []
   return (
-    <Section title="系统脉冲" eyebrow="M2 进度">
-      <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-        <div className="grid grid-cols-4 gap-2">
-          {milestones.map(([id, label, state]) => (
-            <div key={id} className={`rounded-sm border p-3 ${state === 'active' ? 'border-cyan-600 bg-cyan-600/10' : 'border-stone-300 bg-[#f3eddc] dark:border-slate-700 dark:bg-[#161b25]'}`}>
-              <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{id}</div>
-              <div className="mt-2 text-sm font-medium text-stone-950 dark:text-slate-100">{label}</div>
-            </div>
-          ))}
+    <Section title="持仓情况" eyebrow="Portfolio">
+      <div className="grid gap-4 lg:grid-cols-[0.8fr_1fr]">
+        <div className="grid grid-cols-3 gap-2">
+          <Metric label="持仓数" value={positions.count ?? 0} tone="cyan" />
+          <Metric label="总市值" value={money(positions.market_value)} />
+          <Metric label="总盈亏" value={pct(positions.pnl_pct)} tone={(positions.pnl || 0) >= 0 ? 'red' : 'green'} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Metric label="测试1仓位" value={`${Math.round((test1.total_position_pct || 0) * 100)}%`} tone="amber" />
-          <Metric label="测试2阈值" value={test2.entry_threshold ?? '-'} tone="cyan" />
-          <Metric label="活跃标的" value={coverage.active_stocks ?? '-'} />
-          <Metric label="24h新闻" value={coverage.news_24h_covered ?? '-'} />
-        </div>
+        {items.length === 0 ? (
+          <div className="rounded-sm border border-dashed border-stone-300 p-5 text-sm text-stone-500 dark:border-slate-700 dark:text-slate-400">
+            暂无持仓数据。可以进入持仓设置页，或在 AI 对话里说“添加持仓 300308 100股 成本100”。
+          </div>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {items.slice(0, 4).map((item) => (
+              <Link key={item.id} to={`/stock/${item.symbol}`} className="rounded-sm border border-stone-300 bg-[#f3eddc] p-3 dark:border-slate-700 dark:bg-[#161b25]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-stone-950 dark:text-slate-100">{item.name}</div>
+                    <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{item.symbol}</div>
+                  </div>
+                  <div className={`font-mono text-sm font-semibold ${(item.pnl || 0) >= 0 ? 'text-red-700 dark:text-red-200' : 'text-emerald-700 dark:text-emerald-200'}`}>{pct(item.pnl_pct)}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
+    </Section>
+  )
+}
+
+function MarketOverview({ summary }) {
+  const market = summary?.market_overview || {}
+  return (
+    <Section title="大盘情况" eyebrow="Market">
+      {market.available ? (
+        <div className="grid grid-cols-3 gap-2">
+          <Metric label={market.name || '沪深300'} value={money(market.close)} />
+          <Metric label="涨跌幅" value={pct(market.change_pct)} tone={(market.change_pct || 0) >= 0 ? 'red' : 'green'} />
+          <Metric label="日期" value={market.date || '-'} tone="cyan" />
+        </div>
+      ) : (
+        <div className="rounded-sm border border-dashed border-stone-300 p-5 text-sm text-stone-500 dark:border-slate-700 dark:text-slate-400">
+          暂无大盘指数数据，盘前同步后会显示沪深300状态。
+        </div>
+      )}
     </Section>
   )
 }
@@ -352,6 +383,26 @@ function AddStockForm({ onAdd }) {
   const [market, setMarket] = useState('CN')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+
+  useEffect(() => {
+    const query = symbol.trim() || name.trim()
+    if (query.length < 2) {
+      setSuggestions([])
+      return
+    }
+    const id = setTimeout(() => {
+      searchStocks(query, market).then(setSuggestions).catch(() => setSuggestions([]))
+    }, 250)
+    return () => clearTimeout(id)
+  }, [symbol, name, market])
+
+  function pick(item) {
+    setSymbol(item.symbol)
+    setName(item.name || item.symbol)
+    setMarket(item.market || market)
+    setSuggestions([])
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -380,8 +431,8 @@ function AddStockForm({ onAdd }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap justify-end gap-2">
-      <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="代码" className="w-24 rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-1 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]" />
+    <form onSubmit={handleSubmit} className="relative flex flex-wrap justify-end gap-2">
+      <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="代码/名称" className="w-28 rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-1 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]" />
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="名称" className="w-24 rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-1 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]" />
       <select value={market} onChange={(e) => setMarket(e.target.value)} className="rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-1 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]">
         <option value="CN">A股</option>
@@ -390,6 +441,16 @@ function AddStockForm({ onAdd }) {
       <button type="submit" disabled={loading} className="rounded-sm bg-cyan-700 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50">{loading ? '保存中' : '保存'}</button>
       <button type="button" onClick={() => setOpen(false)} className="text-xs text-stone-500 dark:text-slate-400">取消</button>
       {error && <div className="basis-full text-right text-xs text-red-600">{error}</div>}
+      {suggestions.length > 0 && (
+        <div className="absolute right-0 top-8 z-10 w-56 overflow-hidden rounded-sm border border-stone-300 bg-[#fffaf0] shadow-xl dark:border-slate-700 dark:bg-[#161b25]">
+          {suggestions.slice(0, 5).map((item) => (
+            <button key={`${item.source}-${item.symbol}`} type="button" onClick={() => pick(item)} className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-cyan-700/10">
+              <span>{item.name || item.symbol}</span>
+              <span className="font-mono text-stone-500 dark:text-slate-400">{item.symbol}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </form>
   )
 }
@@ -445,11 +506,12 @@ export default function WatchlistPage() {
 
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
         <div className="space-y-4">
-          <SystemPulse summary={summary} />
+          <PositionOverview summary={summary} />
+          <MarketOverview summary={summary} />
           <SignalTicker summary={summary} watchlist={items} />
           <WatchlistManage items={items} onRemove={handleRemove} onReload={load} />
         </div>
-        <ActivityLedger summary={summary} />
+        <ActivityLedger summary={summary} watchlist={items} />
       </div>
     </div>
   )

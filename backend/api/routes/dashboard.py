@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from backend.api.routes._shared import signal_to_schema
-from backend.data.database import Price, Signal, get_db
+from backend.data.database import IndexPrice, Position, Price, Signal, get_db
 from backend.decision.signal_policy import is_entry_signal
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,48 @@ def _load_test2_universe() -> list[dict]:
 
 
 TEST2_UNIVERSE = _load_test2_universe()
+
+
+def _manual_positions_summary(db: Session) -> dict:
+    from backend.api.routes.positions import position_to_schema
+
+    rows = (
+        db.query(Position)
+        .filter(Position.status == "open")
+        .order_by(Position.opened_at.desc(), Position.id.desc())
+        .all()
+    )
+    items = [position_to_schema(row, db).model_dump() for row in rows]
+    market_value = sum(item.get("market_value") or 0 for item in items)
+    cost_value = sum(item.get("cost_value") or 0 for item in items)
+    pnl = market_value - cost_value
+    return {
+        "count": len(items),
+        "market_value": round(market_value, 2),
+        "cost_value": round(cost_value, 2),
+        "pnl": round(pnl, 2),
+        "pnl_pct": round(pnl / cost_value * 100, 2) if cost_value else None,
+        "items": items,
+    }
+
+
+def _market_overview(db: Session) -> dict:
+    latest = (
+        db.query(IndexPrice)
+        .filter(IndexPrice.symbol == "sh000300")
+        .order_by(IndexPrice.date.desc())
+        .first()
+    )
+    if latest is None:
+        return {"symbol": "sh000300", "name": "沪深300", "available": False}
+    return {
+        "symbol": latest.symbol,
+        "name": "沪深300",
+        "available": True,
+        "date": latest.date,
+        "close": latest.close,
+        "change_pct": latest.change_pct,
+    }
 
 
 @router.get("/dashboard/summary")
@@ -159,6 +201,8 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
                 "trailing_atr_mult": settings.trailing_atr_mult,
             },
         },
+        "positions": _manual_positions_summary(db),
+        "market_overview": _market_overview(db),
         "coverage": coverage,
         "signals": {
             "latest_date": latest_date,

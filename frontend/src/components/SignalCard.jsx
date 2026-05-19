@@ -10,9 +10,10 @@ const REC_STYLE = {
 }
 
 function ScoreGauge({ score }) {
-  const clamp = Math.max(-100, Math.min(100, score))
-  const pct = ((clamp + 100) / 200) * 100
+  const clamp = Math.max(-100, Math.min(100, Number(score || 0)))
   const color = clamp > 20 ? '#ef4444' : clamp < -20 ? '#22c55e' : '#eab308'
+  const width = `${Math.abs(clamp) / 2}%`
+  const left = clamp < 0 ? `${50 - Math.abs(clamp) / 2}%` : '50%'
   return (
     <div className="text-center">
       <div className="text-5xl font-bold font-mono" style={{ color }}>
@@ -22,7 +23,7 @@ function ScoreGauge({ score }) {
       <div className="relative h-2 bg-gray-700 rounded-full overflow-hidden">
         <div
           className="absolute top-0 h-2 rounded-full transition-all"
-          style={{ width: `${pct}%`, background: color }}
+          style={{ left, width, background: color }}
         />
         <div className="absolute top-0 left-1/2 w-px h-2 bg-gray-500" />
       </div>
@@ -42,7 +43,8 @@ function Breakdown({ quant, technical, sentiment }) {
   return (
     <div className="space-y-1.5 mt-4">
       {bars.map(({ label, value, color }) => {
-        const pct = ((value + 100) / 200) * 100
+        const normalized = Math.max(-100, Math.min(100, Number(value || 0)))
+        const pct = ((normalized + 100) / 200) * 100
         return (
           <div key={label} className="flex items-center gap-2">
             <span className="text-xs text-gray-400 w-8">{label}</span>
@@ -50,7 +52,7 @@ function Breakdown({ quant, technical, sentiment }) {
               <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: color }} />
             </div>
             <span className="text-xs font-mono w-8 text-right" style={{ color }}>
-              {value > 0 ? '+' : ''}{value.toFixed(0)}
+              {normalized > 0 ? '+' : ''}{normalized.toFixed(0)}
             </span>
           </div>
         )
@@ -108,7 +110,7 @@ export default function SignalCard({ signal }) {
   }
 
   const style = REC_STYLE[signal.recommendation] || { badge: 'bg-gray-600', text: 'text-gray-300' }
-  const bd = { quant: signal.quant_score ?? 0, technical: signal.technical_score ?? 0, sentiment: (signal.sentiment_score ?? 0) * 100 }
+  const bd = { quant: signal.quant_score ?? 0, technical: signal.technical_score ?? 0, sentiment: signal.sentiment_score ?? 0 }
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">

@@ -5,6 +5,55 @@
 
 ---
 
+## [M6.3] 前端操作台与复盘/AI 助手增强 ✅（2026-05-19）
+
+### Added
+- 前端新增并接入独立页面：
+  - `/reviews`：每日复盘 / 长期复盘中心，支持自动 ensure、历史记录和完整报告详情展开。
+  - `/positions`：手动持仓设置，支持股票联想、持仓汇总、平仓记录、永久删除已平仓记录。
+  - `/chat`：项目内 AI 对话助手，支持通用助手 / 长期研究团队模式、左侧会话窗口、新建与归档。
+- 后端新增拆分路由：
+  - `backend/api/routes/positions.py`
+  - `backend/api/routes/stocks.py`
+  - `backend/api/routes/reviews.py`
+  - `backend/api/routes/ai.py`
+- `positions` 表：记录真实/模拟持仓、平仓价、平仓日期、已实现盈亏和收益率。
+- `review_runs` 表：记录每日复盘与长期复盘，支持读取报告全文。
+- `chat_sessions` / `chat_messages` 表：AI 对话窗口与窗口内消息，默认窗口隔离。
+- 股票搜索 API：`GET /api/stocks/search`，本地股票优先，支持代码/名称联想。
+- AI 操作动作：添加/删除自选股、添加持仓、更新配置、触发复盘，写操作均先生成待确认动作。
+- 后端根路径 `/` 返回 API 说明，避免直接打开后端只看到 `{"detail":"Not Found"}`。
+
+### Changed
+- 首页“系统脉冲”区域替换为真实持仓情况；无持仓时显示空状态，不再展示假数据。
+- 首页新增大盘情况卡片；事件时间线统一优先显示股票名称。
+- 顶部导航从小文字斜杠改为分段按钮，当前页高亮。
+- 配置页分区按钮真正切换内容；配置页可编辑综合分权重、单股/板块/总仓位上限、数据补充参数、每日/长期复盘触发日期与时间。
+- 长期研究团队调度从固定周日 11:00 改为两组可配置周内时间，默认周一 09:00 / 周五 15:00。
+- 复盘页真实记录和临时示例记录可同时展示；真实每日复盘读取 Markdown 全文，长期复盘将长期标签整理为 Markdown 内容存入 `payload.content`。
+- 复盘中心在真实历史较少时以前端示例历史补足展示，覆盖每日复盘、长期复盘、信号明细、持仓复核、异动监控、长期标签变化和记忆写入等完整内容。
+- 复盘详情区从纯文本 `<pre>` 展示升级为本地 Markdown 渲染，支持标题、无序/有序列表、表格、段落和行内代码。
+- 聊天回答逻辑读取当前窗口最近消息摘要，不跨窗口读取聊天历史，同时仍可调取 StockSage 自选股、持仓、信号、复盘、研究等项目资源。
+- 聊天窗口归档改为二次确认流程，首次点击进入“确认归档 / 取消”状态，再次确认才执行归档。
+
+### Fixed
+- 修复综合评分双向条只显示红线的问题。
+- 修复个股情感进度条数值归一化异常。
+- 修复配置页 toggle 白色圆点位置异常。
+- 修复复盘页开发模式重复触发 daily ensure 时唯一索引竞争导致的 500。
+- 修复平仓接口运行旧后端时出现 404 的可见问题；新增后端路由并重启后生效。
+
+### Notes
+- 记忆系统管理建议报告已移出项目仓库，放在 Codex 工作区：
+  `/path/to/codex/2026-05-19/s-2/StockSage-memory-system-management-report.md`
+- 验证：
+  - `pytest tests/test_frontend_expansion_api.py tests/test_memory.py` → **10 passed, 1 warning**
+  - `node --test frontend/src/pages/chatArchive.test.js frontend/src/pages/reviewContent.test.js` → **4 passed**
+  - `cd frontend && npm run build` → 通过
+  - Playwright / 浏览器检查首页、配置、持仓、复盘、聊天页面 → 无控制台错误；复盘 Markdown 表格/列表和聊天归档确认流程可见正常
+
+---
+
 ## [M8] 深度研究与来源审计层 ✅（2026-05-17）
 
 ### Added

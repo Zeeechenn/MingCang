@@ -14,13 +14,17 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from backend.api.routes import (
+    ai,
     dashboard,
     model,
     news,
+    positions,
     prices,
     research,
+    reviews,
     signals,
     skills,
+    stocks,
     system,
     watchlist,
 )
@@ -31,6 +35,8 @@ router = APIRouter()
 # include order between modules does not, since each module's paths are
 # disjoint.
 router.include_router(watchlist.router)
+router.include_router(positions.router)
+router.include_router(stocks.router)
 router.include_router(signals.router)
 router.include_router(prices.router)
 router.include_router(model.router)
@@ -38,7 +44,9 @@ router.include_router(system.router)
 router.include_router(dashboard.router)
 router.include_router(news.router)
 router.include_router(research.router)
+router.include_router(reviews.router)
 router.include_router(skills.router)
+router.include_router(ai.router)
 
 
 # Re-exports for tests that import endpoint functions directly.
@@ -49,6 +57,12 @@ update_runtime_config = system.update_runtime_config
 run_deep_research_endpoint = research.run_deep_research_endpoint
 get_watch_events_endpoint = skills.get_watch_events_endpoint
 run_daily_review_endpoint = skills.run_daily_review_endpoint
+list_positions = positions.list_positions
+create_position = positions.create_position
+ensure_daily_review = reviews.ensure_daily_review
+search_stocks = stocks.search_stocks
+ai_chat = ai.chat
+confirm_ai_action = ai.confirm_action
 
 __all__ = [
     "router",
@@ -59,4 +73,10 @@ __all__ = [
     "run_deep_research_endpoint",
     "get_watch_events_endpoint",
     "run_daily_review_endpoint",
+    "list_positions",
+    "create_position",
+    "ensure_daily_review",
+    "search_stocks",
+    "ai_chat",
+    "confirm_ai_action",
 ]

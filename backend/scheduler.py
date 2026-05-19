@@ -439,6 +439,8 @@ def start() -> None:
     """Register all cron jobs and start the background scheduler."""
     pre_h, pre_m = settings.schedule_premarket.split(":")
     post_h, post_m = settings.schedule_postmarket.split(":")
+    long_mon_h, long_mon_m = settings.schedule_longterm_monday_time.split(":")
+    long_fri_h, long_fri_m = settings.schedule_longterm_friday_time.split(":")
 
     scheduler.add_job(job_premarket, CronTrigger(
         hour=int(pre_h), minute=int(pre_m), day_of_week="mon-fri",
@@ -458,15 +460,19 @@ def start() -> None:
         hour=14, minute=30, day_of_week="mon-fri",
     ), id="stoploss_check", replace_existing=True)
 
-    # 长期分析师团（周末）
+    # 长期分析师团：周一早盘前 + 周五收盘后复盘
     if settings.long_term_team_enabled:
-        lt_h, lt_m = settings.schedule_longterm_time.split(":")
         scheduler.add_job(job_weekly_longterm, CronTrigger(
-            hour=int(lt_h), minute=int(lt_m),
-            day_of_week=settings.schedule_longterm_dow,
-        ), id="weekly_longterm", replace_existing=True)
-        logger.info("long_term team scheduled: %s %s",
-                    settings.schedule_longterm_dow, settings.schedule_longterm_time)
+            hour=int(long_mon_h), minute=int(long_mon_m), day_of_week=settings.schedule_longterm_monday_dow,
+        ), id="weekly_longterm_monday", replace_existing=True)
+        scheduler.add_job(job_weekly_longterm, CronTrigger(
+            hour=int(long_fri_h), minute=int(long_fri_m), day_of_week=settings.schedule_longterm_friday_dow,
+        ), id="weekly_longterm_friday", replace_existing=True)
+        logger.info("long_term team scheduled: %s %s, %s %s",
+                    settings.schedule_longterm_monday_dow,
+                    settings.schedule_longterm_monday_time,
+                    settings.schedule_longterm_friday_dow,
+                    settings.schedule_longterm_friday_time)
 
     scheduler.start()
     logger.info("scheduler started (premarket=%s, postmarket=%s)",

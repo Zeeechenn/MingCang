@@ -57,7 +57,7 @@ function Toggle({ value, onChange, danger = false }) {
     <button
       type="button"
       onClick={() => onChange(!value)}
-      className={`relative h-6 w-12 rounded-full border transition-colors ${
+      className={`relative h-7 w-14 rounded-full border transition-colors ${
         value
           ? danger
             ? 'border-emerald-600 bg-emerald-600'
@@ -66,8 +66,8 @@ function Toggle({ value, onChange, danger = false }) {
       }`}
     >
       <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full bg-[#faf6ec] transition-transform dark:bg-slate-100 ${
-          value ? 'translate-x-6' : 'translate-x-1'
+        className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-[#faf6ec] transition-transform dark:bg-slate-100 ${
+          value ? 'translate-x-7' : 'translate-x-0'
         }`}
       />
     </button>
@@ -111,6 +111,58 @@ function Slider({ value, min, max, onChange, suffix = '' }) {
         {value}{suffix}
       </span>
     </div>
+  )
+}
+
+function NumberInput({ value, onChange, min = 0, max, step = 1, suffix = '' }) {
+  return (
+    <label className="inline-flex w-fit flex-nowrap items-center gap-2">
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-24 rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 font-mono text-sm outline-none focus:border-cyan-700 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100 sm:w-28"
+      />
+      {suffix && <span className="whitespace-nowrap text-xs text-stone-500 dark:text-slate-400">{suffix}</span>}
+    </label>
+  )
+}
+
+function TimeInput({ value, onChange }) {
+  return (
+    <input
+      type="time"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 font-mono text-sm outline-none focus:border-cyan-700 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100"
+    />
+  )
+}
+
+const DOW_OPTIONS = [
+  ['mon', '周一'],
+  ['tue', '周二'],
+  ['wed', '周三'],
+  ['thu', '周四'],
+  ['fri', '周五'],
+  ['sat', '周六'],
+  ['sun', '周日'],
+]
+
+function DayInput({ value, onChange }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm outline-none focus:border-cyan-700 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100"
+    >
+      {DOW_OPTIONS.map(([id, label]) => (
+        <option key={id} value={id}>{label}</option>
+      ))}
+    </select>
   )
 }
 
@@ -182,6 +234,23 @@ export default function AdminPage() {
   const [riskManager, setRiskManager] = useState(true)
   const [longTermTeam, setLongTermTeam] = useState(true)
   const [trailingStop, setTrailingStop] = useState(false)
+  const [weightQuant, setWeightQuant] = useState(0)
+  const [weightTechnical, setWeightTechnical] = useState(60)
+  const [weightSentiment, setWeightSentiment] = useState(40)
+  const [maxStockPct, setMaxStockPct] = useState(15)
+  const [maxSectorPct, setMaxSectorPct] = useState(30)
+  const [maxTotalPct, setMaxTotalPct] = useState(80)
+  const [financialYears, setFinancialYears] = useState(5)
+  const [tavilyThreshold, setTavilyThreshold] = useState(3)
+  const [anspireDays, setAnspireDays] = useState(2)
+  const [anspireMaxResults, setAnspireMaxResults] = useState(5)
+  const [anspireMaxAdd, setAnspireMaxAdd] = useState(2)
+  const [anspireMinScore, setAnspireMinScore] = useState(75)
+  const [dailyReviewTime, setDailyReviewTime] = useState('15:00')
+  const [longtermMondayDow, setLongtermMondayDow] = useState('mon')
+  const [longtermMondayTime, setLongtermMondayTime] = useState('09:00')
+  const [longtermFridayDow, setLongtermFridayDow] = useState('fri')
+  const [longtermFridayTime, setLongtermFridayTime] = useState('15:00')
   const [killSwitch, setKillSwitch] = useState(false)
   const [saving, setSaving] = useState(false)
   const [actionBusy, setActionBusy] = useState('')
@@ -216,6 +285,29 @@ export default function AdminPage() {
       if (runtimeConfig?.risk_manager_enabled !== undefined) setRiskManager(Boolean(runtimeConfig.risk_manager_enabled))
       if (runtimeConfig?.long_term_team_enabled !== undefined) setLongTermTeam(Boolean(runtimeConfig.long_term_team_enabled))
       if (runtimeConfig?.trailing_stop_enabled !== undefined) setTrailingStop(Boolean(runtimeConfig.trailing_stop_enabled))
+      if (runtimeConfig?.raw_weights) {
+        setWeightQuant(Math.round((runtimeConfig.raw_weights.weight_quant || 0) * 100))
+        setWeightTechnical(Math.round((runtimeConfig.raw_weights.weight_technical || 0) * 100))
+        setWeightSentiment(Math.round((runtimeConfig.raw_weights.weight_sentiment || 0) * 100))
+      }
+      if (runtimeConfig?.max_position_per_stock !== undefined) setMaxStockPct(Math.round(runtimeConfig.max_position_per_stock * 100))
+      if (runtimeConfig?.max_position_per_sector !== undefined) setMaxSectorPct(Math.round(runtimeConfig.max_position_per_sector * 100))
+      if (runtimeConfig?.max_total_equity_pct !== undefined) setMaxTotalPct(Math.round(runtimeConfig.max_total_equity_pct * 100))
+      if (runtimeConfig?.data_draft) {
+        setFinancialYears(runtimeConfig.data_draft.financial_backfill_years)
+        setTavilyThreshold(runtimeConfig.data_draft.tavily_supplement_threshold)
+        setAnspireDays(runtimeConfig.data_draft.anspire_news_days)
+        setAnspireMaxResults(runtimeConfig.data_draft.anspire_news_max_results)
+        setAnspireMaxAdd(runtimeConfig.data_draft.anspire_news_max_add)
+        setAnspireMinScore(runtimeConfig.data_draft.anspire_news_min_score)
+      }
+      if (runtimeConfig?.schedule) {
+        setDailyReviewTime(runtimeConfig.schedule.daily_review_time)
+        setLongtermMondayDow(runtimeConfig.schedule.longterm_monday_dow || 'mon')
+        setLongtermMondayTime(runtimeConfig.schedule.longterm_monday_time)
+        setLongtermFridayDow(runtimeConfig.schedule.longterm_friday_dow || 'fri')
+        setLongtermFridayTime(runtimeConfig.schedule.longterm_friday_time)
+      }
       setKillSwitch(Boolean(healthData?.kill_switch?.active || dashboard?.system?.kill_switch?.active))
     })
   }
@@ -254,6 +346,12 @@ export default function AdminPage() {
   }
 
   const weights = summary?.system?.weights || { quant: 0, technical: 0.6, sentiment: 0.4 }
+  const draftWeights = {
+    quant: weightQuant / 100,
+    technical: weightTechnical / 100,
+    sentiment: weightSentiment / 100,
+  }
+  const weightTotal = weightQuant + weightTechnical + weightSentiment
   const cov = coverage?.summary || summary?.coverage?.summary || {}
   const [sectionEyebrow, sectionTitle, sectionDescription] = SECTION_COPY[active] || SECTION_COPY.decision
 
@@ -271,6 +369,23 @@ export default function AdminPage() {
         risk_manager_enabled: riskManager,
         long_term_team_enabled: longTermTeam,
         trailing_stop_enabled: trailingStop,
+        weight_quant: weightQuant / 100,
+        weight_technical: weightTechnical / 100,
+        weight_sentiment: weightSentiment / 100,
+        max_position_per_stock: maxStockPct / 100,
+        max_position_per_sector: maxSectorPct / 100,
+        max_total_equity_pct: maxTotalPct / 100,
+        financial_backfill_years: financialYears,
+        tavily_supplement_threshold: tavilyThreshold,
+        anspire_news_days: anspireDays,
+        anspire_news_max_results: anspireMaxResults,
+        anspire_news_max_add: anspireMaxAdd,
+        anspire_news_min_score: anspireMinScore,
+        schedule_daily_review_time: dailyReviewTime,
+        schedule_longterm_monday_dow: longtermMondayDow,
+        schedule_longterm_monday_time: longtermMondayTime,
+        schedule_longterm_friday_dow: longtermFridayDow,
+        schedule_longterm_friday_time: longtermFridayTime,
       })
       setRuntime(updated)
       setMessage(updated.note || '运行时配置已更新')
@@ -373,49 +488,140 @@ export default function AdminPage() {
               </p>
             </div>
             <div className="px-5">
-              <SettingRow label="系统 profile" hint="选择当前规则包。切换后下一次调度会按新 profile 重新生成信号。">
-                <Segmented value={profile} onChange={setProfile} options={['auto', 'test1_legacy_qlib', 'new_framework']} />
-              </SettingRow>
-              <SettingRow label="入场阈值" hint="综合分超过该阈值才进入入场候选。数值越高越严格。">
-                <Slider value={threshold} min={0} max={45} onChange={setThreshold} />
-              </SettingRow>
-              <SettingRow label="Director 置信度地板" hint="平均置信度低于该值时，Research Director 会标记数据不足。">
-                <Slider value={confidence} min={0} max={100} onChange={setConfidence} suffix="%" />
-              </SettingRow>
-              <SettingRow label="综合分权重" hint="量化 / 技术 / 情感三路信号的当前权重。">
-                <Weights weights={weights} />
-              </SettingRow>
-              <SettingRow label="大盘择时过滤" hint="启用后，盘后信号会用 RSRS 与板块扩散对强信号做衰减。">
-                <Toggle value={limitGuard} onChange={setLimitGuard} />
-              </SettingRow>
-              <SettingRow label="ADX 震荡过滤" hint="启用后，技术分在震荡市按 ADX 系数衰减。">
-                <Toggle value={adxFilter} onChange={setAdxFilter} />
-              </SettingRow>
-              <SettingRow label="多 Agent 决策" hint="控制盘后是否走 Analyst → Director → Researcher → Trader → RiskManager。">
-                <Toggle value={multiAgent} onChange={setMultiAgent} />
-              </SettingRow>
-              <SettingRow label="风险经理" hint="启用后，RiskManager 可根据大盘、涨跌停、长期标签否决或降级信号。">
-                <Toggle value={riskManager} onChange={setRiskManager} danger />
-              </SettingRow>
-              <SettingRow label="长期分析师团" hint="控制周频长期标签，以及长期标签对短线信号的约束。">
-                <Toggle value={longTermTeam} onChange={setLongTermTeam} />
-              </SettingRow>
-              <SettingRow label="移动止损" hint="启用后，持仓跟踪模块可按 ATR trailing stop 更新动态止损。">
-                <Toggle value={trailingStop} onChange={setTrailingStop} />
-              </SettingRow>
+              {active === 'decision' && (
+                <>
+                  <SettingRow label="系统 profile" hint="选择当前规则包。切换后下一次调度会按新 profile 重新生成信号。">
+                    <Segmented value={profile} onChange={setProfile} options={['auto', 'test1_legacy_qlib', 'new_framework']} />
+                  </SettingRow>
+                  <SettingRow label="入场阈值" hint="综合分超过该阈值才进入入场候选。数值越高越严格。">
+                    <Slider value={threshold} min={0} max={45} onChange={setThreshold} />
+                  </SettingRow>
+                  <SettingRow label="Director 置信度地板" hint="平均置信度低于该值时，Research Director 会标记数据不足。">
+                    <Slider value={confidence} min={0} max={100} onChange={setConfidence} suffix="%" />
+                  </SettingRow>
+                  <SettingRow label="综合分权重" hint="量化 / 技术 / 情感三路信号的当前权重。">
+                    <div className="space-y-3">
+                      <Weights weights={draftWeights} />
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <NumberInput value={weightQuant} min={0} max={100} onChange={setWeightQuant} suffix="量化%" />
+                        <NumberInput value={weightTechnical} min={0} max={100} onChange={setWeightTechnical} suffix="技术%" />
+                        <NumberInput value={weightSentiment} min={0} max={100} onChange={setWeightSentiment} suffix="情感%" />
+                      </div>
+                      <div className={`text-xs ${weightTotal === 100 ? 'text-stone-500 dark:text-slate-400' : 'text-red-600 dark:text-red-300'}`}>
+                        权重合计 {weightTotal}%，建议保持 100%。
+                      </div>
+                    </div>
+                  </SettingRow>
+                </>
+              )}
+              {active === 'portfolio' && (
+                <>
+                  <SettingRow label="风险经理" hint="启用后，RiskManager 可根据大盘、涨跌停、长期标签否决或降级信号。">
+                    <Toggle value={riskManager} onChange={setRiskManager} danger />
+                  </SettingRow>
+                  <SettingRow label="移动止损" hint="启用后，持仓跟踪模块可按 ATR trailing stop 更新动态止损。">
+                    <Toggle value={trailingStop} onChange={setTrailingStop} />
+                  </SettingRow>
+                  <SettingRow label="单股仓位上限" hint="当前运行时配置，只在后端白名单中展示。">
+                    <NumberInput value={maxStockPct} min={0} max={100} onChange={setMaxStockPct} suffix="%" />
+                  </SettingRow>
+                  <SettingRow label="板块仓位上限" hint="同一行业或板块的最大总暴露。">
+                    <NumberInput value={maxSectorPct} min={0} max={100} onChange={setMaxSectorPct} suffix="%" />
+                  </SettingRow>
+                  <SettingRow label="总仓位上限" hint="Portfolio Manager 约束使用。">
+                    <NumberInput value={maxTotalPct} min={0} max={100} onChange={setMaxTotalPct} suffix="%" />
+                  </SettingRow>
+                </>
+              )}
+              {active === 'agents' && (
+                <>
+                  <SettingRow label="多 Agent 决策" hint="控制盘后是否走 Analyst → Director → Researcher → Trader → RiskManager。">
+                    <Toggle value={multiAgent} onChange={setMultiAgent} />
+                  </SettingRow>
+                  <SettingRow label="长期分析师团" hint="控制周频长期标签，以及长期标签对短线信号的约束。">
+                    <Toggle value={longTermTeam} onChange={setLongTermTeam} />
+                  </SettingRow>
+                  <SettingRow label="手动长期团" hint="立即提交长期研究团队后台任务。">
+                    <ActionButton disabled={actionBusy === 'longterm'} onClick={() => runAction('longterm', triggerLongTermTeam, '长期分析师团已提交后台任务')}>
+                      跑长期团
+                    </ActionButton>
+                  </SettingRow>
+                </>
+              )}
+              {active === 'data' && (
+                <>
+                  <SettingRow label="活跃标的" hint="当前 watchlist active=true 的股票数量。">
+                    <MiniStat label="stocks" value={cov.active_stocks ?? '-'} />
+                  </SettingRow>
+                  <SettingRow label="财报回填年限" hint="长期研究团队同步财务数据时回看的年份数量。">
+                    <NumberInput value={financialYears} min={1} max={10} onChange={setFinancialYears} suffix="年" />
+                  </SettingRow>
+                  <SettingRow label="Tavily 新闻补充阈值" hint="DB 内新闻数量低于该值时，触发联网补充。">
+                    <NumberInput value={tavilyThreshold} min={0} max={10} onChange={setTavilyThreshold} />
+                  </SettingRow>
+                  <SettingRow label="Anspire 新闻窗口" hint="短线新闻搜索回看天数。">
+                    <NumberInput value={anspireDays} min={1} max={7} onChange={setAnspireDays} suffix="天" />
+                  </SettingRow>
+                  <SettingRow label="Anspire 结果上限" hint="每股最多读取的搜索结果。">
+                    <NumberInput value={anspireMaxResults} min={1} max={20} onChange={setAnspireMaxResults} />
+                  </SettingRow>
+                  <SettingRow label="Anspire 补入标题" hint="每股最多补入情感分析链路的标题数。">
+                    <NumberInput value={anspireMaxAdd} min={0} max={10} onChange={setAnspireMaxAdd} />
+                  </SettingRow>
+                  <SettingRow label="Anspire 最低审计分" hint="低于该分数的新闻不会进入情感分析链路。">
+                    <NumberInput value={anspireMinScore} min={0} max={100} onChange={setAnspireMinScore} />
+                  </SettingRow>
+                  <SettingRow label="价格覆盖" hint="已有价格数据的标的数量。">
+                    <MiniStat label="prices" value={cov.price_covered ?? '-'} />
+                  </SettingRow>
+                  <SettingRow label="24h 新闻" hint="最近 24 小时有新闻覆盖的标的数量。">
+                    <MiniStat label="news" value={cov.news_24h_covered ?? '-'} />
+                  </SettingRow>
+                </>
+              )}
+              {active === 'schedule' && (
+                <>
+                  <SettingRow label="冷启动初始化" hint="回填价格历史、同步财报、披露日并生成首批信号。">
+                    <ActionButton disabled={initStatus?.running} onClick={handleInitialize}>
+                      {initStatus?.running ? '初始化中…' : '立即初始化'}
+                    </ActionButton>
+                  </SettingRow>
+                  <SettingRow label="每日复盘" hint="复盘页会在每天 15:00 后自动 ensure。">
+                    <TimeInput value={dailyReviewTime} onChange={setDailyReviewTime} />
+                  </SettingRow>
+                  <SettingRow label="长期复盘" hint="复盘页和调度按两组周内日期与时间触发。">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <DayInput value={longtermMondayDow} onChange={setLongtermMondayDow} />
+                      <TimeInput value={longtermMondayTime} onChange={setLongtermMondayTime} />
+                      <DayInput value={longtermFridayDow} onChange={setLongtermFridayDow} />
+                      <TimeInput value={longtermFridayTime} onChange={setLongtermFridayTime} />
+                    </div>
+                  </SettingRow>
+                </>
+              )}
+              {active === 'risk' && (
+                <>
+                  <SettingRow label="大盘择时过滤" hint="启用后，盘后信号会用 RSRS 与板块扩散对强信号做衰减。">
+                    <Toggle value={limitGuard} onChange={setLimitGuard} />
+                  </SettingRow>
+                  <SettingRow label="ADX 震荡过滤" hint="启用后，技术分在震荡市按 ADX 系数衰减。">
+                    <Toggle value={adxFilter} onChange={setAdxFilter} />
+                  </SettingRow>
+                  <SettingRow label="熔断状态" hint="触发后跳过盘前、盘后、止损检查调度；重置需要明确操作。" danger>
+                    <span className={`rounded-sm border px-2 py-1 text-xs font-semibold ${
+                      killSwitch
+                        ? 'border-emerald-600/40 bg-emerald-600/10 text-emerald-700 dark:text-emerald-200'
+                        : 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700 dark:text-cyan-200'
+                    }`}>
+                      {killSwitch ? '已触发' : '正常'}
+                    </span>
+                  </SettingRow>
+                </>
+              )}
               <SettingRow label="保存运行时配置" hint="只影响当前后端进程；重启后仍以 .env 为准。">
                 <ActionButton onClick={handleSaveRuntime} disabled={saving}>
                   {saving ? '保存中' : '应用'}
                 </ActionButton>
-              </SettingRow>
-              <SettingRow label="熔断状态" hint="触发后跳过盘前、盘后、止损检查调度；重置需要明确操作。" danger>
-                <span className={`rounded-sm border px-2 py-1 text-xs font-semibold ${
-                  killSwitch
-                    ? 'border-emerald-600/40 bg-emerald-600/10 text-emerald-700 dark:text-emerald-200'
-                    : 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700 dark:text-cyan-200'
-                }`}>
-                  {killSwitch ? '已触发' : '正常'}
-                </span>
               </SettingRow>
             </div>
           </section>
@@ -471,6 +677,8 @@ export default function AdminPage() {
               <div className="space-y-3 p-4">
                 <DiffRow path="decision.entry_threshold" before={summary?.system?.entry_threshold ?? '-'} after={threshold} />
                 <DiffRow path="decision.profile" before={summary?.system?.profile ?? '-'} after={profile} />
+                <DiffRow path="decision.weights" before={`${Math.round(weights.quant * 100)}/${Math.round(weights.technical * 100)}/${Math.round(weights.sentiment * 100)}`} after={`${weightQuant}/${weightTechnical}/${weightSentiment}`} />
+                <DiffRow path="portfolio.max_total" before={`${Math.round((runtime?.max_total_equity_pct || 0) * 100)}%`} after={`${maxTotalPct}%`} />
                 <DiffRow path="risk.manager" before={runtime?.risk_manager_enabled ? 'on' : 'off'} after={riskManager ? 'on' : 'off'} />
                 {message && (
                   <div className="rounded-sm border border-cyan-700/30 bg-cyan-700/10 p-2 text-xs leading-relaxed text-cyan-800 dark:text-cyan-200">

@@ -14,7 +14,7 @@
 | M3 | 可信度审计层 | ✅ 完成 |
 | M4 | 多 Agent 决策深化 | 🟡 大部分（M4.1/4.2/4.3/4.6 完成 2026-05-16；M4.4/4.5 暂缓） |
 | M5 | 自动化执行 | 🔲 后置 |
-| M6 | 持续迭代与扩展 | ✅ M6.1 当前范围完成，Qlib 暂不恢复权重 |
+| M6 | 持续迭代与扩展 | ✅ M6.1 / M6.3 当前范围完成，Qlib 暂不恢复权重 |
 | M7 | 工程化与开源就绪 | ✅ 完成（A/B/C 全 + .editorconfig + Makefile + pyproject 单一真理源） |
 | M8 | 深度研究与来源审计层 | ✅ 完成（轻量新闻审计 + 手动专题研究，不进入日常信号） |
 
@@ -56,7 +56,7 @@
 | 14:30 工作日 | 止损预警 | 检查买入信号止损线，触及则 Bark 推送 |
 | 16:00 工作日 | 盘后信号 | 三路信号聚合 → 写 Signal 表 → Bark 推送 |
 | 周六 09:00 | 模型重训 | LightGBM Alpha 模型周训练 |
-| 周日 11:00 | 长期团 | 长期分析师团 label 生成 |
+| 周一 09:00 / 周五 15:00 | 长期团 | 长期分析师团 label 生成；日期与时间可在配置页调整 |
 
 > 所有任务跑在 FastAPI 进程内（APScheduler），服务不运行则任务不触发。
 > M3.4 kill switch 激活时，premarket / postmarket / stoploss_check 自动跳过。
@@ -77,7 +77,19 @@
 
 - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **217 passed**（2026-05-17 M8 完成后）
 - `python3 -m compileall backend tests` → 通过
-- `cd frontend && npm run build` → 通过（47 modules，347 KB / gzip 111 KB）
+- `cd frontend && npm run build` → 通过（M6.3 后 52 modules，约 427 KB / gzip 134 KB）
+
+### M6.3 当前前端/API 快照（2026-05-19）
+
+- 首页：真实持仓情况、大盘情况、股票名称优先的活动流水。
+- 复盘中心：每日复盘 / 长期复盘 ensure、历史记录、示例历史补足、Markdown 完整报告详情展开。
+- 持仓设置：股票联想、持仓汇总、平仓记录、永久删除已平仓记录。
+- AI 对话：左侧会话窗口、新建/二次确认归档、窗口内记忆隔离、通用助手 / 长期研究团队模式。
+- 配置页：综合分权重、仓位上限、数据补充参数、复盘触发日期与时间可运行时调整。
+- 后端新增表：`positions`、`review_runs`、`pending_ai_actions`、`chat_sessions`、`chat_messages`。
+- 验证：`pytest tests/test_frontend_expansion_api.py tests/test_memory.py` → **10 passed, 1 warning**。
+- 验证：`node --test frontend/src/pages/chatArchive.test.js frontend/src/pages/reviewContent.test.js` → **4 passed**。
+- 验证：`cd frontend && npm run build` → 通过（2026-05-19 复盘 Markdown / 归档确认增强后）。
 
 ---
 

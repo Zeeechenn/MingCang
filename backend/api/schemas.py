@@ -72,6 +72,56 @@ class WatchlistItem(BaseModel):
     long_term_label: Optional[LongTermLabelOut] = None
 
 
+class PositionCreate(BaseModel):
+    symbol: str
+    name: Optional[str] = None
+    market: str = "CN"
+    quantity: float
+    avg_cost: float
+    opened_at: Optional[str] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    note: Optional[str] = None
+
+
+class PositionUpdate(BaseModel):
+    name: Optional[str] = None
+    market: Optional[str] = None
+    quantity: Optional[float] = None
+    avg_cost: Optional[float] = None
+    opened_at: Optional[str] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    closed_at: Optional[str] = None
+    close_price: Optional[float] = None
+    note: Optional[str] = None
+    status: Optional[str] = None
+
+
+class PositionOut(BaseModel):
+    id: int
+    symbol: str
+    name: str
+    market: str
+    quantity: float
+    avg_cost: float
+    opened_at: str
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    closed_at: Optional[str] = None
+    close_price: Optional[float] = None
+    realized_pnl: Optional[float] = None
+    realized_pnl_pct: Optional[float] = None
+    note: Optional[str] = None
+    status: str
+    latest_price: Optional[float] = None
+    latest_price_date: Optional[str] = None
+    market_value: Optional[float] = None
+    cost_value: Optional[float] = None
+    pnl: Optional[float] = None
+    pnl_pct: Optional[float] = None
+
+
 class PriceBar(BaseModel):
     time: str      # "YYYY-MM-DD"，TradingView Lightweight Charts 格式
     open: float
@@ -173,3 +223,17 @@ class DeepResearchResponse(BaseModel):
     report_path: Optional[str] = None
     source_count: int = 0
     risk_flags: list[str] = []
+
+
+class AIChatRequest(BaseModel):
+    message: str
+    mode: str = "general"  # general / long_term_team
+    history: list[dict] = []
+    session_id: Optional[str] = None
+
+
+class AIChatResponse(BaseModel):
+    answer: str
+    citations: list[str] = []
+    used_resources: list[str] = []
+    pending_action: Optional[dict] = None

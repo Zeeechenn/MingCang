@@ -134,6 +134,11 @@ class Settings(BaseSettings):
     qfii_flow_drop_ratio: float = 0.20            # 累计净减仓占历史峰值比例阈值
     schedule_longterm_dow: str = "sun"
     schedule_longterm_time: str = "11:00"
+    schedule_daily_review_time: str = "15:00"
+    schedule_longterm_monday_dow: str = "mon"
+    schedule_longterm_monday_time: str = "09:00"
+    schedule_longterm_friday_dow: str = "fri"
+    schedule_longterm_friday_time: str = "15:00"
 
     # Kronos (optional, requires CUDA GPU)
     kronos_enabled: bool = False          # 设为 True 后需有 GPU 且已安装 Kronos 依赖

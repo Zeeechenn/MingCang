@@ -13,6 +13,72 @@ export const getWatchlist = () => request('/watchlist')
 
 export const getDashboardSummary = () => request('/dashboard/summary')
 
+export const getPositions = (status = 'open') => request(`/positions?status=${status}`)
+
+export const createPosition = (payload) =>
+  request('/positions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+export const updatePosition = (id, payload) =>
+  request(`/positions/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+export const closePosition = (id, payload = {}) =>
+  request(`/positions/${id}/close`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+export const deleteClosedPosition = (id) =>
+  request(`/positions/${id}/closed`, { method: 'DELETE' })
+
+export const searchStocks = (q, market = 'CN') =>
+  request(`/stocks/search?q=${encodeURIComponent(q)}&market=${market}`)
+
+export const getReviews = (kind = '') =>
+  request(`/reviews${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`)
+
+export const getReview = (id) => request(`/reviews/${id}`)
+
+export const getLatestReviews = () => request('/reviews/latest')
+
+export const ensureDailyReview = () =>
+  request('/reviews/daily/ensure', { method: 'POST' })
+
+export const ensureLongTermReview = () =>
+  request('/reviews/long-term/ensure', { method: 'POST' })
+
+export const chatWithAI = (payload) =>
+  request('/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+export const confirmAIAction = (id) =>
+  request(`/ai/actions/${id}/confirm`, { method: 'POST' })
+
+export const getChatSessions = () => request('/ai/sessions')
+
+export const createChatSession = (payload = {}) =>
+  request('/ai/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+export const getChatMessages = (id) => request(`/ai/sessions/${id}/messages`)
+
+export const archiveChatSession = (id) =>
+  request(`/ai/sessions/${id}/archive`, { method: 'POST' })
+
 export const getRuntimeConfig = () => request('/system/runtime-config')
 
 export const updateRuntimeConfig = (payload) =>

@@ -31,6 +31,28 @@ class Stock(Base):
     added_at = Column(DateTime, default=datetime.utcnow)
 
 
+class Position(Base):
+    """手动维护的真实/模拟持仓。"""
+    __tablename__ = "positions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String, index=True)
+    name = Column(String, nullable=True)
+    market = Column(String, default="CN")
+    quantity = Column(Float)
+    avg_cost = Column(Float)
+    opened_at = Column(String, index=True)
+    stop_loss = Column(Float, nullable=True)
+    take_profit = Column(Float, nullable=True)
+    closed_at = Column(String, nullable=True)
+    close_price = Column(Float, nullable=True)
+    realized_pnl = Column(Float, nullable=True)
+    realized_pnl_pct = Column(Float, nullable=True)
+    note = Column(Text, nullable=True)
+    status = Column(String, default="open")  # open / closed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Price(Base):
     """日线行情"""
     __tablename__ = "prices"
@@ -204,6 +226,55 @@ class ResearchState(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ReviewRun(Base):
+    """复盘运行记录：daily / long_term。"""
+    __tablename__ = "review_runs"
+    __table_args__ = (UniqueConstraint("kind", "as_of", name="uq_review_kind_as_of"),)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    kind = Column(String, index=True)
+    as_of = Column(String, index=True)
+    summary = Column(Text, nullable=True)
+    path = Column(String, nullable=True)
+    status = Column(String, default="created")
+    payload_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PendingAIAction(Base):
+    """AI 对话生成、等待用户确认的项目内操作。"""
+    __tablename__ = "pending_ai_actions"
+    action_id = Column(String, primary_key=True)
+    action = Column(String, index=True)
+    payload_json = Column(Text)
+    status = Column(String, default="pending")  # pending / executed / cancelled / failed
+    result_json = Column(Text, nullable=True)
+    user_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    executed_at = Column(DateTime, nullable=True)
+
+
+class ChatSession(Base):
+    """Project AI chat window; memory is scoped to this session only."""
+    __tablename__ = "chat_sessions"
+    id = Column(String, primary_key=True)
+    title = Column(String, nullable=True)
+    mode = Column(String, default="general")
+    archived_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ChatMessage(Base):
+    """Messages stored per chat window."""
+    __tablename__ = "chat_messages"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String, index=True)
+    role = Column(String)
+    content = Column(Text)
+    payload_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def get_latest_price_date(symbol: str, db) -> str | None:
     """返回该股最新一条价格记录的日期字符串，无数据时返回 None"""
     result = db.query(Price.date).filter(Price.symbol == symbol)\
@@ -219,6 +290,16 @@ def _ensure_runtime_schema() -> None:
             conn.execute(text("ALTER TABLE signals ADD COLUMN rule_version TEXT"))
         if "data_timestamp" not in signal_cols:
             conn.execute(text("ALTER TABLE signals ADD COLUMN data_timestamp TEXT"))
+
+        position_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(positions)")).fetchall()]
+        for col, ddl in {
+            "closed_at": "ALTER TABLE positions ADD COLUMN closed_at TEXT",
+            "close_price": "ALTER TABLE positions ADD COLUMN close_price REAL",
+            "realized_pnl": "ALTER TABLE positions ADD COLUMN realized_pnl REAL",
+            "realized_pnl_pct": "ALTER TABLE positions ADD COLUMN realized_pnl_pct REAL",
+        }.items():
+            if col not in position_cols:
+                conn.execute(text(ddl))
 
         fm_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(financial_metrics)")).fetchall()]
         if "disclosure_date" not in fm_cols:
@@ -303,6 +384,87 @@ def _ensure_runtime_schema() -> None:
         conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_market_snapshots_symbol_date
             ON market_snapshots(symbol, date)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS positions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT,
+                name TEXT,
+                market TEXT DEFAULT 'CN',
+                quantity REAL,
+                avg_cost REAL,
+                opened_at TEXT,
+                stop_loss REAL,
+                take_profit REAL,
+                closed_at TEXT,
+                close_price REAL,
+                realized_pnl REAL,
+                realized_pnl_pct REAL,
+                note TEXT,
+                status TEXT DEFAULT 'open',
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_positions_symbol_status
+            ON positions(symbol, status)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS review_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT,
+                as_of TEXT,
+                summary TEXT,
+                path TEXT,
+                status TEXT DEFAULT 'created',
+                payload_json TEXT,
+                created_at DATETIME,
+                UNIQUE(kind, as_of)
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_review_runs_kind_as_of
+            ON review_runs(kind, as_of)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS pending_ai_actions (
+                action_id TEXT PRIMARY KEY,
+                action TEXT,
+                payload_json TEXT,
+                status TEXT DEFAULT 'pending',
+                result_json TEXT,
+                user_message TEXT,
+                created_at DATETIME,
+                executed_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                mode TEXT DEFAULT 'general',
+                archived_at DATETIME,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        chat_session_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(chat_sessions)")).fetchall()]
+        if "archived_at" not in chat_session_cols:
+            conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN archived_at DATETIME"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                role TEXT,
+                content TEXT,
+                payload_json TEXT,
+                created_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created
+            ON chat_messages(session_id, created_at)
         """))
 
 
