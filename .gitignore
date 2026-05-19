@@ -13,3 +13,6 @@ dist/
 *.egg-info/
 .DS_Store
 .signal_news_cache.json
+
+# paper_trading 归因脚本按日生成的报告（脚本本身需要 track）
+paper_trading/quant_attribution_*.md
