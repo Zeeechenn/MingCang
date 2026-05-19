@@ -155,7 +155,11 @@ def job_postmarket() -> None:
         return
     from backend.data.database import SessionLocal, Stock
     from backend.data.market import load_price_df
-    from backend.data.news import get_recent_news_items, fetch_titles_tavily
+    from backend.data.news import (
+        fetch_stock_news_anspire,
+        fetch_titles_tavily,
+        get_recent_news_items,
+    )
     from backend.data.news_audit import audited_titles
     from backend.analysis.technical import technical_score
     from backend.analysis.qlib_engine import qlib_score
@@ -206,9 +210,24 @@ def job_postmarket() -> None:
                 quant_result = qlib_score(df, symbol=stock.symbol, db=db)
                 quant = quant_result["score"]
 
-                # 情感信号：DB 24h 内新闻先做轻量来源审计；Tavily 只作不足时补充
+                # 情感信号：DB 24h 内新闻先做轻量来源审计；搜索源只作不足时补充
                 news_items = get_recent_news_items(stock.symbol, db, hours=24)
                 titles, news_audits = audited_titles(news_items)
+                db_title_count = len(titles)
+                if len(titles) < settings.tavily_supplement_threshold:
+                    slots = settings.tavily_supplement_threshold - len(titles)
+                    limit = min(settings.anspire_news_max_add, max(0, slots))
+                    anspire_items = fetch_stock_news_anspire(stock.symbol, stock.name, limit=limit)
+                    if anspire_items:
+                        anspire_titles, anspire_audits = audited_titles(
+                            anspire_items,
+                            min_score=settings.anspire_news_min_score,
+                            limit=limit,
+                        )
+                        titles = titles + anspire_titles[:slots]
+                        news_audits = news_audits + anspire_audits
+                        logger.info("Anspire补充 %s: +%d条 (DB=%d条)",
+                                    stock.symbol, len(anspire_titles[:slots]), db_title_count)
                 if len(titles) < settings.tavily_supplement_threshold:
                     tavily_titles = fetch_titles_tavily(stock.symbol, stock.name)
                     if tavily_titles:

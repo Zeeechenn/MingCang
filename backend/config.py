@@ -145,6 +145,13 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""             # 填入你的 Tavily API Key
     tavily_supplement_threshold: int = 3  # DB新闻 < 此值时触发Tavily补充
 
+    # Anspire Search API（严格补缺：只补事件型新闻，不补行情/F10/资料页）
+    anspire_api_key: str = ""             # 填入你的 Anspire API Key
+    anspire_news_days: int = 2            # 短线新闻搜索窗口
+    anspire_news_max_results: int = 5     # 每股最多读取的搜索结果
+    anspire_news_max_add: int = 2         # 每股最多补入情感分析的标题
+    anspire_news_min_score: int = 75      # Anspire 来源进入情感链路的最低审计分
+
     # Bark 推送通知（可选，iOS App）
     bark_key: str = ""                    # Bark App 设备密钥
     bark_server: str = "https://api.day.app"  # 自建 Bark 服务时可替换
