@@ -1,11 +1,21 @@
-"""行情数据拉取：A股用 AkShare，美股用 yfinance"""
-import time
-import logging
+"""行情数据拉取：A股多源 fallback，美股用 yfinance."""
 import functools
+import json
+import logging
+import subprocess
+import time
+from datetime import date, timedelta
+
 import pandas as pd
 import akshare as ak
 import yfinance as yf
-from datetime import date, timedelta
+
+from backend.data.providers import (
+    fetch_daily_with_fallback,
+    fetch_index_with_fallback,
+    register_daily_provider,
+    register_index_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +49,63 @@ def _cn_market_prefix(symbol: str) -> str:
     return "1" if symbol[:2] in ("60", "68", "11") else "0"
 
 
+def _to_sina_tx_symbol(symbol: str) -> str:
+    """Return sh/sz/bj-prefixed A-share symbol for AkShare Sina/Tencent endpoints."""
+    if symbol.startswith(("60", "68", "11", "51", "52", "56", "58")):
+        return f"sh{symbol}"
+    if symbol.startswith(("43", "81", "82", "83", "87", "88", "92")):
+        return f"bj{symbol}"
+    return f"sz{symbol}"
+
+
 def cn_yfinance_ticker(symbol: str) -> str:
     """Map an A-share symbol to a Yahoo Finance ticker suffix."""
     suffix = "SS" if symbol[:2] in ("60", "68", "11") else "SZ"
     return f"{symbol}.{suffix}"
+
+
+def _normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize common Chinese/English OHLCV columns to index=date str."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = df.copy()
+    out = out.rename(columns={
+        "日期": "date",
+        "开盘": "open",
+        "最高": "high",
+        "最低": "low",
+        "收盘": "close",
+        "成交量": "volume",
+        "Open": "open",
+        "High": "high",
+        "Low": "low",
+        "Close": "close",
+        "Volume": "volume",
+    })
+    if "date" not in out.columns:
+        out = out.reset_index().rename(columns={"index": "date"})
+    out["date"] = pd.to_datetime(out["date"]).dt.strftime("%Y-%m-%d")
+    out = out.set_index("date").sort_index()
+    for col in ("open", "high", "low", "close", "volume"):
+        if col not in out.columns:
+            raise ValueError(f"missing OHLCV column: {col}")
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+    return out[["open", "high", "low", "close", "volume"]].dropna(subset=["close"])
+
+
+def fetch_cn_daily_efinance(symbol: str, days: int = 365) -> pd.DataFrame:
+    """A-share daily data via efinance/Eastmoney wrapper."""
+    import efinance as ef
+
+    start = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
+    df = ef.stock.get_quote_history(
+        stock_codes=symbol,
+        beg=start,
+        end="20500101",
+        klt=101,
+        fqt=1,
+    )
+    return _normalize_ohlcv(df)
 
 
 @_retry(max_attempts=3, delay=1.0)
@@ -50,7 +113,6 @@ def fetch_cn_daily(symbol: str, days: int = 365) -> pd.DataFrame:
     """拉取A股日线数据，返回 OHLCV DataFrame（index=date str）。"""
     start = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
     secid = f"{_cn_market_prefix(symbol)}.{symbol}"
-    import subprocess as _sp, json as _json
     # eastmoney API 要求逗号不能 URL 编码（%2C 会触发空响应），直接拼 URL
     url = (
         "https://push2his.eastmoney.com/api/qt/stock/kline/get"
@@ -62,11 +124,13 @@ def fetch_cn_daily(symbol: str, days: int = 365) -> pd.DataFrame:
         "&ut=7eea3edcaed734bea9cbfc24409ed989"
     )
     # curl 走 Clash TUN，绕开 Python requests 与 TUN 的 SSL 握手问题
-    result = _sp.run(["curl", "-s", "--max-time", "10", url],
-                     capture_output=True, text=True)
+    result = subprocess.run(["curl", "-s", "--max-time", "10", url],
+                            capture_output=True, text=True)
     if result.returncode != 0:
         raise ConnectionError(f"curl failed: {result.stderr}")
-    data = _json.loads(result.stdout)
+    if not result.stdout:
+        raise ConnectionError("curl returned empty body")
+    data = json.loads(result.stdout)
     klines = (data.get("data") or {}).get("klines") or []
     if not klines:
         raise ValueError(f"No kline data for {symbol}")
@@ -83,6 +147,46 @@ def fetch_cn_daily(symbol: str, days: int = 365) -> pd.DataFrame:
         })
     df_result = pd.DataFrame(rows).set_index("date")
     return df_result[["open", "high", "low", "close", "volume"]]
+
+
+@_retry(max_attempts=3, delay=1.0)
+def fetch_cn_daily_akshare_em(symbol: str, days: int = 365) -> pd.DataFrame:
+    """A-share daily data via AkShare Eastmoney endpoint."""
+    start = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
+    df = ak.stock_zh_a_hist(
+        symbol=symbol,
+        period="daily",
+        start_date=start,
+        end_date="20500101",
+        adjust="qfq",
+    )
+    return _normalize_ohlcv(df)
+
+
+@_retry(max_attempts=3, delay=1.0)
+def fetch_cn_daily_akshare_sina(symbol: str, days: int = 365) -> pd.DataFrame:
+    """A-share daily data via AkShare Sina endpoint."""
+    start = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
+    df = ak.stock_zh_a_daily(
+        symbol=_to_sina_tx_symbol(symbol),
+        start_date=start,
+        end_date="20500101",
+        adjust="qfq",
+    )
+    return _normalize_ohlcv(df)
+
+
+@_retry(max_attempts=3, delay=1.0)
+def fetch_cn_daily_akshare_tx(symbol: str, days: int = 365) -> pd.DataFrame:
+    """A-share daily data via AkShare Tencent endpoint."""
+    start = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
+    df = ak.stock_zh_a_hist_tx(
+        symbol=_to_sina_tx_symbol(symbol),
+        start_date=start,
+        end_date="20500101",
+        adjust="qfq",
+    )
+    return _normalize_ohlcv(df)
 
 
 @_retry(max_attempts=3, delay=1.0)
@@ -109,11 +213,13 @@ def fetch_us_daily(symbol: str, days: int = 365) -> pd.DataFrame:
 
 def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
     """Dispatch to the appropriate market data fetcher based on market."""
-    from backend.data.providers import fetch_daily_with_fallback, register_daily_provider
-
-    register_daily_provider("eastmoney_cn", {"CN"}, fetch_cn_daily)
-    register_daily_provider("yfinance_cn", {"CN"}, fetch_cn_daily_yfinance)
-    register_daily_provider("yfinance_us", {"US"}, fetch_us_daily)
+    register_daily_provider("efinance_cn", {"CN"}, fetch_cn_daily_efinance, priority=0, cooldown_seconds=60)
+    register_daily_provider("eastmoney_cn", {"CN"}, fetch_cn_daily, priority=10, cooldown_seconds=60)
+    register_daily_provider("akshare_em_cn", {"CN"}, fetch_cn_daily_akshare_em, priority=20, cooldown_seconds=60)
+    register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=30, cooldown_seconds=30)
+    register_daily_provider("akshare_tx_cn", {"CN"}, fetch_cn_daily_akshare_tx, priority=40, cooldown_seconds=30)
+    register_daily_provider("yfinance_cn", {"CN"}, fetch_cn_daily_yfinance, priority=90, cooldown_seconds=120)
+    register_daily_provider("yfinance_us", {"US"}, fetch_us_daily, priority=90, cooldown_seconds=120)
     df, provider = fetch_daily_with_fallback(symbol, market, days)
     logger.debug("fetch_daily provider=%s symbol=%s market=%s rows=%d",
                  provider, symbol, market, len(df))
@@ -121,17 +227,95 @@ def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
 
 
 @_retry(max_attempts=3, delay=1.0)
-def fetch_cn_index(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFrame:
-    """
-    拉取A股指数日线数据，默认沪深300。
-    index_symbol: "sh000300"（沪深300）/ "sh000001"（上证）/ "sh000016"（上证50）
-    """
+def fetch_cn_index_akshare(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFrame:
+    """Fetch A-share index daily data via AkShare."""
     df = ak.stock_zh_index_daily(symbol=index_symbol)
     df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
     cutoff = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d")
     df = df[df["date"] >= cutoff].copy()
     df["change_pct"] = df["close"].pct_change() * 100
     return df[["date", "close", "change_pct"]].set_index("date")
+
+
+def _eastmoney_index_secid(index_symbol: str) -> str:
+    code = index_symbol[2:] if index_symbol[:2].lower() in {"sh", "sz"} else index_symbol
+    market = "1" if index_symbol.lower().startswith("sh") else "0"
+    return f"{market}.{code}"
+
+
+@_retry(max_attempts=3, delay=1.0)
+def fetch_cn_index_eastmoney(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFrame:
+    """Fetch A-share index daily data via Eastmoney kline endpoint."""
+    start = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
+    url = (
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        f"?secid={_eastmoney_index_secid(index_symbol)}"
+        "&fields1=f1,f2,f3,f4,f5,f6"
+        "&fields2=f51,f52,f53,f54,f55,f56"
+        "&klt=101&fqt=1"
+        f"&beg={start}&end=20500101"
+        "&ut=7eea3edcaed734bea9cbfc24409ed989"
+    )
+    result = subprocess.run(["curl", "-s", "--max-time", "10", url],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        raise ConnectionError(f"curl failed: {result.stderr}")
+    if not result.stdout:
+        raise ConnectionError("curl returned empty body")
+    data = json.loads(result.stdout)
+    klines = (data.get("data") or {}).get("klines") or []
+    if not klines:
+        raise ValueError(f"No index kline data for {index_symbol}")
+    rows = []
+    for line in klines:
+        parts = line.split(",")
+        rows.append({"date": parts[0], "close": float(parts[2])})
+    df = pd.DataFrame(rows).set_index("date")
+    df["change_pct"] = df["close"].pct_change() * 100
+    return df[["close", "change_pct"]]
+
+
+def fetch_cn_index_efinance(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFrame:
+    """Fetch A-share index daily data via efinance."""
+    import efinance as ef
+
+    code = index_symbol[2:] if index_symbol[:2].lower() in {"sh", "sz"} else index_symbol
+    start = (date.today() - timedelta(days=days)).strftime("%Y%m%d")
+    df = ef.stock.get_quote_history(stock_codes=code, beg=start, end="20500101", klt=101, fqt=1)
+    normalized = _normalize_ohlcv(df)
+    out = normalized[["close"]].copy()
+    out["change_pct"] = out["close"].pct_change() * 100
+    return out
+
+
+@_retry(max_attempts=3, delay=1.0)
+def fetch_cn_index_yfinance(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFrame:
+    """Last-resort A-share index data via Yahoo Finance."""
+    code = index_symbol[2:] if index_symbol[:2].lower() in {"sh", "sz"} else index_symbol
+    suffix = "SS" if index_symbol.lower().startswith("sh") else "SZ"
+    ticker = yf.Ticker(f"{code}.{suffix}")
+    df = ticker.history(period=f"{days}d", interval="1d", auto_adjust=True)
+    if df.empty:
+        raise ValueError(f"No yfinance index data for {index_symbol}")
+    df.index = df.index.strftime("%Y-%m-%d")
+    df.index.name = "date"
+    out = df[["Close"]].rename(columns={"Close": "close"})
+    out["change_pct"] = out["close"].pct_change() * 100
+    return out
+
+
+def fetch_cn_index(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFrame:
+    """
+    拉取A股指数日线数据，默认沪深300。
+    index_symbol: "sh000300"（沪深300）/ "sh000001"（上证）/ "sh000016"（上证50）
+    """
+    register_index_provider("akshare_index_cn", fetch_cn_index_akshare, priority=0, cooldown_seconds=60)
+    register_index_provider("eastmoney_index_cn", fetch_cn_index_eastmoney, priority=10, cooldown_seconds=60)
+    register_index_provider("efinance_index_cn", fetch_cn_index_efinance, priority=20, cooldown_seconds=60)
+    register_index_provider("yfinance_index_cn", fetch_cn_index_yfinance, priority=90, cooldown_seconds=120)
+    df, provider = fetch_index_with_fallback(index_symbol, days)
+    logger.debug("fetch_cn_index provider=%s index=%s rows=%d", provider, index_symbol, len(df))
+    return df
 
 
 def load_price_df(symbol: str, db, days: int = 200) -> pd.DataFrame:

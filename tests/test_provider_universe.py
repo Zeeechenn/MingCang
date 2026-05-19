@@ -6,7 +6,10 @@ def test_provider_registry_fallback():
         fetch_daily_with_fallback,
         list_daily_providers,
         register_daily_provider,
+        reset_provider_registry,
     )
+
+    reset_provider_registry()
 
     def broken(symbol, days):
         raise RuntimeError("down")
@@ -22,6 +25,87 @@ def test_provider_registry_fallback():
     assert provider == "test_ok"
     assert len(df) == 1
     assert "test_ok" in list_daily_providers("T")
+
+
+def test_provider_registry_skips_cooling_provider():
+    from backend.data.providers import (
+        fetch_daily_with_fallback,
+        get_provider_health,
+        register_daily_provider,
+        reset_provider_registry,
+    )
+
+    reset_provider_registry()
+    calls = {"bad": 0, "ok": 0}
+
+    def bad(symbol, days):
+        calls["bad"] += 1
+        raise RuntimeError("network down")
+
+    def ok(symbol, days):
+        calls["ok"] += 1
+        return pd.DataFrame([{"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}])
+
+    register_daily_provider("bad", {"CN"}, bad, cooldown_seconds=60)
+    register_daily_provider("ok", {"CN"}, ok)
+
+    _, provider1 = fetch_daily_with_fallback("600519", "CN", 30)
+    _, provider2 = fetch_daily_with_fallback("600519", "CN", 30)
+
+    assert provider1 == "ok"
+    assert provider2 == "ok"
+    assert calls == {"bad": 1, "ok": 2}
+    assert get_provider_health()["bad"]["cooldown_until"] is not None
+
+
+def test_fetch_daily_registers_cn_multi_source_chain(monkeypatch):
+    from backend.data import market
+    from backend.data.providers import list_daily_providers, reset_provider_registry
+
+    reset_provider_registry()
+
+    def fake_fetch(symbol, market_name, days):
+        return pd.DataFrame([{"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]), "efinance_cn"
+
+    monkeypatch.setattr(market, "fetch_daily_with_fallback", fake_fetch)
+
+    df = market.fetch_daily("600519", "CN", days=30)
+
+    assert not df.empty
+    assert list_daily_providers("CN") == [
+        "efinance_cn",
+        "eastmoney_cn",
+        "akshare_em_cn",
+        "akshare_sina_cn",
+        "akshare_tx_cn",
+        "yfinance_cn",
+    ]
+
+
+def test_fetch_cn_index_uses_index_provider_fallback(monkeypatch):
+    from backend.data import market
+    from backend.data.providers import reset_provider_registry
+
+    reset_provider_registry()
+    calls = []
+
+    def broken(index_symbol, days):
+        calls.append("broken")
+        raise RuntimeError("index source down")
+
+    def ok(index_symbol, days):
+        calls.append("ok")
+        return pd.DataFrame(
+            [{"date": "2026-05-18", "close": 4000.0, "change_pct": 1.2}]
+        ).set_index("date")
+
+    monkeypatch.setattr(market, "fetch_cn_index_akshare", broken)
+    monkeypatch.setattr(market, "fetch_cn_index_eastmoney", ok)
+
+    df = market.fetch_cn_index("sh000300", days=30)
+
+    assert calls == ["broken", "ok"]
+    assert float(df.loc["2026-05-18", "close"]) == 4000.0
 
 
 def test_universe_upsert_deduplicates(test_db):

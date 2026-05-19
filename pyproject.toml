@@ -26,6 +26,7 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "requests>=2.31.0",
     "akshare>=1.12.0",
+    "efinance>=0.5.5",
     "yfinance>=0.2.38",
     "anthropic>=0.25.0",
     "apscheduler>=3.10.0",
@@ -85,7 +86,7 @@ warn_unused_ignores = true
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["akshare.*", "backtrader.*", "qlib.*", "alphalens.*"]
+module = ["akshare.*", "efinance.*", "backtrader.*", "qlib.*", "alphalens.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
