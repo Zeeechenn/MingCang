@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" role="img" aria-labelledby="title desc">
+  <title id="title">StockSage system architecture</title>
+  <desc id="desc">Light theme architecture diagram showing data sources, storage, analysis, agents, decision engine, memory, API, frontend, notification and research flows.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="58%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#eef6ff"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#64748b" flood-opacity="0.16"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowAccent" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#0891b2"/>
+    </marker>
+    <style>
+      .title { font: 800 44px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; letter-spacing: 0; }
+      .subtitle { font: 500 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; letter-spacing: 0; }
+      .section { font: 800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; letter-spacing: 0; }
+      .label { font: 750 16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; letter-spacing: 0; }
+      .small { font: 500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; letter-spacing: 0; }
+      .tiny { font: 600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; letter-spacing: 0; }
+      .chip { font: 750 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; letter-spacing: 0; }
+      .panel { fill: url(#panel); stroke: #dbe4ef; stroke-width: 1.2; filter: url(#shadow); }
+      .card { fill: #ffffff; stroke: #d6e0ea; stroke-width: 1.1; }
+      .line { fill: none; stroke: #64748b; stroke-width: 2.3; marker-end: url(#arrow); }
+      .lineAccent { fill: none; stroke: #0891b2; stroke-width: 2.6; marker-end: url(#arrowAccent); }
+      .dash { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 6 7; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1440" height="940" fill="url(#bg)"/>
+  <path d="M0 122 C210 42 370 150 560 86 C750 22 930 118 1126 62 C1266 22 1360 42 1440 6 L1440 0 L0 0 Z" fill="#dff7fb" opacity="0.82"/>
+  <path d="M0 882 C224 812 430 920 660 852 C884 786 1116 826 1440 754 L1440 940 L0 940 Z" fill="#dcfce7" opacity="0.72"/>
+
+  <text x="72" y="82" class="title">StockSage System Architecture</text>
+  <text x="72" y="116" class="subtitle">A 股辅助决策：数据底座、可信分析、多 Agent 风控、记忆治理与本地操作台</text>
+
+  <rect x="66" y="158" width="238" height="528" rx="8" class="panel"/>
+  <text x="92" y="196" class="section">Data Sources</text>
+  <rect x="92" y="222" width="186" height="70" rx="8" fill="#ecfeff" stroke="#67e8f9"/>
+  <text x="112" y="250" class="label">AkShare</text>
+  <text x="112" y="274" class="small">A 股行情 / 新闻 / 指数</text>
+  <rect x="92" y="310" width="186" height="70" rx="8" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="112" y="338" class="label">Financial Data</text>
+  <text x="112" y="362" class="small">财报 / QFII / 市值资金流</text>
+  <rect x="92" y="398" width="186" height="70" rx="8" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="112" y="426" class="label">News Feeds</text>
+  <text x="112" y="450" class="small">本地新闻 + 补充标题</text>
+  <rect x="92" y="486" width="186" height="70" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="112" y="514" class="label">Manual Input</text>
+  <text x="112" y="538" class="small">持仓 / 自选 / 配置 / 研究主题</text>
+  <rect x="92" y="584" width="186" height="58" rx="8" fill="#e0f2fe" stroke="#38bdf8"/>
+  <text x="112" y="619" class="label">APScheduler</text>
+
+  <rect x="362" y="158" width="244" height="528" rx="8" class="panel"/>
+  <text x="388" y="196" class="section">Storage &amp; Quality</text>
+  <rect x="388" y="226" width="192" height="86" rx="8" fill="#f0fdfa" stroke="#5eead4"/>
+  <text x="410" y="258" class="label">SQLite</text>
+  <text x="410" y="282" class="small">Price / News / Signal</text>
+  <text x="410" y="300" class="small">Position / Review / Chat</text>
+  <rect x="388" y="338" width="192" height="76" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="410" y="368" class="label">Point-in-Time</text>
+  <text x="410" y="392" class="small">披露日 / as_of 防穿越</text>
+  <rect x="388" y="440" width="192" height="76" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="410" y="470" class="label">Data Coverage</text>
+  <text x="410" y="494" class="small">覆盖快照 / provider health</text>
+  <rect x="388" y="542" width="192" height="82" rx="8" fill="#fefce8" stroke="#fde047"/>
+  <text x="410" y="572" class="label">Audit Trail</text>
+  <text x="410" y="596" class="small">FTS5 事件检索</text>
+
+  <rect x="664" y="158" width="326" height="528" rx="8" class="panel"/>
+  <text x="690" y="196" class="section">Analysis &amp; Research</text>
+  <rect x="690" y="222" width="130" height="88" rx="8" fill="#e0f2fe" stroke="#38bdf8"/>
+  <text x="710" y="254" class="label">Technical</text>
+  <text x="710" y="278" class="small">ATR / RSI / MA</text>
+  <text x="710" y="296" class="small">RSRS / regime</text>
+  <rect x="838" y="222" width="126" height="88" rx="8" fill="#fff7ed" stroke="#fb923c"/>
+  <text x="858" y="254" class="label">Sentiment</text>
+  <text x="858" y="278" class="small">LLM 新闻评分</text>
+  <text x="858" y="296" class="small">来源审计</text>
+  <rect x="690" y="336" width="130" height="88" rx="8" fill="#eef2ff" stroke="#a5b4fc"/>
+  <text x="710" y="368" class="label">Qlib</text>
+  <text x="710" y="392" class="small">LightGBM / PIT</text>
+  <text x="710" y="410" class="small">默认权重 0</text>
+  <rect x="838" y="336" width="126" height="88" rx="8" fill="#fff1f2" stroke="#fda4af"/>
+  <text x="858" y="368" class="label">Backtest</text>
+  <text x="858" y="392" class="small">WF / DSR / PBO</text>
+  <text x="858" y="410" class="small">阈值 / exit sweep</text>
+  <rect x="690" y="454" width="274" height="82" rx="8" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="710" y="486" class="label">Long-term Analyst Team</text>
+  <text x="710" y="510" class="small">赛道 / 财务质量 / 景气 / QFII 规避</text>
+  <rect x="690" y="560" width="274" height="82" rx="8" fill="#faf5ff" stroke="#d8b4fe"/>
+  <text x="710" y="592" class="label">Manual Deep Research</text>
+  <text x="710" y="616" class="small">行业研究员 / 公司研究员 / 风险复核</text>
+
+  <rect x="1048" y="158" width="326" height="528" rx="8" class="panel"/>
+  <text x="1074" y="196" class="section">Decision &amp; Delivery</text>
+  <rect x="1074" y="222" width="274" height="88" rx="8" fill="#ecfeff" stroke="#22d3ee"/>
+  <text x="1096" y="254" class="label">Decision Aggregator</text>
+  <text x="1096" y="278" class="small">技术 60% + 情感 40% + 量化 0%</text>
+  <text x="1096" y="296" class="small">综合评分 -100 到 +100</text>
+  <rect x="1074" y="336" width="130" height="88" rx="8" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="1094" y="368" class="label">Agents</text>
+  <text x="1094" y="392" class="small">研究员 / 交易员</text>
+  <text x="1094" y="410" class="small">Director / PM</text>
+  <rect x="1218" y="336" width="130" height="88" rx="8" fill="#fff1f2" stroke="#fb7185"/>
+  <text x="1238" y="368" class="label">Risk</text>
+  <text x="1238" y="392" class="small">ATR 止盈止损</text>
+  <text x="1238" y="410" class="small">Kill switch</text>
+  <rect x="1074" y="454" width="274" height="76" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="1096" y="484" class="label">FastAPI</text>
+  <text x="1096" y="508" class="small">watchlist / signal / system / memory / AI</text>
+  <rect x="1074" y="556" width="130" height="86" rx="8" fill="#f0fdf4" stroke="#4ade80"/>
+  <text x="1094" y="588" class="label">React UI</text>
+  <text x="1094" y="612" class="small">看板 / 复盘</text>
+  <text x="1094" y="630" class="small">持仓 / 聊天 / 配置</text>
+  <rect x="1218" y="556" width="130" height="86" rx="8" fill="#fffbeb" stroke="#fbbf24"/>
+  <text x="1238" y="588" class="label">Bark</text>
+  <text x="1238" y="612" class="small">买入信号</text>
+  <text x="1238" y="630" class="small">14:30 止损预警</text>
+
+  <rect x="246" y="744" width="946" height="112" rx="8" fill="#ffffff" stroke="#dbe4ef" filter="url(#shadow)"/>
+  <text x="280" y="782" class="section">Memory &amp; Governance Layer</text>
+  <rect x="280" y="804" width="156" height="30" rx="8" fill="#cffafe"/>
+  <text x="306" y="824" class="chip">ai_memory</text>
+  <rect x="456" y="804" width="182" height="30" rx="8" fill="#dcfce7"/>
+  <text x="484" y="824" class="chip">layered decisions</text>
+  <rect x="658" y="804" width="156" height="30" rx="8" fill="#fef3c7"/>
+  <text x="688" y="824" class="chip">audit_log_fts</text>
+  <rect x="834" y="804" width="150" height="30" rx="8" fill="#ede9fe"/>
+  <text x="866" y="824" class="chip">chat summary</text>
+  <rect x="1004" y="804" width="154" height="30" rx="8" fill="#ffe4e6"/>
+  <text x="1032" y="824" class="chip">daily backup</text>
+
+  <path d="M304 320 C326 320 338 270 362 270" class="line"/>
+  <path d="M304 420 C326 420 338 380 362 380" class="line"/>
+  <path d="M304 520 C332 520 338 584 362 584" class="line"/>
+  <path d="M606 270 C632 270 638 266 664 266" class="lineAccent"/>
+  <path d="M606 380 C632 380 638 380 664 380" class="line"/>
+  <path d="M606 584 C632 584 638 600 664 600" class="line"/>
+  <path d="M990 266 C1018 266 1022 266 1048 266" class="lineAccent"/>
+  <path d="M990 494 C1018 494 1022 380 1048 380" class="line"/>
+  <path d="M1211 530 L1211 556" class="lineAccent"/>
+  <path d="M1211 310 L1211 336" class="line"/>
+  <path d="M827 642 C827 706 720 720 720 744" class="dash"/>
+  <path d="M1211 642 C1211 720 1078 720 1078 744" class="dash"/>
+  <path d="M500 624 C500 704 548 720 548 744" class="dash"/>
+  <path d="M990 600 C1016 600 1024 600 1048 600" class="line"/>
+
+  <text x="72" y="910" class="tiny">Core rule: LLM does not predict prices or place trades. ATR defines take-profit / stop-loss; the user makes the final decision.</text>
+</svg>
