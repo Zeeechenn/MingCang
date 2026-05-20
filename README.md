@@ -2,7 +2,7 @@
 
 个人 A 股辅助决策工具——量化信号 + LLM 情感分析 + 多 Agent 风控，输出建设性择股建议，用户自行最终决策。
 
-![Tests](https://img.shields.io/badge/tests-225%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-293%20pytest%20%2B%209%20node-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Status](https://img.shields.io/badge/status-M2%20paper%20trading-yellow)
@@ -113,7 +113,7 @@ stock-sage/
 │   └── src/
 │       ├── pages/                 Watchlist / StockDetail / SignalHistory
 │       └── components/            Chart / SignalBadge / SignalEvalCard
-└── tests/                         pytest 测试套件（225 passed）
+└── tests/                         pytest 测试套件（293 passed）
 ```
 
 ---

@@ -1,5 +1,8 @@
 """定时任务：盘前更新数据，盘后生成信号"""
 import logging
+from copy import deepcopy
+from datetime import datetime, timezone
+from functools import wraps
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from backend.config import settings
@@ -8,6 +11,83 @@ logger = logging.getLogger(__name__)
 
 # BackgroundScheduler 在独立线程运行，不阻塞 FastAPI event loop
 scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+
+JOB_STATE: dict[str, dict] = {}
+
+
+
+def reset_job_state() -> None:
+    """Reset in-memory scheduler state. Primarily used by tests."""
+    JOB_STATE.clear()
+
+
+def _state_for(job_name: str) -> dict:
+    return JOB_STATE.setdefault(job_name, {
+        "job": job_name,
+        "running": False,
+        "last_status": "never_run",
+        "last_started_at": None,
+        "last_finished_at": None,
+        "last_duration_seconds": None,
+        "last_result": None,
+        "last_error": None,
+        "success_count": 0,
+        "error_count": 0,
+    })
+
+
+def get_scheduler_state() -> dict:
+    """Return a JSON-serializable snapshot of scheduler runtime state."""
+    return {
+        "running": bool(getattr(scheduler, "running", False)),
+        "jobs": deepcopy(JOB_STATE),
+    }
+
+
+def run_tracked_job(job_name: str, fn):
+    """Run a job and record start/end/error metadata."""
+    state = _state_for(job_name)
+    started = datetime.now(timezone.utc)
+    state.update({
+        "running": True,
+        "last_status": "running",
+        "last_started_at": started.isoformat(),
+        "last_finished_at": None,
+        "last_duration_seconds": None,
+        "last_error": None,
+    })
+    try:
+        result = fn()
+        finished = datetime.now(timezone.utc)
+        state.update({
+            "running": False,
+            "last_status": "success",
+            "last_finished_at": finished.isoformat(),
+            "last_duration_seconds": round((finished - started).total_seconds(), 3),
+            "last_result": result,
+            "success_count": state.get("success_count", 0) + 1,
+        })
+        return result
+    except Exception as exc:
+        finished = datetime.now(timezone.utc)
+        state.update({
+            "running": False,
+            "last_status": "error",
+            "last_finished_at": finished.isoformat(),
+            "last_duration_seconds": round((finished - started).total_seconds(), 3),
+            "last_error": str(exc),
+            "error_count": state.get("error_count", 0) + 1,
+        })
+        raise
+
+
+def tracked_job(job_name: str):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            return run_tracked_job(job_name, lambda: fn(*args, **kwargs))
+        return wrapper
+    return decorator
 
 
 def _use_multi_agent_decision() -> bool:
@@ -77,6 +157,7 @@ def _run_kill_switch_checks(db) -> None:
         logger.error("kill_switch auto checks failed: %s", e)
 
 
+@tracked_job("premarket")
 def job_premarket() -> None:
     """盘前任务：同步行情 + 个股新闻 + 沪深300指数"""
     if _kill_switch_guard("premarket"):
@@ -149,166 +230,216 @@ def _build_regime(db, stocks) -> dict:
     return market_regime(index_df, sector_dfs)
 
 
-def job_postmarket() -> None:
-    """盘后任务：量化 + 技术 + 情感 → 聚合 → 写 Signal 表 → 存决策记忆"""
-    if _kill_switch_guard("postmarket"):
-        return
-    from backend.data.database import SessionLocal, Stock
-    from backend.data.market import load_price_df
-    from backend.data.news import (
-        fetch_stock_news_anspire,
-        fetch_titles_tavily,
-        get_recent_news_items,
-    )
-    from backend.data.news_audit import audited_titles
-    from backend.analysis.technical import technical_score
-    from backend.analysis.qlib_engine import qlib_score
-    from backend.analysis.sentiment import analyze_news
-    from backend.decision.aggregator import aggregate, aggregate_v2, save_signal
-    from backend.decision.decision_memory import save_decision
-    from backend.decision.memory_layered import save_decision_layered, get_layered_context
-    from backend.decision.signal_policy import should_send_signal_alert
+def _load_postmarket_context(db, stocks) -> dict:
+    """Load cross-stock context once for the whole post-market batch."""
     from backend.config import settings
+
+    regime = None
+    if settings.regime_filter_enabled:
+        try:
+            regime = _build_regime(db, stocks)
+            logger.info("regime: %s", regime.reason)
+        except Exception as e:
+            logger.warning("regime 构建失败: %s", e)
+
+    long_term_labels = {}
+    if settings.long_term_team_enabled:
+        try:
+            from backend.agents.long_term.storage import bulk_get_labels
+            long_term_labels = bulk_get_labels([s.symbol for s in stocks], db)
+            logger.info("long_term labels loaded: %d/%d", len(long_term_labels), len(stocks))
+        except Exception as e:
+            logger.warning("long_term labels 读取失败: %s", e)
+
+    return {"regime": regime, "long_term_labels": long_term_labels}
+
+
+def _postmarket_news_sentiment(stock, db) -> dict:
+    from backend.analysis.sentiment import analyze_news
+    from backend.config import settings
+    from backend.data.news import fetch_stock_news_anspire, fetch_titles_tavily, get_recent_news_items
+    from backend.data.news_audit import audited_titles
+
+    news_items = get_recent_news_items(stock.symbol, db, hours=24)
+    titles, news_audits = audited_titles(news_items)
+    db_title_count = len(titles)
+    if len(titles) < settings.tavily_supplement_threshold:
+        slots = settings.tavily_supplement_threshold - len(titles)
+        limit = min(settings.anspire_news_max_add, max(0, slots))
+        anspire_items = fetch_stock_news_anspire(stock.symbol, stock.name, limit=limit)
+        if anspire_items:
+            anspire_titles, anspire_audits = audited_titles(
+                anspire_items,
+                min_score=settings.anspire_news_min_score,
+                limit=limit,
+            )
+            titles = titles + anspire_titles[:slots]
+            news_audits = news_audits + anspire_audits
+            logger.info("Anspire补充 %s: +%d条 (DB=%d条)",
+                        stock.symbol, len(anspire_titles[:slots]), db_title_count)
+    if len(titles) < settings.tavily_supplement_threshold:
+        tavily_titles = fetch_titles_tavily(stock.symbol, stock.name)
+        if tavily_titles:
+            titles = titles + tavily_titles
+            logger.info("Tavily补充 %s: +%d条 (DB=%d条)",
+                        stock.symbol, len(tavily_titles), len(titles) - len(tavily_titles))
+
+    sentiment_result = analyze_news(titles, symbol=stock.symbol)
+    sentiment_result["news_audit"] = [
+        {
+            "title": audit.title,
+            "score": audit.score,
+            "usable": audit.usable,
+            "risk_flags": audit.risk_flags,
+            "source": audit.news.source,
+            "url": audit.news.url,
+        }
+        for audit in news_audits[:10]
+    ]
+    return sentiment_result
+
+
+def _analyze_postmarket_stock(stock, db, context: dict) -> dict | None:
+    from backend.analysis.qlib_engine import qlib_score
+    from backend.analysis.technical import technical_score
+    from backend.data.market import load_price_df
+    from backend.decision.aggregator import aggregate, aggregate_v2
+    from backend.decision.memory_layered import get_layered_context
+
+    df = load_price_df(stock.symbol, db, days=200)
+    if len(df) < 60:
+        logger.warning("not enough data for %s (%d rows), skipping", stock.symbol, len(df))
+        return None
+
+    tech = technical_score(df, market=stock.market)
+    close = tech["latest"]["close"]
+    atr = tech["latest"]["atr14"] or 0.0
+    date_str = df.index[-1]
+    quant_result = qlib_score(df, symbol=stock.symbol, db=db)
+    sentiment_result = _postmarket_news_sentiment(stock, db)
+    reflection = get_layered_context(stock.symbol, db)
+    lt_label = context["long_term_labels"].get(stock.symbol)
+
+    if _use_multi_agent_decision():
+        result = aggregate_v2(
+            quant_result=quant_result,
+            technical_result=tech,
+            sentiment_result=sentiment_result,
+            close=close,
+            atr=atr,
+            regime=context.get("regime"),
+            reflection_context=reflection,
+            long_term_label=lt_label,
+        )
+    else:
+        result = aggregate(
+            quant_score=quant_result["score"],
+            technical_result=tech,
+            sentiment_score=sentiment_result["sentiment"],
+            close=close,
+            atr=atr,
+            sentiment_result=sentiment_result,
+            reflection_context=reflection,
+        )
+    result["news_audit"] = sentiment_result.get("news_audit", [])
+    return {
+        "date": date_str,
+        "result": result,
+        "quant_result": quant_result,
+        "technical_result": tech,
+        "sentiment_result": sentiment_result,
+    }
+
+
+def _persist_postmarket_stock(stock, analysis: dict, db) -> None:
+    from backend.config import settings
+    from backend.decision.aggregator import save_signal
+    from backend.decision.decision_memory import save_decision
+    from backend.decision.memory_layered import save_decision_layered
+
+    date_str = analysis["date"]
+    result = analysis["result"]
+    save_signal(stock.symbol, date_str, result, db)
+    save_decision(stock.symbol, date_str, result)
+    if settings.layered_memory_enabled:
+        save_decision_layered(stock.symbol, date_str, result, db=db)
+
+    try:
+        from backend.decision.harness import review_latest_signal
+        review_latest_signal(db, stock.symbol)
+    except Exception as e:
+        logger.warning("auto review failed %s: %s", stock.symbol, e)
+
+
+def _maybe_send_postmarket_alert(stock, result: dict) -> bool:
+    from backend.decision.signal_policy import should_send_signal_alert
+
+    if not should_send_signal_alert(result["recommendation"]):
+        return False
+    from backend.notification.bark import send_signal_alert
+    return send_signal_alert(
+        symbol=stock.symbol,
+        name=stock.name,
+        recommendation=result["recommendation"],
+        score=result["composite_score"],
+        stop_loss=result["stop_loss"],
+        take_profit=result["take_profit"],
+        position_pct=result.get("position_pct"),
+    )
+
+
+def run_postmarket_batch(db) -> dict:
+    """Run post-market analysis for active stocks and return batch stats."""
+    from backend.data.database import Stock
+
+    stocks = db.query(Stock).filter(Stock.active == True).all()
+    context = _load_postmarket_context(db, stocks)
+    stats = {"stocks": len(stocks), "processed": 0, "saved": 0, "skipped": 0, "errors": 0, "alerts": 0}
+    for stock in stocks:
+        try:
+            analysis = _analyze_postmarket_stock(stock, db, context)
+            if analysis is None:
+                stats["skipped"] += 1
+                continue
+            _persist_postmarket_stock(stock, analysis, db)
+            result = analysis["result"]
+            stats["processed"] += 1
+            stats["saved"] += 1
+            if _maybe_send_postmarket_alert(stock, result):
+                stats["alerts"] += 1
+            logger.info(
+                "signal saved: %s %s %s(%.0f) quant=%.1f tech=%.1f sentiment=%.2f model=%s",
+                stock.symbol,
+                analysis["date"],
+                result["recommendation"],
+                result["composite_score"],
+                analysis["quant_result"]["score"],
+                analysis["technical_result"].get("score", 0),
+                analysis["sentiment_result"]["sentiment"],
+                analysis["quant_result"].get("model", "?"),
+            )
+        except Exception as e:
+            stats["errors"] += 1
+            logger.error("postmarket failed %s: %s", stock.symbol, e)
+    logger.info("post-market done: %d stocks processed", stats["processed"])
+    _run_kill_switch_checks(db)
+    return stats
+
+
+@tracked_job("postmarket")
+def job_postmarket() -> dict:
+    """盘后任务入口：量化 + 技术 + 情感 → 聚合 → 写 Signal 表。"""
+    if _kill_switch_guard("postmarket"):
+        return {"skipped": "kill_switch"}
+    from backend.data.database import SessionLocal
 
     db = SessionLocal()
     try:
-        stocks = db.query(Stock).filter(Stock.active == True).all()
-
-        # 阶段A: 大盘+板块 regime（所有股票共享）
-        regime = None
-        if settings.regime_filter_enabled:
-            try:
-                regime = _build_regime(db, stocks)
-                logger.info("regime: %s", regime.reason)
-            except Exception as e:
-                logger.warning("regime 构建失败: %s", e)
-
-        # 长期分析师团 label（一次性查所有自选股，可能为空）
-        long_term_labels = {}
-        if settings.long_term_team_enabled:
-            try:
-                from backend.agents.long_term.storage import bulk_get_labels
-                long_term_labels = bulk_get_labels([s.symbol for s in stocks], db)
-                logger.info("long_term labels loaded: %d/%d",
-                            len(long_term_labels), len(stocks))
-            except Exception as e:
-                logger.warning("long_term labels 读取失败: %s", e)
-
-        for stock in stocks:
-            try:
-                df = load_price_df(stock.symbol, db, days=200)
-                if len(df) < 60:
-                    logger.warning("not enough data for %s (%d rows), skipping", stock.symbol, len(df))
-                    continue
-
-                tech = technical_score(df, market=stock.market)
-                close = tech["latest"]["close"]
-                atr = tech["latest"]["atr14"] or 0.0
-                date_str = df.index[-1]
-
-                # 量化信号：LightGBM Alpha（未训练时退化为动量占位）
-                quant_result = qlib_score(df, symbol=stock.symbol, db=db)
-                quant = quant_result["score"]
-
-                # 情感信号：DB 24h 内新闻先做轻量来源审计；搜索源只作不足时补充
-                news_items = get_recent_news_items(stock.symbol, db, hours=24)
-                titles, news_audits = audited_titles(news_items)
-                db_title_count = len(titles)
-                if len(titles) < settings.tavily_supplement_threshold:
-                    slots = settings.tavily_supplement_threshold - len(titles)
-                    limit = min(settings.anspire_news_max_add, max(0, slots))
-                    anspire_items = fetch_stock_news_anspire(stock.symbol, stock.name, limit=limit)
-                    if anspire_items:
-                        anspire_titles, anspire_audits = audited_titles(
-                            anspire_items,
-                            min_score=settings.anspire_news_min_score,
-                            limit=limit,
-                        )
-                        titles = titles + anspire_titles[:slots]
-                        news_audits = news_audits + anspire_audits
-                        logger.info("Anspire补充 %s: +%d条 (DB=%d条)",
-                                    stock.symbol, len(anspire_titles[:slots]), db_title_count)
-                if len(titles) < settings.tavily_supplement_threshold:
-                    tavily_titles = fetch_titles_tavily(stock.symbol, stock.name)
-                    if tavily_titles:
-                        titles = titles + tavily_titles
-                        logger.info("Tavily补充 %s: +%d条 (DB=%d条)",
-                                    stock.symbol, len(tavily_titles), len(titles) - len(tavily_titles))
-                sentiment_result = analyze_news(titles, symbol=stock.symbol)
-                sentiment_result["news_audit"] = [
-                    {
-                        "title": audit.title,
-                        "score": audit.score,
-                        "usable": audit.usable,
-                        "risk_flags": audit.risk_flags,
-                        "source": audit.news.source,
-                        "url": audit.news.url,
-                    }
-                    for audit in news_audits[:10]
-                ]
-
-                reflection = get_layered_context(stock.symbol, db)
-                lt_label = long_term_labels.get(stock.symbol)
-                if _use_multi_agent_decision():
-                    result = aggregate_v2(
-                        quant_result=quant_result,
-                        technical_result=tech,
-                        sentiment_result=sentiment_result,
-                        close=close,
-                        atr=atr,
-                        regime=regime,
-                        reflection_context=reflection,
-                        long_term_label=lt_label,
-                    )
-                else:
-                    result = aggregate(
-                        quant_score=quant,
-                        technical_result=tech,
-                        sentiment_score=sentiment_result["sentiment"],
-                        close=close,
-                        atr=atr,
-                        sentiment_result=sentiment_result,
-                        reflection_context=reflection,
-                    )
-                result["news_audit"] = sentiment_result.get("news_audit", [])
-
-                save_signal(stock.symbol, date_str, result, db)
-                save_decision(stock.symbol, date_str, result)
-                if settings.layered_memory_enabled:
-                    save_decision_layered(stock.symbol, date_str, result, db=db)
-                try:
-                    from backend.decision.harness import review_latest_signal
-                    review_latest_signal(db, stock.symbol)
-                except Exception as e:
-                    logger.warning("auto review failed %s: %s", stock.symbol, e)
-                logger.info(
-                    "signal saved: %s %s %s(%.0f) quant=%.1f tech=%.1f sentiment=%.2f model=%s",
-                    stock.symbol, date_str, result["recommendation"],
-                    result["composite_score"], quant, tech.get("score", 0),
-                    sentiment_result["sentiment"], quant_result.get("model", "?"),
-                )
-
-                # Bark 推送：明确交易动作（观察/小仓试错/旧框架买入）
-                if should_send_signal_alert(result["recommendation"]):
-                    from backend.notification.bark import send_signal_alert
-                    send_signal_alert(
-                        symbol=stock.symbol,
-                        name=stock.name,
-                        recommendation=result["recommendation"],
-                        score=result["composite_score"],
-                        stop_loss=result["stop_loss"],
-                        take_profit=result["take_profit"],
-                        position_pct=result.get("position_pct"),
-                    )
-            except Exception as e:
-                logger.error("postmarket failed %s: %s", stock.symbol, e)
-
-        logger.info("post-market done: %d stocks processed", len(stocks))
-        _run_kill_switch_checks(db)
+        return run_postmarket_batch(db)
     finally:
         db.close()
 
-
+@tracked_job("stoploss_check")
 def job_stoploss_check() -> None:
     """
     盘中止损预警（每天 14:30 运行）：
@@ -365,6 +496,7 @@ def job_stoploss_check() -> None:
         db.close()
 
 
+@tracked_job("train_model")
 def job_train_model() -> None:
     """每周六重训 LightGBM Alpha 模型（数据不足时自动跳过）"""
     from backend.data.database import SessionLocal
@@ -383,6 +515,7 @@ def job_train_model() -> None:
         db.close()
 
 
+@tracked_job("weekly_longterm")
 def job_weekly_longterm() -> None:
     """
     长期分析师团 first batch：每周日 11:00
@@ -435,8 +568,10 @@ def job_weekly_longterm() -> None:
         db.close()
 
 
+@tracked_job("daily_memory_backup")
 def job_daily_memory_backup() -> None:
     """Daily dump of ai_memory to ~/.stock-sage/memory/backups/ (M9.横向)."""
+    from backend.data.database import SessionLocal
     from backend.memory.backup import run_daily_backup
     db = SessionLocal()
     try:
@@ -448,8 +583,10 @@ def job_daily_memory_backup() -> None:
         db.close()
 
 
+@tracked_job("daily_memory_expire")
 def job_daily_memory_expire() -> None:
     """Daily cleanup of expired ai_memory rows (M9.3)."""
+    from backend.data.database import SessionLocal
     from backend.memory.ai_memory import expire_stale_memories
     db = SessionLocal()
     try:

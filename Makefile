@@ -1,16 +1,28 @@
 # StockSage 常用命令封装
 # 用法：make <target>，例如 `make test`、`make dev`
 
-.PHONY: help install test lint fmt typecheck check dev build clean docker-build docker-up docker-down
+PYTHON ?= $(shell test -x .venv/bin/python && echo .venv/bin/python || echo python3)
+PIP ?= $(PYTHON) -m pip
+PYTEST ?= $(PYTHON) -m pytest
+RUFF ?= $(PYTHON) -m ruff
+MYPY ?= $(PYTHON) -m mypy
+PRE_COMMIT ?= $(PYTHON) -m pre_commit
+
+.PHONY: help install precommit-install test frontend-test lint fmt typecheck check verify dev build coverage-snapshot paper-stats clean docker-build docker-up docker-down
 
 help:
 	@echo "StockSage Makefile commands:"
 	@echo "  install      安装依赖（含 dev 工具链）"
+	@echo "  precommit-install 安装 Git pre-commit hooks"
 	@echo "  test         跑后端测试套件"
+	@echo "  frontend-test 跑前端 node:test 单元测试"
 	@echo "  lint         ruff 检查（不修复）"
 	@echo "  fmt          ruff format + ruff fix"
 	@echo "  typecheck    mypy 类型检查"
 	@echo "  check        lint + typecheck + test 一键全跑（PR 前用）"
+	@echo "  verify       后端/前端/构建全量验证"
+	@echo "  coverage-snapshot 输出当前数据覆盖快照"
+	@echo "  paper-stats  统计纸面交易结果"
 	@echo "  dev          启动后端 dev server (uvicorn --reload)"
 	@echo "  build        前端 vite 构建"
 	@echo "  clean        清理 __pycache__ / .pytest_cache / dist"
@@ -19,29 +31,43 @@ help:
 	@echo "  docker-down  docker compose down"
 
 install:
-	pip install ".[dev]"
+	$(PIP) install ".[dev]"
 	cd frontend && npm install
 
+precommit-install:
+	$(PRE_COMMIT) install
+
 test:
-	PYTHONPATH=. pytest -q
+	PYTHONPATH=. $(PYTEST) -q
+
+frontend-test:
+	cd frontend && node --test src/*.test.js src/pages/*.test.js
 
 lint:
-	ruff check backend tests
+	$(RUFF) check backend tests
 
 fmt:
-	ruff format backend tests
-	ruff check --fix backend tests
+	$(RUFF) format backend tests
+	$(RUFF) check --fix backend tests
 
 typecheck:
-	mypy backend
+	$(MYPY) backend
 
 check: lint typecheck test
 
+verify: lint typecheck test frontend-test build
+
 dev:
-	PYTHONPATH=. uvicorn backend.main:app --reload
+	PYTHONPATH=. $(PYTHON) -m uvicorn backend.main:app --reload
 
 build:
 	cd frontend && npm run build
+
+coverage-snapshot:
+	PYTHONPATH=. $(PYTHON) -m backend.tools.coverage_snapshot
+
+paper-stats:
+	PYTHONPATH=. $(PYTHON) -m paper_trading.stats
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +

@@ -136,34 +136,42 @@ export default function StockDetailPage({ theme = 'dark' }) {
   const [evalDays, setEvalDays] = useState(60)
   const [evalLoading, setEvalLoading] = useState(true)
   const [reviewing, setReviewing] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [coreLoading, setCoreLoading] = useState(true)
+  const [extrasLoading, setExtrasLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
-    setLoading(true)
+    setCoreLoading(true)
+    setExtrasLoading(true)
     setError('')
+    setSignal(null)
+    setPrices([])
     Promise.all([
       getLatestSignal(symbol).catch(() => null),
       getPrices(symbol, 120).catch(() => []),
+    ]).then(([sig, px]) => {
+      setSignal(sig)
+      setPrices(px)
+    }).catch(e => {
+      setError(e.message)
+    }).finally(() => setCoreLoading(false))
+
+    Promise.all([
       getNews(symbol, 48).catch(() => []),
       getSignalEvidence(symbol, 5).catch(() => []),
       getResearchState(symbol).catch(() => null),
       getDataCoverage().catch(() => null),
       getLongTermLabel(symbol).catch(() => null),
       getSignals(symbol, 8).catch(() => []),
-    ]).then(([sig, px, nw, ev, rs, cov, lt, sigHistory]) => {
-      setSignal(sig)
-      setPrices(px)
+    ]).then(([nw, ev, rs, cov, lt, sigHistory]) => {
       setNews(nw)
       setEvidence(ev)
       setResearch(rs)
       setCoverage(cov)
       setLongTerm(lt)
       setHistory(sigHistory)
-    }).catch(e => {
-      setError(e.message)
-    }).finally(() => setLoading(false))
+    }).finally(() => setExtrasLoading(false))
   }, [symbol])
 
   useEffect(() => {
@@ -240,7 +248,7 @@ export default function StockDetailPage({ theme = 'dark' }) {
         </div>
       </div>
 
-      {loading ? (
+      {coreLoading ? (
         <div className="py-20 text-center text-stone-500 dark:text-slate-400">加载中…</div>
       ) : error ? (
         <div className="py-20 text-center text-red-600 dark:text-red-300">{error}</div>
@@ -248,6 +256,12 @@ export default function StockDetailPage({ theme = 'dark' }) {
         <div className="space-y-4">
           {/* 主图 */}
           <Chart prices={prices} signal={signal} theme={theme} />
+
+          {extrasLoading && (
+            <div className="rounded-sm border border-stone-300/80 bg-[#faf6ec] px-4 py-3 text-sm text-stone-500 dark:border-slate-700 dark:bg-[#1d232e] dark:text-slate-400">
+              正在补充新闻、证据和长期标签...
+            </div>
+          )}
 
           {/* 信号卡片 + 新闻侧栏 */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

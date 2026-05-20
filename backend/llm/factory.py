@@ -38,3 +38,10 @@ def get_provider() -> LLMProvider:
         logger.info("LLM provider: Anthropic")
 
     return _instance
+
+
+
+def reset_provider() -> None:
+    """Clear the cached LLM provider. Tests call this after mutating settings."""
+    global _instance
+    _instance = None

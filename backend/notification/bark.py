@@ -4,20 +4,30 @@ BARK_KEY 未配置时静默跳过，不影响主流程。
 """
 import json
 import logging
-import urllib.request
+import time
 import urllib.error
+import urllib.request
+
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-def send(title: str, body: str, group: str = "StockSage", sound: str = "bark") -> bool:
+def send_result(
+    title: str,
+    body: str,
+    group: str = "StockSage",
+    sound: str = "bark",
+    retries: int = 1,
+    backoff_seconds: float = 0.5,
+    timeout: int = 10,
+) -> dict:
     """
-    发送 Bark 推送。返回 True 表示成功，False 表示跳过或失败。
-    title/body 长度超出时自动截断（Bark 限制 ~200 字节）。
+    发送 Bark 推送，返回结构化结果，便于调度器记录失败原因。
+    retries 表示失败后的额外重试次数。
     """
     if not settings.bark_key:
-        return False
+        return {"ok": False, "skipped": True, "reason": "missing_bark_key", "attempts": 0}
 
     payload = json.dumps({
         "device_key": settings.bark_key,
@@ -35,20 +45,37 @@ def send(title: str, body: str, group: str = "StockSage", sound: str = "bark") -
         headers={"Content-Type": "application/json; charset=utf-8"},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read())
+    last_error = None
+    max_attempts = max(1, retries + 1)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                result = json.loads(resp.read())
             if result.get("code") == 200:
                 logger.debug("Bark 推送成功: %s", title)
-                return True
+                return {"ok": True, "attempts": attempt, "response": result}
+            last_error = f"non_200:{result}"
             logger.warning("Bark 返回非 200: %s", result)
-            return False
-    except urllib.error.URLError as e:
-        logger.warning("Bark 推送失败（网络）: %s", e)
-        return False
-    except Exception as e:
-        logger.warning("Bark 推送失败: %s", e)
-        return False
+        except urllib.error.URLError as e:
+            last_error = str(e)
+            logger.warning("Bark 推送失败（网络，第%d次）: %s", attempt, e)
+        except Exception as e:
+            last_error = str(e)
+            logger.warning("Bark 推送失败（第%d次）: %s", attempt, e)
+        if attempt < max_attempts and backoff_seconds > 0:
+            time.sleep(backoff_seconds * attempt)
+    return {"ok": False, "attempts": max_attempts, "reason": last_error or "unknown"}
+
+
+def send(
+    title: str,
+    body: str,
+    group: str = "StockSage",
+    sound: str = "bark",
+    retries: int = 1,
+) -> bool:
+    """发送 Bark 推送。返回 True 表示成功，False 表示跳过或失败。"""
+    return bool(send_result(title, body, group=group, sound=sound, retries=retries).get("ok"))
 
 
 def send_signal_alert(symbol: str, name: str, recommendation: str,

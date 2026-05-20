@@ -1,13 +1,78 @@
 const BASE = '/api'
 
-async function request(path, options = {}) {
-  const res = await fetch(BASE + path, options)
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`${res.status}: ${text}`)
+export class ApiError extends Error {
+  constructor(message, { status = null, kind = 'unknown', path = '', retriable = false } = {}) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.kind = kind
+    this.path = path
+    this.retriable = retriable
   }
-  return res.json()
 }
+
+function classifyStatus(status) {
+  if (status === 408 || status === 429) return 'transient'
+  if (status >= 500) return 'server'
+  if (status >= 400) return 'client'
+  return 'unknown'
+}
+
+function defaultSleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export function createRequestClient({
+  base = BASE,
+  fetchImpl = fetch,
+  timeoutMs = 15000,
+  retries = 1,
+  sleep = defaultSleep,
+} = {}) {
+  async function request(path, options = {}) {
+    const method = (options.method || 'GET').toUpperCase()
+    const retryableMethod = method === 'GET'
+    const maxAttempts = retryableMethod ? retries + 1 : 1
+    let lastError
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+      const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
+      try {
+        const res = await fetchImpl(base + path, { ...options, signal: controller?.signal })
+        if (timer) clearTimeout(timer)
+        if (!res.ok) {
+          const text = await res.text()
+          const kind = classifyStatus(res.status)
+          throw new ApiError(`${res.status}: ${text}`, {
+            status: res.status,
+            kind,
+            path,
+            retriable: retryableMethod && (kind === 'server' || kind === 'transient'),
+          })
+        }
+        return res.json()
+      } catch (err) {
+        if (timer) clearTimeout(timer)
+        if (err?.name === 'AbortError') {
+          lastError = new ApiError(`请求超时：${path}`, { kind: 'timeout', path, retriable: retryableMethod })
+        } else if (err instanceof ApiError) {
+          lastError = err
+        } else {
+          lastError = new ApiError(err?.message || '网络请求失败', { kind: 'network', path, retriable: retryableMethod })
+        }
+        if (!lastError.retriable || attempt >= maxAttempts) throw lastError
+        await sleep(250 * attempt)
+      }
+    }
+    throw lastError
+  }
+
+  return { request }
+}
+
+const defaultClient = createRequestClient()
+export const request = defaultClient.request
 
 export const getWatchlist = () => request('/watchlist')
 
@@ -61,6 +126,58 @@ export const chatWithAI = (payload) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+
+function parseSseBlock(block) {
+  const lines = block.split(/\r?\n/)
+  let event = 'message'
+  const data = []
+  for (const line of lines) {
+    if (line.startsWith('event:')) event = line.slice(6).trim()
+    if (line.startsWith('data:')) data.push(line.slice(5).trim())
+  }
+  return { event, data: data.join('\n') }
+}
+
+export async function chatWithAIStream(payload, handlers = {}) {
+  const res = await fetch(BASE + '/ai/chat/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new ApiError(`${res.status}: ${text}`, { status: res.status, kind: classifyStatus(res.status), path: '/ai/chat/stream' })
+  }
+  if (!res.body?.getReader) {
+    const fallback = await chatWithAI(payload)
+    handlers.onToken?.(fallback.answer || '')
+    handlers.onDone?.(fallback)
+    return fallback
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalPayload = null
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const blocks = buffer.split(/\n\n/)
+    buffer = blocks.pop() || ''
+    for (const block of blocks) {
+      if (!block.trim()) continue
+      const parsed = parseSseBlock(block)
+      const data = parsed.data ? JSON.parse(parsed.data) : {}
+      if (parsed.event === 'token') handlers.onToken?.(data.text || '')
+      if (parsed.event === 'meta') handlers.onMeta?.(data)
+      if (parsed.event === 'done') {
+        finalPayload = data
+        handlers.onDone?.(data)
+      }
+    }
+  }
+  return finalPayload
+}
 
 export const confirmAIAction = (id) =>
   request(`/ai/actions/${id}/confirm`, { method: 'POST' })
@@ -156,8 +273,6 @@ export const startInitialize = () =>
 
 export const getInitializeStatus = () =>
   request('/system/initialize/status')
-
-// ── M9.2 Memory management ────────────────────────────────────────────────
 
 export const getMemoryOverview = () => request('/memory/overview')
 

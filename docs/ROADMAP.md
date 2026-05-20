@@ -84,6 +84,63 @@
 
 ---
 
+## M10 运行可靠性与产品化优化 ✅（2026-05-20 完成 M10.0-M10.4）
+
+> 来源：2026-05-20 两份项目 review 核验后的优化计划。
+> 原则：先修“运行事实是否可信”和“系统是否真的在跑”，再做体验和长期架构升级。
+> 明确不做：不立刻恢复 Qlib 生产权重，不立刻迁 PostgreSQL，不为状态管理而引入前端全局 store。
+
+### M10.0 运行事实与文档口径校准（必做 / P0）
+- [x] 新增一条覆盖快照生成命令或脚本，输出 active 股票数、价格覆盖、2 年价格覆盖、财报覆盖、24h 新闻覆盖、最新价格日、signals 日期范围。
+- [x] `STATUS.md` / `README.md` 不再手写易过期的覆盖数字；改为引用 `GET /api/system/data-coverage` 或生成时间明确的快照。
+- [x] 统一验证口径：扩展 `make check` 或新增 `make verify`，覆盖后端 pytest、前端 node tests、frontend build。
+- [x] 清理测试结果口径不一致：`STATUS.md` 的 217 passed、`README.md` 的 225 passed 改成同一来源。
+- [x] 加轻量入库防线：pre-commit 阻止 `.db` / `.env` / 模型 pickle 等敏感或大文件进入 Git。
+
+### M10.1 调度与通知可靠性（必做 / P0-P1）
+- [x] System Health / AdminPage 展示 scheduler 是否启用、最近一次任务、最近一次状态、最近错误。
+- [x] 盘前、盘后、止损检查、周训练、每日 memory backup/expire 都记录 `last_run / last_status / last_error`。
+- [x] Bark 推送抽出 notification client，增加 timeout、retry、backoff 和结构化结果。
+- [x] Bark 失败只写 warning/audit，不影响信号保存、复盘写入和 postmarket 主流程。
+- [x] 中期预留独立 worker 入口，例如 `python -m backend.scheduler_worker`，供 launchd/systemd/supervisor 使用。
+
+### M10.2 后端核心模块降复杂度（强烈建议 / P1）
+- [x] 拆分 `scheduler.py::job_postmarket`：
+      `build_postmarket_context` / `analyze_stock` / `persist_signal` / `notify_signal` / `run_postmarket_batch`。
+- [x] `job_postmarket` 输出批处理统计：成功数、跳过数、失败数、推送数。
+- [x] 拆分 `database.py` 第一阶段：`session.py` / `models.py` / `schema_runtime.py` / `seed.py`，保留 `database.py` 兼容导出。
+- [x] `backend/llm/factory.py` 增加 `reset_provider()`；测试 fixture 自动 reset，避免 provider 单例跨测试污染。
+
+### M10.3 前端关键体验修复（建议 / P1-P2）
+- [x] `frontend/src/api.js` 增加 timeout、GET 短重试、错误分类（network / timeout / http / validation）。
+- [x] StockDetail 改为渐进加载：主图和最新信号优先，新闻、证据、复盘、长期标签异步补上；辅助接口失败不阻塞首屏。
+- [x] Watchlist 管理区增加本地搜索和筛选：symbol / name / industry / 最新信号 / 长期标签 / 持仓中。
+- [x] AI Chat 增加 SSE 流式输出；长回复 1 秒内有首字反馈。
+- [x] Chat 消息支持 Markdown 渲染，优先复用 `reviewContent.js` 或引入轻量 renderer。
+
+### M10.4 Paper Trading 自动统计（必做 / P1）
+- [x] 统一 paper trade 结构：entry、exit、reason、fees、gross/net pnl、holding_days、signal_snapshot。
+- [x] 自动计算胜率、平均收益、盈亏比、最大回撤、单笔最大亏损、手续费后收益。
+- [x] 按 profile / recommendation / exit_reason 分组统计 test1/test2 表现。
+- [x] 每个交易日更新后自动生成 test summary，减少手工维护误差。
+- [x] 测试 2 积累 20+ 交易日后，再讨论阈值、exit、权重是否需要调整。
+
+### M10.5 长期工程基础（后置 / P3）
+- [ ] 数据库迁移体系：先保留 `create_all + runtime patch`，中期引入 Alembic baseline。
+- [ ] 前后端契约：从 OpenAPI 生成 TypeScript types/client，先覆盖高频页面。
+- [ ] Qlib 恢复路线只走离线实验：因子版本、训练窗口、验证窗口、IC/ICIR、分层单调性、交易成本后收益。
+- [ ] 只有多个窗口验证通过后，才允许小权重灰度，例如 quant 0.1；默认生产继续 `weight_quant=0.0`。
+
+### M10 最小交付包
+- [x] 覆盖快照命令 + 文档口径修正。
+- [x] scheduler last_run / last_error 状态。
+- [x] Bark 重试与失败隔离。
+- [x] `job_postmarket` 拆分。
+- [x] 前端 API request 层错误分类。
+- [x] StockDetail 渐进加载。
+
+---
+
 ## M2 纸上交易验证 ⏳（旧 Phase 6.5 + 执行计划 D + 测试1/测试2）
 
 详细规则与持仓见 `PAPER_TRADING.md` 索引及 `paper_trading/` 拆分文件。

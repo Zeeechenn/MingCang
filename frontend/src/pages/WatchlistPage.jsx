@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getDashboardSummary, getWatchlist, addStock, removeStock, searchStocks } from '../api'
+import { filterWatchlistItems } from './watchlistFilters'
 
 const REC_STYLE = {
   可小仓试错: 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-200',
@@ -352,10 +353,28 @@ function MiniSpark({ score }) {
 }
 
 function WatchlistManage({ items, onRemove, onReload }) {
+  const [query, setQuery] = useState('')
+  const [market, setMarket] = useState('all')
+  const [recommendation, setRecommendation] = useState('all')
+  const filtered = filterWatchlistItems(items, { query, market, recommendation })
+  const recommendations = Array.from(new Set(items.map((item) => item.latest_signal?.recommendation || '无信号'))).sort()
   return (
     <Section title="自选股管理" eyebrow="关注池" right={<AddStockForm onAdd={onReload} />}>
+      <div className="mb-3 grid gap-2 md:grid-cols-[1fr_120px_150px_auto]">
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索代码、名称、行业" className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-xs outline-none focus:border-cyan-700 dark:border-slate-700 dark:bg-[#161b25]" />
+        <select value={market} onChange={(e) => setMarket(e.target.value)} className="rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-2 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]">
+          <option value="all">全部市场</option>
+          <option value="CN">A股</option>
+          <option value="US">美股</option>
+        </select>
+        <select value={recommendation} onChange={(e) => setRecommendation(e.target.value)} className="rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-2 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]">
+          <option value="all">全部信号</option>
+          {recommendations.map((rec) => <option key={rec} value={rec}>{rec}</option>)}
+        </select>
+        <div className="self-center text-right font-mono text-xs text-stone-500 dark:text-slate-400">{filtered.length}/{items.length}</div>
+      </div>
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        {items.slice(0, 12).map((item) => (
+        {filtered.map((item) => (
           <div key={item.symbol} className="flex items-center justify-between rounded-sm border border-stone-300 bg-[#f3eddc] px-3 py-2 dark:border-slate-700 dark:bg-[#161b25]">
             <Link to={`/stock/${item.symbol}`} className="min-w-0">
               <div className="truncate text-sm font-medium text-stone-950 dark:text-slate-100">{item.name}</div>
@@ -371,6 +390,11 @@ function WatchlistManage({ items, onRemove, onReload }) {
             </button>
           </div>
         ))}
+        {filtered.length === 0 && (
+          <div className="col-span-full rounded-sm border border-dashed border-stone-300 p-5 text-sm text-stone-500 dark:border-slate-700 dark:text-slate-400">
+            没有匹配的自选股
+          </div>
+        )}
       </div>
     </Section>
   )

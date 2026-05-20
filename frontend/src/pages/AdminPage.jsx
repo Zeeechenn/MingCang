@@ -190,6 +190,34 @@ function Segmented({ value, options, onChange }) {
   )
 }
 
+function SchedulerState({ state }) {
+  const jobs = Object.values(state?.jobs || {})
+  return (
+    <div className="min-w-[320px] space-y-2">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-stone-500 dark:text-slate-400">scheduler</span>
+        <span className={`rounded-sm border px-2 py-0.5 font-semibold ${state?.running ? 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700 dark:text-cyan-200' : 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-200'}`}>
+          {state?.running ? '运行中' : '未运行'}
+        </span>
+      </div>
+      {jobs.length === 0 ? (
+        <div className="text-xs text-stone-500 dark:text-slate-400">暂无任务运行记录</div>
+      ) : jobs.slice(0, 8).map((job) => (
+        <div key={job.job} className="rounded-sm border border-stone-300 bg-[#fffaf0] p-2 text-xs dark:border-slate-700 dark:bg-[#161b25]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono text-stone-950 dark:text-slate-100">{job.job}</span>
+            <span className="font-semibold text-stone-600 dark:text-slate-300">{job.last_status}</span>
+          </div>
+          <div className="mt-1 truncate text-stone-500 dark:text-slate-400">
+            {job.last_finished_at || job.last_started_at || 'never run'}
+            {job.last_error ? ` · ${job.last_error}` : ''}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Weights({ weights }) {
   const rows = [
     ['量化', weights.quant, 'bg-cyan-700 dark:bg-cyan-400'],
@@ -584,6 +612,9 @@ export default function AdminPage() {
               )}
               {active === 'schedule' && (
                 <>
+                  <SettingRow label="调度运行状态" hint="展示最近一次任务状态、错误和完成时间。">
+                    <SchedulerState state={health?.scheduler || systemStatus?.scheduler} />
+                  </SettingRow>
                   <SettingRow label="冷启动初始化" hint="回填价格历史、同步财报、披露日并生成首批信号。">
                     <ActionButton disabled={initStatus?.running} onClick={handleInitialize}>
                       {initStatus?.running ? '初始化中…' : '立即初始化'}

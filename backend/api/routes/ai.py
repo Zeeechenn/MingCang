@@ -7,6 +7,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.api.schemas import AIChatRequest, AIChatResponse, PositionCreate
@@ -14,6 +15,15 @@ from backend.data.database import ChatMessage, ChatSession, PendingAIAction, Pos
 
 router = APIRouter()
 
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {_json(data)}\n\n"
+
+
+def _text_chunks(text: str, size: int = 24):
+    for i in range(0, len(text), size):
+        yield text[i:i + size]
 
 def _json(data) -> str:
     return json.dumps(data, ensure_ascii=False, sort_keys=True)
@@ -345,6 +355,24 @@ def chat(request: AIChatRequest, db: Session = Depends(get_db)):
         },
     )
     return response
+
+
+@router.post("/ai/chat/stream")
+def chat_stream(request: AIChatRequest, db: Session = Depends(get_db)):
+    """SSE-compatible chat endpoint. Keeps /ai/chat behavior and streams answer chunks."""
+    def generate():
+        response = chat(request, db)
+        payload = response.model_dump()
+        yield _sse("meta", {
+            "used_resources": response.used_resources,
+            "citations": response.citations,
+            "pending_action": response.pending_action,
+        })
+        for chunk in _text_chunks(response.answer):
+            yield _sse("token", {"text": chunk})
+        yield _sse("done", payload)
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.get("/ai/actions/{action_id}")

@@ -138,6 +138,12 @@ def system_status(db: Session = Depends(get_db)):
 
     latest_price_date = db.query(Price.date).order_by(Price.date.desc()).first()
     latest_label_date = db.query(LongTermLabel.date).order_by(LongTermLabel.date.desc()).first()
+    try:
+        from backend.scheduler import get_scheduler_state
+        scheduler_state = get_scheduler_state()
+    except Exception:
+        scheduler_state = None
+
     return {
         "database_url": settings.database_url,
         "database_path": settings.database_url.removeprefix("sqlite:///"),
@@ -146,6 +152,7 @@ def system_status(db: Session = Depends(get_db)):
         "financial_metrics_count": db.query(FinancialMetric).count(),
         "long_term_labels_count": db.query(LongTermLabel).count(),
         "latest_long_term_label_date": latest_label_date[0] if latest_label_date else None,
+        "scheduler": scheduler_state,
     }
 
 
@@ -205,6 +212,12 @@ def system_health(db: Session = Depends(get_db)):
         pass
 
     ks_state = kill_switch.current_state()
+    try:
+        from backend.scheduler import get_scheduler_state
+        scheduler_state = get_scheduler_state()
+    except Exception as e:
+        scheduler_state = {"error": str(e), "jobs": {}}
+
     healthy = (
         db_ok
         and (data_age_days is None or data_age_days <= kill_switch.DEFAULT_DATA_STALE_DAYS)
@@ -221,6 +234,7 @@ def system_health(db: Session = Depends(get_db)):
         "kill_switch": ks_state,
         "consecutive_losses": recent_losses,
         "consecutive_losses_threshold": kill_switch.DEFAULT_CONSECUTIVE_LOSSES,
+        "scheduler": scheduler_state,
     }
 
 

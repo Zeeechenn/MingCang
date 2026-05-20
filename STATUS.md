@@ -17,6 +17,8 @@
 | M6 | 持续迭代与扩展 | ✅ M6.1 / M6.3 当前范围完成，Qlib 暂不恢复权重 |
 | M7 | 工程化与开源就绪 | ✅ 完成（A/B/C 全 + .editorconfig + Makefile + pyproject 单一真理源） |
 | M8 | 深度研究与来源审计层 | ✅ 完成（轻量新闻审计 + 手动专题研究，不进入日常信号） |
+| M9 | 记忆系统接入与治理 | ✅ 大部分完成 |
+| M10 | 运行可靠性与产品化优化 | ✅ M10.0-M10.4 完成，M10.5 后置 |
 
 ---
 
@@ -31,7 +33,7 @@
 
 > Qlib 量化层已加入 point-in-time 基本面因子与可选 LambdaRank 训练入口。2026-05-16 工程扩容验证（70 只 / 51,439 行面板）显示 walk-forward IC=+0.0026、ICIR=+0.009、分层非单调，因此生产默认 quant 权重继续保持 0，暂不启用 Ranker。
 
-当前数据覆盖快照：active 70 / 价格覆盖 70 / 2 年价格覆盖 69 / 财报覆盖 10 / 24h 新闻覆盖 0。覆盖报表 API：`GET /api/system/data-coverage`。
+当前数据覆盖请以 `PYTHONPATH=. python3 -m backend.tools.coverage_snapshot` 或 `GET /api/system/data-coverage` 为准；2026-05-20 快照显示 active 88 / 价格覆盖 88 / 2 年价格覆盖 87 / 财报覆盖 23 / 24h 新闻覆盖 37 / signals 266（2026-05-12 ~ 2026-05-20）。
 
 专题研究入口：`POST /api/research/deep/run` 或
 `PYTHONPATH=. python3 -m backend.research.deep_research --topic "AI算力产业链" --symbols 300308,300394`。
@@ -75,9 +77,10 @@
 
 ## 测试套件
 
-- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **217 passed**（2026-05-17 M8 完成后）
+- `PYTHONPATH=. pytest -q` → **293 passed, 1 warning**（2026-05-20 M10.0-M10.4 完成后）
 - `python3 -m compileall backend tests` → 通过
-- `cd frontend && npm run build` → 通过（M6.3 后 52 modules，约 427 KB / gzip 134 KB）
+- `cd frontend && node --test src/*.test.js src/pages/*.test.js` → **9 passed**
+- `cd frontend && npm run build` → 通过（57 modules，约 453 KB / gzip 142 KB）
 
 ### M6.3 当前前端/API 快照（2026-05-19）
 

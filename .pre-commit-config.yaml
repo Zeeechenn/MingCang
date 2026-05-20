@@ -15,3 +15,12 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=500]
       - id: debug-statements
+
+
+  - repo: local
+    hooks:
+      - id: check-sensitive-paths
+        name: block runtime data and secret-like files
+        entry: python3 -m backend.tools.check_sensitive_paths
+        language: system
+        pass_filenames: true

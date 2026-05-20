@@ -1,10 +1,27 @@
 import { useEffect, useState } from 'react'
-import { archiveChatSession, chatWithAI, confirmAIAction, createChatSession, getChatMessages, getChatSessions } from '../api'
+import { archiveChatSession, chatWithAI, chatWithAIStream, confirmAIAction, createChatSession, getChatMessages, getChatSessions } from '../api'
 import { getArchiveState, nextArchiveIntent } from './chatArchive'
+import { parseChatMarkdown } from './chatMarkdown'
 
 const PANEL = 'rounded-sm border border-stone-300/80 bg-[#faf6ec] dark:border-slate-700 dark:bg-[#1d232e]'
 const INSET = 'rounded-sm border border-stone-300 bg-[#f3eddc] dark:border-slate-700 dark:bg-[#161b25]'
 const LABEL = 'text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500 dark:text-slate-400'
+
+function ChatMarkdown({ text }) {
+  const blocks = parseChatMarkdown(text || '')
+  return (
+    <div className="space-y-2">
+      {blocks.map((block, index) => {
+        if (block.type === 'h1') return <h2 key={index} className="text-base font-semibold text-stone-950 dark:text-slate-50">{block.text}</h2>
+        if (block.type === 'h2' || block.type === 'h3') return <h3 key={index} className="text-sm font-semibold text-stone-950 dark:text-slate-100">{block.text}</h3>
+        if (block.type === 'ul') return <ul key={index} className="list-disc space-y-1 pl-5">{block.items.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        if (block.type === 'ol') return <ol key={index} className="list-decimal space-y-1 pl-5">{block.items.map((item, i) => <li key={i}>{item}</li>)}</ol>
+        if (block.type === 'code') return <pre key={index} className="overflow-x-auto rounded-sm bg-stone-950 p-3 font-mono text-xs text-slate-100"><code>{block.text}</code></pre>
+        return <p key={index}>{block.text}</p>
+      })}
+    </div>
+  )
+}
 
 function normalizeMessage(row) {
   if (row.answer || row.pending_action || row.used_resources) return row
@@ -67,8 +84,28 @@ export default function ChatPage() {
     setBusy(true)
     try {
       const sessionId = await ensureActiveSession()
-      const res = await chatWithAI({ message: user.content, mode, session_id: sessionId })
-      setRows((v) => [...v, { role: 'assistant', ...res }])
+      const draftId = `stream-${Date.now()}`
+      setRows((v) => [...v, { id: draftId, role: 'assistant', answer: '', used_resources: [] }])
+      let streamed = ''
+      let finalPayload = null
+      try {
+        finalPayload = await chatWithAIStream(
+          { message: user.content, mode, session_id: sessionId },
+          {
+            onToken: (chunk) => {
+              streamed += chunk
+              setRows((v) => v.map((row) => (row.id === draftId ? { ...row, answer: streamed } : row)))
+            },
+            onMeta: (meta) => {
+              setRows((v) => v.map((row) => (row.id === draftId ? { ...row, ...meta } : row)))
+            },
+          },
+        )
+      } catch {
+        finalPayload = await chatWithAI({ message: user.content, mode, session_id: sessionId })
+        streamed = finalPayload.answer || ''
+      }
+      setRows((v) => v.map((row) => (row.id === draftId ? { ...row, ...finalPayload, answer: streamed || finalPayload?.answer } : row)))
       await loadSessions()
     } catch (err) {
       setRows((v) => [...v, { role: 'assistant', answer: err.message }])
@@ -190,7 +227,7 @@ export default function ChatPage() {
             )}
             {rows.map((row, index) => (
               <div key={row.id || index} className={`max-w-[86%] rounded-sm border p-3 text-sm leading-relaxed ${row.role === 'user' ? 'ml-auto border-cyan-700/40 bg-cyan-700/10 text-stone-900 dark:text-slate-100' : 'border-stone-300 bg-[#f3eddc] text-stone-700 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-300'}`}>
-                <div className="whitespace-pre-wrap">{row.content || row.answer}</div>
+                <ChatMarkdown text={row.content || row.answer} />
                 {row.used_resources?.length > 0 && (
                   <div className="mt-2 font-mono text-[10px] text-stone-500 dark:text-slate-500">resources: {row.used_resources.join(', ')}</div>
                 )}
