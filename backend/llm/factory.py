@@ -1,9 +1,25 @@
 import logging
+
+from backend.config import settings
 from backend.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
 _instance: LLMProvider | None = None
+
+
+def has_runtime_llm_provider(runtime_settings=None) -> bool:
+    """Return whether the configured runtime LLM provider can be used."""
+    runtime_settings = settings if runtime_settings is None else runtime_settings
+    provider_name = getattr(runtime_settings, "ai_provider", "anthropic")
+    provider = provider_name.lower() if isinstance(provider_name, str) else "anthropic"
+    if provider == "local_cli":
+        return True
+    if provider == "anthropic":
+        return bool(runtime_settings.anthropic_api_key)
+    if provider == "openai":
+        return bool(runtime_settings.openai_api_key)
+    return False
 
 
 def get_provider() -> LLMProvider:
@@ -16,8 +32,6 @@ def get_provider() -> LLMProvider:
     global _instance
     if _instance is not None:
         return _instance
-
-    from backend.config import settings
 
     provider = settings.ai_provider.lower()
 

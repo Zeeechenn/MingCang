@@ -62,6 +62,12 @@ StockSage `.env` keys such as `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 only when running StockSage workflows that call the internal LLM, search, or data
 provider chains.
 
+For local agent development, cloud LLM keys are optional. To let StockSage's
+internal LLM workflows run through local Claude Code CLI instead, set
+`AI_PROVIDER=local_cli` and ensure `claude -p` works in the shell. Only
+`AI_PROVIDER=anthropic` or `AI_PROVIDER=openai` requires and consumes the
+matching cloud API key.
+
 ## Project Memory First
 
 Before making StockSage trading, testing, review, or research decisions, prefer

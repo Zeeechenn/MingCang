@@ -14,7 +14,7 @@ import statistics
 
 from backend.agents.analyst import AnalystReport
 from backend.config import settings
-from backend.llm import get_provider
+from backend.llm import get_provider, has_runtime_llm_provider
 
 
 @dataclass
@@ -208,7 +208,7 @@ def multi_round_debate(
     if not settings.multi_round_debate_enabled:
         return quick_consensus(reports)
 
-    if not (settings.anthropic_api_key or settings.openai_api_key):
+    if not has_runtime_llm_provider(settings):
         return quick_consensus(reports)
 
     if len(reports) < 2:

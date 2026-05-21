@@ -11,7 +11,7 @@ import logging
 from backend.config import settings, active_signal_weights
 from backend.analysis.factors import calc_stop_take
 from backend.decision.signal_policy import score_to_recommendation
-from backend.llm import get_provider
+from backend.llm import get_provider, has_runtime_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ def _bull_bear_debate(
     三路信号分歧时进行多空辩论（标准差 < 20 视为一致，跳过以节省 API）。
     同时注入历史决策反思（reflection_context）帮助 LLM 修正系统性偏差。
     """
-    if not settings.anthropic_api_key and not settings.openai_api_key:
+    if not has_runtime_llm_provider(settings):
         return {}
 
     scores = [

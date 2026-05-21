@@ -86,7 +86,7 @@
 ## 环境准备
 
 ```bash
-cp .env.example .env                   # 填入 ANTHROPIC_API_KEY（必填）和 BARK_KEY（可选）
+cp .env.example .env                   # 本地 AI 可设 AI_PROVIDER=local_cli；云 provider 才填对应 API key
 pip install ".[dev]"                   # 含 dev/test/agent 工具链
 pip install -e ".[agent]"              # 可选：只安装本地 MCP agent 工具桥
 python3 backend/data/database.py       # 初始化 DB
@@ -117,4 +117,4 @@ curl http://localhost:8000/api/signals/eval/600519?days=60
 - 本地 Codex / Claude Code 使用 StockSage 时默认信任，可直接跑测试、查 DB、运行纸上交易统计和项目研究流程。
 - 远程 agent 暴露必须显式设置 `STOCKSAGE_AGENT_MODE=remote`，并配置 `STOCKSAGE_AGENT_API_KEY`；stdio MCP 工具调用需传入 `api_key` 参数，远程写操作默认关闭。
 - 项目记忆入口在 `backend/agent/context.py`，MCP 启动入口为 `PYTHONPATH=. python3 -m backend.agent.mcp_server`；未初始化数据库时 health/context 返回空状态，不抛出缺表错误。
-- 免费/试用 API key 限额见 README 的 "API Key 限额" 表，额度以各平台控制台为准。
+- 云 runtime provider 限额见 README 的 "云 Runtime Provider 限额" 表，额度以各平台控制台为准。
