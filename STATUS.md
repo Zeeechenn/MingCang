@@ -1,6 +1,6 @@
-# StockSage — 当前快照
+# StockSage — Public Status Snapshot
 
-> 此文件记录当前可操作状态，由 PROJECT.md 链接。历史详情见 CHANGELOG.md，未来计划见 docs/ROADMAP.md。
+> Public runtime and release snapshot. Detailed history lives in `CHANGELOG.md`; future work lives in `docs/ROADMAP.md`.
 
 ---
 
@@ -12,11 +12,11 @@
 | M1 | 严肃化与质量门槛 | ✅ 完成 |
 | M2 | 纸上交易验证 | ⏳ 进行中 |
 | M3 | 可信度审计层 | ✅ 完成 |
-| M4 | 多 Agent 决策深化 | 🟡 大部分（M4.1/4.2/4.3/4.6 完成 2026-05-16；M4.4/4.5 暂缓） |
+| M4 | 多 Agent 决策深化 | 🟡 大部分完成，LangGraph / full FinMem 后置 |
 | M5 | 自动化执行 | 🔲 后置 |
 | M6 | 持续迭代与扩展 | ✅ M6.1 / M6.3 当前范围完成，Qlib 暂不恢复权重 |
-| M7 | 工程化与开源就绪 | ✅ 完成（A/B/C 全 + .editorconfig + Makefile + pyproject 单一真理源） |
-| M8 | 深度研究与来源审计层 | ✅ 完成（轻量新闻审计 + 手动专题研究，不进入日常信号） |
+| M7 | 工程化与开源就绪 | ✅ 完成 |
+| M8 | 深度研究与来源审计层 | ✅ 完成，手动触发，不进入日常信号 |
 | M9 | 记忆系统接入与治理 | ✅ 大部分完成 |
 | M10 | 运行可靠性与产品化优化 | ✅ M10.0-M10.4 完成，M10.5 后置 |
 
@@ -31,9 +31,9 @@
 
 综合评分范围：-100（规避）→ +100（可小仓试错）
 
-> Qlib 量化层已加入 point-in-time 基本面因子与可选 LambdaRank 训练入口。2026-05-16 工程扩容验证（70 只 / 51,439 行面板）显示 walk-forward IC=+0.0026、ICIR=+0.009、分层非单调，因此生产默认 quant 权重继续保持 0，暂不启用 Ranker。
+> Qlib 量化层已加入 point-in-time 基本面因子与可选 LambdaRank 训练入口；最近验证未通过 alpha 门槛，因此生产默认 quant 权重继续保持 0。
 
-当前数据覆盖请以 `PYTHONPATH=. python3 -m backend.tools.coverage_snapshot` 或 `GET /api/system/data-coverage` 为准；2026-05-20 快照显示 active 88 / 价格覆盖 88 / 2 年价格覆盖 87 / 财报覆盖 23 / 24h 新闻覆盖 37 / signals 266（2026-05-12 ~ 2026-05-20）。
+当前数据覆盖请以 `PYTHONPATH=. python3 -m backend.tools.coverage_snapshot` 或 `GET /api/system/data-coverage` 为准。
 
 专题研究入口：`POST /api/research/deep/run` 或
 `PYTHONPATH=. python3 -m backend.research.deep_research --topic "AI算力产业链" --symbols 300308,300394`。
@@ -65,7 +65,7 @@
 
 ---
 
-## M1 验收结果（10 只股 × 6 个月，含长期标签）
+## 验证摘要
 
 | 指标 | 最低标准 | 实际 |
 |------|---------|------|
@@ -81,20 +81,6 @@
 - `python3 -m compileall backend tests` → 通过
 - `cd frontend && node --test src/*.test.js src/pages/*.test.js` → **9 passed**
 - `cd frontend && npm run build` → 通过（57 modules，约 453 KB / gzip 142 KB）
-
-### M6.3 当前前端/API 快照（2026-05-19）
-
-- 首页：真实持仓情况、大盘情况、股票名称优先的活动流水。
-- 复盘中心：每日复盘 / 长期复盘 ensure、历史记录、示例历史补足、Markdown 完整报告详情展开。
-- 持仓设置：股票联想、持仓汇总、平仓记录、永久删除已平仓记录。
-- AI 对话：左侧会话窗口、新建/二次确认归档、窗口内记忆隔离、通用助手 / 长期研究团队模式。
-- 配置页：综合分权重、仓位上限、数据补充参数、复盘触发日期与时间可运行时调整。
-- 后端新增表：`positions`、`review_runs`、`pending_ai_actions`、`chat_sessions`、`chat_messages`。
-- 验证：`pytest tests/test_frontend_expansion_api.py tests/test_memory.py` → **10 passed, 1 warning**。
-- 验证：`node --test frontend/src/pages/chatArchive.test.js frontend/src/pages/reviewContent.test.js` → **4 passed**。
-- 验证：`cd frontend && npm run build` → 通过（2026-05-19 复盘 Markdown / 归档确认增强后）。
-
----
 
 ## 环境准备
 

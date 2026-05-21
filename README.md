@@ -200,6 +200,7 @@ cd frontend && npm install && npm run dev
 | [CHANGELOG.md](CHANGELOG.md) | 已完成里程碑和重要变更 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 进行中任务、未来规划和后置事项 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发环境、测试要求和贡献流程 |
+| [AGENTS.md](AGENTS.md) | Agent 使用说明占位，后续补充 |
 
 ### 项目结构
 
@@ -208,6 +209,7 @@ stock-sage/
 ├── PROJECT.md                     项目索引
 ├── STATUS.md                      当前运行快照
 ├── CHANGELOG.md                   已完成里程碑
+├── AGENTS.md                      Agent 使用说明占位
 ├── docs/ROADMAP.md                进行中与未来规划
 ├── docs/assets/architecture.svg   README 架构图
 ├── paper_trading/                 纸上交易测试记录与统计

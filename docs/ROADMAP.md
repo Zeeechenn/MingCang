@@ -37,7 +37,7 @@
 - [x] `should_remember()` 接入 `ai_memory.remember()`，未通过时 `audit_write("memory.skipped", ...)` 记原因；新增 `force=True` 留口子；`should_remember` 白名单扩 `deep_research`/`bias_override`。
 - [x] `save_decision_layered` 加可选 `db=None`；`scheduler.py:278` 调用方已传入 db。
 - [x] 新增测试 `tests/test_m9_audit_wiring.py`（9 用例）；246 项全套通过。
-- [ ] ChatPage 写入接入**延后**到 M9.4（当前主用 Claude Code 跑项目，价值低风险高）。
+- [ ] ChatPage 写入接入**延后**到 M9.4（优先保证对话写记忆的二次确认和可审计性）。
 
 ### M9.1 修正数据存储事实错误 ✅（2026-05-19）
 - [x] 新表 `decision_memory_layered(symbol, layer, content, updated_at)`；layer='long' 全局行用 `__GLOBAL__` sentinel 规避 SQLite `NULL ≠ NULL`。
@@ -147,7 +147,7 @@
 ### M2.1 测试 1（用户主导，2026-05-13 ~ 05-20，1 周）
 宽撒网验证系统完整性。**含 5 个交易日强平规则**（仅本测试适用）。
 
-### M2.2 测试 2（Claude 主导，2026-05-21 ~ 2026-07-21，2 个月强测试）
+### M2.2 测试 2（人工 / AI 辅助，2026-05-21 ~ 2026-07-21，2 个月强测试）
 精选 7 股，阈值 25。**无 5 日强平** — 让趋势完整运行。中期复盘节点：6/3、6/20、7/4。
 
 ### M2.3 测试 1 收盘后汇总（2026-05-20）

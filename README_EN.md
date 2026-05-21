@@ -146,6 +146,7 @@ Open http://localhost:5173 for the dashboard. API docs are available at http://l
 | [CHANGELOG.md](CHANGELOG.md) | Completed milestones and major changes |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | In-progress work, roadmap and deferred items |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, test expectations and contribution flow |
+| [AGENTS.md](AGENTS.md) | Placeholder for future agent operating instructions |
 
 ## Roadmap
 

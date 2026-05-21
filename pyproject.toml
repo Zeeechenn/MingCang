@@ -52,6 +52,9 @@ dev = [
     "pre-commit>=3.7.0",
 ]
 
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["backend*"]

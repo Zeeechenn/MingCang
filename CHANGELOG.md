@@ -5,6 +5,17 @@
 
 ---
 
+## [Docs] 软件与 Agent 双用途文档分层（2026-05-21）
+
+### Changed
+- `PROJECT.md` 瘦身为公开项目索引，移除本地工作台语气，补充软件/agent-ready 边界说明。
+- `STATUS.md` 瘦身为公开运行快照，保留默认权重、调度、验证摘要和启动命令。
+- README / README_EN 文档中心补充 `AGENTS.md` 入口。
+- Python wheel 打包关闭隐式 package data，避免本地说明、生成报告或运行材料进入发布包。
+
+### Added
+- 新增 `AGENTS.md` 占位文件，后续补充 agent 使用说明。
+
 ## [Repository Hygiene] GitHub 发布边界收敛（2026-05-21）
 
 ### Changed
@@ -51,8 +62,7 @@
 - 修复平仓接口运行旧后端时出现 404 的可见问题；新增后端路由并重启后生效。
 
 ### Notes
-- 记忆系统管理建议报告已移出项目仓库，放在 Codex 工作区：
-  `/path/to/codex/2026-05-19/s-2/StockSage-memory-system-management-report.md`
+- 记忆系统管理建议报告已移出项目仓库，保留在本地私有工作区。
 - 验证：
   - `pytest tests/test_frontend_expansion_api.py tests/test_memory.py` → **10 passed, 1 warning**
   - `node --test frontend/src/pages/chatArchive.test.js frontend/src/pages/reviewContent.test.js` → **4 passed**
