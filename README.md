@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Status](https://img.shields.io/badge/status-M2%20paper%20trading-yellow)
 
-[Agent 使用指南](#agent-使用指南) · [产品预览](#产品预览) · [推荐使用方式](#推荐使用方式) · [API Key 配置](#api-key-配置) · [注意事项](#注意事项) · [更多文档](#更多文档)
+[Agent 使用指南](#agent-使用指南) · [产品预览](#产品预览) · [推荐使用方式](#推荐使用方式) · [API Key 配置](#api-key-配置) · [当前推荐配置](#当前推荐配置) · [注意事项](#注意事项) · [更多文档](#更多文档)
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -170,6 +170,19 @@ STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS=
 ```bash
 python3 -m backend.agent.cli health --pretty
 ```
+
+### 当前推荐配置
+
+当前生产默认使用 `new_framework` 信号权重。基于现有回测与测试 1 / 测试 2 早期对照结果，推荐暂时保持量化层不参与综合分，只保留技术面与新闻情绪：
+
+| 配置项 | 当前推荐值 | 含义 |
+|---|---:|---|
+| `WEIGHT_QUANT` | `0.0` | Qlib / Kronos 等量化层仍可计算和记录，但默认不影响综合分。 |
+| `WEIGHT_TECHNICAL` | `0.6` | 技术信号权重。 |
+| `WEIGHT_SENTIMENT` | `0.4` | 新闻情绪 / 事件信号权重。 |
+| `NEW_FRAMEWORK_ENTRY_THRESHOLD` | `25.0` | 综合分高于该阈值才进入小仓试错候选。 |
+
+这些是当前项目推荐值，不是硬编码交易建议。用户可以在 Web 配置页或项目根目录 `.env` 中自行调整，并用纸上交易、回测和复盘结果验证自己的参数组合。
 
 ### 注意事项
 
