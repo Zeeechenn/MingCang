@@ -8,6 +8,7 @@ from backend.config import settings
 from backend.data.database import DecisionRun, LongTermLabel, NewsItem, ResearchState, Signal
 from backend.decision.signal_policy import EXIT_RECS
 from backend.llm import get_provider, has_runtime_llm_provider
+from backend.skills.vetter import vet_skill_output
 
 
 class CopilotUnavailable(RuntimeError):
@@ -275,6 +276,26 @@ def generate_symbol_copilot(symbol: str, db) -> dict:
         "official": official,
         "long_term": long_term,
     }
+
+    review = vet_skill_output({
+        "skill_name": "research-copilot",
+        "result": {
+            "stance": card["stance"],
+            "event_read": card["event_read"],
+            "technical_read": card["technical_read"],
+            "summary_opinion": card["summary_opinion"],
+            "position_note": card["position_note"],
+            "risks": card["risks"],
+            "validation_questions": card["validation_questions"],
+        },
+        "evidence": [f"signal:{symbol}:{sig.date}"],
+        "allowed_actions": ["research_only"],
+    })
+    card["vetter"] = review.to_dict()
+    if review.blocked_actions:
+        card["shadow_position_pct"] = 0.0
+        card["position_note"] = ("安全审计阻断自动交易类表述，影子仓位强制为 0。"
+                                 + card["position_note"])[:180]
 
     state = _research_state(symbol, db)
     state.copilot_json = json.dumps(card, ensure_ascii=False, sort_keys=True)

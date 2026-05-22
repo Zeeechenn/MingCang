@@ -127,6 +127,15 @@ def _validate(memory_type: str | None = None, status: str | None = None) -> None
         raise ValueError(f"unsupported status: {status}")
 
 
+def _id_by_source_ref(db, source_ref: str) -> int | None:
+    """Return the id of an existing memory row with this source_ref, or None."""
+    row = db.execute(text(
+        "SELECT id FROM stock_memory_items WHERE source_ref = :source_ref "
+        "ORDER BY id ASC LIMIT 1"
+    ), {"source_ref": source_ref}).first()
+    return int(row.id) if row else None
+
+
 def create_stock_memory(
     db,
     *,
@@ -141,20 +150,18 @@ def create_stock_memory(
     status: str = "active",
     ttl_days: int | None = None,
 ) -> dict:
-    """Insert one structured stock-memory item and audit the write."""
+    """Insert or upsert one structured stock-memory item and audit the write.
+
+    ``source_ref`` is the idempotency key: when it is provided and a row with
+    that ref already exists, the existing row is updated in place (id and
+    created_at preserved) instead of inserting a duplicate. This keeps
+    re-runnable writers — postmarket judgments, deep-research candidates,
+    outcome backfill — from accumulating duplicate rows on re-run.
+    """
     _validate(memory_type=memory_type, status=status)
     _ensure_schema(db)
     now = _utc_now().isoformat(timespec="seconds")
-    result = db.execute(text("""
-        INSERT INTO stock_memory_items(
-            symbol, memory_type, summary, evidence_json, source_type, source_ref,
-            importance, confidence, status, ttl_days, created_at, updated_at
-        )
-        VALUES(
-            :symbol, :memory_type, :summary, :evidence_json, :source_type, :source_ref,
-            :importance, :confidence, :status, :ttl_days, :now, :now
-        )
-    """), {
+    params = {
         "symbol": symbol,
         "memory_type": memory_type,
         "summary": summary.strip(),
@@ -166,13 +173,39 @@ def create_stock_memory(
         "status": status,
         "ttl_days": ttl_days,
         "now": now,
-    })
-    db.commit()
-    row_id = int(result.lastrowid)
+    }
+    existing_id = _id_by_source_ref(db, source_ref) if source_ref else None
+    if existing_id is not None:
+        params["id"] = existing_id
+        db.execute(text("""
+            UPDATE stock_memory_items SET
+                symbol = :symbol, memory_type = :memory_type, summary = :summary,
+                evidence_json = :evidence_json, source_type = :source_type,
+                importance = :importance, confidence = :confidence,
+                status = :status, ttl_days = :ttl_days, updated_at = :now
+            WHERE id = :id
+        """), params)
+        db.commit()
+        row_id = existing_id
+        mode = "upsert"
+    else:
+        result = db.execute(text("""
+            INSERT INTO stock_memory_items(
+                symbol, memory_type, summary, evidence_json, source_type, source_ref,
+                importance, confidence, status, ttl_days, created_at, updated_at
+            )
+            VALUES(
+                :symbol, :memory_type, :summary, :evidence_json, :source_type, :source_ref,
+                :importance, :confidence, :status, :ttl_days, :now, :now
+            )
+        """), params)
+        db.commit()
+        row_id = int(result.lastrowid)
+        mode = "insert"
     audit_write(
         db,
         "stock_memory.write",
-        f"id={row_id} symbol={symbol} type={memory_type} source={source_type}",
+        f"id={row_id} symbol={symbol} type={memory_type} source={source_type} mode={mode}",
         related_symbol=symbol,
     )
     row = db.execute(text("""
@@ -394,15 +427,13 @@ def build_memory_context(
     }
 
 
-def _existing_source_ref(db, source_ref: str) -> bool:
-    row = db.execute(text("""
-        SELECT id FROM stock_memory_items WHERE source_ref = :source_ref LIMIT 1
-    """), {"source_ref": source_ref}).first()
-    return row is not None
-
-
 def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
-    """Create outcome/lesson memories for judgment rows that have enough later prices."""
+    """Create outcome/lesson memories for judgment rows with a full 10-day horizon.
+
+    An outcome is only written once the decision has at least 10 later trading
+    days of prices, so the 1d/3d/5d/10d return picture is complete before the
+    row is frozen as ``validated`` (and never silently stuck at a 1-day view).
+    """
     from backend.decision.signal_policy import is_entry_signal
 
     _ensure_schema(db)
@@ -419,7 +450,7 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
     written = 0
     for row in rows:
         source_ref = f"outcome:{row.id}"
-        if _existing_source_ref(db, source_ref):
+        if _id_by_source_ref(db, source_ref) is not None:
             continue
         try:
             evidence = json.loads(row.evidence_json or "{}")
@@ -435,7 +466,7 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
             ORDER BY date ASC
             LIMIT 11
         """), {"symbol": row.symbol, "date": decision_date}).all()
-        if len(prices) < 2 or not prices[0].close:
+        if len(prices) < 11 or not prices[0].close:
             continue
         base = float(prices[0].close)
         offsets = [1, 3, 5, 10]
@@ -463,7 +494,7 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
         latest_return = next((returns[k] for k in ("10d", "5d", "3d", "1d") if k in returns), None)
         if latest_return is not None and is_entry_signal(recommendation, include_legacy=True) and latest_return < 0:
             lesson_ref = f"lesson:{row.id}"
-            if not _existing_source_ref(db, lesson_ref):
+            if _id_by_source_ref(db, lesson_ref) is None:
                 create_stock_memory(
                     db,
                     symbol=row.symbol,

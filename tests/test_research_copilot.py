@@ -247,3 +247,34 @@ def test_chat_context_answer_presents_official_and_copilot_tracks(test_db, sampl
     assert "影子仓位：3.0%" in response.answer
     assert "逆风控影子建议" in response.answer
     assert "research_copilot" in response.used_resources
+
+
+def test_copilot_card_carries_passing_vetter_review(test_db):
+    """M15.1: a clean copilot card is run through the safety vetter."""
+    from backend.research.copilot import generate_symbol_copilot
+
+    _signal(test_db)
+
+    with patch("backend.research.copilot.has_runtime_llm_provider", return_value=True), \
+            patch("backend.research.copilot.get_provider", return_value=_provider(_llm_payload())):
+        card = generate_symbol_copilot("600519", test_db)
+
+    assert card["vetter"]["status"] == "pass"
+    assert card["vetter"]["blocked_actions"] == []
+
+
+def test_copilot_vetter_blocks_auto_trade_language_and_zeroes_shadow(test_db):
+    """M15.1: auto-trade phrasing in the LLM output is blocked and shadow is zeroed."""
+    from backend.research.copilot import generate_symbol_copilot
+
+    _signal(test_db, recommendation="可关注", composite_score=20.0)
+    payload = _llm_payload(summary_opinion="建议直接下单自动买入该股票。")
+
+    with patch("backend.research.copilot.has_runtime_llm_provider", return_value=True), \
+            patch("backend.research.copilot.get_provider", return_value=_provider(payload)):
+        card = generate_symbol_copilot("600519", test_db)
+
+    assert card["vetter"]["status"] == "block"
+    assert "auto_trade" in card["vetter"]["blocked_actions"]
+    assert card["shadow_position_pct"] == 0.0
+    assert "安全审计阻断" in card["position_note"]

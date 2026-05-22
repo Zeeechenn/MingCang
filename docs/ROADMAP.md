@@ -245,6 +245,164 @@
 
 ---
 
+## M15 记忆系统与影子副驾驶评审修复 ⏳
+
+> 来源：2026-05-23 对记忆系统（`stock_memory` / `memory_layered` / `ai_memory` /
+> `audit_log` / `research_memory`）和研究影子副驾驶（`research/copilot.py`）的全局评审。
+> 原则：先修污染记忆数据本身和安全边界的问题（P1），再做读写副作用与增长治理（P2），
+> 最后做记忆质量与健壮性（P3）。
+> 明确不做：影子副驾驶在 `veto_reason` 存在时只设 `risk_conflict=True`、不强制清零
+> `shadow_position_pct` —— 这是 `_bounded_shadow_position` 的有意设计，本轮保留不改。
+
+### M15.0 记忆数据完整性（必做 / P1）✅（2026-05-23）
+- [x] **重复 judgment 记忆**：`create_stock_memory` 改为 upsert —— 提供 `source_ref` 且已存在
+      同 ref 行时原地 UPDATE（保留 id / created_at），不再 INSERT 重复行。新增
+      `_id_by_source_ref` 替换原 `_existing_source_ref`，audit content 标 `mode=insert/upsert`。
+- [x] **outcome 记忆过早定格**：`update_judgment_outcomes` 把 `len(prices) < 2` 改为
+      `< 11`，即必须凑齐 10 个交易日 horizon 才写 outcome，1d/3d/5d/10d 一次性成形后
+      才冻结为 `validated`，`lesson` 也基于完整 10d 收益判断。
+- [x] 回归测试：`test_create_stock_memory_upserts_on_source_ref` /
+      `test_create_stock_memory_without_source_ref_always_inserts` /
+      `test_update_judgment_outcomes_waits_for_full_horizon`。
+
+### M15.1 安全层接线修正（必做 / P1）✅（2026-05-23）
+- [x] **vetter 接反**：`vet_skill_output` 此前只在 `daily_review.py` 调用、且喂入确定性 summary。
+      已让 `generate_symbol_copilot` 返回前对 `summary_opinion / event_read / technical_read /
+      position_note` 等 LLM 字段过 vetter，结果写入 `card["vetter"]`，命中自动交易类表述时
+      强制 `shadow_position_pct=0`。实现时确认 `deep_research` 报告由 `research/agents.py`
+      确定性模板生成、无 LLM 自由文本，故不接 vetter —— copilot 是当前唯一的 LLM 自由文本输出。
+- [x] **research / skills 写路由漏挂 agent guard**：`POST /api/research/{symbol}/copilot`、
+      `POST /api/research/deep/run`、`POST /api/skills/daily-review/run` 分别挂上
+      `agent_write_guard("research.copilot" / "research.deep.run" / "skill.daily_review.run")`，
+      `.env.example` 的 `STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS` 示例补齐三个 action 名。
+- [x] 回归测试：`tests/test_m15_route_guards.py` 覆盖 remote 缺 key 拒绝、action allowlist、
+      本地信任模式放行。
+
+### M15.2 读写副作用与增长治理（建议 / P2）
+- [ ] **读操作带写副作用**：`build_memory_context` 召回时 `UPDATE last_used_at` + `audit_write`
+      各 commit 一次，且挂在 `GET /api/memory/stock/{symbol}/context`；postmarket 88 股一次
+      ≈ 176 commit + 88 audit 行。把召回 audit 降级为采样 / 可选，`last_used_at` 改批量或
+      异步更新，GET 路由不带写副作用 —— 与 `ai_memory.recall`“miss 不审计”的既定原则对齐。
+- [ ] **audit_log_fts 无清理**：全仓库无 audit 保留 / 滚动任务，FTS5 表无限增长
+      （`expire_stale_memories` 注释假设的“audit 保留窗口”并不存在）。新增按时间或行数的
+      audit 滚动清理（建议并入 `daily_memory_expire` 或独立 cron），并明确保留窗口。
+- [ ] **copilot official / signal 日期错配**：`generate_symbol_copilot` 中 `_latest_decision`
+      回退到“最近一条 DecisionRun”时，`official` 仍用 `sig.date`，但 `position_pct` /
+      `risk_notes` / `veto_reason` 来自别的日期。回退时明确标注 decision 实际日期，或不混用。
+
+### M15.3 记忆质量与健壮性（排期 / P3）
+- [ ] **medium-term 记忆无上限**：`save_medium_term` 保留全部历史，每次 postmarket 把不断
+      增长的 markdown 整体 read + upsert 进 `decision_memory_layered.content`。改为只留最近 N 笔。
+- [ ] **outcome 用裸收益判成败**：`update_judgment_outcomes` / `weekly_long_term_reflect`
+      用 `pct<0` 判失败，A 股高 beta 下大盘下跌日会系统性“全失败”，长期反思偏空。
+      至少减去沪深 300 同期收益或用 ATR 归一。
+- [ ] **deep research 候选记忆质量低**：`remember_deep_research` 对每个 symbol 用同一段
+      `clipped_summary` 写 research_pointer + thesis + risk + event，最多 4×N 行近乎重复；
+      “risk” 条目并不含真实风险点，`_RISK_HINTS` 仅靠“摘要含‘风险’二字”触发。改为让 LLM
+      结构化产出独立的 thesis / risk / event 字段。
+- [ ] **audit_search FTS 注入**：`GET /api/memory/audit?q=` 直接把 q 传给 `MATCH`，FTS5
+      语法字符（`"` `*` `:` `NEAR`）会抛 500。对 q 做短语转义或捕获异常返回 400。
+- [ ] 收尾 nits：`stock_sage_memory_context`（`agent/context.py`）补 try/except，对齐 M11.4
+      “未初始化返回空状态”；`patch_stock_memory` 改 importance 不应顺带刷新 `updated_at`
+      （TTL 按 `updated_at` 算，会意外给快过期记忆续命）；`build_memory_context` 的
+      `_ai_memory_context` 对 symbol 召回时仍全量塞 preference/rule/risk，考虑按相关性收敛。
+
+### M15 最小交付包
+- [x] M15.0 judgment 去重 + outcome horizon 修正。
+- [x] M15.1 vetter 接到 copilot + 三个写路由挂 guard。
+- [ ] M15.2 召回写副作用降级 + audit 滚动清理。
+
+---
+
+## M16 全项目分层评审 ⏳
+
+> 来源：2026-05-23 完成 M15（记忆系统 + 影子副驾驶评审）后，确认首轮只覆盖了
+> `memory/*` + `research/copilot.py` + 直接接线，项目其余部分尚未逐文件评审。
+> 性质：这是评审任务清单，不是功能开发。每完成一级输出一份分级评审结论，
+> 确认的缺陷参照 M15 模式转为 M-numbered 修复里程碑。
+> 与 M15 的关系：M15 是“已发现缺陷的修复计划”，M16 是“尚未评审区域的评审计划”。
+
+### 评审方法（六级通用）
+每一级按同一套方法执行：
+1. **静态走查** — 逐文件精读，对照四个维度打标：正确性与 bug / 架构与设计 /
+   金融逻辑合理性 / 安全与边界。
+2. **调用链追踪** — 从入口（route / scheduler job / CLI）追到落库，确认数据流与
+   副作用，重点查重跑幂等、commit 边界、异常被静默吞没。
+3. **失败路径** — 空数据 / 缺表 / provider 失败 / LLM 返回空 / 并发，确认降级
+   而非崩溃或静默写脏数据。
+4. **测试核对** — 对照 `tests/` 现有覆盖，标注缺口；P1 缺陷必须能写出复现测试。
+5. **运行核实** — 必要时跑 `make verify`、覆盖快照、回测脚本，用真实输出核对结论，
+   不只靠读代码。
+6. **产出** — 每级一份按维度 + 严重度（P1/P2/P3）分级的结论；确认项追加为修复里程碑。
+
+### M16.0 决策链与多 Agent（最高优先级）
+- 评审内容：`decision/aggregator.py`（`aggregate` / `aggregate_v2` / `save_signal`）、
+  `decision/harness.py`、`decision/decision_memory.py`、
+  `agents/{pipeline,director,researcher,risk_manager,portfolio_manager,analyst,trader}.py`。
+- 评审重点：
+  - 综合分公式、双 profile 权重、`entry_threshold` 与 `score_to_recommendation` 是否一致；
+  - 一票否决 / veto 在 `aggregate_v2 → portfolio_manager` 全链是否一致传递、不被覆盖；
+  - 多轮辩论降级路径、Director 注入 `debate_topic`、组合层裁剪（单股/板块/总仓）边界；
+  - `position_pct` vs `trader_position_pct` 写入与 evidence 一致性；
+  - LLM 失败时是否退回纯规则路径，而非静默给 0 分。
+
+### M16.1 回测与统计口径
+- 评审内容：`backtest/walk_forward.py`、`backtest/statistics/*`（DSR / PBO / IC 显著性）、
+  `backtest/compare_paths.py`、`sweep_threshold.py`、`exit_sweep.py`、`backtrader_eval.py`。
+- 评审重点：
+  - 手续费 0.20% + 滑点 0.10% 是否在所有路径一致计入；
+  - 是否有前视偏差（用未来数据选参 / IS-OOS 泄漏）；
+  - DSR / PBO 实现与论文口径核对，“数据不足”样本量门槛；
+  - STATUS.md 验证摘要（Sharpe 1.36 / 回撤 8.60% / 盈亏比 2.78）能否由脚本复现。
+
+### M16.2 数据层与 Point-in-Time
+- 评审内容：`data/{market,providers,universe,qlib_data,market_features,fundamentals,
+  qfii_holdings,point_in_time,news,quality,external_sources}.py`。
+- 评审重点：
+  - PIT `as_of` 拦截层是否真的挡住未来数据（`disclosure_date` vs `report_date` join）；
+  - provider fallback 链（efinance / AkShare / yfinance_cn / Tushare）的重试、断连、对齐；
+  - universe 市值/流动性过滤、批量回填幂等；
+  - 复权口径一致性、新闻去重与时区。
+
+### M16.3 量化与分析层
+- 评审内容：`analysis/{factors,technical,sentiment,qlib_engine}.py`、
+  `analysis/timing/{rsrs,diffusion,regime}.py`。
+- 评审重点：
+  - 技术因子 / ATR / 止盈止损公式与 STATUS.md 公式逐项核对；
+  - regime 过滤层的触发与降级；
+  - sentiment LLM 调用的成本、缓存、失败降级；
+  - `FEATURE_COLS` 维度守护，训练 / 推理特征口径一致。
+
+### M16.4 前端
+- 评审内容：`frontend/src/{api.js,pages/*,components/*}`。
+- 评审重点：
+  - API 层 timeout / 重试 / 错误分类；
+  - 渐进加载与辅助接口失败不阻塞首屏；
+  - 影子副驾驶 / 记忆管理新组件的状态管理与二次确认 UI；
+  - 金融数字展示口径（综合分双向条、仓位、止盈止损）与后端一致。
+
+### M16.5 其余后端基础设施
+- 评审内容：`config.py`、`data/database.py`、`scheduler.py` 剩余 job、`ops/kill_switch.py`、
+  `llm/{factory,base,*_provider}.py`、`agent/{cli,mcp_server,action_registry,security}.py`、
+  其余 `api/routes/*`。
+- 评审重点：
+  - 配置项默认值与 `.env.example` 一致性、敏感项不入库；
+  - database 轻量迁移幂等、并发与 WAL；
+  - kill switch 覆盖的 job 是否齐全；
+  - LLM provider 单例与测试隔离、`model_tier` 映射；
+  - Action Registry 的 `risk_level` / `allowed_modes` / `requires_confirmation` 与 `http_guard` 是否自洽。
+
+### M16 交付节奏
+- [ ] M16.0 决策链与多 Agent 评审 → 结论 + 修复项
+- [ ] M16.1 回测与统计评审 → 结论 + 修复项
+- [ ] M16.2 数据层与 PIT 评审 → 结论 + 修复项
+- [ ] M16.3 量化与分析评审 → 结论 + 修复项
+- [ ] M16.4 前端评审 → 结论 + 修复项
+- [ ] M16.5 基础设施评审 → 结论 + 修复项
+> 每级独立可交付；P1 缺陷即时升级为修复里程碑，不等整轮评审结束。
+
+---
+
 ## M2 纸上交易验证 ⏳（旧 Phase 6.5 + 执行计划 D）
 
 详细规则与持仓作为本地验证材料维护，不进入 GitHub。

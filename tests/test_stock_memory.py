@@ -194,7 +194,7 @@ def test_update_judgment_outcomes_writes_outcome_and_lesson(test_db):
         update_judgment_outcomes,
     )
 
-    for i, close in enumerate([100, 99, 98, 97, 96, 95]):
+    for i, close in enumerate([100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90]):
         test_db.add(Price(
             symbol="300308",
             date=f"2026-05-{20 + i:02d}",
@@ -221,4 +221,89 @@ def test_update_judgment_outcomes_writes_outcome_and_lesson(test_db):
     lessons = list_stock_memories(test_db, symbol="300308", memory_type="lesson")
     assert written == 2
     assert "1d-1.00%" in outcomes[0]["summary"]
+    assert "10d-10.00%" in outcomes[0]["summary"]
     assert "技术确认与新闻兑现" in lessons[0]["summary"]
+
+
+def test_create_stock_memory_upserts_on_source_ref(test_db):
+    """M15.0: a re-run with the same source_ref updates in place, not duplicates."""
+    from backend.memory.stock_memory import create_stock_memory, list_stock_memories
+
+    first = create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="judgment",
+        summary="2026-05-20 建议可关注，综合分+12",
+        evidence={"date": "2026-05-20", "recommendation": "可关注"},
+        source_type="postmarket_signal",
+        source_ref="300308:2026-05-20",
+    )
+    second = create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="judgment",
+        summary="2026-05-20 建议可小仓试错，综合分+31",
+        evidence={"date": "2026-05-20", "recommendation": "可小仓试错"},
+        source_type="postmarket_signal",
+        source_ref="300308:2026-05-20",
+    )
+
+    rows = list_stock_memories(test_db, symbol="300308", memory_type="judgment", limit=20)
+    assert second["id"] == first["id"]
+    assert len(rows) == 1
+    assert rows[0]["summary"] == "2026-05-20 建议可小仓试错，综合分+31"
+
+
+def test_create_stock_memory_without_source_ref_always_inserts(test_db):
+    """Rows without a source_ref carry no idempotency key and are not deduped."""
+    from backend.memory.stock_memory import create_stock_memory, list_stock_memories
+
+    for _ in range(2):
+        create_stock_memory(
+            test_db,
+            symbol="300308",
+            memory_type="risk",
+            summary="无 source_ref 的临时风险记忆",
+            source_type="test",
+        )
+    rows = list_stock_memories(test_db, symbol="300308", memory_type="risk", limit=20)
+    assert len(rows) == 2
+
+
+def test_update_judgment_outcomes_waits_for_full_horizon(test_db):
+    """M15.0: no outcome is frozen until a full 10-trading-day horizon exists."""
+    from backend.data.database import Price
+    from backend.memory.stock_memory import (
+        create_stock_memory,
+        list_stock_memories,
+        update_judgment_outcomes,
+    )
+
+    create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="judgment",
+        summary="2026-05-20 建议可小仓试错",
+        evidence={"date": "2026-05-20", "recommendation": "可小仓试错"},
+        source_type="postmarket_signal",
+        source_ref="300308:2026-05-20",
+    )
+
+    # Only 6 trading days of prices: the 10-day horizon is not complete yet.
+    for i, close in enumerate([100, 99, 98, 97, 96, 95]):
+        test_db.add(Price(symbol="300308", date=f"2026-05-{20 + i:02d}",
+                          open=close, high=close, low=close, close=close, volume=1000))
+    test_db.commit()
+    assert update_judgment_outcomes(test_db, symbol="300308") == 0
+    assert list_stock_memories(test_db, symbol="300308", memory_type="outcome") == []
+
+    # Extend to a full 11-row horizon: the outcome is written once, fully formed.
+    for i, close in zip(range(6, 11), [94, 93, 92, 91, 90], strict=True):
+        test_db.add(Price(symbol="300308", date=f"2026-05-{20 + i:02d}",
+                          open=close, high=close, low=close, close=close, volume=1000))
+    test_db.commit()
+    written = update_judgment_outcomes(test_db, symbol="300308")
+    outcomes = list_stock_memories(test_db, symbol="300308", memory_type="outcome")
+    assert written == 2
+    assert len(outcomes) == 1
+    assert "10d-10.00%" in outcomes[0]["summary"]
