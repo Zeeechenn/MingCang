@@ -8,7 +8,7 @@ An agent-ready personal A-share research and decision-support workspace. StockSa
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Status](https://img.shields.io/badge/status-M2%20paper%20trading-yellow)
 
-[Product Preview](#product-preview) · [Agent Usage Guide](#agent-usage-guide) · [Core Capabilities](#core-capabilities) · [Recommended Usage](#recommended-usage) · [Headless Usage](#headless-usage) · [Cautions](#cautions) · [More Docs](#more-docs)
+[Product Preview](#product-preview) · [Agent Usage Guide](#agent-usage-guide) · [Core Capabilities](#core-capabilities) · [Recommended Usage](#recommended-usage) · [Cautions](#cautions) · [More Docs](#more-docs)
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -95,29 +95,6 @@ Open http://localhost:5173 for the Web console. API docs are available at http:/
 pip install -e ".[agent]"
 PYTHONPATH=. python3 -m backend.agent.mcp_server
 ```
-
-## Headless Usage
-
-If a user swaps in their own API keys but does not open the Web frontend, StockSage is still usable. The important distinction is that API keys are credentials for StockSage runtime calls to models, search or data providers; they do not create an interactive chat interface by themselves. Conversation, permission prompts and tool orchestration come from an outer agent client such as Codex or Claude Code.
-
-| Entry | Best for |
-|---|---|
-| Codex / Claude Code + MCP | Closest natural-language experience: let the agent read the project, run commands, call tools and explain results. |
-| FastAPI + curl / HTTP client | Scripted access to endpoints such as `/api/ai/chat` and `/api/research/deep/run`. |
-| CLI scripts | Deterministic jobs such as deep research, coverage snapshots and paper-trading statistics. |
-
-Examples:
-
-```bash
-PYTHONPATH=. python3 -m backend.research.deep_research \
-  --topic "AI算力产业链" \
-  --symbols 300308,300394
-
-PYTHONPATH=. python3 -m backend.tools.coverage_snapshot
-PYTHONPATH=. python3 -m paper_trading.stats
-```
-
-The project does not currently include a standalone `stocksage chat` terminal REPL. For Claude-Code-style terminal conversation, use Codex / Claude Code as the outer agent and let it connect to this project's MCP server or call project commands.
 
 ## Cautions
 

@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Status](https://img.shields.io/badge/status-M2%20paper%20trading-yellow)
 
-[产品预览](#产品预览) · [Agent 使用指南](#agent-使用指南) · [主要能力](#主要能力) · [推荐使用方式](#推荐使用方式) · [无前端使用方式](#无前端使用方式) · [注意事项](#注意事项) · [更多文档](#更多文档)
+[产品预览](#产品预览) · [Agent 使用指南](#agent-使用指南) · [主要能力](#主要能力) · [推荐使用方式](#推荐使用方式) · [注意事项](#注意事项) · [更多文档](#更多文档)
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -97,29 +97,6 @@ cd frontend && npm install && npm run dev
 pip install -e ".[agent]"
 PYTHONPATH=. python3 -m backend.agent.mcp_server
 ```
-
-### 无前端使用方式
-
-如果使用者只换自己的 API key、但不打开 Web 前端，仍然可以使用 StockSage，但入口不是“API key 自动变成聊天界面”。API key 只是 StockSage runtime 调用模型、搜索或数据源的凭证；真正负责对话、申请权限和调工具的是 Codex / Claude Code 这类 agent 客户端。
-
-| 入口 | 适合场景 |
-|---|---|
-| Codex / Claude Code + MCP | 最接近自然语言对话体验：让 agent 读项目、跑命令、调用工具、解释结果。 |
-| FastAPI + curl / HTTP 客户端 | 适合脚本化调用 `/api/ai/chat`、`/api/research/deep/run` 等接口。 |
-| CLI 脚本 | 适合确定性任务，例如深度研究、覆盖快照、纸上交易统计。 |
-
-示例：
-
-```bash
-PYTHONPATH=. python3 -m backend.research.deep_research \
-  --topic "AI算力产业链" \
-  --symbols 300308,300394
-
-PYTHONPATH=. python3 -m backend.tools.coverage_snapshot
-PYTHONPATH=. python3 -m paper_trading.stats
-```
-
-目前项目没有独立的 `stocksage chat` 终端 REPL。若希望像 Claude Code 一样在终端里连续对话，推荐直接使用 Codex / Claude Code 作为外层 agent，让它连接本项目 MCP 或调用项目命令。
 
 ### 注意事项
 
