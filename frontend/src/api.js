@@ -252,6 +252,9 @@ export const getLongTermLabel = (symbol) =>
 export const getResearchState = (symbol) =>
   request(`/research/${symbol}`)
 
+export const refreshResearchCopilot = (symbol) =>
+  request(`/research/${symbol}/copilot`, { method: 'POST' })
+
 export const getDataCoverage = () =>
   request('/system/data-coverage')
 

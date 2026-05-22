@@ -9,7 +9,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from backend.agent.security import agent_mode
-from backend.data.database import LongTermLabel, Position, Signal, Stock
+from backend.data.database import LongTermLabel, Position, ResearchState, Signal, Stock
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MEMORY_DIR = Path.home() / ".stock-sage" / "memory"
@@ -166,6 +166,21 @@ def _latest_signal(db: Session, symbol: str) -> dict | None:
     }
 
 
+def _research_copilot(db: Session, symbol: str) -> dict | None:
+    try:
+        row = db.query(ResearchState).filter(ResearchState.symbol == symbol).first()
+    except OperationalError:
+        return None
+    if row is None:
+        return None
+    import json
+
+    try:
+        return json.loads(row.copilot_json) if row.copilot_json else None
+    except Exception:
+        return None
+
+
 def stock_sage_stock_context(db: Session, symbol: str) -> dict:
     """Return the project context most useful before discussing one stock."""
     try:
@@ -225,6 +240,7 @@ def stock_sage_stock_context(db: Session, symbol: str) -> dict:
             "score": label.score,
             "expires_at": label.expires_at,
         } if label else None,
+        "copilot": _research_copilot(db, symbol),
         "layered_memory": [
             {**row, "content_preview": _short(row.get("content"), 300)}
             for row in layered

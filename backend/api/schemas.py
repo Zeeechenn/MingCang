@@ -188,6 +188,7 @@ class ResearchStateOut(BaseModel):
     thesis: str = ""
     risks: list[str] = []
     open_questions: list[str] = []
+    copilot: dict | None = None
     last_signal_summary: str = ""
     last_review: dict | None = None
     updated_at: str | None = None

@@ -33,6 +33,19 @@ def review_symbol_latest_signal(symbol: str, db: Session = Depends(get_db)):
     return review
 
 
+@router.post("/research/{symbol}/copilot")
+def refresh_symbol_copilot(symbol: str, db: Session = Depends(get_db)):
+    """Generate a manual LLM shadow research copilot card."""
+    from backend.research.copilot import CopilotInputError, CopilotUnavailable, generate_symbol_copilot
+
+    try:
+        return generate_symbol_copilot(symbol, db)
+    except CopilotInputError as e:
+        raise HTTPException(404, str(e)) from e
+    except CopilotUnavailable as e:
+        raise HTTPException(503, str(e)) from e
+
+
 @router.post("/research/deep/run", response_model=DeepResearchResponse)
 def run_deep_research_endpoint(
     request: DeepResearchRequest,

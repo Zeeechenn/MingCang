@@ -232,6 +232,7 @@ class ResearchState(Base):
     thesis: Mapped[str | None] = mapped_column(Text, nullable=True)
     risks_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     open_questions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    copilot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_signal_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_review_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -434,12 +435,16 @@ def _ensure_runtime_schema() -> None:
                 thesis TEXT,
                 risks_json TEXT,
                 open_questions_json TEXT,
+                copilot_json TEXT,
                 last_signal_summary TEXT,
                 last_review_json TEXT,
                 updated_at DATETIME,
                 created_at DATETIME
             )
         """))
+        research_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(research_states)")).fetchall()]
+        if "copilot_json" not in research_cols:
+            conn.execute(text("ALTER TABLE research_states ADD COLUMN copilot_json TEXT"))
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS market_snapshots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

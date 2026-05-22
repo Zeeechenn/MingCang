@@ -11,12 +11,14 @@ import {
   getLongTermLabel,
   getSignals,
   reviewLatestSignal,
+  refreshResearchCopilot,
 } from '../api'
 import SignalCard from '../components/SignalCard'
 import SignalEvalCard from '../components/SignalEvalCard'
 import Chart from '../components/Chart'
 import NewsSidebar from '../components/NewsSidebar'
 import EvidenceCard from '../components/EvidenceCard'
+import ResearchCopilotCard from '../components/ResearchCopilotCard'
 
 const PANEL = 'rounded-sm border border-stone-300/80 bg-[#faf6ec] dark:border-slate-700 dark:bg-[#1d232e]'
 const INSET = 'rounded-sm border border-stone-300 bg-[#f3eddc] dark:border-slate-700 dark:bg-[#161b25]'
@@ -136,6 +138,8 @@ export default function StockDetailPage({ theme = 'dark' }) {
   const [evalDays, setEvalDays] = useState(60)
   const [evalLoading, setEvalLoading] = useState(true)
   const [reviewing, setReviewing] = useState(false)
+  const [copilotLoading, setCopilotLoading] = useState(false)
+  const [copilotError, setCopilotError] = useState('')
   const [coreLoading, setCoreLoading] = useState(true)
   const [extrasLoading, setExtrasLoading] = useState(true)
   const [error, setError] = useState('')
@@ -198,6 +202,19 @@ export default function StockDetailPage({ theme = 'dark' }) {
       setNotice(e.message)
     } finally {
       setReviewing(false)
+    }
+  }
+
+  async function handleRefreshCopilot() {
+    setCopilotLoading(true)
+    setCopilotError('')
+    try {
+      const card = await refreshResearchCopilot(symbol)
+      setResearch((prev) => ({ ...(prev || { symbol }), copilot: card }))
+    } catch (e) {
+      setCopilotError(e.message || '副驾驶生成失败')
+    } finally {
+      setCopilotLoading(false)
     }
   }
 
@@ -274,6 +291,12 @@ export default function StockDetailPage({ theme = 'dark' }) {
                 onReview={handleReviewLatest}
               />
               <SignalCard signal={signal} />
+              <ResearchCopilotCard
+                copilot={research?.copilot}
+                loading={copilotLoading}
+                error={copilotError}
+                onRefresh={handleRefreshCopilot}
+              />
               <EvidenceCard evidence={evidence} research={research} coverage={coverage} />
               <SignalEvalCard
                 evalData={evalData}

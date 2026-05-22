@@ -39,6 +39,22 @@ def _parse(raw: str | None, default):
         return default
 
 
+def _fmt_score(value) -> str:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    return f"{n:+.1f}"
+
+
+def _fmt_pct(value) -> str:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    return f"{n * 100:.1f}%"
+
+
 def _symbol_from_text(text: str) -> str | None:
     match = re.search(r"\b(\d{6})\b", text)
     return match.group(1) if match else None
@@ -186,6 +202,40 @@ def _chat_context_for_session(db: Session, session_id: str, tail_limit: int = 12
     return "\n".join(parts)
 
 
+def _copilot_context_section(db: Session, symbol: str) -> tuple[str | None, bool]:
+    try:
+        from backend.decision.harness import get_research_state
+        state = get_research_state(db, symbol)
+    except Exception:
+        return None, False
+    copilot = state.get("copilot") if isinstance(state, dict) else None
+    if not copilot:
+        return None, False
+    official = copilot.get("official") or {}
+    lines = [
+        "双轨影子副驾驶：",
+        "官方规则：",
+        f"- 建议：{official.get('recommendation', '-')}",
+        f"- 综合分：{_fmt_score(official.get('composite_score'))}",
+        f"- 技术：{_fmt_score(official.get('technical_score') or official.get('breakdown', {}).get('technical'))}",
+        f"- 情绪：{_fmt_score(official.get('sentiment_score') or official.get('breakdown', {}).get('sentiment'))}",
+        f"- 官方仓位：{_fmt_pct(official.get('position_pct'))}",
+        "LLM 副驾驶：",
+        f"- 立场：{copilot.get('stance', '-')}",
+        f"- 影子仓位：{_fmt_pct(copilot.get('shadow_position_pct'))}",
+        f"- 结论：{copilot.get('summary_opinion', '-')}",
+    ]
+    if copilot.get("risk_conflict"):
+        lines.append("- 标记：逆风控影子建议")
+    risks = (copilot.get("risks") or [])[:2]
+    if risks:
+        lines.append("- 风险：" + "、".join(risks))
+    questions = (copilot.get("validation_questions") or [])[:2]
+    if questions:
+        lines.append("- 待验证：" + "、".join(questions))
+    return "\n".join(lines), True
+
+
 def _context_answer(message: str, db: Session, session_id: str | None = None) -> AIChatResponse:
     """Deterministic fallback answer using internal StockSage resources."""
     symbol = _symbol_from_text(message)
@@ -211,6 +261,10 @@ def _context_answer(message: str, db: Session, session_id: str | None = None) ->
         if memory_context.get("text"):
             parts.append("项目长期记忆：\n" + memory_context["text"])
             used_resources.append("stock_memory")
+        copilot_section, has_copilot = _copilot_context_section(db, symbol)
+        if has_copilot:
+            parts.append(copilot_section)
+            used_resources.append("research_copilot")
     if stocks:
         parts.append("当前自选股包括：" + "、".join(f"{s.name or s.symbol}({s.symbol})" for s in stocks))
     if positions:
