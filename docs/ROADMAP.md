@@ -160,7 +160,7 @@
 
 ### M11.3 MCP 本地工具桥 ✅
 - [x] 新增 `backend/agent/mcp_server.py`，通过 MCP 暴露 `stock_sage_project_context`、`stock_sage_memory_snapshot`、`stock_sage_stock_context`、`stock_sage_health`。
-- [x] `pyproject.toml` 新增可选依赖组 `agent`，本地可用 `pip install -e ".[agent]"` 后启动 `PYTHONPATH=. python -m backend.agent.mcp_server`。
+- [x] `pyproject.toml` 新增可选依赖组 `agent`，本地可用 `pip install -e ".[agent]"` 后启动 `PYTHONPATH=. python3 -m backend.agent.mcp_server`。
 
 ### M11.4 Agent 运行硬化 ✅
 - [x] 未初始化数据库时，agent context / health 返回空 memory、positions、watchlist 和 symbol context，不因缺表退出。
@@ -198,6 +198,31 @@
 - [ ] 从 `a-stock-data` 只挑 1 个证据型数据集试点，例如两融、龙虎榜或解禁；先进入 evidence / risk review，不进入买卖评分。
 - [ ] 对任何新端点先补 provider health / PIT 时间戳 / 字段归一化 / 测试，再考虑写入 SQLite。
 - [ ] 连续观测稳定后，再决定是否加入定时任务；默认仍不改变现有 efinance / AkShare / yfinance 行情 fallback 链路。
+
+---
+
+## M13 pi Shell + Agent Kernel 双入口 MVP ✅（2026-05-23）
+
+### M13.0 本地 Agent CLI 桥 ✅
+- [x] 新增 `backend/agent/cli.py`：`health`、`project-context`、`memory-snapshot`、`stock-context` 和 `action` 子命令。
+- [x] 读操作默认 JSON 输出；remote mode 复用 `STOCKSAGE_AGENT_API_KEY` 校验。
+- [x] 写操作默认 dry-run，只返回 action metadata、schema、风险等级和 payload；只有显式 `--confirm` 才调用 Action Registry 执行。
+
+### M13.1 pi 项目本地配置 ✅
+- [x] 新增 `.pi/SYSTEM.md`，定义 StockSage pi 终端 agent 的研究边界、金融风险边界和写操作确认规则。
+- [x] 新增 `.pi/skills/stock-sage-research/SKILL.md`，覆盖健康检查、个股研究、记忆工作、纸上交易复盘和 confirmed action workflow。
+- [x] 新增 `.pi/prompts/`：个股研究、纸上交易复盘、健康检查、记忆快照模板。
+
+### M13.2 启动入口与文档 ✅
+- [x] `make agent-setup`：检查 Python、安装 agent extra、创建 `.env`、初始化 DB，并提示 pi 安装与 provider key 配置。
+- [x] `make agent` / `make agent-dev`：启动 StockSage pi 终端 shell。
+- [x] `make agent-mcp` / `make agent-mcp-config`：保留并强化 Claude Desktop / Claude Code / Cursor / Codex 类 MCP 接入。
+- [x] README / README_EN / AGENTS 记录 Claude/Codex 双入口与 pi terminal quickstart。
+
+### M13 后续可选
+- [ ] 将 `.pi/` 目录封装为可安装 pi package。
+- [ ] 增加 TypeScript pi extension，提供更漂亮的工具状态、schema 展示和确认 UI。
+- [ ] 如需普通用户桌面分发，再评估 Electron / Tauri / Web 控制台产品化，不把 pi 误描述为桌面 App。
 
 ---
 

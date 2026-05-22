@@ -82,10 +82,40 @@ project-owned memory over assistant-only chat memory:
 4. `decision_memory_layered` and `~/.stock-sage/memory/*.md`
 5. recent `audit_log_fts` entries
 
+## First-Run Checklist For External Agents
+
+When Codex, Claude Code, pi, Cursor or another local agent opens this repository
+for the first time:
+
+1. Read `README.md`, this `AGENTS.md`, `STATUS.md` and `PROJECT.md`.
+2. Run `python3 -m backend.agent.cli health --pretty`.
+3. If the database is not initialized, run `python3 backend/data/database.py`.
+4. For one-stock work, run
+   `python3 -m backend.agent.cli project-context --symbol <symbol> --pretty`
+   and `python3 -m backend.agent.cli stock-context <symbol> --pretty`.
+5. For memory-sensitive work, run
+   `python3 -m backend.agent.cli memory-snapshot --pretty`.
+6. Use dry-run action metadata before mutating local state:
+   `python3 -m backend.agent.cli action <name> --payload-json '<json>' --pretty`.
+7. Execute mutations only after explicit user confirmation by adding
+   `--confirm`.
+
+The terminal pi entrypoint is:
+
+```bash
+make agent-setup
+make agent
+```
+
+`make agent-dev` starts the same pi shell with developer intent; use it for code
+changes rather than trading research.
+
 The local MCP entrypoint is:
 
 ```bash
-PYTHONPATH=. python -m backend.agent.mcp_server
+PYTHONPATH=. python3 -m backend.agent.mcp_server
+# or:
+make agent-mcp
 ```
 
 Install the optional MCP dependency with:
@@ -100,6 +130,12 @@ Useful agent tools are:
 - `stock_sage_memory_snapshot`
 - `stock_sage_stock_context`
 - `stock_sage_health`
+
+To generate a local MCP client config snippet:
+
+```bash
+make agent-mcp-config
+```
 
 On a fresh clone, run `python3 backend/data/database.py` before expecting live
 positions, watchlist, signals or memory. The MCP health tool returns empty
@@ -143,8 +179,9 @@ Use existing durable docs:
 
 ```bash
 PYTHONPATH=. pytest -q
-PYTHONPATH=. python -m backend.tools.coverage_snapshot
-PYTHONPATH=. python -m paper_trading.stats
+PYTHONPATH=. python3 -m backend.tools.coverage_snapshot
+PYTHONPATH=. python3 -m paper_trading.stats
+PYTHONPATH=. python3 -m backend.agent.cli health --pretty
 PYTHONPATH=. uvicorn backend.main:app --reload
 cd frontend && npm run dev
 ```

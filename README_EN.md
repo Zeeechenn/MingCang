@@ -63,9 +63,31 @@ Common MCP tools:
 
 1. Send the GitHub homepage or repository URL to Codex / Claude Code.
 2. Ask the agent to read `README.md` and [AGENTS.md](AGENTS.md) before running anything.
-3. Configure `.env`, for example `AI_PROVIDER=local_cli`, or set runtime keys such as `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
-4. Let the agent install dependencies, initialize the database, start services or MCP, and approve privileged steps when prompted.
-5. Use natural-language tasks for research, reviews, memory or project health checks.
+3. Ask the agent to run `python3 -m backend.agent.cli health --pretty` first, so it sees database, memory, watchlist and position state.
+4. Configure `.env`, for example `AI_PROVIDER=local_cli`, or set runtime keys such as `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
+5. Let the agent install dependencies, initialize the database, start services or MCP, and approve privileged steps when prompted.
+6. Use natural-language tasks for research, reviews, memory or project health checks.
+
+**Option A2: terminal pi Agent**
+
+```bash
+git clone <repo-url> && cd stock-sage
+make agent-setup
+make agent
+```
+
+`make agent-setup` checks Python, installs StockSage agent dependencies, creates `.env`, initializes the database and prompts for pi installation if needed. V1 defaults to reusing one Anthropic/OpenAI key for both the outer pi chat model and the StockSage internal LLM runtime. If you choose `AI_PROVIDER=local_cli`, StockSage internal LLM workflows use the local Claude CLI.
+
+Once inside pi, you can ask:
+
+```text
+Check StockSage health.
+Research 300308 with memory, news, positions and long-term labels.
+Summarize test-2 paper-trading performance.
+Add 300394 to my watchlist.
+```
+
+Research and health checks read local context directly. Mutating actions such as watchlist, position, memory and config changes are dry-run first and require explicit confirmation before `backend.agent.cli action ... --confirm` executes them.
 
 **Option B: start the Web console**
 
@@ -94,6 +116,9 @@ Docker starts the backend and frontend. Open http://localhost for the local UI a
 ```bash
 pip install -e ".[agent]"
 PYTHONPATH=. python3 -m backend.agent.mcp_server
+# Or:
+make agent-mcp
+make agent-mcp-config
 ```
 
 Connect this MCP server to Claude Desktop, Claude Code, Cursor or any MCP-capable client so the outer agent can call StockSage project context, memory snapshot, stock context and health tools.

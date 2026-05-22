@@ -8,7 +8,7 @@ RUFF ?= $(PYTHON) -m ruff
 MYPY ?= $(PYTHON) -m mypy
 PRE_COMMIT ?= $(PYTHON) -m pre_commit
 
-.PHONY: help install precommit-install test frontend-test lint fmt typecheck check verify dev build coverage-snapshot paper-stats clean docker-build docker-up docker-down
+.PHONY: help install precommit-install test frontend-test lint fmt typecheck check verify dev build coverage-snapshot paper-stats agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
 
 help:
 	@echo "StockSage Makefile commands:"
@@ -23,6 +23,11 @@ help:
 	@echo "  verify       后端/前端/构建全量验证"
 	@echo "  coverage-snapshot 输出当前数据覆盖快照"
 	@echo "  paper-stats  统计纸面交易结果"
+	@echo "  agent-setup  配置 StockSage pi/agent 本地运行环境"
+	@echo "  agent        启动 StockSage pi 研究型终端 agent"
+	@echo "  agent-dev    启动 StockSage pi 开发型终端 agent"
+	@echo "  agent-mcp    启动 StockSage MCP stdio 工具桥"
+	@echo "  agent-mcp-config 输出 MCP 客户端配置片段"
 	@echo "  dev          启动后端 dev server (uvicorn --reload)"
 	@echo "  build        前端 vite 构建"
 	@echo "  clean        清理 __pycache__ / .pytest_cache / dist"
@@ -68,6 +73,21 @@ coverage-snapshot:
 
 paper-stats:
 	PYTHONPATH=. $(PYTHON) -m paper_trading.stats
+
+agent-setup:
+	bash scripts/agent_setup.sh
+
+agent:
+	bash scripts/agent_run.sh research
+
+agent-dev:
+	bash scripts/agent_run.sh dev
+
+agent-mcp:
+	PYTHONPATH=. $(PYTHON) -m backend.agent.mcp_server
+
+agent-mcp-config:
+	$(PYTHON) scripts/agent_mcp_config.py
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +
