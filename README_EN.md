@@ -8,7 +8,7 @@ An agent-ready personal A-share research and decision-support workspace. StockSa
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Status](https://img.shields.io/badge/status-M2%20paper%20trading-yellow)
 
-[Product Preview](#product-preview) · [Agent Usage Guide](#agent-usage-guide) · [Core Capabilities](#core-capabilities) · [Recommended Usage](#recommended-usage) · [Cautions](#cautions) · [More Docs](#more-docs)
+[Agent Usage Guide](#agent-usage-guide) · [Product Preview](#product-preview) · [Recommended Usage](#recommended-usage) · [Cautions](#cautions) · [More Docs](#more-docs)
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -16,39 +16,33 @@ An agent-ready personal A-share research and decision-support workspace. StockSa
 
 ## Overview
 
-StockSage is a local-first personal A-share research system and an already agentized investment-research kernel. It stores market data, news, fundamentals, QFII holdings, index data, positions, reviews and long-term memory in local SQLite, then combines technical indicators, LLM news sentiment, a long-term analyst team, Research Director, Trader, Risk Manager and Portfolio Manager into auditable suggestions.
+StockSage is a local-first personal A-share research system and an already agentized investment-research kernel. It organizes market data, news, fundamentals, QFII holdings, index data, positions, reviews and long-term memory in local SQLite, then uses technical indicators, LLM news sentiment, long-term research, portfolio risk control and auditable memory to support traceable decisions.
 
-The project is intentionally not about asking an LLM to guess price moves. Its job is to keep data, evidence, risk constraints and historical memory in one workspace: sync data before market open, generate signals after close, check stop-loss risk during the session, refresh long-term labels weekly, and let the user explicitly trigger single-stock research, sector deep research, paper-trading statistics and project-memory retrieval.
-
-The Agent-ready local/remote interface is now in place. Local agents such as Codex or Claude Code can read project context, inspect memory, run tests, produce reviews and call MCP tools. Remote agents are read-only by default and require explicit API-key auth, write enablement and an action allowlist. The product direction is to evolve from the current Web console into a fuller client experience, making daily research, alerts, reviews and agent collaboration feel natural in a personal workflow.
-
-## Product Preview
-
-![StockSage System Architecture](docs/assets/architecture.svg)
+The project currently focuses on paper-trading validation and agent-ready usage. It is not an automated trading system, does not ask LLMs to directly predict prices, and will evolve from the current Web console toward a fuller client experience.
 
 ## Agent Usage Guide
 
-StockSage Agent is a collaborative research assistant for personal A-share research. It is designed for agent clients such as Codex, Claude Code, Claude Desktop, Cursor and other tools that can run local commands or connect to MCP tools. It can read project data and memory, assist with single-stock research, topic research, long-term research, deep research, reviews and project maintenance. It is not an automated trading bot.
+StockSage Agent is designed for agent clients such as Codex, Claude Code, Claude Desktop, Cursor and other tools that can run local commands or connect to MCP tools. The most useful guide for users is not only how to run it, but what research and review tasks they can delegate to it.
 
-The recommended external-user flow is to send this GitHub page or repository URL to Codex / Claude Code and ask the agent to download, install, configure and run the project:
+| User goal | Task to delegate | Typical output |
+|---|---|
+| Single-stock research | Read one stock's signals, news, positions, long-term labels, historical reviews and project memory. | Research summary, evidence trail, risks and follow-up questions. |
+| Topic research | Investigate an industry, theme, value chain or group of stocks. | Theme conclusion, related symbols, source audit and questions to verify. |
+| Long-term research | Run the long-term analyst team across sector thesis, financial quality, prosperity indicators and QFII flow. | Long-term label, score, key findings and hold/avoid rationale. |
+| Deep research | Coordinate industry researcher, company researcher, risk reviewer, source auditor and report writer roles. | Markdown research report, core conclusion, risk review and cited sources. |
+| Memory management | Read or write long-term rules, risk preferences, research indexes, chat summaries and layered decision memory. | Memory summary, recall results and memory-write confirmations. |
+| Reviews and paper trading | Analyze test performance, signal attribution, win rate, drawdown, exit reasons and risk-rule execution. | Review summary, performance attribution and rule-calibration suggestions. |
+| Project health | Check data coverage, scheduler, API, config, tests and docs. | Health report, anomalies and next maintenance steps. |
+
+Example prompts:
 
 ```text
-Please read this project homepage and AGENTS.md, then download and run StockSage.
-First explain which API keys I need to configure. Then initialize the database and start the backend/frontend or MCP tools.
-Before running commands, list what you plan to execute. Ask for confirmation before writing files, installing dependencies, starting services or calling paid APIs.
+Read project memory, then research whether 300308 is still worth following.
+Run an AI computing value-chain topic research report covering 300308 and 300394.
+Run the long-term analyst team and refresh long-term labels for my watchlist.
+Summarize test-2 paper-trading performance and identify whether risk rules need adjustment.
+Check current data coverage and scheduler health.
 ```
-
-## Core Capabilities
-
-| Capability | Description |
-|---|---|
-| Single-stock research | Combine one stock's signals, news, positions, long-term labels, historical reviews and project memory. |
-| Topic research | Generate structured reports for an industry, theme, value chain or group of stocks. |
-| Long-term research | Run the long-term analyst team across sector thesis, financial quality, prosperity indicators and QFII flow. |
-| Deep research | Coordinate industry researcher, company researcher, risk reviewer, source auditor and report writer roles. |
-| Memory | Read and write long-term rules, risk preferences, research indexes, chat summaries, layered decision memory and audit logs. |
-| Reviews and paper trading | Analyze test results, signal attribution, win rate, drawdown, exit reasons and risk-rule execution. |
-| Project maintenance | Run tests, inspect data coverage, check scheduler / API / config health, update docs and diagnose runtime issues. |
 
 Common MCP tools:
 
@@ -59,6 +53,10 @@ Common MCP tools:
 | `stock_sage_stock_context` | Single-stock signals, news, positions, long-term labels and memory context. |
 | `stock_sage_health` | Agent mode, database, dependency and permission health. |
 
+## Product Preview
+
+![StockSage System Architecture](docs/assets/architecture.svg)
+
 ## Recommended Usage
 
 **Option A: hand the project to Codex / Claude Code**
@@ -67,14 +65,7 @@ Common MCP tools:
 2. Ask the agent to read `README.md` and [AGENTS.md](AGENTS.md) before running anything.
 3. Configure `.env`, for example `AI_PROVIDER=local_cli`, or set runtime keys such as `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
 4. Let the agent install dependencies, initialize the database, start services or MCP, and approve privileged steps when prompted.
-5. Use natural-language tasks such as:
-
-```text
-Read project memory, then research whether 300308 is still worth following.
-Run an AI computing value-chain topic research report covering 300308 and 300394.
-Summarize test-2 paper-trading performance and identify whether risk rules need adjustment.
-Check current data coverage and scheduler health.
-```
+5. Use natural-language tasks for research, reviews, memory or project health checks.
 
 **Option B: start the Web console**
 
