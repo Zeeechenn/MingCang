@@ -5,7 +5,7 @@ Trailing Stop 跟踪（阶段B）
   • 初始止损 = 买入价 - ATR×2
   • 持仓期间记录最高收盘价 highest_close
   • 每日动态止损 = max(初始止损, highest_close - ATR×trailing_atr_mult)
-  • 触及止损 → 平仓；触及止盈 → 平仓
+  • 触及止损 → 平仓；触及固定止盈 → 默认仅提醒，显式开启时平仓
   • 时间退出默认关闭，仅在回测/实验显式开启
 
 落库位置：~/.stock-sage/positions.json
@@ -74,7 +74,7 @@ def update_trailing_stop(pos: TrailingStopTracker, current_high: float,
         pos.exit_reason = "止损"
         return pos
 
-    if current_high >= pos.take_profit:
+    if settings.take_profit_exit_enabled and current_high >= pos.take_profit:
         pos.status = "take_profit"
         pos.exit_date = current_date
         pos.exit_price = pos.take_profit

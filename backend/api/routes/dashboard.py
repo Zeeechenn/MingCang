@@ -199,6 +199,7 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
                 "universe": _load_test2_universe(),
                 "trailing_stop_enabled": settings.trailing_stop_enabled,
                 "trailing_atr_mult": settings.trailing_atr_mult,
+                "take_profit_exit_enabled": settings.take_profit_exit_enabled,
             },
         },
         "positions": _manual_positions_summary(db),

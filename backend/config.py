@@ -64,11 +64,12 @@ class Settings(BaseSettings):
     # 全部可通过 .env 覆盖，便于测试1/2 结束后再调参。
     atr_period: int = 14
     atr_multiplier: float = 2.0
-    risk_reward_ratio: float = 2.0            # 保持 1:2 RR（1.5 截断大行情）
+    risk_reward_ratio: float = 2.0            # 固定止盈参考线仍按 1:2 RR 展示
+    take_profit_exit_enabled: bool = False    # 默认不因固定止盈强平；作为提醒/分批决策参考
     time_exit_enabled: bool = False           # 实盘/持仓跟踪不做硬强平；回测实验可开启
     max_hold_days: int = 10                   # 仅在 time_exit_enabled=True 时作为评估窗口
-    trailing_stop_enabled: bool = False       # 默认关（扫描显示 trailing 1.5/2.5×ATR 均略拖累）
-    trailing_atr_mult: float = 2.5            # 若启用建议 2.5（1.5 过紧）
+    trailing_stop_enabled: bool = True        # 默认启用 ATR 移动止损保护趋势浮盈
+    trailing_atr_mult: float = 2.5            # M4.9 exit sweep 推荐值（1.5 过紧）
 
     # 阶段A 大盘/板块择时过滤
     # 默认开启，但 dampen_factor 设为 0.7（不彻底归零）以保留学习空间

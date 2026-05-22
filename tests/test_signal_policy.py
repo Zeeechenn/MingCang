@@ -99,6 +99,33 @@ def test_trailing_stop_does_not_force_timeout_by_default(monkeypatch):
     assert updated.status == "open"
 
 
+def test_trailing_stop_is_enabled_by_default():
+    from backend.config import settings
+
+    assert settings.trailing_stop_enabled is True
+    assert settings.trailing_atr_mult == 2.5
+
+
+def test_take_profit_is_reference_by_default(monkeypatch):
+    from backend.config import settings
+    from backend.portfolio.trailing_stop import TrailingStopTracker, update_trailing_stop
+
+    monkeypatch.setattr(settings, "take_profit_exit_enabled", False)
+    monkeypatch.setattr(settings, "trailing_stop_enabled", True)
+
+    pos = TrailingStopTracker.open("603986", "2026-05-19", 100.0, 5.0)
+    updated = update_trailing_stop(
+        pos,
+        current_high=125.0,
+        current_low=101.0,
+        current_close=124.0,
+        current_date="2026-05-20",
+    )
+
+    assert updated.status == "open"
+    assert updated.current_stop == 111.5
+
+
 def test_trailing_stop_timeout_can_be_enabled_for_experiments(monkeypatch):
     from backend.config import settings
     from backend.portfolio.trailing_stop import TrailingStopTracker, update_trailing_stop
