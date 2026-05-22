@@ -48,6 +48,28 @@ def test_scheduler_tracks_success_and_failure():
     assert "boom" in failed["last_error"]
 
 
+def test_scheduler_weekly_long_term_reflect_invokes_layered_memory(monkeypatch):
+    from backend import scheduler
+
+    calls = []
+
+    class FakeDb:
+        def close(self):
+            calls.append("closed")
+
+    monkeypatch.setattr("backend.data.database.SessionLocal", lambda: FakeDb())
+    monkeypatch.setattr(
+        "backend.decision.memory_layered.weekly_long_term_reflect",
+        lambda db: calls.append(db) or "reflection",
+    )
+
+    result = scheduler.job_weekly_long_term_reflect()
+
+    assert result == {"status": "ok", "reflection": "reflection"}
+    assert isinstance(calls[0], FakeDb)
+    assert calls[1] == "closed"
+
+
 def test_system_health_exposes_scheduler_state(test_db):
     from backend import scheduler
     from backend.api.routes.system import system_health

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from backend.agent.http_guard import agent_write_guard
 from backend.data.database import ReviewRun, get_db
 
 router = APIRouter()
@@ -109,7 +110,10 @@ def _dow_from_setting(value: str, fallback: int) -> int:
     return _DOW.get((value or "").lower(), fallback)
 
 
-@router.post("/reviews/daily/ensure")
+@router.post(
+    "/reviews/daily/ensure",
+    dependencies=[Depends(agent_write_guard("review.daily.ensure"))],
+)
 def ensure_daily_review(
     as_of: str | None = None,
     now: str | None = None,
@@ -208,7 +212,10 @@ def _run_long_term_review(day: str, db: Session) -> dict:
     return {"summary": summary, "content": "\n".join(lines)}
 
 
-@router.post("/reviews/long-term/ensure")
+@router.post(
+    "/reviews/long-term/ensure",
+    dependencies=[Depends(agent_write_guard("review.long_term.ensure"))],
+)
 def ensure_long_term_review(
     as_of: str | None = None,
     now: str | None = None,

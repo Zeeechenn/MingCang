@@ -167,6 +167,19 @@
 - [x] CI 后端安装 `.[test,agent]`，pytest 覆盖真实 MCP stdio 列工具与 health 调用。
 - [x] README / README_EN 记录免费、试用和促销 API key 限额快照，并标注以平台控制台为准。
 
+### M11.5 Portfolio Manager 批处理闭环 ✅（2026-05-22）
+- [x] `run_postmarket_batch` 改为先完成当日单股分析，再按当日候选统一调用 `PortfolioManager`，执行单股 / 板块 / 总仓位裁剪。
+- [x] 组合层结果不覆盖原始单股证据：`position_pct` 表示最终建议仓位，`trader_position_pct` 保留 Trader/RiskManager 原始仓位，`portfolio_decision` 记录动作和裁剪原因。
+- [x] `DecisionRun.final_action` 追加组合层字段；EvidenceCard 展示最终仓位、单股原始仓位和裁剪原因，旧 evidence 记录保持兼容。
+- [x] Bark 提示沿用最终 `position_pct`，因此会优先显示组合层裁剪后的建议仓位。
+
+### M11.6 Agent 内核闭环补齐 ✅（2026-05-22）
+- [x] 新增 `backend/agent/action_registry.py`，Chat pending action / confirm 执行统一走 registry；每个 action 暴露 `input_schema`、`risk_level`、`requires_confirmation`、`allowed_modes`、`schema_version`。
+- [x] HTTP 写路由接入 `backend/agent/http_guard.py`；remote 模式要求 API key，写操作要求 `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED=true`，并可用 `STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS` 做 action allowlist。
+- [x] `DecisionRun` evidence 追加 step trace：analysts、director、researcher、trader、risk_manager、portfolio_manager；trace 写入失败不阻断主信号路径。
+- [x] Chat fallback context 改为 `chat_sessions.summary + summary_until_id 之后的消息 tail`，避免只依赖最近 6 条消息。
+- [x] `weekly_long_term_reflect` 接入 APScheduler，默认使用 `SCHEDULE_LONGTERM_DOW/TIME`。
+
 ### M11 后续可选
 - [ ] 如果需要公网或局域网远程 agent 服务，再单独增加 HTTP/SSE transport、header 鉴权、限流、审计与只读 allowlist。
 - [ ] 将更多项目动作封装为明确命名的 MCP 写工具，但保持本地默认信任、远程默认只读。

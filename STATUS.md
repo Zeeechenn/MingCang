@@ -63,6 +63,7 @@
 | 16:00 工作日 | 盘后信号 | 三路信号聚合 → 写 Signal 表 → Bark 推送 |
 | 周六 09:00 | 模型重训 | LightGBM Alpha 模型周训练 |
 | 周一 09:00 / 周五 15:00 | 长期团 | 长期分析师团 label 生成；日期与时间可在配置页调整 |
+| 周日 11:00 | 长期反思 | `weekly_long_term_reflect` 写入分层长期记忆 |
 
 > 所有任务跑在 FastAPI 进程内（APScheduler），服务不运行则任务不触发。
 > M3.4 kill switch 激活时，premarket / postmarket / stoploss_check 自动跳过。
@@ -120,4 +121,6 @@ curl http://localhost:8000/api/signals/eval/600519?days=60
 - 本地 Codex / Claude Code 使用 StockSage 时默认信任，可直接跑测试、查 DB、运行纸上交易统计和项目研究流程。
 - 远程 agent 暴露必须显式设置 `STOCKSAGE_AGENT_MODE=remote`，并配置 `STOCKSAGE_AGENT_API_KEY`；stdio MCP 工具调用需传入 `api_key` 参数，远程写操作默认关闭。
 - 项目记忆入口在 `backend/agent/context.py`，MCP 启动入口为 `PYTHONPATH=. python3 -m backend.agent.mcp_server`；未初始化数据库时 health/context 返回空状态，不抛出缺表错误。
+- 盘后批处理已接入 Portfolio Manager：单股信号先生成，再统一做组合层裁剪；最终仓位写入 `position_pct`，原始单股仓位保留在 `trader_position_pct`，裁剪原因进入 `portfolio_decision` / evidence。
+- Chat action 已统一走 Action Registry；远程 HTTP 写操作复用 agent guard，支持 API key、写开关和 action allowlist。
 - 云 runtime provider 限额见 README 的 "云 Runtime Provider 限额" 表，额度以各平台控制台为准。

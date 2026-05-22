@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.agent.http_guard import agent_write_guard
 from backend.api.routes._shared import latest_signal, signal_to_schema
 from backend.api.schemas import LongTermLabelOut, WatchlistItem
 from backend.data.database import SessionLocal, Stock, get_db
@@ -70,7 +71,10 @@ def get_long_term_label(symbol: str, db: Session = Depends(get_db)):
     return label_to_schema(lt)
 
 
-@router.post("/long-term/run")
+@router.post(
+    "/long-term/run",
+    dependencies=[Depends(agent_write_guard("long_term.run"))],
+)
 def trigger_long_term_team(background_tasks: BackgroundTasks):
     """Manually trigger the long-term analyst team in the background."""
     from backend.scheduler import job_weekly_longterm
@@ -79,7 +83,10 @@ def trigger_long_term_team(background_tasks: BackgroundTasks):
     return {"status": "long-term team triggered"}
 
 
-@router.post("/watchlist")
+@router.post(
+    "/watchlist",
+    dependencies=[Depends(agent_write_guard("watchlist.add"))],
+)
 def add_stock(
     symbol: str,
     name: str,
@@ -100,7 +107,10 @@ def add_stock(
     return {"status": "ok", "backfill": "started"}
 
 
-@router.delete("/watchlist/{symbol}")
+@router.delete(
+    "/watchlist/{symbol}",
+    dependencies=[Depends(agent_write_guard("watchlist.remove"))],
+)
 def remove_stock(symbol: str, db: Session = Depends(get_db)):
     """Soft-delete a stock from the watchlist (sets active=False)."""
     stock = db.query(Stock).filter(Stock.symbol == symbol).first()

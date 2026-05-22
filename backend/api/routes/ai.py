@@ -6,11 +6,12 @@ import re
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from backend.api.schemas import AIChatRequest, AIChatResponse, PositionCreate
+from backend.agent.http_guard import require_http_agent_write_key
+from backend.api.schemas import AIChatRequest, AIChatResponse
 from backend.data.database import ChatMessage, ChatSession, PendingAIAction, Position, Stock, get_db
 
 router = APIRouter()
@@ -52,7 +53,10 @@ def _name_after_symbol(text: str, symbol: str) -> str | None:
 
 
 def _pending(action: str, payload: dict, user_message: str, db: Session) -> dict:
+    from backend.agent.action_registry import action_metadata
+
     action_id = uuid4().hex
+    metadata = action_metadata(action)
     row = PendingAIAction(
         action_id=action_id,
         action=action,
@@ -68,6 +72,7 @@ def _pending(action: str, payload: dict, user_message: str, db: Session) -> dict
         "action": action,
         "payload": payload,
         "status": "pending",
+        **metadata,
     }
 
 
@@ -156,22 +161,39 @@ def _detect_action(message: str, db: Session) -> tuple[str, dict] | None:
     return None
 
 
+def _chat_context_for_session(db: Session, session_id: str, tail_limit: int = 12) -> str:
+    """Build chat context from persisted summary plus recent uncompressed tail."""
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if session is None:
+        return ""
+
+    parts: list[str] = []
+    if session.summary:
+        parts.append(f"窗口摘要：{session.summary}")
+
+    query = db.query(ChatMessage).filter(ChatMessage.session_id == session_id)
+    if session.summary_until_id:
+        query = query.filter(ChatMessage.id > session.summary_until_id)
+    tail = (
+        query
+        .order_by(ChatMessage.id.desc())
+        .limit(tail_limit)
+        .all()
+    )
+    for row in reversed(tail):
+        parts.append(f"{row.role}: {row.content}")
+    return "\n".join(parts)
+
+
 def _context_answer(message: str, db: Session, session_id: str | None = None) -> AIChatResponse:
     """Deterministic fallback answer using internal StockSage resources."""
     stocks = db.query(Stock).filter(Stock.active).limit(6).all()
     positions = db.query(Position).filter(Position.status == "open").limit(6).all()
     parts = ["我会在 StockSage 项目内回答：已读取自选股、持仓、信号、复盘和研究记忆。"]
     if session_id:
-        recent = (
-            db.query(ChatMessage)
-            .filter(ChatMessage.session_id == session_id)
-            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
-            .limit(6)
-            .all()
-        )
-        remembered = [row.content for row in reversed(recent) if row.role == "user"]
-        if remembered:
-            parts.append("本窗口记忆：" + " / ".join(remembered[-3:]))
+        chat_context = _chat_context_for_session(db, session_id)
+        if chat_context:
+            parts.append("本窗口上下文：\n" + chat_context)
     if stocks:
         parts.append("当前自选股包括：" + "、".join(f"{s.name or s.symbol}({s.symbol})" for s in stocks))
     if positions:
@@ -390,12 +412,18 @@ def get_action(action_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/ai/actions/{action_id}/confirm")
-def confirm_action(action_id: str, db: Session = Depends(get_db)):
+def confirm_action(
+    action_id: str,
+    api_key: str | None = Header(default=None, alias="x-stocksage-agent-api-key"),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
     row = db.query(PendingAIAction).filter(PendingAIAction.action_id == action_id).first()
     if row is None:
         raise HTTPException(404, "action not found")
     if row.status != "pending":
         return get_action(action_id, db)
+    require_http_agent_write_key(row.action, api_key=api_key, authorization=authorization)
 
     payload = _parse(row.payload_json, {})
     result = _execute_action(row.action, payload, db)
@@ -407,72 +435,6 @@ def confirm_action(action_id: str, db: Session = Depends(get_db)):
 
 
 def _execute_action(action: str, payload: dict, db: Session) -> dict:
-    if action == "watchlist.add":
-        symbol = payload["symbol"]
-        stock = db.query(Stock).filter(Stock.symbol == symbol).first()
-        if stock:
-            stock.active = True
-            stock.name = payload.get("name") or stock.name
-            stock.market = payload.get("market") or stock.market
-        else:
-            db.add(Stock(
-                symbol=symbol,
-                name=payload.get("name") or symbol,
-                market=payload.get("market") or "CN",
-                active=True,
-            ))
-        db.commit()
-        return {"symbol": symbol, "active": True}
+    from backend.agent.action_registry import execute_registered_action
 
-    if action == "watchlist.remove":
-        symbol = payload["symbol"]
-        stock = db.query(Stock).filter(Stock.symbol == symbol).first()
-        if stock:
-            stock.active = False
-            db.commit()
-        return {"symbol": symbol, "active": False}
-
-    if action == "position.add":
-        from backend.api.routes.positions import create_position
-
-        if not payload.get("quantity") or not payload.get("avg_cost"):
-            raise HTTPException(400, "添加持仓需要数量和成本价")
-        created = create_position(PositionCreate(**payload), db=db)
-        return created.model_dump()
-
-    if action == "config.update":
-        from backend.api.routes.system import update_runtime_config
-
-        updated = update_runtime_config(payload)
-        return {"updated": payload, "active_profile": updated.get("active_profile")}
-
-    if action == "review.daily.ensure":
-        from backend.api.routes.reviews import ensure_daily_review
-
-        return ensure_daily_review(db=db)
-
-    if action == "review.long_term.ensure":
-        from backend.api.routes.reviews import ensure_long_term_review
-
-        return ensure_long_term_review(db=db)
-
-    if action == "memory.write":
-        # M9.4：受控写入。should_remember 在 ai_memory.remember 内已做把关；
-        # 这里设 force=True 因为已经过用户二次确认。
-        from backend.memory.ai_memory import remember
-        persisted = remember(
-            db,
-            payload["key"],
-            payload["value"],
-            category=payload.get("category"),
-            scope=payload.get("scope", "global"),
-            ttl_days=payload.get("ttl_days"),
-            force=True,
-        )
-        return {
-            "persisted": persisted,
-            "key": payload["key"],
-            "scope": payload.get("scope", "global"),
-        }
-
-    raise HTTPException(400, f"unsupported action: {action}")
+    return execute_registered_action(action, payload, db)

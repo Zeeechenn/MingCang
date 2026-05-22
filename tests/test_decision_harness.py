@@ -38,6 +38,78 @@ def test_record_decision_run_and_research_state(test_db):
     assert state["last_signal_summary"].startswith("可小仓试错")
 
 
+def test_record_decision_run_preserves_portfolio_decision(test_db):
+    from backend.decision.harness import get_decision_evidence, record_decision_run
+
+    result = {
+        "rule_version": "multi_agent_v2:new_framework",
+        "recommendation": "可小仓试错",
+        "confidence": "中",
+        "composite_score": 72,
+        "position_pct": 0.10,
+        "trader_position_pct": 0.15,
+        "portfolio_decision": {
+            "symbol": "600519",
+            "target_position_pct": 0.10,
+            "delta_position_pct": -0.05,
+            "action": "reduce",
+            "rationale": "受组合约束裁剪",
+        },
+    }
+
+    record_decision_run(
+        test_db,
+        run_type="postmarket",
+        symbol="600519",
+        as_of="2026-05-21",
+        result=result,
+    )
+
+    final_action = get_decision_evidence(test_db, "600519")[0]["final_action"]
+    assert final_action["position_pct"] == 0.10
+    assert final_action["trader_position_pct"] == 0.15
+    assert final_action["portfolio_decision"]["action"] == "reduce"
+
+
+def test_record_decision_run_builds_step_trace(test_db):
+    from backend.decision.harness import get_decision_evidence, record_decision_run
+
+    result = {
+        "rule_version": "multi_agent_v2:new_framework",
+        "recommendation": "可小仓试错",
+        "confidence": "中",
+        "composite_score": 72,
+        "breakdown": {"technical": 70, "sentiment": 75, "quant": 0},
+        "director": {"quality_notes": ["数据质量正常"]},
+        "llm_arbitration": {"rationale": "分歧较小", "used_llm": False},
+        "risk_notes": ["单股上限裁剪"],
+        "position_pct": 0.10,
+        "trader_position_pct": 0.15,
+        "portfolio_decision": {"action": "reduce", "rationale": "受组合约束裁剪"},
+    }
+
+    record_decision_run(
+        test_db,
+        run_type="postmarket",
+        symbol="600519",
+        as_of="2026-05-21",
+        result=result,
+    )
+
+    trace = get_decision_evidence(test_db, "600519")[0]["trace"]
+    step_names = [step["step_name"] for step in trace]
+    assert step_names == [
+        "analysts",
+        "director",
+        "researcher",
+        "trader",
+        "risk_manager",
+        "portfolio_manager",
+    ]
+    assert all("duration_ms" in step for step in trace)
+    assert trace[-1]["output_summary"] == "reduce: 受组合约束裁剪"
+
+
 def test_review_latest_signal_updates_run_and_state(test_db):
     from backend.decision.harness import (
         get_decision_evidence,
@@ -73,4 +145,3 @@ def test_review_latest_signal_updates_run_and_state(test_db):
     assert "情感偏乐观" in review["attribution"][0]
     assert get_research_state(test_db, "600519")["last_review"]["next_day_return"] == -10.0
     assert get_decision_evidence(test_db, "600519")[0]["eval_result"]["correct"] is False
-

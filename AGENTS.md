@@ -42,6 +42,9 @@ explicitly sets `STOCKSAGE_AGENT_MODE=remote`.
 Remote mode must require `STOCKSAGE_AGENT_API_KEY` at the hosting/API layer.
 Remote tools are read-only by default. Mutating remote tools require an explicit
 allowlist and `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED=true`.
+HTTP writes accept `X-StockSage-Agent-API-Key` or `Authorization: Bearer ...`;
+when `STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS` is non-empty, the action name must
+also be listed, for example `watchlist.add,memory.write,config.update`.
 
 For the bundled stdio MCP bridge, remote-mode tool calls must pass the same key
 as the optional `api_key` argument, for example

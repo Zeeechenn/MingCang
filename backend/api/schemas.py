@@ -175,6 +175,7 @@ class DecisionRunOut(BaseModel):
     composite_score: float | None = None
     input_snapshot: dict = {}
     agent_outputs: dict = {}
+    trace: list[dict] = []
     risk_decision: dict = {}
     final_action: dict = {}
     eval_result: dict | None = None

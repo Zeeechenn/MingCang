@@ -171,6 +171,13 @@ class Settings(BaseSettings):
     # 调度器开关（false = 手动触发，不自动跑定时任务）
     scheduler_enabled: bool = False
 
+    # Agent local/remote guardrails. Local desktop use is trusted; remote writes
+    # require an API key, explicit write enablement, and optional action allowlist.
+    stocksage_agent_mode: str = "local"
+    stocksage_agent_api_key: str = ""
+    stocksage_agent_remote_write_enabled: bool = False
+    stocksage_agent_remote_write_actions: str = ""
+
 
 settings = Settings()
 

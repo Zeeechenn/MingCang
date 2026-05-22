@@ -395,22 +395,128 @@ def _maybe_send_postmarket_alert(stock, result: dict) -> bool:
     )
 
 
+def _open_position_weights(db) -> dict[str, float]:
+    """Best-effort current holding weights for PortfolioManager input."""
+    from backend.data.database import Position, Price
+
+    try:
+        positions = db.query(Position).filter(Position.status == "open").all()
+    except Exception as e:
+        logger.warning("portfolio position load failed: %s", e)
+        return {}
+
+    values: dict[str, float] = {}
+    for pos in positions:
+        quantity = float(getattr(pos, "quantity", 0) or 0)
+        if quantity <= 0:
+            continue
+        latest = None
+        try:
+            latest = (
+                db.query(Price.close)
+                .filter(Price.symbol == pos.symbol)
+                .order_by(Price.date.desc())
+                .first()
+            )
+        except Exception:
+            latest = None
+        close = float(latest[0]) if latest else float(getattr(pos, "avg_cost", 0) or 0)
+        if close > 0:
+            values[pos.symbol] = values.get(pos.symbol, 0.0) + quantity * close
+
+    total_value = sum(values.values())
+    if total_value <= 0:
+        return {}
+    scale = min(1.0, float(settings.max_total_equity_pct or 1.0))
+    return {symbol: round(value / total_value * scale, 4) for symbol, value in values.items()}
+
+
+def _apply_portfolio_decision(batch_items: list[tuple[object, dict]], db) -> int:
+    """Apply batch-level PortfolioManager targets to per-stock signal results."""
+    if not batch_items:
+        return 0
+
+    from backend.agents.portfolio_manager import (
+        PortfolioCandidate,
+        decision_to_dict,
+        manage,
+    )
+
+    current_weights = _open_position_weights(db)
+    candidates = []
+    for stock, analysis in batch_items:
+        result = analysis["result"]
+        current = current_weights.get(stock.symbol, 0.0)
+        candidates.append(PortfolioCandidate(
+            symbol=stock.symbol,
+            sector=getattr(stock, "industry", None) or "未分类",
+            composite_score=float(result.get("composite_score") or 0.0),
+            recommendation=result.get("recommendation") or "观望",
+            confidence=result.get("confidence") or "低",
+            suggested_position_pct=float(result.get("position_pct") or 0.0),
+            is_existing=current > 0,
+            current_position_pct=current,
+        ))
+
+    decision = manage(candidates)
+    batch_decision = decision_to_dict(decision)
+    by_symbol = {a["symbol"]: a for a in batch_decision["allocations"]}
+    for stock, analysis in batch_items:
+        result = analysis["result"]
+        allocation = by_symbol.get(stock.symbol)
+        if allocation is None:
+            continue
+        trader_position_pct = float(result.get("position_pct") or 0.0)
+        result["trader_position_pct"] = trader_position_pct
+        result["position_pct"] = allocation["target_position_pct"]
+        result["allocation_rationale"] = allocation["rationale"]
+        result["portfolio_decision"] = {
+            **allocation,
+            "available_capital_pct": batch_decision["available_capital_pct"],
+            "sector_usage": batch_decision["sector_usage"],
+            "rejected": batch_decision["rejected"],
+            "notes": batch_decision["notes"],
+        }
+    return len(by_symbol)
+
+
 def run_postmarket_batch(db) -> dict:
     """Run post-market analysis for active stocks and return batch stats."""
     from backend.data.database import Stock
 
     stocks = db.query(Stock).filter(Stock.active).all()
     context = _load_postmarket_context(db, stocks)
-    stats = {"stocks": len(stocks), "processed": 0, "saved": 0, "skipped": 0, "errors": 0, "alerts": 0}
+    stats = {
+        "stocks": len(stocks),
+        "processed": 0,
+        "saved": 0,
+        "skipped": 0,
+        "errors": 0,
+        "alerts": 0,
+        "portfolio_allocated": 0,
+    }
+    batch_items: list[tuple[object, dict]] = []
     for stock in stocks:
         try:
             analysis = _analyze_postmarket_stock(stock, db, context)
             if analysis is None:
                 stats["skipped"] += 1
                 continue
+            batch_items.append((stock, analysis))
+            stats["processed"] += 1
+        except Exception as e:
+            stats["errors"] += 1
+            logger.error("postmarket failed %s: %s", stock.symbol, e)
+
+    try:
+        stats["portfolio_allocated"] = _apply_portfolio_decision(batch_items, db)
+    except Exception as e:
+        logger.warning("portfolio manager batch decision failed: %s", e)
+
+    for stock, analysis in batch_items:
+        try:
             _persist_postmarket_stock(stock, analysis, db)
             result = analysis["result"]
-            stats["processed"] += 1
             stats["saved"] += 1
             if _maybe_send_postmarket_alert(stock, result):
                 stats["alerts"] += 1
@@ -579,6 +685,20 @@ def job_weekly_longterm() -> None:
         db.close()
 
 
+@tracked_job("weekly_long_term_reflect")
+def job_weekly_long_term_reflect() -> dict:
+    """Weekly long-term decision reflection into layered memory."""
+    from backend.data.database import SessionLocal
+    from backend.decision.memory_layered import weekly_long_term_reflect
+
+    db = SessionLocal()
+    try:
+        reflection = weekly_long_term_reflect(db)
+        return {"status": "ok", "reflection": reflection}
+    finally:
+        db.close()
+
+
 @tracked_job("daily_memory_backup")
 def job_daily_memory_backup() -> None:
     """Daily dump of ai_memory to ~/.stock-sage/memory/backups/ (M9.横向)."""
@@ -616,6 +736,7 @@ def start() -> None:
     post_h, post_m = settings.schedule_postmarket.split(":")
     long_mon_h, long_mon_m = settings.schedule_longterm_monday_time.split(":")
     long_fri_h, long_fri_m = settings.schedule_longterm_friday_time.split(":")
+    reflect_h, reflect_m = settings.schedule_longterm_time.split(":")
 
     scheduler.add_job(job_premarket, CronTrigger(
         hour=int(pre_h), minute=int(pre_m), day_of_week="mon-fri",
@@ -658,6 +779,10 @@ def start() -> None:
                     settings.schedule_longterm_monday_time,
                     settings.schedule_longterm_friday_dow,
                     settings.schedule_longterm_friday_time)
+
+    scheduler.add_job(job_weekly_long_term_reflect, CronTrigger(
+        hour=int(reflect_h), minute=int(reflect_m), day_of_week=settings.schedule_longterm_dow,
+    ), id="weekly_long_term_reflect", replace_existing=True)
 
     scheduler.start()
     logger.info("scheduler started (premarket=%s, postmarket=%s)",

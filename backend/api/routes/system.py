@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.agent.http_guard import agent_write_guard
 from backend.api.schemas import DataCoverageOut
 from backend.data.database import (
     FinancialMetric,
@@ -119,7 +120,10 @@ def get_runtime_config():
     return _runtime_config_payload()
 
 
-@router.patch("/system/runtime-config")
+@router.patch(
+    "/system/runtime-config",
+    dependencies=[Depends(agent_write_guard("config.update"))],
+)
 def update_runtime_config(payload: dict):
     """Update a safe whitelist of runtime settings for the current process."""
     from backend.config import settings

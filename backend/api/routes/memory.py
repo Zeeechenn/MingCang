@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.agent.http_guard import agent_write_guard
 from backend.data.database import get_db
 from backend.memory.ai_memory import list_active
 from backend.memory.audit_log import audit_search, audit_write
@@ -129,7 +130,10 @@ def _row_by_id(db: Session, row_id: int):
     return row
 
 
-@router.delete("/{row_id}")
+@router.delete(
+    "/{row_id}",
+    dependencies=[Depends(agent_write_guard("memory.forget"))],
+)
 def memory_delete(row_id: int, db: Session = Depends(get_db)) -> dict:
     """Delete an ai_memory row by id. Backups make this recoverable."""
     row = _row_by_id(db, row_id)
@@ -144,7 +148,10 @@ def memory_delete(row_id: int, db: Session = Depends(get_db)) -> dict:
     return {"deleted": True, "id": row_id}
 
 
-@router.post("/{row_id}/pin")
+@router.post(
+    "/{row_id}/pin",
+    dependencies=[Depends(agent_write_guard("memory.pin"))],
+)
 def memory_pin(row_id: int, db: Session = Depends(get_db)) -> dict:
     """Pin a memory row (clear ttl_days so it never expires)."""
     row = _row_by_id(db, row_id)
@@ -160,7 +167,10 @@ def memory_pin(row_id: int, db: Session = Depends(get_db)) -> dict:
     return {"pinned": True, "id": row_id}
 
 
-@router.patch("/{row_id}")
+@router.patch(
+    "/{row_id}",
+    dependencies=[Depends(agent_write_guard("memory.patch"))],
+)
 def memory_patch(
     row_id: int,
     payload: PatchPayload,

@@ -36,6 +36,103 @@ def _signal_summary(result: dict) -> str:
     return f"{rec}，综合分 {score:+.1f}{suffix}" if isinstance(score, (int, float)) else rec
 
 
+def _trace_step(
+    step_name: str,
+    *,
+    used_llm: bool = False,
+    fallback_reason: str | None = None,
+    input_summary: str = "",
+    output_summary: str = "",
+    provider: str | None = None,
+    model_tier: str | None = None,
+    structured_output_valid: bool | None = None,
+) -> dict:
+    step = {
+        "step_name": step_name,
+        "used_llm": used_llm,
+        "fallback_reason": fallback_reason,
+        "duration_ms": 0,
+        "input_summary": input_summary,
+        "output_summary": output_summary,
+    }
+    if used_llm:
+        step.update({
+            "provider": provider,
+            "model_tier": model_tier,
+            "structured_output_valid": structured_output_valid,
+        })
+    return step
+
+
+def _build_decision_trace(result: dict) -> list[dict]:
+    """Build a compact step trace when the caller did not provide one."""
+    explicit = result.get("decision_trace")
+    if isinstance(explicit, list):
+        return explicit
+
+    breakdown = result.get("breakdown", {}) or {}
+    llm = result.get("llm_arbitration", {}) or {}
+    risk_notes = result.get("risk_notes", []) or []
+    portfolio = result.get("portfolio_decision") or {}
+
+    try:
+        from backend.config import settings
+        provider = settings.ai_provider
+    except Exception:
+        provider = None
+
+    trace = [
+        _trace_step(
+            "analysts",
+            input_summary="technical/quant/sentiment/news inputs",
+            output_summary=", ".join(f"{k}={v}" for k, v in breakdown.items()) or "no breakdown",
+        ),
+        _trace_step(
+            "director",
+            input_summary="analyst reports",
+            output_summary="; ".join((result.get("director") or {}).get("quality_notes", [])[:2]) or "no director notes",
+        ),
+        _trace_step(
+            "researcher",
+            used_llm=bool(llm.get("used_llm")),
+            fallback_reason=None if llm.get("used_llm") else "no_llm_or_no_divergence",
+            input_summary="analyst disagreement and debate topic",
+            output_summary=llm.get("rationale") or "no arbitration",
+            provider=provider,
+            model_tier="fast",
+            structured_output_valid=bool(llm) if llm.get("used_llm") else None,
+        ),
+        _trace_step(
+            "trader",
+            input_summary="research conclusion, close, ATR",
+            output_summary=(
+                f"{result.get('recommendation', '-')}, "
+                f"score={result.get('composite_score', '-')}, "
+                f"position={result.get('trader_position_pct', result.get('position_pct'))}"
+            ),
+        ),
+        _trace_step(
+            "risk_manager",
+            input_summary="trader proposal, regime, limit status, long-term label",
+            output_summary=(
+                result.get("veto_reason")
+                or "; ".join(risk_notes[:2])
+                or f"approved position={result.get('position_pct')}"
+            ),
+        ),
+    ]
+    if portfolio:
+        trace.append(_trace_step(
+            "portfolio_manager",
+            input_summary="batch candidates and current holdings",
+            output_summary=(
+                f"{portfolio.get('action', '-')}: "
+                f"{portfolio.get('rationale') or result.get('allocation_rationale') or ''}"
+            ).strip(),
+        ))
+    return trace
+
+
 def record_decision_run(
     db,
     *,
@@ -52,6 +149,7 @@ def record_decision_run(
     This is intentionally called after Signal upsert so the main decision path
     remains unchanged if harness persistence fails in tests or scripts.
     """
+    trace = _build_decision_trace(result)
     run = DecisionRun(
         run_id=f"{run_type}:{symbol}:{as_of}:{uuid4().hex[:8]}",
         run_type=run_type,
@@ -67,6 +165,7 @@ def record_decision_run(
             "llm_arbitration": result.get("llm_arbitration"),
             "director": result.get("director"),
             "regime": result.get("regime"),
+            "trace": trace,
         }),
         risk_decision_json=_json({
             "limit_status": result.get("limit_status"),
@@ -78,6 +177,9 @@ def record_decision_run(
             "stop_loss": result.get("stop_loss"),
             "take_profit": result.get("take_profit"),
             "position_pct": result.get("position_pct"),
+            "trader_position_pct": result.get("trader_position_pct"),
+            "portfolio_decision": result.get("portfolio_decision"),
+            "allocation_rationale": result.get("allocation_rationale"),
             "confidence": result.get("confidence"),
         }),
         notes=notes,
@@ -116,8 +218,10 @@ def get_decision_evidence(db, symbol: str, limit: int = 10) -> list[dict]:
         .limit(limit)
         .all()
     )
-    return [
-        {
+    output = []
+    for r in rows:
+        agent_outputs = _parse(r.agent_outputs_json, {})
+        output.append({
             "run_id": r.run_id,
             "run_type": r.run_type,
             "symbol": r.symbol,
@@ -127,15 +231,15 @@ def get_decision_evidence(db, symbol: str, limit: int = 10) -> list[dict]:
             "recommendation": r.recommendation,
             "composite_score": r.composite_score,
             "input_snapshot": _parse(r.input_snapshot_json, {}),
-            "agent_outputs": _parse(r.agent_outputs_json, {}),
+            "agent_outputs": agent_outputs,
+            "trace": agent_outputs.get("trace", []),
             "risk_decision": _parse(r.risk_decision_json, {}),
             "final_action": _parse(r.final_action_json, {}),
             "eval_result": _parse(r.eval_result_json, None),
             "notes": r.notes,
             "created_at": r.created_at.isoformat(timespec="seconds") if r.created_at else None,
-        }
-        for r in rows
-    ]
+        })
+    return output
 
 
 def get_research_state(db, symbol: str) -> dict:

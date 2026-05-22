@@ -192,6 +192,7 @@ cd frontend && npm install && npm run dev
 | 16:00 工作日 | 盘后信号 | 聚合信号，写入 Signal，触发推送 |
 | 周六 09:00 | 模型重训 | LightGBM Alpha 模型周训练 |
 | 周一 09:00 / 周五 15:00 | 长期分析师团 | 生成长期 label，时间可在配置页调整 |
+| 周日 11:00 | 长期反思 | `weekly_long_term_reflect` 写入分层长期记忆 |
 | 每日 00:30 / 01:00 | 记忆维护 | 备份 ai_memory，清理过期记忆 |
 
 所有任务运行在 FastAPI 进程内。服务不运行时，APScheduler 不会触发任务；kill switch 激活时，盘前、盘后和止损检查会自动跳过。

@@ -154,6 +154,93 @@ def test_scheduler_postmarket_runs_kill_switch_checks(monkeypatch):
     assert calls == [{"trade_returns": [], "latest_price_date": "2026-05-15"}]
 
 
+def test_postmarket_batch_applies_portfolio_manager_before_persist(monkeypatch):
+    from backend import scheduler
+
+    persisted = []
+    alerts = []
+
+    class FakeStock:
+        active = True
+
+        def __init__(self, symbol, name, industry):
+            self.symbol = symbol
+            self.name = name
+            self.market = "CN"
+            self.industry = industry
+
+    class FakeStockQuery:
+        def filter(self, *args):
+            return self
+
+        def all(self):
+            return [
+                FakeStock("HIGH", "高分股", "半导体"),
+                FakeStock("LOW", "低分股", "半导体"),
+            ]
+
+    class FakeDb:
+        def query(self, entity):
+            return FakeStockQuery()
+
+    analyses = {
+        "HIGH": {
+            "date": "2026-05-21",
+            "result": {
+                "recommendation": "可小仓试错",
+                "confidence": "中",
+                "composite_score": 80,
+                "position_pct": 0.15,
+            },
+            "quant_result": {"score": 80, "model": "fake"},
+            "technical_result": {"score": 80},
+            "sentiment_result": {"sentiment": 0.8},
+        },
+        "LOW": {
+            "date": "2026-05-21",
+            "result": {
+                "recommendation": "可小仓试错",
+                "confidence": "中",
+                "composite_score": 70,
+                "position_pct": 0.15,
+            },
+            "quant_result": {"score": 70, "model": "fake"},
+            "technical_result": {"score": 70},
+            "sentiment_result": {"sentiment": 0.7},
+        },
+    }
+
+    monkeypatch.setattr(scheduler, "_load_postmarket_context", lambda db, stocks: {})
+    monkeypatch.setattr(scheduler, "_run_kill_switch_checks", lambda db: None)
+    monkeypatch.setattr(scheduler, "_analyze_postmarket_stock", lambda stock, db, context: analyses[stock.symbol])
+    monkeypatch.setattr(
+        scheduler,
+        "_persist_postmarket_stock",
+        lambda stock, analysis, db: persisted.append((stock.symbol, analysis["result"].copy())),
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "_maybe_send_postmarket_alert",
+        lambda stock, result: alerts.append((stock.symbol, result.get("position_pct"))) or False,
+    )
+    monkeypatch.setattr(scheduler.settings, "portfolio_manager_enabled", True)
+    monkeypatch.setattr(scheduler.settings, "max_position_per_stock", 0.15)
+    monkeypatch.setattr(scheduler.settings, "max_position_per_sector", 0.15)
+    monkeypatch.setattr(scheduler.settings, "max_total_equity_pct", 0.80)
+
+    stats = scheduler.run_postmarket_batch(FakeDb())
+
+    by_symbol = dict(persisted)
+    assert stats["portfolio_allocated"] == 2
+    assert by_symbol["HIGH"]["position_pct"] == 0.15
+    assert by_symbol["HIGH"]["trader_position_pct"] == 0.15
+    assert by_symbol["HIGH"]["portfolio_decision"]["action"] == "open"
+    assert by_symbol["LOW"]["position_pct"] == 0.0
+    assert by_symbol["LOW"]["trader_position_pct"] == 0.15
+    assert by_symbol["LOW"]["portfolio_decision"]["action"] == "reject"
+    assert alerts == [("HIGH", 0.15), ("LOW", 0.0)]
+
+
 def test_walk_forward_module_exposes_cli_help():
     res = subprocess.run(
         [sys.executable, "-m", "backend.backtest.walk_forward", "--help"],

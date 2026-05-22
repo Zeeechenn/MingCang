@@ -1,3 +1,5 @@
+import { getPortfolioActionSummary } from './evidenceSummary'
+
 function fmtScore(value) {
   if (value === null || value === undefined) return '-'
   return Number(value).toFixed(1)
@@ -8,6 +10,7 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
   const risk = latest?.risk_decision || {}
   const agents = latest?.agent_outputs || {}
   const finalAction = latest?.final_action || {}
+  const portfolioAction = getPortfolioActionSummary(finalAction)
   const stockCoverage = coverage?.stocks?.find((row) => row.symbol === latest?.symbol) || null
 
   return (
@@ -55,7 +58,13 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
               <div>状态：{risk.limit_status || 'normal'}</div>
               <div>止损：{finalAction.stop_loss ?? '-'}</div>
               <div>止盈：{finalAction.take_profit ?? '-'}</div>
-              <div>仓位：{finalAction.position_pct ? `${(finalAction.position_pct * 100).toFixed(1)}%` : '-'}</div>
+              <div>仓位：{portfolioAction.finalPosition}</div>
+              {portfolioAction.traderPosition && (
+                <div className="text-xs text-gray-500">单股：{portfolioAction.traderPosition}</div>
+              )}
+              {portfolioAction.rationale && (
+                <div className="text-xs text-gray-500">{portfolioAction.rationale}</div>
+              )}
             </div>
           </div>
         </div>

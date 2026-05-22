@@ -6,6 +6,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from backend.agent.http_guard import agent_write_guard
 from backend.api.schemas import PositionCreate, PositionOut, PositionUpdate
 from backend.data.database import Position, Price, Stock, get_db
 
@@ -65,7 +66,11 @@ def list_positions(status: str = "open", db: Session = Depends(get_db)):
     return [position_to_schema(row, db) for row in rows]
 
 
-@router.post("/positions", response_model=PositionOut)
+@router.post(
+    "/positions",
+    response_model=PositionOut,
+    dependencies=[Depends(agent_write_guard("position.add"))],
+)
 def create_position(payload: PositionCreate, db: Session = Depends(get_db)):
     """Create a manual position and ensure the stock exists in the watch universe."""
     symbol = payload.symbol.strip().upper()
@@ -98,8 +103,16 @@ def create_position(payload: PositionCreate, db: Session = Depends(get_db)):
     return position_to_schema(pos, db)
 
 
-@router.patch("/positions/{position_id}/close", response_model=PositionOut)
-@router.post("/positions/{position_id}/close", response_model=PositionOut)
+@router.patch(
+    "/positions/{position_id}/close",
+    response_model=PositionOut,
+    dependencies=[Depends(agent_write_guard("position.close"))],
+)
+@router.post(
+    "/positions/{position_id}/close",
+    response_model=PositionOut,
+    dependencies=[Depends(agent_write_guard("position.close"))],
+)
 def close_position(
     position_id: int,
     payload: PositionUpdate | None = None,
@@ -140,7 +153,10 @@ def close_position(
     return position_to_schema(pos, db)
 
 
-@router.delete("/positions/{position_id}/closed")
+@router.delete(
+    "/positions/{position_id}/closed",
+    dependencies=[Depends(agent_write_guard("position.delete_closed"))],
+)
 def delete_closed_position(position_id: int, db: Session = Depends(get_db)):
     """Permanently delete a closed position record."""
     pos = db.query(Position).filter(Position.id == position_id).first()
@@ -153,7 +169,11 @@ def delete_closed_position(position_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted"}
 
 
-@router.patch("/positions/{position_id}", response_model=PositionOut)
+@router.patch(
+    "/positions/{position_id}",
+    response_model=PositionOut,
+    dependencies=[Depends(agent_write_guard("position.update"))],
+)
 def update_position(
     position_id: int,
     payload: PositionUpdate,
@@ -171,7 +191,10 @@ def update_position(
     return position_to_schema(pos, db)
 
 
-@router.delete("/positions/{position_id}")
+@router.delete(
+    "/positions/{position_id}",
+    dependencies=[Depends(agent_write_guard("position.close"))],
+)
 def delete_position(position_id: int, db: Session = Depends(get_db)):
     """Close a position without deleting its history."""
     close_position(position_id, db=db)
