@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).parent.parent
 
@@ -18,6 +18,11 @@ class SignalWeights:
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=BASE_DIR / ".env",
+        env_file_encoding="utf-8",
+    )
+
     # LLM 提供方（"anthropic" 或 "openai"）
     ai_provider: str = "anthropic"
 
@@ -164,10 +169,6 @@ class Settings(BaseSettings):
 
     # 调度器开关（false = 手动触发，不自动跑定时任务）
     scheduler_enabled: bool = False
-
-    class Config:
-        env_file = BASE_DIR / ".env"
-        env_file_encoding = "utf-8"
 
 
 settings = Settings()

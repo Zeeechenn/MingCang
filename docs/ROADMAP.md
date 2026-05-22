@@ -173,6 +173,21 @@
 
 ---
 
+## M12 外部数据源扩展治理 ⏳
+
+### M12.0 候选源可观测接入 ✅（2026-05-22）
+- [x] 新增 `backend/data/external_sources.py`：记录 `a-stock-data` / `ftshare-market-data` 的高价值数据集、推荐接入阶段、风险说明和治理策略。
+- [x] 新增 `GET /api/system/external-data-sources`：默认只返回 catalog，不联网、不写库、不影响调度和生产信号。
+- [x] 显式 `probe=true` 时只运行 side-effect-free 可达性探针；当前先覆盖 `ftshare` 股票列表，用于衡量远端可用性，不注册为行情 provider。
+- [x] 测试：`tests/test_external_data_sources.py` 覆盖 observe-only policy、默认离线行为和显式 probe 挂载。
+
+### M12 后续可选
+- [ ] 从 `a-stock-data` 只挑 1 个证据型数据集试点，例如两融、龙虎榜或解禁；先进入 evidence / risk review，不进入买卖评分。
+- [ ] 对任何新端点先补 provider health / PIT 时间戳 / 字段归一化 / 测试，再考虑写入 SQLite。
+- [ ] 连续观测稳定后，再决定是否加入定时任务；默认仍不改变现有 efinance / AkShare / yfinance 行情 fallback 链路。
+
+---
+
 ## M2 纸上交易验证 ⏳（旧 Phase 6.5 + 执行计划 D）
 
 详细规则与持仓作为本地验证材料维护，不进入 GitHub。

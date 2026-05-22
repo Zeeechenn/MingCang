@@ -54,6 +54,7 @@ router.include_router(memory.router)
 # Re-exports for tests that import endpoint functions directly.
 dashboard_summary = dashboard.dashboard_summary
 data_coverage = system.data_coverage
+external_data_sources = system.external_data_sources
 get_runtime_config = system.get_runtime_config
 update_runtime_config = system.update_runtime_config
 run_deep_research_endpoint = research.run_deep_research_endpoint
@@ -70,6 +71,7 @@ __all__ = [
     "router",
     "dashboard_summary",
     "data_coverage",
+    "external_data_sources",
     "get_runtime_config",
     "update_runtime_config",
     "run_deep_research_endpoint",

@@ -100,6 +100,11 @@ def test_fetch_stock_news_anspire_limits_added_items(monkeypatch):
 
     monkeypatch.setattr("requests.get", fake_get)
 
-    items = fetch_stock_news_anspire("000858", "五粮液", limit=2)
+    items = fetch_stock_news_anspire(
+        "000858",
+        "五粮液",
+        limit=2,
+        now=datetime(2026, 5, 19, 10, 0, 0),
+    )
 
     assert len(items) == 2

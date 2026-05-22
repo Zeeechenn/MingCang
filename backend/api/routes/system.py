@@ -17,6 +17,7 @@ from backend.data.database import (
     Signal,
     get_db,
 )
+from backend.data.external_sources import build_external_source_catalog, probe_external_sources
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -162,6 +163,14 @@ def data_coverage(db: Session = Depends(get_db)):
     from backend.data.quality import build_data_coverage_report
 
     return build_data_coverage_report(db)
+
+
+@router.get("/system/external-data-sources")
+def external_data_sources(probe: bool = False, symbol: str = "600519"):
+    """Return candidate external data sources and optional side-effect-free probes."""
+    payload = build_external_source_catalog()
+    payload["probes"] = probe_external_sources(symbol=symbol) if probe else {}
+    return payload
 
 
 @router.get("/system/health")
