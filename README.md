@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Status](https://img.shields.io/badge/status-M2%20paper%20trading-yellow)
 
-[Agent 使用指南](#agent-使用指南) · [产品预览](#产品预览) · [推荐使用方式](#推荐使用方式) · [注意事项](#注意事项) · [更多文档](#更多文档)
+[Agent 使用指南](#agent-使用指南) · [产品预览](#产品预览) · [推荐使用方式](#推荐使用方式) · [API Key 配置](#api-key-配置) · [注意事项](#注意事项) · [更多文档](#更多文档)
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -125,12 +125,64 @@ make agent-mcp-config
 
 把这个 MCP server 配到 Claude Desktop、Claude Code、Cursor 或其他支持 MCP 的客户端后，就可以让外层 agent 调用 StockSage 的项目上下文、记忆快照、单股上下文和健康检查工具。
 
+### API Key 配置
+
+StockSage 的外部 key 都从项目根目录 `.env` 读取；不要把 `.env`、真实 key、数据库或个人交易记录提交到 Git。最小本地运行可以只用 `AI_PROVIDER=local_cli`，不配置云 LLM key；新闻补充、推送和远程 agent 暴露再按需启用。
+
+| 配置项 | 当前用途 | 是否必需 | 获取/配置方式 |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` 时供 StockSage 内部 LLM 调用。 | 可选；选 Anthropic runtime 时必需。 | 在 Anthropic Console 创建 key，写入 `.env`。 |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | `AI_PROVIDER=openai` 时供 OpenAI 或 OpenAI-compatible endpoint 使用。 | 可选；选 OpenAI runtime 时必需。 | 在对应平台创建 key；第三方兼容接口同时填写 `OPENAI_BASE_URL`。 |
+| `TAVILY_API_KEY` | 数据库 24 小时内新闻不足时，补充实时搜索标题；`backfill_coverage --use-tavily` 和长期 A-teacher 证据搜索也会用。 | 可选备用 key。 | 到 [Tavily](https://app.tavily.com/) 创建 API key，写入 `.env`。 |
+| `ANSPIRE_API_KEY` | 盘后情感链路的严格事件型新闻补缺，优先过滤行情页、资料页和噪音来源。 | 可选备用 key。 | 到 [Anspire AI Search](https://aisearch.anspire.cn) 注册，在 API Keys 页面创建 key，写入 `.env`。 |
+| `BARK_KEY` / `BARK_SERVER` | 盘后信号、止损预警和熔断提醒的 iOS Bark 推送。 | 可选；不配置会静默跳过推送。 | 打开 Bark App 复制设备 key；默认服务为 `https://api.day.app`，自建服务时改 `BARK_SERVER`。 |
+| `STOCKSAGE_AGENT_API_KEY` | 仅 `STOCKSAGE_AGENT_MODE=remote` 时用于远程 agent/MCP/HTTP 写操作鉴权。 | 本地模式不需要；远程暴露时必需。 | 自己生成一段高强度随机字符串，写入 `.env`，并按需开启 `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED` 和 action allowlist。 |
+| `TUSHARE_TOKEN` | 当前代码未接入 Tushare provider；保留为未来 A 股数据补充入口。 | 当前不需要。 | 如未来启用 Tushare provider，再到 [Tushare](https://tushare.pro/) 获取 token 并写入 `.env`。 |
+
+推荐的个人配置流程：
+
+```bash
+cp .env.example .env
+```
+
+然后只填写你实际要启用的 key。一个常见的本地备用配置是：
+
+```env
+AI_PROVIDER=local_cli
+TAVILY_API_KEY=your_tavily_api_key_here
+ANSPIRE_API_KEY=your_anspire_api_key_here
+BARK_KEY=your_bark_device_key_here
+BARK_SERVER=https://api.day.app
+```
+
+远程部署或把 MCP/HTTP 暴露给其他机器时，再额外加：
+
+```env
+STOCKSAGE_AGENT_MODE=remote
+STOCKSAGE_AGENT_API_KEY=replace_with_a_long_random_secret
+STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED=false
+STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS=
+```
+
+配置后可先跑：
+
+```bash
+python3 -m backend.agent.cli health --pretty
+```
+
 ### 注意事项
 
 - StockSage 是研究与辅助决策工具，不构成投资建议，不自动下真实订单。
 - LLM 不直接预测价格；止盈止损来自 ATR 公式、组合约束和风险规则。
 - 本地 Codex / Claude Code 会话默认可信；远程 agent 默认只读。
 - 远程写操作必须同时配置 API key、写开关和 action allowlist。
+- API key 是 StockSage 运行时凭证，不是 Codex / Claude Code 外层对话凭证；只有运行到内部 LLM、搜索、推送或远程 agent 链路时才会消耗。
+- 数据来源与 API key 对应关系：A 股日线行情当前使用 efinance / Eastmoney / AkShare / yfinance fallback，不需要 key；A 股财务、QFII、新闻基础数据主要走 AkShare/Eastmoney，不需要 key；实时新闻补充使用 `TAVILY_API_KEY`；严格事件型新闻补缺使用 `ANSPIRE_API_KEY`；iOS 推送使用 `BARK_KEY`；远程 agent 鉴权使用 `STOCKSAGE_AGENT_API_KEY`；`TUSHARE_TOKEN` 当前未被代码调用，仅作为未来 Tushare 数据源预留。
+- 免费/试用 key 有额度限制，以下为 2026-05-23 查到的公开说明：
+  - Tavily Researcher 免费档为 1,000 API credits/月；StockSage 当前使用 basic search，每次请求约消耗 1 credit；development key 默认 100 RPM，production key 1,000 RPM，production key 需要付费计划或 PAYGO。见 [Tavily Credits & Pricing](https://docs.tavily.com/documentation/api-credits) 和 [Tavily Rate Limits](https://docs.tavily.com/documentation/rate-limits)。
+  - Anspire 公开文档说明可在控制台查看每个资源包的总额度和使用情况，但未给出固定免费额度数字；以 [Anspire 控制台](https://aisearch.anspire.cn) 的资源包页面为准。见 [Anspire 使用教程](https://open.anspire.cn/document/docs/openPlatform/)。
+  - Tushare 当前未被 StockSage 代码调用；若未来启用，官方积分表显示 120 积分档可调股票非复权日线行情，频次 50 次/分钟、8,000 次/天，其他数据需要更高积分或单独权限。见 [Tushare 积分频次对应表](https://tushare.pro/document/1?doc_id=290)。
+  - Bark 的 `api.day.app` 是推送服务入口，项目只在配置 `BARK_KEY` 后发送通知；公开教程说明 key 来自 App 测试 URL/设备 key，未承诺免费额度或 SLA。高频推送建议自建 Bark server。见 [Bark tutorial](https://github.com/Finb/Bark/blob/master/docs/en-us/tutorial.md)。
 - 交易、研究、复盘前应先读取项目上下文和项目记忆，不只依赖当前聊天窗口。
 - 长期记忆写入必须有明确用户意图；一次性问题和普通编码偏好不要写入交易系统记忆。
 - 日常批量盘后信号默认不开多 Agent，避免 25+ 股票池线性消耗 runtime LLM token。
