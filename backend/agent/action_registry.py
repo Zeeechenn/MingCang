@@ -1,11 +1,11 @@
 """Unified project action registry for chat and future agent tools."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from fastapi import HTTPException
-
 
 Handler = Callable[[dict, object], dict]
 

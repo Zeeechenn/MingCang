@@ -41,7 +41,7 @@ test:
 	PYTHONPATH=. $(PYTEST) -q
 
 frontend-test:
-	cd frontend && node --test src/*.test.js src/pages/*.test.js
+	cd frontend && node --test src/*.test.js src/components/*.test.js src/pages/*.test.js
 
 lint:
 	$(RUFF) check backend tests

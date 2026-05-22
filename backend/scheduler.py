@@ -3,6 +3,7 @@ import logging
 from copy import deepcopy
 from datetime import UTC, datetime
 from functools import wraps
+from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -431,7 +432,7 @@ def _open_position_weights(db) -> dict[str, float]:
     return {symbol: round(value / total_value * scale, 4) for symbol, value in values.items()}
 
 
-def _apply_portfolio_decision(batch_items: list[tuple[object, dict]], db) -> int:
+def _apply_portfolio_decision(batch_items: list[tuple[Any, dict]], db) -> int:
     """Apply batch-level PortfolioManager targets to per-stock signal results."""
     if not batch_items:
         return 0
@@ -495,7 +496,7 @@ def run_postmarket_batch(db) -> dict:
         "alerts": 0,
         "portfolio_allocated": 0,
     }
-    batch_items: list[tuple[object, dict]] = []
+    batch_items: list[tuple[Any, dict]] = []
     for stock in stocks:
         try:
             analysis = _analyze_postmarket_stock(stock, db, context)
