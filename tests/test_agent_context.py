@@ -114,6 +114,7 @@ def test_stock_sage_context_handles_uninitialized_database(tmp_path):
 def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_stocks):
     from backend.data.database import Position, Signal
     from backend.memory.ai_memory import remember
+    from backend.memory.stock_memory import create_stock_memory
 
     _prepare_memory_schema(test_db)
     remember(
@@ -133,6 +134,15 @@ def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_
         opened_at="2026-05-21",
         status="open",
     ))
+    create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="risk",
+        summary="300308 若缩量上冲需降低仓位。",
+        source_type="unit_test",
+        importance=4,
+        confidence=0.8,
+    )
     test_db.add(Signal(
         symbol="300308",
         date="2026-05-21",
@@ -152,6 +162,9 @@ def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_
     assert context["positions"]["open_count"] == 1
     assert context["symbol_context"]["symbol"] == "300308"
     assert context["symbol_context"]["latest_signal"]["recommendation"] == "可小仓试错"
+    assert "memory_context" in context
+    assert "300308 若缩量上冲需降低仓位" in context["memory_context"]["text"]
+    assert "300308 若缩量上冲需降低仓位" in context["symbol_context"]["memory_context"]["text"]
 
 
 def test_mcp_server_smoke_lists_tools_and_reads_health(tmp_path):
@@ -216,6 +229,7 @@ asyncio.run(main())
         "stock_sage_project_context",
         "stock_sage_memory_snapshot",
         "stock_sage_stock_context",
+        "stock_sage_memory_context",
         "stock_sage_health",
     ]
     assert '"ok": true' in data["content"][0]

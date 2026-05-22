@@ -102,10 +102,27 @@ def _memory_write(payload: dict, db) -> dict:
         ttl_days=payload.get("ttl_days"),
         force=True,
     )
+    stock_memory_id = None
+    if persisted and payload.get("category") in {"preference", "rule", "risk"}:
+        from backend.memory.stock_memory import create_stock_memory
+        memory_type = "user_preference" if payload.get("category") in {"preference", "rule"} else "risk"
+        stock_memory = create_stock_memory(
+            db,
+            symbol=payload.get("symbol"),
+            memory_type=memory_type,
+            summary=payload["value"],
+            evidence={"ai_memory_key": payload["key"], "category": payload.get("category")},
+            source_type="chat_confirmed",
+            source_ref=payload["key"],
+            importance=4,
+            confidence=0.8,
+        )
+        stock_memory_id = stock_memory["id"]
     return {
         "persisted": persisted,
         "key": payload["key"],
         "scope": payload.get("scope", "global"),
+        "stock_memory_id": stock_memory_id,
     }
 
 
@@ -175,6 +192,7 @@ _ACTIONS: dict[str, ActionDefinition] = {
             "value": {"type": "string"},
             "category": {"type": "string"},
             "scope": {"type": "string"},
+            "symbol": {"type": "string"},
             "ttl_days": {"type": "integer"},
         }),
         risk_level="high",

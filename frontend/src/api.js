@@ -302,3 +302,26 @@ export const patchMemory = (id, payload) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+
+export const getStockMemoryItems = ({ symbol = '', type = '', status = '', q = '', limit = 100 } = {}) => {
+  const params = new URLSearchParams()
+  if (symbol) params.set('symbol', symbol)
+  if (type) params.set('type', type)
+  if (status) params.set('status', status)
+  if (q) params.set('q', q)
+  params.set('limit', String(limit))
+  return request(`/memory/stock-items?${params.toString()}`)
+}
+
+export const archiveStockMemory = (id) =>
+  request(`/memory/stock-items/${id}/archive`, { method: 'POST' })
+
+export const deleteStockMemory = (id) =>
+  request(`/memory/stock-items/${id}`, { method: 'DELETE' })
+
+export const patchStockMemory = (id, payload) =>
+  request(`/memory/stock-items/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })

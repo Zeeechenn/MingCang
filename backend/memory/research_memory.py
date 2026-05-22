@@ -6,6 +6,14 @@ from datetime import datetime
 
 from backend.memory.ai_memory import remember
 
+_RISK_HINTS = ("风险", "不确定", "估值", "拥挤", "压力", "回撤")
+_EVENT_HINTS = ("事件", "公告", "政策", "订单", "业绩", "涨价", "新品")
+
+
+def _summary_clip(summary: str, limit: int = 220) -> str:
+    text = summary.strip()
+    return text if len(text) <= limit else text[:limit] + "..."
+
 
 def remember_deep_research(
     db,
@@ -16,9 +24,12 @@ def remember_deep_research(
     report_path: str,
 ) -> None:
     """Store a structured pointer to a deep-research report."""
+    from backend.memory.stock_memory import create_stock_memory
+
+    clipped_summary = _summary_clip(summary)
     payload = {
         "topic": topic,
-        "summary": summary,
+        "summary": clipped_summary,
         "symbols": symbols,
         "report_path": report_path,
         "updated_at": datetime.utcnow().isoformat(timespec="seconds"),
@@ -30,3 +41,53 @@ def remember_deep_research(
         category="deep_research",
         scope="research",
     )
+    for symbol in symbols:
+        create_stock_memory(
+            db,
+            symbol=symbol,
+            memory_type="research_pointer",
+            summary=clipped_summary,
+            evidence={"topic": topic, "symbols": symbols},
+            source_type="deep_research",
+            source_ref=report_path,
+            importance=3,
+            confidence=0.7,
+        )
+        create_stock_memory(
+            db,
+            symbol=symbol,
+            memory_type="thesis",
+            summary=f"{topic} 深度研究候选结论：{clipped_summary}",
+            evidence={"topic": topic, "report_path": report_path},
+            source_type="deep_research_candidate",
+            source_ref=f"{report_path}#thesis:{symbol}",
+            importance=3,
+            confidence=0.6,
+            status="watching",
+        )
+        if any(hint in clipped_summary for hint in _RISK_HINTS):
+            create_stock_memory(
+                db,
+                symbol=symbol,
+                memory_type="risk",
+                summary=f"{topic} 深度研究候选风险：{clipped_summary}",
+                evidence={"topic": topic, "report_path": report_path},
+                source_type="deep_research_candidate",
+                source_ref=f"{report_path}#risk:{symbol}",
+                importance=3,
+                confidence=0.6,
+                status="watching",
+            )
+        if any(hint in clipped_summary for hint in _EVENT_HINTS):
+            create_stock_memory(
+                db,
+                symbol=symbol,
+                memory_type="event",
+                summary=f"{topic} 深度研究候选事件：{clipped_summary}",
+                evidence={"topic": topic, "report_path": report_path},
+                source_type="deep_research_candidate",
+                source_ref=f"{report_path}#event:{symbol}",
+                importance=2,
+                confidence=0.5,
+                status="watching",
+            )

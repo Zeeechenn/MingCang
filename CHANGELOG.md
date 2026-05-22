@@ -5,6 +5,24 @@
 
 ---
 
+## [M14] 股票长期记忆与跨入口召回（2026-05-23）
+
+### Added
+- 新增 `stock_memory_items` 结构化股票记忆表，覆盖 thesis、risk、event、judgment、outcome、lesson、user_preference 和 research_pointer。
+- 新增统一召回入口 `build_memory_context()`，供 ChatPage、Agent CLI/MCP、项目/个股上下文、盘后信号和深度研究复用项目长期记忆。
+- 新增股票记忆 API：上下文召回、列表过滤、归档、删除和元数据 patch。
+- Admin 记忆管理新增股票长期记忆视图，支持按 symbol/type/status/关键词过滤和受控治理。
+
+### Changed
+- 深度研究不只写 `ai_memory` 研究索引，同时为相关股票写入 `research_pointer` 和低风险 thesis/risk/event 候选。
+- 盘后决策写入 `judgment` 股票记忆；每日记忆维护会基于后续价格补 outcome / lesson。
+- ChatPage 普通回答与长期研究团队模式会读取跨会话股票长期记忆，不再只依赖当前聊天窗口摘要。
+
+### Notes
+- v1 不引入 Hermes、mem0、Chroma 或向量库，继续使用 StockSage 自研 SQLite + FTS/结构化筛选记忆系统。
+
+---
+
 ## [M11] Agent-ready 运行硬化与 API Key 限额说明（2026-05-21）
 
 ### Added

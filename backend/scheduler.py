@@ -312,7 +312,7 @@ def _analyze_postmarket_stock(stock, db, context: dict) -> dict | None:
     from backend.analysis.technical import technical_score
     from backend.data.market import load_price_df
     from backend.decision.aggregator import aggregate, aggregate_v2
-    from backend.decision.memory_layered import get_layered_context
+    from backend.memory.stock_memory import build_memory_context
 
     df = load_price_df(stock.symbol, db, days=200)
     if len(df) < 60:
@@ -325,7 +325,13 @@ def _analyze_postmarket_stock(stock, db, context: dict) -> dict | None:
     date_str = df.index[-1]
     quant_result = qlib_score(df, symbol=stock.symbol, db=db)
     sentiment_result = _postmarket_news_sentiment(stock, db)
-    reflection = get_layered_context(stock.symbol, db)
+    memory_context = build_memory_context(
+        db,
+        symbol=stock.symbol,
+        query=f"{stock.symbol} {stock.name}",
+        task_type="postmarket_signal",
+    )
+    reflection = memory_context.get("text", "")
     lt_label = context["long_term_labels"].get(stock.symbol)
 
     if _use_multi_agent_decision():
@@ -717,14 +723,18 @@ def job_daily_memory_backup() -> None:
 
 @tracked_job("daily_memory_expire")
 def job_daily_memory_expire() -> None:
-    """Daily cleanup of expired ai_memory rows (M9.3)."""
+    """Daily cleanup of expired memory rows and stock-memory outcomes."""
     from backend.data.database import SessionLocal
     from backend.memory.ai_memory import expire_stale_memories
+    from backend.memory.stock_memory import update_judgment_outcomes
     db = SessionLocal()
     try:
         removed = expire_stale_memories(db)
         if removed:
             logger.info("memory expire: removed %d stale rows", removed)
+        outcomes = update_judgment_outcomes(db)
+        if outcomes:
+            logger.info("stock memory outcomes: wrote %d rows", outcomes)
     except Exception as e:
         logger.error("memory expire failed: %s", e)
     finally:

@@ -17,6 +17,7 @@ from backend.data.database import (
     ReviewRun,
     Signal,
     Stock,
+    StockMemoryItem,
 )
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "ReviewRun",
     "PendingAIAction",
     "DecisionMemoryLayered",
+    "StockMemoryItem",
     "ChatSession",
     "ChatMessage",
 ]

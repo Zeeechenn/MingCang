@@ -15,6 +15,9 @@ from backend.agent.context import (
     stock_sage_context as build_stock_sage_context,
 )
 from backend.agent.context import (
+    stock_sage_memory_context as build_stock_sage_memory_context,
+)
+from backend.agent.context import (
     stock_sage_memory_snapshot as build_stock_sage_memory_snapshot,
 )
 from backend.agent.context import (
@@ -54,6 +57,23 @@ def stock_sage_memory_snapshot(api_key: str | None = None) -> dict:
     """Read StockSage project-owned memory summary and recent entries."""
     require_agent_access("read", api_key=api_key)
     return _with_db(build_stock_sage_memory_snapshot)
+
+
+@mcp.tool()
+def stock_sage_memory_context(
+    symbol: str,
+    task_type: str | None = None,
+    query: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """Read prompt-ready StockSage memory context for one stock."""
+    require_agent_access("read", api_key=api_key)
+    return _with_db(lambda db: build_stock_sage_memory_context(
+        db,
+        symbol=symbol,
+        query=query,
+        task_type=task_type or "research",
+    ))
 
 
 @mcp.tool()

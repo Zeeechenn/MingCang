@@ -226,6 +226,25 @@
 
 ---
 
+## M14 股票长期记忆与跨入口召回 ✅（2026-05-23）
+
+### M14.0 结构化股票记忆层 ✅
+- [x] 新增 `stock_memory_items`：按 symbol / type / status / importance 记录 thesis、risk、event、judgment、outcome、lesson、user_preference、research_pointer。
+- [x] 新增统一召回入口 `build_memory_context()`：合并用户规则/偏好、股票长期记忆、研究索引和分层决策记忆，并写 `stock_memory.recall` audit。
+- [x] 深度研究写入 `research_pointer` 和低风险 thesis/risk/event 候选股票记忆；盘后决策写入 `judgment` 股票记忆；每日记忆维护补 outcome / lesson。
+
+### M14.1 跨入口接入 ✅
+- [x] ChatPage 普通回答和长期研究团队模式读取股票长期记忆，不只依赖当前窗口摘要。
+- [x] Agent CLI / MCP 新增 `memory-context` / `stock_sage_memory_context`，`project-context` / `stock-context` 增加统一记忆摘要。
+- [x] 后端新增 `/api/memory/stock/{symbol}/context` 与 `/api/memory/stock-items` 读接口，以及归档 / 删除 / 元数据 patch 写接口。
+- [x] Admin 记忆管理新增股票长期记忆视图，支持 symbol、type、status、关键词过滤和受控元数据编辑。
+
+### M14 后续可选
+- [ ] 记忆规模足够后，再评估 embedding / reranker；v1 继续保持 SQLite + 结构化筛选。
+- [ ] 为高重要度用户偏好增加更细的二次确认 UI，而不是使用浏览器 prompt。
+
+---
+
 ## M2 纸上交易验证 ⏳（旧 Phase 6.5 + 执行计划 D）
 
 详细规则与持仓作为本地验证材料维护，不进入 GitHub。

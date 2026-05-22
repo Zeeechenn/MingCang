@@ -112,6 +112,7 @@ def stock_sage_memory_snapshot(
     return {
         "database": {
             "ai_memory_count": _count(db, "ai_memory"),
+            "stock_memory_items_count": _count(db, "stock_memory_items"),
             "decision_memory_layered_count": _count(db, "decision_memory_layered"),
             "audit_log_count": _count(db, "audit_log_fts"),
             "chat_sessions_count": _count(db, "chat_sessions"),
@@ -168,6 +169,12 @@ def _latest_signal(db: Session, symbol: str) -> dict | None:
 def stock_sage_stock_context(db: Session, symbol: str) -> dict:
     """Return the project context most useful before discussing one stock."""
     try:
+        from backend.memory.stock_memory import build_memory_context
+        memory_context = build_memory_context(db, symbol=symbol, task_type="stock_context")
+    except Exception:
+        memory_context = {"symbol": symbol, "task_type": "stock_context", "text": "",
+                          "used_stock_memory_ids": [], "ai_memory_keys": []}
+    try:
         stock = db.query(Stock).filter(Stock.symbol == symbol).first()
         position = (
             db.query(Position)
@@ -222,6 +229,7 @@ def stock_sage_stock_context(db: Session, symbol: str) -> dict:
             {**row, "content_preview": _short(row.get("content"), 300)}
             for row in layered
         ],
+        "memory_context": memory_context,
     }
 
 
@@ -262,6 +270,22 @@ def stock_sage_context(
 ) -> dict:
     """Return the compact startup context coding agents should read first."""
     memory = stock_sage_memory_snapshot(db, memory_dir=memory_dir)
+    try:
+        from backend.memory.stock_memory import build_memory_context
+        memory_context = build_memory_context(
+            db,
+            symbol=symbol,
+            task_type="project_context",
+            limit=6,
+        )
+    except Exception:
+        memory_context = {
+            "symbol": symbol,
+            "task_type": "project_context",
+            "text": "",
+            "used_stock_memory_ids": [],
+            "ai_memory_keys": [],
+        }
     context = {
         "agent_mode": agent_mode(),
         "project_root": str(PROJECT_ROOT),
@@ -272,6 +296,7 @@ def stock_sage_context(
             "agents": str(PROJECT_ROOT / "AGENTS.md"),
         },
         "memory": memory["database"],
+        "memory_context": memory_context,
         "paper_trading_rules": _paper_trading_rules(memory),
         "positions": _open_positions(db),
         "watchlist": _watchlist(db),
@@ -279,3 +304,23 @@ def stock_sage_context(
     if symbol:
         context["symbol_context"] = stock_sage_stock_context(db, symbol)
     return context
+
+
+def stock_sage_memory_context(
+    db: Session,
+    *,
+    symbol: str | None = None,
+    query: str | None = None,
+    task_type: str = "research",
+    limit: int = 8,
+) -> dict:
+    """Return prompt-ready project memory for one stock or research task."""
+    from backend.memory.stock_memory import build_memory_context
+
+    return build_memory_context(
+        db,
+        symbol=symbol,
+        query=query,
+        task_type=task_type,
+        limit=limit,
+    )

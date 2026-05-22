@@ -10,6 +10,7 @@ from typing import Any
 
 from backend.agent.context import (
     stock_sage_context,
+    stock_sage_memory_context,
     stock_sage_memory_snapshot,
     stock_sage_stock_context,
 )
@@ -106,6 +107,17 @@ def _command_memory_snapshot(args: argparse.Namespace) -> dict:
     return _with_db(stock_sage_memory_snapshot)
 
 
+def _command_memory_context(args: argparse.Namespace) -> dict:
+    _read_guard(args)
+    return _with_db(lambda db: stock_sage_memory_context(
+        db,
+        symbol=args.symbol,
+        query=args.query,
+        task_type=args.task_type,
+        limit=args.limit,
+    ))
+
+
 def _command_stock_context(args: argparse.Namespace) -> dict:
     _read_guard(args)
     return _with_db(lambda db: stock_sage_stock_context(db, args.symbol))
@@ -157,6 +169,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="read project-owned memory summary",
     )
     memory.set_defaults(handler=_command_memory_snapshot)
+
+    memory_context = subparsers.add_parser(
+        "memory-context",
+        help="read prompt-ready stock memory context",
+    )
+    memory_context.add_argument("--symbol")
+    memory_context.add_argument("--query")
+    memory_context.add_argument("--task-type", default="research")
+    memory_context.add_argument("--limit", type=int, default=8)
+    memory_context.set_defaults(handler=_command_memory_context)
 
     stock = subparsers.add_parser(
         "stock-context",

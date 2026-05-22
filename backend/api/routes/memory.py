@@ -25,6 +25,15 @@ from backend.agent.http_guard import agent_write_guard
 from backend.data.database import get_db
 from backend.memory.ai_memory import list_active
 from backend.memory.audit_log import audit_search, audit_write
+from backend.memory.stock_memory import (
+    archive_stock_memory,
+    build_memory_context,
+    delete_stock_memory,
+    list_stock_memories,
+)
+from backend.memory.stock_memory import (
+    patch_stock_memory as patch_stock_memory_item,
+)
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -113,6 +122,107 @@ def memory_layered(db: Session = Depends(get_db)) -> dict:
         ],
         "count": len(rows),
     }
+
+
+@router.get("/stock/{symbol}/context")
+def stock_memory_context(
+    symbol: str,
+    task_type: str = "research",
+    q: str | None = None,
+    limit: int = Query(default=8, ge=1, le=50),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Prompt-ready structured memory context for one stock."""
+    return build_memory_context(db, symbol=symbol, query=q, task_type=task_type, limit=limit)
+
+
+@router.get("/stock-items")
+def stock_memory_items(
+    symbol: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> dict:
+    """List structured stock-memory rows."""
+    rows = list_stock_memories(
+        db,
+        symbol=symbol,
+        memory_type=type,
+        status=status,
+        q=q,
+        limit=limit,
+    )
+    return {"rows": rows, "count": len(rows)}
+
+
+class StockMemoryPatchPayload(BaseModel):
+    status: str | None = None
+    importance: int | None = None
+    ttl_days: int | None = None
+    clear_ttl: bool = False
+
+
+@router.post(
+    "/stock-items/{row_id}/archive",
+    dependencies=[Depends(agent_write_guard("stock_memory.archive"))],
+)
+def stock_memory_archive(row_id: int, db: Session = Depends(get_db)) -> dict:
+    """Archive a structured stock-memory row."""
+    try:
+        archive_stock_memory(db, row_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"stock memory id {row_id} not found",
+        ) from exc
+    return {"archived": True, "id": row_id}
+
+
+@router.patch(
+    "/stock-items/{row_id}",
+    dependencies=[Depends(agent_write_guard("stock_memory.patch"))],
+)
+def stock_memory_patch(
+    row_id: int,
+    payload: StockMemoryPatchPayload,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Patch status, importance and/or TTL for a structured stock-memory row."""
+    try:
+        row = patch_stock_memory_item(
+            db,
+            row_id,
+            status=payload.status,
+            importance=payload.importance,
+            ttl_days=payload.ttl_days,
+            clear_ttl=payload.clear_ttl,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"stock memory id {row_id} not found",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"patched": True, "id": row_id, "row": row}
+
+
+@router.delete(
+    "/stock-items/{row_id}",
+    dependencies=[Depends(agent_write_guard("stock_memory.delete"))],
+)
+def stock_memory_delete(row_id: int, db: Session = Depends(get_db)) -> dict:
+    """Delete a structured stock-memory row."""
+    try:
+        delete_stock_memory(db, row_id)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"stock memory id {row_id} not found",
+        ) from exc
+    return {"deleted": True, "id": row_id}
 
 
 class PatchPayload(BaseModel):

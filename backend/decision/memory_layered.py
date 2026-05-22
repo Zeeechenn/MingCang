@@ -94,12 +94,35 @@ def save_decision_layered(symbol: str, date: str, signal: dict, db=None) -> None
     save_medium_term(symbol, date, signal, db=db)
     if db is not None:
         from backend.memory.audit_log import audit_write
+        from backend.memory.stock_memory import create_stock_memory
         audit_write(
             db,
             "decision_memory.save",
             f"symbol={symbol} date={date} rec={signal.get('recommendation','-')} "
             f"score={signal.get('composite_score', 0):+.0f}",
             related_symbol=symbol,
+        )
+        create_stock_memory(
+            db,
+            symbol=symbol,
+            memory_type="judgment",
+            summary=(
+                f"{date} 建议{signal.get('recommendation','-')}，"
+                f"综合分{signal.get('composite_score', 0):+.0f}，"
+                f"仓位{(signal.get('position_pct') or 0) * 100:.1f}%"
+            ),
+            evidence={
+                "date": date,
+                "recommendation": signal.get("recommendation"),
+                "composite_score": signal.get("composite_score"),
+                "stop_loss": signal.get("stop_loss"),
+                "take_profit": signal.get("take_profit"),
+                "veto_reason": signal.get("veto_reason"),
+            },
+            source_type="postmarket_signal",
+            source_ref=f"{symbol}:{date}",
+            importance=3,
+            confidence=0.6,
         )
 
 

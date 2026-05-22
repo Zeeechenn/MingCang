@@ -130,6 +130,7 @@ def _detect_action(message: str, db: Session) -> tuple[str, dict] | None:
                 "value": body,
                 "category": category,
                 "scope": "global",
+                "symbol": symbol,
             }
 
     if not symbol:
@@ -187,13 +188,29 @@ def _chat_context_for_session(db: Session, session_id: str, tail_limit: int = 12
 
 def _context_answer(message: str, db: Session, session_id: str | None = None) -> AIChatResponse:
     """Deterministic fallback answer using internal StockSage resources."""
+    symbol = _symbol_from_text(message)
     stocks = db.query(Stock).filter(Stock.active).limit(6).all()
     positions = db.query(Position).filter(Position.status == "open").limit(6).all()
     parts = ["我会在 StockSage 项目内回答：已读取自选股、持仓、信号、复盘和研究记忆。"]
+    used_resources = ["stocks", "positions", "project_research"]
     if session_id:
         chat_context = _chat_context_for_session(db, session_id)
         if chat_context:
             parts.append("本窗口上下文：\n" + chat_context)
+    if symbol:
+        try:
+            from backend.memory.stock_memory import build_memory_context
+            memory_context = build_memory_context(
+                db,
+                symbol=symbol,
+                query=message,
+                task_type="chat",
+            )
+        except Exception:
+            memory_context = {"text": ""}
+        if memory_context.get("text"):
+            parts.append("项目长期记忆：\n" + memory_context["text"])
+            used_resources.append("stock_memory")
     if stocks:
         parts.append("当前自选股包括：" + "、".join(f"{s.name or s.symbol}({s.symbol})" for s in stocks))
     if positions:
@@ -201,7 +218,7 @@ def _context_answer(message: str, db: Session, session_id: str | None = None) ->
     parts.append("需要联网调研时，我会优先走项目内新闻、行情、深度研究和长期研究团队链路。")
     return AIChatResponse(
         answer="\n".join(parts),
-        used_resources=["stocks", "positions", "project_research"],
+        used_resources=used_resources,
     )
 
 
@@ -290,10 +307,21 @@ def _long_term_answer(message: str, db: Session) -> AIChatResponse:
     label = LongTermTeam().run(stock.symbol, stock.name, db)
     save_label(label, db)
     findings = "；".join(label.key_findings[:3]) if label.key_findings else "暂无关键发现"
+    try:
+        from backend.memory.stock_memory import build_memory_context
+        memory_context = build_memory_context(
+            db,
+            symbol=stock.symbol,
+            query=message,
+            task_type="long_term_team",
+        )
+    except Exception:
+        memory_context = {"text": ""}
+    memory_text = f"\n项目长期记忆：\n{memory_context['text']}" if memory_context.get("text") else ""
     return AIChatResponse(
-        answer=f"{stock.name}({stock.symbol}) 长期研究团队结论：{label.label}，评分 {label.score:.1f}。{findings}",
+        answer=f"{stock.name}({stock.symbol}) 长期研究团队结论：{label.label}，评分 {label.score:.1f}。{findings}{memory_text}",
         citations=[f"long_term:{stock.symbol}:{label.date}"],
-        used_resources=["long_term_team"],
+        used_resources=["long_term_team"] + (["stock_memory"] if memory_context.get("text") else []),
     )
 
 

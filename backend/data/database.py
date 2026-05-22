@@ -281,6 +281,25 @@ class DecisionMemoryLayered(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class StockMemoryItem(Base):
+    """Structured long-term memory for stock research and decision experience."""
+    __tablename__ = "stock_memory_items"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    memory_type: Mapped[str] = mapped_column(String, index=True)
+    summary: Mapped[str] = mapped_column(Text)
+    evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(String, index=True)
+    source_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    importance: Mapped[int] = mapped_column(Integer, default=3)
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    status: Mapped[str] = mapped_column(String, default="active", index=True)
+    ttl_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class ChatSession(Base):
     """Project AI chat window; memory is scoped to this session only."""
     __tablename__ = "chat_sessions"
@@ -356,6 +375,32 @@ def _ensure_runtime_schema() -> None:
             CREATE VIRTUAL TABLE IF NOT EXISTS audit_log_fts USING fts5(
                 timestamp, event_type, content, related_symbol, related_scope
             )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS stock_memory_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT,
+                memory_type TEXT,
+                summary TEXT NOT NULL,
+                evidence_json TEXT,
+                source_type TEXT,
+                source_ref TEXT,
+                importance INTEGER DEFAULT 3,
+                confidence REAL DEFAULT 0.5,
+                status TEXT DEFAULT 'active',
+                ttl_days INTEGER,
+                created_at DATETIME,
+                updated_at DATETIME,
+                last_used_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_stock_memory_symbol_type
+            ON stock_memory_items(symbol, memory_type)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_stock_memory_status_updated
+            ON stock_memory_items(status, updated_at)
         """))
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS decision_runs (

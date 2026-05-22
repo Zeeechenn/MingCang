@@ -20,6 +20,7 @@
 | M9 | 记忆系统接入与治理 | ✅ 大部分完成 |
 | M10 | 运行可靠性与产品化优化 | ✅ M10.0-M10.4 完成，M10.5 后置 |
 | M11 | Agent-Ready 本地/远程双模式接口 | ✅ 初版完成，本地 agent 默认信任，远程模式显式启用 |
+| M14 | 股票长期记忆与跨入口召回 | ✅ 初版完成，SQLite 结构化召回 |
 
 ---
 
@@ -66,6 +67,7 @@
 | 周六 09:00 | 模型重训 | LightGBM Alpha 模型周训练 |
 | 周一 09:00 / 周五 15:00 | 长期团 | 长期分析师团 label 生成；日期与时间可在配置页调整 |
 | 周日 11:00 | 长期反思 | `weekly_long_term_reflect` 写入分层长期记忆 |
+| 每日 01:00 | 记忆维护 | 清理过期 `ai_memory` 并为股票判断补 outcome / lesson |
 
 > 所有任务跑在 FastAPI 进程内（APScheduler），服务不运行则任务不触发。
 > M3.4 kill switch 激活时，premarket / postmarket / stoploss_check 自动跳过。

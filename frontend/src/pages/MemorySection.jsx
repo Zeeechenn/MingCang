@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  archiveStockMemory,
   deleteMemory,
+  deleteStockMemory,
   getMemoryAudit,
   getMemoryLayered,
   getMemoryList,
   getMemoryOverview,
+  getStockMemoryItems,
   patchMemory,
+  patchStockMemory,
   pinMemory,
 } from '../api'
 
@@ -143,6 +147,100 @@ function MemoryTable({ rows, onChange }) {
   )
 }
 
+function StockMemoryRow({ row, onChange }) {
+  const [busy, setBusy] = useState(false)
+
+  const run = async (fn) => {
+    setBusy(true)
+    try {
+      await fn()
+      await onChange()
+    } catch (e) {
+      window.alert(String(e.message || e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onArchive = () => {
+    if (!window.confirm(`归档股票记忆 #${row.id}？`)) return
+    run(() => archiveStockMemory(row.id))
+  }
+  const onDelete = () => {
+    if (!window.confirm(`删除股票记忆 #${row.id}？`)) return
+    run(() => deleteStockMemory(row.id))
+  }
+  const onChangeTTL = () => {
+    const raw = window.prompt(`新 TTL（天）。留空清除 TTL；当前 ${row.ttl_days ?? '永不过期'}`, row.ttl_days ?? '')
+    if (raw === null) return
+    if (raw === '') {
+      run(() => patchStockMemory(row.id, { clear_ttl: true }))
+    } else {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n < 0) return window.alert('无效 TTL 数值')
+      run(() => patchStockMemory(row.id, { ttl_days: n }))
+    }
+  }
+  const onChangeImportance = () => {
+    const raw = window.prompt('重要度 1-5', row.importance ?? 3)
+    if (raw === null) return
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n < 1 || n > 5) return window.alert('重要度必须是 1-5')
+    run(() => patchStockMemory(row.id, { importance: n }))
+  }
+  const onChangeStatus = () => {
+    const next = window.prompt('status: active / watching / validated / refuted / archived', row.status ?? 'active')
+    if (next === null || next === row.status) return
+    run(() => patchStockMemory(row.id, { status: next }))
+  }
+
+  return (
+    <tr className="border-t border-stone-300 align-top text-sm dark:border-slate-700">
+      <td className="px-3 py-2 font-mono text-xs">{row.symbol ?? '全局'}</td>
+      <td className="px-3 py-2 font-mono text-xs">{row.memory_type}</td>
+      <td className="px-3 py-2 font-mono text-xs">{row.status}</td>
+      <td className="px-3 py-2 text-xs text-stone-500 dark:text-slate-400" title={row.summary}>{truncate(row.summary, 110)}</td>
+      <td className="px-3 py-2 font-mono text-xs">{row.importance}</td>
+      <td className="px-3 py-2 font-mono text-xs">{row.ttl_days ?? '∞'}</td>
+      <td className="px-3 py-2 font-mono text-[11px] text-stone-500 dark:text-slate-400">{row.updated_at?.slice(0, 19) || '—'}</td>
+      <td className="px-3 py-2 whitespace-nowrap text-xs">
+        <button type="button" disabled={busy} onClick={onArchive} className="mr-2 underline">归档</button>
+        <button type="button" disabled={busy} onClick={onChangeTTL} className="mr-2 underline">TTL</button>
+        <button type="button" disabled={busy} onClick={onChangeImportance} className="mr-2 underline">重要度</button>
+        <button type="button" disabled={busy} onClick={onChangeStatus} className="mr-2 underline">status</button>
+        <button type="button" disabled={busy} onClick={onDelete} className="text-red-600 underline dark:text-red-400">删除</button>
+      </td>
+    </tr>
+  )
+}
+
+function StockMemoryTable({ rows, onChange }) {
+  if (rows.length === 0) {
+    return <div className={`${INSET} p-4 text-sm text-stone-500 dark:text-slate-400`}>无匹配股票记忆。</div>
+  }
+  return (
+    <div className={`${INSET} overflow-x-auto`}>
+      <table className="w-full text-left">
+        <thead className="text-[10px] uppercase tracking-[0.18em] text-stone-500 dark:text-slate-400">
+          <tr>
+            <th className="px-3 py-2">symbol</th>
+            <th className="px-3 py-2">type</th>
+            <th className="px-3 py-2">status</th>
+            <th className="px-3 py-2">summary</th>
+            <th className="px-3 py-2">重要度</th>
+            <th className="px-3 py-2">TTL</th>
+            <th className="px-3 py-2">updated</th>
+            <th className="px-3 py-2">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => <StockMemoryRow key={r.id} row={r} onChange={onChange} />)}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function LayeredPanel({ rows }) {
   if (!rows || rows.length === 0) {
     return <div className={`${INSET} p-3 text-xs text-stone-500 dark:text-slate-400`}>暂无分层决策记忆（medium/long）。</div>
@@ -239,29 +337,36 @@ function AuditPanel() {
 export default function MemorySection() {
   const [overview, setOverview] = useState(null)
   const [rows, setRows] = useState([])
+  const [stockRows, setStockRows] = useState([])
   const [layered, setLayered] = useState([])
   const [scope, setScope] = useState('')
   const [category, setCategory] = useState('')
   const [q, setQ] = useState('')
+  const [stockSymbol, setStockSymbol] = useState('')
+  const [stockType, setStockType] = useState('')
+  const [stockStatus, setStockStatus] = useState('')
+  const [stockQ, setStockQ] = useState('')
   const [busy, setBusy] = useState(false)
 
   const refresh = useCallback(async () => {
     setBusy(true)
     try {
-      const [o, l, le] = await Promise.all([
+      const [o, l, le, sm] = await Promise.all([
         getMemoryOverview(),
         getMemoryList({ scope, category, q }),
         getMemoryLayered(),
+        getStockMemoryItems({ symbol: stockSymbol, type: stockType, status: stockStatus, q: stockQ }),
       ])
       setOverview(o)
       setRows(l.rows || [])
       setLayered(le.rows || [])
+      setStockRows(sm.rows || [])
     } catch (e) {
       console.error(e)
     } finally {
       setBusy(false)
     }
-  }, [scope, category, q])
+  }, [scope, category, q, stockSymbol, stockType, stockStatus, stockQ])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -293,6 +398,26 @@ export default function MemorySection() {
       <section className="space-y-3">
         <h3 className={LABEL}>分层决策记忆（只读）</h3>
         <LayeredPanel rows={layered} />
+      </section>
+
+      <section className="space-y-3">
+        <h3 className={LABEL}>股票长期记忆（受控编辑：归档 / 删除 / 改 TTL / 改重要度 / 改 status。**不**支持编辑原文）</h3>
+        <div className={`${PANEL} p-4`}>
+          <div className="mb-3 grid gap-2 sm:grid-cols-[120px_150px_150px_1fr_auto]">
+            <input type="text" placeholder="symbol" value={stockSymbol} onChange={(e) => setStockSymbol(e.target.value)}
+              className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100" />
+            <input type="text" placeholder="type" value={stockType} onChange={(e) => setStockType(e.target.value)}
+              className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100" />
+            <input type="text" placeholder="status" value={stockStatus} onChange={(e) => setStockStatus(e.target.value)}
+              className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100" />
+            <input type="text" placeholder="summary / evidence 关键词" value={stockQ} onChange={(e) => setStockQ(e.target.value)}
+              className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100" />
+            <button type="button" onClick={refresh} disabled={busy} className="rounded-sm bg-cyan-700 px-3 py-1 text-xs font-semibold text-white dark:bg-cyan-400 dark:text-slate-950">
+              {busy ? '加载…' : '刷新'}
+            </button>
+          </div>
+          <StockMemoryTable rows={stockRows} onChange={refresh} />
+        </div>
       </section>
 
       <section className="space-y-3">

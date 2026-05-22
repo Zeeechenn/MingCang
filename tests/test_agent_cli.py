@@ -53,6 +53,31 @@ def test_agent_cli_context_commands_emit_json(tmp_path):
         assert isinstance(json.loads(result.stdout), dict)
 
 
+def test_agent_cli_memory_context_reads_project_memory(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    db_url = f"sqlite:///{tmp_path / f'memory-context-{uuid.uuid4().hex}.db'}"
+
+    setup = _run_cli(repo, db_url, "health")
+    assert setup.returncode == 0, setup.stderr
+
+    write = _run_cli(
+        repo,
+        db_url,
+        "action",
+        "memory.write",
+        "--payload-json",
+        '{"key":"pref:risk","value":"用户偏好：不追高","category":"preference","scope":"global"}',
+        "--confirm",
+    )
+    assert write.returncode == 0, write.stderr
+
+    result = _run_cli(repo, db_url, "memory-context", "--symbol", "300308")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert "用户偏好：不追高" in payload["text"]
+
+
 def test_agent_cli_action_without_confirm_returns_metadata_without_writing(tmp_path):
     repo = Path(__file__).resolve().parents[1]
     db_path = tmp_path / f"dry-run-{uuid.uuid4().hex}.db"
