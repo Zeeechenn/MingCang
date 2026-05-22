@@ -125,4 +125,4 @@ curl http://localhost:8000/api/signals/eval/600519?days=60
 - 项目记忆入口在 `backend/agent/context.py`，MCP 启动入口为 `PYTHONPATH=. python3 -m backend.agent.mcp_server`；未初始化数据库时 health/context 返回空状态，不抛出缺表错误。
 - 盘后批处理已接入 Portfolio Manager：单股信号先生成，再统一做组合层裁剪；最终仓位写入 `position_pct`，原始单股仓位保留在 `trader_position_pct`，裁剪原因进入 `portfolio_decision` / evidence。
 - Chat action 已统一走 Action Registry；远程 HTTP 写操作复用 agent guard，支持 API key、写开关和 action allowlist。
-- 云 runtime provider 限额见 README 的 "云 Runtime Provider 限额" 表，额度以各平台控制台为准。
+- Runtime LLM/API key 边界见 README 的 "注意事项" 与 `AGENTS.md`；云服务额度仍以各平台控制台为准。

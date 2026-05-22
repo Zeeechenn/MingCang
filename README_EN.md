@@ -1,6 +1,6 @@
 # StockSage
 
-Personal A-share decision-support system: local data foundation, quant/technical indicators, LLM news sentiment, multi-agent risk control and memory governance, producing auditable stock-selection and position suggestions. StockSage is advisory only. It does not predict prices, does not place orders and does not make the final investment decision for the user.
+An agent-ready personal A-share research and decision-support workspace. StockSage combines a local data foundation, multi-source market/news feeds, technical and sentiment analysis, long-term research, portfolio risk control and auditable memory into one traceable research system. It supports research, reviews and risk alerts only; it does not predict prices, place orders or make the final investment decision for the user.
 
 ![Tests](https://img.shields.io/badge/tests-300%20pytest%20%2B%209%20node-brightgreen)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
@@ -8,7 +8,7 @@ Personal A-share decision-support system: local data foundation, quant/technical
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Status](https://img.shields.io/badge/status-M2%20paper%20trading-yellow)
 
-[Product Preview](#product-preview) · [Features](#feature-highlights) · [Quick Start](#quick-start) · [API Key Limits](#api-key-limits) · [Architecture](#architecture) · [Docs](#documentation) · [Roadmap](#roadmap)
+[Product Preview](#product-preview) · [Agent Usage Guide](#agent-usage-guide) · [Core Capabilities](#core-capabilities) · [Recommended Usage](#recommended-usage) · [Headless Usage](#headless-usage) · [Cautions](#cautions) · [More Docs](#more-docs)
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -16,146 +16,121 @@ Personal A-share decision-support system: local data foundation, quant/technical
 
 ## Overview
 
-StockSage is a personal A-share research and decision-support workstation. It stores market data, news, fundamentals, QFII holdings, index data and manual positions in local SQLite, then combines technical signals, LLM news sentiment, long-term analyst labels, risk management and portfolio constraints into auditable trading suggestions.
+StockSage is a local-first personal A-share research system and an already agentized investment-research kernel. It stores market data, news, fundamentals, QFII holdings, index data, positions, reviews and long-term memory in local SQLite, then combines technical indicators, LLM news sentiment, a long-term analyst team, Research Director, Trader, Risk Manager and Portfolio Manager into auditable suggestions.
 
-The current default production profile is `new_framework`: 60% technical signal, 40% LLM sentiment and 0% Qlib quant weight. The Qlib/LightGBM engineering pipeline is available, but recent expanded validation did not pass the alpha gate, so quant remains disabled in production.
+The project is intentionally not about asking an LLM to guess price moves. Its job is to keep data, evidence, risk constraints and historical memory in one workspace: sync data before market open, generate signals after close, check stop-loss risk during the session, refresh long-term labels weekly, and let the user explicitly trigger single-stock research, sector deep research, paper-trading statistics and project-memory retrieval.
+
+The Agent-ready local/remote interface is now in place. Local agents such as Codex or Claude Code can read project context, inspect memory, run tests, produce reviews and call MCP tools. Remote agents are read-only by default and require explicit API-key auth, write enablement and an action allowlist. The product direction is to evolve from the current Web console into a fuller client experience, making daily research, alerts, reviews and agent collaboration feel natural in a personal workflow.
 
 ## Product Preview
 
 ![StockSage System Architecture](docs/assets/architecture.svg)
 
-## Architecture
+## Agent Usage Guide
 
-1. Data sources: AkShare, fundamentals/QFII, market-cap and flow snapshots, news feeds, manual positions and runtime config.
-2. Storage: SQLite keeps prices, news, signals, positions, reviews, chat history and memory. Point-in-time access reduces look-ahead bias.
-3. Analysis: technical indicators, news source audit, LLM sentiment, offline Qlib validation, long-term analyst team and manual deep research.
-4. Decision: `backend/decision/aggregator.py` uses lightweight aggregation for daily signals by default; the multi-agent pipeline is reserved for explicit single-stock research, long-term research and experiment reviews.
-5. Delivery: FastAPI and React expose the dashboard; Bark sends buy-signal and 14:30 stop-loss alerts.
-6. Governance: ai_memory, layered decision memory, audit_log_fts, chat summaries, TTL cleanup and daily backups.
+StockSage Agent is a collaborative research assistant for personal A-share research. It is designed for agent clients such as Codex, Claude Code, Claude Desktop, Cursor and other tools that can run local commands or connect to MCP tools. It can read project data and memory, assist with single-stock research, topic research, long-term research, deep research, reviews and project maintenance. It is not an automated trading bot.
 
-## Current Status
+The recommended external-user flow is to send this GitHub page or repository URL to Codex / Claude Code and ask the agent to download, install, configure and run the project:
 
-| Milestone | Name | Status |
-|---|---|---|
-| M0 | System skeleton | Done |
-| M1 | Serious validation gates | Done, Sharpe 1.36 / max drawdown 8.6% / profit-loss ratio 2.78 |
-| M2 | Paper trading validation | In progress |
-| M3 | Credibility audit layer | Done, DSR / PBO / walk-forward / PIT / kill switch |
-| M4 | Multi-agent decision layer | Mostly done; LangGraph and full FinMem replacement are deferred |
-| M5 | Automated execution | Deferred until paper trading and holdout validation pass |
-| M6 | Iteration and expansion | Current scope done, including quant infrastructure and frontend workspace |
-| M7 | Engineering and open-source readiness | Done, with CI, Docker, Makefile, pyproject and documentation |
-| M8 | Deep research and source audit | Done, manual-only and outside daily signals |
-| M9 | Memory integration and governance | Mostly done, including memory admin, audit, summaries and backups |
-| M10 | Reliability and product polish | M10.0-M10.4 done; M10.5 deferred |
+```text
+Please read this project homepage and AGENTS.md, then download and run StockSage.
+First explain which API keys I need to configure. Then initialize the database and start the backend/frontend or MCP tools.
+Before running commands, list what you plan to execute. Ask for confirmation before writing files, installing dependencies, starting services or calling paid APIs.
+```
 
-## Feature Highlights
+## Core Capabilities
 
-**Data and Coverage**
+| Capability | Description |
+|---|---|
+| Single-stock research | Combine one stock's signals, news, positions, long-term labels, historical reviews and project memory. |
+| Topic research | Generate structured reports for an industry, theme, value chain or group of stocks. |
+| Long-term research | Run the long-term analyst team across sector thesis, financial quality, prosperity indicators and QFII flow. |
+| Deep research | Coordinate industry researcher, company researcher, risk reviewer, source auditor and report writer roles. |
+| Memory | Read and write long-term rules, risk preferences, research indexes, chat summaries, layered decision memory and audit logs. |
+| Reviews and paper trading | Analyze test results, signal attribution, win rate, drawdown, exit reasons and risk-rule execution. |
+| Project maintenance | Run tests, inspect data coverage, check scheduler / API / config health, update docs and diagnose runtime issues. |
 
-- A-share market data, stock news and index synchronization.
-- Fundamentals, QFII holdings, market cap, float market cap and fund-flow features.
-- Provider registry with fallback and health tracking.
-- Data coverage snapshot for active stocks, price coverage, two-year price coverage, fundamentals coverage, 24h news coverage and signal date range.
-- Point-in-time reads for training and inference to reduce look-ahead risk.
+Common MCP tools:
 
-**Signals and Analysis**
+| Tool | Purpose |
+|---|---|
+| `stock_sage_project_context` | Project runtime overview, config, positions, watchlist and memory summary. |
+| `stock_sage_memory_snapshot` | `ai_memory`, layered memory, audit log and chat-summary status. |
+| `stock_sage_stock_context` | Single-stock signals, news, positions, long-term labels and memory context. |
+| `stock_sage_health` | Agent mode, database, dependency and permission health. |
 
-- Technical factors: ATR, RSI, MA, RSRS and regime filters.
-- LLM news sentiment scoring with rationale.
-- News source audit by source, URL traceability, freshness and duplicate titles.
-- Qlib/LightGBM pipeline with technical, PIT fundamental and market-flow features.
-- Backtrader, walk-forward, holdout, DSR, PBO, IC significance, threshold sweep and exit experiments.
+## Recommended Usage
 
-**Multi-Agent Decision Making**
+**Option A: hand the project to Codex / Claude Code**
 
-- Daily and batch signals keep multi-agent off by default to avoid linear runtime LLM token spend across 25+ stock pools.
-- Explicit research mode can enable the multi-agent pipeline for single-stock research, long-term research or experiment reviews.
-- Long-term analyst team: sector thesis, Piotroski quality, prosperity indicators and QFII outflow veto.
-- Researcher: bull/bear multi-round debate with graceful fallback.
-- Research Director: quality review and debate-topic selection.
-- Trader: converts evidence into trading suggestions.
-- Risk Manager: risk veto, ATR take-profit/stop-loss and kill-switch constraints.
-- Portfolio Manager: allocation under single-stock, sector and total exposure limits.
+1. Send the GitHub homepage or repository URL to Codex / Claude Code.
+2. Ask the agent to read `README.md` and [AGENTS.md](AGENTS.md) before running anything.
+3. Configure `.env`, for example `AI_PROVIDER=local_cli`, or set runtime keys such as `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
+4. Let the agent install dependencies, initialize the database, start services or MCP, and approve privileged steps when prompted.
+5. Use natural-language tasks such as:
 
-**Frontend Workspace**
+```text
+Read project memory, then research whether 300308 is still worth following.
+Run an AI computing value-chain topic research report covering 300308 and 300394.
+Summarize test-2 paper-trading performance and identify whether risk rules need adjustment.
+Check current data coverage and scheduler health.
+```
 
-- Pulse dashboard with watchlist, latest signals, market snapshot, real positions and activity feed.
-- Stock detail page with chart, latest signal, news, evidence, reviews and long-term labels.
-- Review center for daily and long-term reviews with Markdown report rendering.
-- Position manager with stock search, open/closed positions and realized PnL.
-- AI chat with session isolation, confirmation workflow, Markdown replies and SSE streaming.
-- Admin page for weights, exposure limits, data backfill parameters, review schedules and memory management.
-
-**Memory and Audit**
-
-- `ai_memory` for long-term rules, risk preferences, research indexes and user preferences.
-- Layered decision memory for symbol-level medium-term notes and global long-term reflections.
-- `audit_log_fts` for searchable memory, research, recall, backup and action events.
-- `should_remember()` heuristic before long-term memory writes.
-- User confirmation before chat-triggered memory writes.
-- TTL cleanup, daily backup and chat-window summarization.
-
-**Manual Deep Research**
-
-- CLI/API deep research flow with industry researcher, company researcher, risk reviewer, source auditor and report writer.
-- Default report path: `docs/research/YYYY-MM-DD-topic.md`.
-- Deep research writes an indexed memory pointer but does not create a `Signal` or participate in daily postmarket signals.
-
-## Quick Start
+**Option B: start locally by hand**
 
 ```bash
-# 1. Clone and install dependencies
 git clone <repo-url> && cd stock-sage
 pip install ".[dev]"
-
-# 2. Configure environment variables
 cp .env.example .env
-# Fill ANTHROPIC_API_KEY and optionally BARK_KEY
-
-# 3. Initialize database
 python3 backend/data/database.py
-
-# 4. Start backend
 PYTHONPATH=. uvicorn backend.main:app --reload
-
-# 5. Start frontend in another terminal
 cd frontend && npm install && npm run dev
 ```
 
-Open http://localhost:5173 for the dashboard. API docs are available at http://localhost:8000/docs.
+Open http://localhost:5173 for the Web console. API docs are available at http://localhost:8000/docs.
 
-## API Key Limits
+**Option C: start only the Agent MCP server**
 
-This is a 2026-05-21 snapshot from official docs. Free, trial and promotional quotas can change; always treat each provider dashboard as the source of truth.
+```bash
+pip install -e ".[agent]"
+PYTHONPATH=. python3 -m backend.agent.mcp_server
+```
 
-| Variable | Purpose | Free/trial limit | StockSage guidance |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | Default LLM provider | Anthropic API has no stable daily free-call allowance. Limits depend on account tier, credit balance and rate limits shown in Claude Console. | Set a monthly spend limit and avoid unbounded LLM calls in batch jobs. |
-| `OPENAI_API_KEY` | OpenAI or compatible provider | OpenAI API limits vary by organization, project and model. There is no project-safe daily free-call number to hardcode. | Required only when `AI_PROVIDER=openai`; set a project hard cap. |
-| `TUSHARE_TOKEN` | Optional A-share data source | 120-point tier: 50 RPM and 8000 calls/day, only non-adjusted stock daily prices. 2000-point tier: 200 RPM and 100000 calls/day/API. 5000-point tier: 500 RPM and no regular-data daily cap. | Low/free tiers are suitable only for daily price supplementation. Fundamentals, flow data, HK/US, minute data and news usually need higher points or separate permissions. |
-| `TAVILY_API_KEY` | Optional realtime news supplement | Free Researcher plan: 1000 API credits/month. Basic search costs 1 credit/request; advanced search costs 2. Development keys default to 100 RPM. | Basic search averages about 33 requests/day across a month. StockSage calls Tavily only when local 24h news is sparse. |
-| `ANSPIRE_API_KEY` | Optional strict news backfill | Official pages currently show both 2500 signup points and a 500-call promotion. Standard search is listed at RMB 30/1000 calls. | Do not assume a daily reset. Plan around the console usage page and one-time trial balance. |
-| `BARK_KEY` | Optional iOS push | Not a market-data or LLM API key. StockSage uses it only for buy-signal and stop-loss alerts. | Push failures are logged/audited and do not block signal persistence. |
-| `STOCKSAGE_AGENT_API_KEY` | Remote agent auth | Self-generated project access key, with no third-party quota. | Required only for remote agent mode; local Codex/Claude sessions do not need it. |
+## Headless Usage
 
-Sources: Anthropic [rate limits](https://docs.anthropic.com/en/api/rate-limits), OpenAI [rate limits](https://help.openai.com/en/articles/5955598) / [usage tiers](https://platform.openai.com/docs/guides/rate-limits), Tushare [points and rate table](https://tushare.pro/document/1?doc_id=290), Tavily [credits](https://docs.tavily.com/documentation/api-credits) / [rate limits](https://docs.tavily.com/documentation/rate-limits), Anspire [product page](https://open.anspire.cn/document/docs/searchProduce/) / [best practice](https://open.anspire.cn/document/docs/bestPractice/).
+If a user swaps in their own API keys but does not open the Web frontend, StockSage is still usable. The important distinction is that API keys are credentials for StockSage runtime calls to models, search or data providers; they do not create an interactive chat interface by themselves. Conversation, permission prompts and tool orchestration come from an outer agent client such as Codex or Claude Code.
 
-## Common Commands
-
-| Command | Purpose |
+| Entry | Best for |
 |---|---|
-| `make install` | Install Python dev dependencies and frontend packages |
-| `make dev` | Start backend dev server |
-| `make build` | Build frontend |
-| `make test` | Run backend pytest suite |
-| `make frontend-test` | Run frontend node:test suite |
-| `make verify` | Run lint, typecheck, backend tests, frontend tests and frontend build |
-| `make coverage-snapshot` | Print current data coverage snapshot |
-| `make paper-stats` | Compute paper trading statistics |
-| `make docker-up` | Start services with docker compose |
+| Codex / Claude Code + MCP | Closest natural-language experience: let the agent read the project, run commands, call tools and explain results. |
+| FastAPI + curl / HTTP client | Scripted access to endpoints such as `/api/ai/chat` and `/api/research/deep/run`. |
+| CLI scripts | Deterministic jobs such as deep research, coverage snapshots and paper-trading statistics. |
 
-## Documentation
+Examples:
+
+```bash
+PYTHONPATH=. python3 -m backend.research.deep_research \
+  --topic "AI算力产业链" \
+  --symbols 300308,300394
+
+PYTHONPATH=. python3 -m backend.tools.coverage_snapshot
+PYTHONPATH=. python3 -m paper_trading.stats
+```
+
+The project does not currently include a standalone `stocksage chat` terminal REPL. For Claude-Code-style terminal conversation, use Codex / Claude Code as the outer agent and let it connect to this project's MCP server or call project commands.
+
+## Cautions
+
+- StockSage is for research and decision support, not investment advice, and it must not place real orders.
+- LLMs do not directly predict prices; take-profit and stop-loss levels come from ATR formulas, portfolio constraints and risk rules.
+- Local Codex / Claude Code sessions are trusted by default; remote agents are read-only by default.
+- Remote writes require an API key, the remote write switch and an action allowlist.
+- Before trading, research or reviews, read project context and project memory instead of relying only on the current chat.
+- Long-term memory writes require explicit user intent; one-off questions and ordinary coding preferences should not enter trading-system memory.
+- Daily postmarket batch signals keep multi-agent off by default to avoid linear runtime LLM token spend across 25+ stocks.
+- `.env`, databases, model files, personal trading records and real keys should never enter Git.
+
+## More Docs
 
 | Document | Description |
 |---|---|
@@ -165,29 +140,6 @@ Sources: Anthropic [rate limits](https://docs.anthropic.com/en/api/rate-limits),
 | [docs/ROADMAP.md](docs/ROADMAP.md) | In-progress work, roadmap and deferred items |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, test expectations and contribution flow |
 | [AGENTS.md](AGENTS.md) | Codex / Claude Code / MCP local agent instructions |
-
-## Roadmap
-
-**Near term**
-
-- Finish the M2 test-1 closing summary and start the two-month test-2 validation.
-- Compare real paper-trading results against system suggestions, manual actions, stop rules and holding periods.
-- Keep calibrating entry threshold, exit logic, trailing stop and exposure limits.
-
-**Mid term**
-
-- Consider a small Qlib weight such as 0.1 only after M2/M3 independent validation passes.
-- Keep Qlib restoration offline-first: factor versioning, train/validation windows, IC/ICIR, monotonic buckets and cost-adjusted returns.
-- Add an Alembic baseline to gradually replace `create_all + runtime patch`.
-- Generate TypeScript types/client from OpenAPI for high-traffic frontend pages.
-- Move scheduling out of the FastAPI process via `backend.scheduler_worker` and launchd/systemd/supervisor.
-
-**Deferred**
-
-- LangGraph pipeline rewrite only if test-2 provides enough samples and path B clearly beats path A.
-- Full FinMem replacement only if memory depth shows verified improvement in return or drawdown.
-- US market expansion stays deferred until the A-share path is stable and explicitly needed.
-- QMT/miniQMT execution stays deferred until paper trading and holdout validation pass.
 
 ## Disclaimer
 
