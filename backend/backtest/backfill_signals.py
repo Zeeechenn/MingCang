@@ -73,7 +73,7 @@ def generate_input(
         return None
 
     try:
-        tech = technical_score(df, market=market)
+        tech = technical_score(df, market=market, symbol=symbol)
     except Exception as e:
         logger.debug("technical_score 失败 %s %s: %s", symbol, date, e)
         return None

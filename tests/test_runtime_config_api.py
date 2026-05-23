@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_runtime_config_returns_current_settings(monkeypatch):
     from backend.api.routes import get_runtime_config
 
@@ -47,3 +50,21 @@ def test_update_runtime_config_rejects_unknown_keys():
         assert "Unsupported runtime config key" in exc.detail
     else:
         raise AssertionError("expected unsupported runtime config key to be rejected")
+
+
+def test_update_runtime_config_rejects_invalid_types_and_weights():
+    from fastapi import HTTPException
+
+    from backend.api.routes import update_runtime_config
+
+    with pytest.raises(HTTPException) as exc:
+        update_runtime_config({"max_position_per_stock": "large"})
+    assert exc.value.status_code == 400
+
+    with pytest.raises(HTTPException) as exc:
+        update_runtime_config({
+            "weight_quant": 0.2,
+            "weight_technical": 0.6,
+            "weight_sentiment": 0.4,
+        })
+    assert exc.value.status_code == 400

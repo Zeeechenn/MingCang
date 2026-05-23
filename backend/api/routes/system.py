@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
@@ -126,14 +127,21 @@ def get_runtime_config():
 )
 def update_runtime_config(payload: dict):
     """Update a safe whitelist of runtime settings for the current process."""
-    from backend.config import settings
+    from backend.config import Settings, settings
 
     for key in payload:
         if key not in RUNTIME_CONFIG_KEYS:
             raise HTTPException(400, f"Unsupported runtime config key: {key}")
 
-    for key, value in payload.items():
-        setattr(settings, key, value)
+    data = settings.model_dump()
+    data.update(payload)
+    try:
+        validated = Settings.model_validate(data)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(400, f"Invalid runtime config: {exc}") from exc
+
+    for key in payload:
+        object.__setattr__(settings, key, getattr(validated, key))
 
     return _runtime_config_payload()
 
@@ -253,7 +261,10 @@ def system_health(db: Session = Depends(get_db)):
     }
 
 
-@router.post("/system/kill-switch/trigger")
+@router.post(
+    "/system/kill-switch/trigger",
+    dependencies=[Depends(agent_write_guard("kill-switch.trigger"))],
+)
 def trigger_kill_switch(reason: str = "manual"):
     """Manually trigger the kill switch with a reason string."""
     from backend.ops import kill_switch
@@ -262,7 +273,10 @@ def trigger_kill_switch(reason: str = "manual"):
     return state.to_dict()
 
 
-@router.post("/system/kill-switch/reset")
+@router.post(
+    "/system/kill-switch/reset",
+    dependencies=[Depends(agent_write_guard("kill-switch.reset"))],
+)
 def reset_kill_switch():
     """Reset an active kill switch state."""
     from backend.ops import kill_switch
@@ -367,7 +381,10 @@ def _run_initialize() -> None:
             db.close()
 
 
-@router.post("/system/initialize")
+@router.post(
+    "/system/initialize",
+    dependencies=[Depends(agent_write_guard("system.initialize"))],
+)
 def start_initialize(background_tasks: BackgroundTasks):
     """启动冷启动初始化：价格回填 → 财报同步 → 披露日 → 生成首批信号。"""
     if _init_state["running"]:

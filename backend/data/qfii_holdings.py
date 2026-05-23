@@ -25,12 +25,17 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path.home() / ".stock-sage" / "qfii_cache"
+
+# M19.3 TTL: 季报披露窗口约 120 天（Q4/Q1 由 4/30 截止，Q3 由 10/31）；
+# 在窗口内空结果可能只是"尚未披露"，每 7 天重试一次。窗口外的空结果稳定，永久缓存。
+DISCLOSURE_WINDOW_DAYS = 120
+EMPTY_RESULT_TTL_DAYS = 7
 
 QFII_KEYWORDS = [
     "高盛", "Goldman",
@@ -94,14 +99,14 @@ def _recent_quarter_dates(quarters: int, today: date | None = None) -> list[str]
     return out
 
 
-def _fetch_single_quarter(symbol: str, report_date: str) -> list[dict]:
-    """拉单季 QFII 持仓，失败返回 []。仅过滤 QFII 关键词命中的股东。"""
+def _fetch_single_quarter(symbol: str, report_date: str) -> list[dict] | None:
+    """拉单季 QFII 持仓；失败返回 None，确无 QFII 返回 []。"""
     try:
         import akshare as ak
         df = ak.stock_gdfx_free_top_10_em(symbol=_market_prefix(symbol), date=report_date)
     except Exception as e:
         logger.debug("AkShare 拉取失败 %s %s: %s", symbol, report_date, e)
-        return []
+        return None
     if df is None or df.empty:
         return []
     rows: list[dict] = []
@@ -130,8 +135,13 @@ def _cache_path(symbol: str) -> Path:
     return CACHE_DIR / f"{symbol}.json"
 
 
-def _read_cache(symbol: str) -> dict[str, list[dict]]:
-    """Read cached QFII holdings for a symbol, returning empty dict on miss."""
+def _read_cache(symbol: str) -> dict[str, object]:
+    """Read cached QFII holdings for a symbol, returning empty dict on miss.
+
+    Entries may be:
+      • legacy ``list[dict]`` (pre-M19.3 format), or
+      • ``{"data": list[dict], "cached_at": "YYYY-MM-DD"}`` with TTL metadata.
+    """
     p = _cache_path(symbol)
     if not p.exists():
         return {}
@@ -141,12 +151,49 @@ def _read_cache(symbol: str) -> dict[str, list[dict]]:
         return {}
 
 
-def _write_cache(symbol: str, data: dict[str, list[dict]]) -> None:
+def _write_cache(symbol: str, data: dict[str, object]) -> None:
     """Write QFII holdings data to the cache file for a symbol."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     _cache_path(symbol).write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+def _entry_data(entry: object) -> list[dict] | None:
+    """Extract holdings list from either legacy list or TTL-wrapped dict."""
+    if isinstance(entry, list):
+        return entry
+    if isinstance(entry, dict) and isinstance(entry.get("data"), list):
+        return entry["data"]
+    return None
+
+
+def _is_entry_fresh(entry: object, report_date: str, today: date) -> bool:
+    """Decide whether a cache entry is still usable or needs refetch.
+
+    Empty results inside the disclosure window expire after ``EMPTY_RESULT_TTL_DAYS``
+    so a "report not yet disclosed" cache miss does not get pinned forever.
+    """
+    data = _entry_data(entry)
+    if data is None:
+        return False
+    if data:
+        return True
+    try:
+        rd = datetime.strptime(report_date, "%Y%m%d").date()
+    except ValueError:
+        return True
+    if today - rd >= timedelta(days=DISCLOSURE_WINDOW_DAYS):
+        return True
+    if isinstance(entry, dict):
+        cached_at_raw = entry.get("cached_at")
+        if isinstance(cached_at_raw, str):
+            try:
+                cached_at = date.fromisoformat(cached_at_raw)
+            except ValueError:
+                return False
+            return today - cached_at < timedelta(days=EMPTY_RESULT_TTL_DAYS)
+    return False
 
 
 def get_qfii_history(symbol: str, quarters: int = 4,
@@ -159,17 +206,26 @@ def get_qfii_history(symbol: str, quarters: int = 4,
     报告期键按时间倒序（最近季度在前）。
 
     fetcher 参数用于测试时注入 mock。
+
+    M19.3：抓取失败（fetcher 返回 None）不入缓存；"确无 QFII"（[]）入缓存。
+    披露窗口内的空结果按 EMPTY_RESULT_TTL_DAYS 过期，过期后下次调用会重试。
     """
+    today = today or date.today()
     target_dates = _recent_quarter_dates(quarters, today=today)
     cache = _read_cache(symbol)
     dirty = False
     out: dict[str, list[dict]] = {}
     for d in target_dates:
-        if d in cache:
-            out[d] = cache[d]
-            continue
+        entry = cache.get(d)
+        if entry is not None and _is_entry_fresh(entry, d, today):
+            data = _entry_data(entry)
+            if data is not None:
+                out[d] = data
+                continue
         fetched = fetcher(symbol, d)
-        cache[d] = fetched
+        if fetched is None:
+            continue
+        cache[d] = {"data": fetched, "cached_at": today.isoformat()}
         out[d] = fetched
         dirty = True
     if dirty:

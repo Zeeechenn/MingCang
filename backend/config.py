@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).parent.parent
@@ -21,6 +22,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
+        validate_assignment=True,
     )
 
     # LLM 提供方（"anthropic" 或 "openai"）
@@ -28,10 +30,16 @@ class Settings(BaseSettings):
 
     # Anthropic
     anthropic_api_key: str = ""
+    anthropic_model_fast: str = "claude-haiku-4-5-20251001"
+    anthropic_model_capable: str = "claude-sonnet-4-6"
 
     # OpenAI / 兼容接口（DeepSeek、Moonshot、Azure 等）
     openai_api_key: str = ""
     openai_base_url: str = ""   # 留空使用 OpenAI 官方地址
+    openai_model_fast: str = "gpt-4o-mini"
+    openai_model_capable: str = "gpt-4o"
+    local_cli_model_fast: str = "claude-haiku-4-5-20251001"
+    local_cli_model_capable: str = "claude-sonnet-4-6"
 
     database_url: str = f"sqlite:///{BASE_DIR}/stock-sage.db"
     schedule_premarket: str = "08:30"
@@ -178,6 +186,24 @@ class Settings(BaseSettings):
     stocksage_agent_api_key: str = ""
     stocksage_agent_remote_write_enabled: bool = False
     stocksage_agent_remote_write_actions: str = ""
+
+    @model_validator(mode="after")
+    def _validate_runtime_invariants(self):
+        for prefix in ("", "test1_"):
+            values = [
+                getattr(self, f"{prefix}weight_quant"),
+                getattr(self, f"{prefix}weight_technical"),
+                getattr(self, f"{prefix}weight_sentiment"),
+            ]
+            if any(v < 0 or v > 1 for v in values):
+                raise ValueError(f"{prefix or 'default '}signal weights must be in [0, 1]")
+            if abs(sum(values) - 1.0) > 1e-6:
+                raise ValueError(f"{prefix or 'default '}signal weights must sum to 1.0")
+        for key in ("max_position_per_stock", "max_position_per_sector", "max_total_equity_pct"):
+            value = getattr(self, key)
+            if value < 0 or value > 1:
+                raise ValueError(f"{key} must be in [0, 1]")
+        return self
 
 
 settings = Settings()

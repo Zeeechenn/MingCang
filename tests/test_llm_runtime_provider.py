@@ -62,6 +62,32 @@ def test_disabled_runtime_provider_is_not_available():
         assert has_runtime_llm_provider() is False
 
 
+def test_provider_model_tiers_map_to_distinct_models():
+    from backend.llm import anthropic_provider, openai_provider
+
+    assert anthropic_provider._model_for_tier("fast") != anthropic_provider._model_for_tier("capable")
+    assert openai_provider._model_for_tier("fast") != openai_provider._model_for_tier("capable")
+    assert not openai_provider._model_for_tier("fast").startswith("anthropic/")
+
+
+@patch("backend.llm.local_cli_provider.subprocess.run")
+def test_local_cli_provider_passes_model_for_tier(mock_run, monkeypatch):
+    from backend.llm.local_cli_provider import LocalCLIProvider
+
+    mock_run.return_value = MagicMock(returncode=0, stdout='{"ok": true}', stderr="")
+    monkeypatch.setattr("backend.config.settings.local_cli_model_fast", "claude-haiku")
+
+    result = LocalCLIProvider(timeout=1).complete_structured(
+        "prompt",
+        {"name": "tool", "input_schema": {"type": "object"}},
+        model_tier="fast",
+    )
+
+    assert result == {"ok": True}
+    assert "--model" in mock_run.call_args.args[0]
+    assert "claude-haiku" in mock_run.call_args.args[0]
+
+
 @patch("backend.analysis.sentiment.get_provider")
 def test_analyze_news_skips_provider_when_runtime_disabled(mock_get_provider):
     from backend.analysis import sentiment

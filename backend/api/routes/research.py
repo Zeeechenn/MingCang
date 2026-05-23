@@ -23,7 +23,10 @@ def get_symbol_research_state(symbol: str, db: Session = Depends(get_db)):
     return get_research_state(db, symbol)
 
 
-@router.post("/research/{symbol}/review")
+@router.post(
+    "/research/{symbol}/review",
+    dependencies=[Depends(agent_write_guard("research.review"))],
+)
 def review_symbol_latest_signal(symbol: str, db: Session = Depends(get_db)):
     """Run a lightweight attribution review for the latest evaluable signal."""
     from backend.decision.harness import review_latest_signal

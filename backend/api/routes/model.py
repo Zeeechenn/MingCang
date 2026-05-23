@@ -4,7 +4,9 @@ from __future__ import annotations
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
+
+from backend.agent.http_guard import agent_write_guard
 
 from backend.data.database import SessionLocal
 
@@ -22,7 +24,10 @@ def _train_task() -> None:
         db.close()
 
 
-@router.post("/model/train")
+@router.post(
+    "/model/train",
+    dependencies=[Depends(agent_write_guard("model.train"))],
+)
 def trigger_train(background_tasks: BackgroundTasks):
     """Manually trigger LightGBM Alpha retraining (background)."""
     background_tasks.add_task(_train_task)

@@ -22,8 +22,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
+
+from sqlalchemy import and_, or_
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ _PIT_DATE_FIELDS: dict[str, tuple[str, str]] = {
     "Price": ("date", "string"),
     "Signal": ("date", "string"),
     "LongTermLabel": ("date", "string"),
-    "FinancialMetric": ("report_date", "string"),
+    "FinancialMetric": ("disclosure_date", "financial_disclosure"),
     "IndexPrice": ("date", "string"),
     "NewsItem": ("published_at", "datetime"),
 }
@@ -68,6 +70,14 @@ class PITSession:
                 if field_kind == "datetime":
                     cutoff = datetime.fromisoformat(self._as_of)
                     q = q.filter(col <= cutoff)
+                elif field_kind == "financial_disclosure":
+                    fallback_cutoff = (
+                        datetime.fromisoformat(self._as_of) - timedelta(days=45)
+                    ).strftime("%Y-%m-%d")
+                    q = q.filter(or_(
+                        col <= self._as_of,
+                        and_(col.is_(None), getattr(ent, "report_date") <= fallback_cutoff),
+                    ))
                 else:
                     q = q.filter(col <= self._as_of)
         return q
@@ -100,4 +110,10 @@ def assert_pit_clean(db, as_of: str, model, field: str | None = None) -> int:
     if kind == "datetime":
         cutoff = datetime.fromisoformat(as_of)
         return db.query(model).filter(col > cutoff).count()
+    if kind == "financial_disclosure":
+        fallback_cutoff = (datetime.fromisoformat(as_of) - timedelta(days=45)).strftime("%Y-%m-%d")
+        return db.query(model).filter(or_(
+            col > as_of,
+            and_(col.is_(None), getattr(model, "report_date") > fallback_cutoff),
+        )).count()
     return db.query(model).filter(col > as_of).count()

@@ -33,6 +33,36 @@ from backend.data.database import Price, SessionLocal, Stock
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
 
+# 回测公开验证口径：A 股交易成本 = 往返 0.20% 手续费/印花税 + 每次成交 0.10% 滑点。
+A_SHARE_SLIPPAGE_PERC = 0.001
+
+PUBLIC_VALIDATION_SNAPSHOT = {
+    "metric_scope": "single_stock_cross_section_average",
+    "universe": ["300308", "688008"],
+    "n_symbols": 2,
+    "start": "2025-11-01",
+    "end": "2026-05-14",
+    "settings": {
+        "risk_reward_ratio": 2.0,
+        "max_hold_days": 10,
+        "trailing_stop_enabled": False,
+        "adx_filter_enabled": False,
+    },
+    "costs": {
+        "commission_round_trip": 0.002,
+        "slippage_per_trade": A_SHARE_SLIPPAGE_PERC,
+    },
+    "metrics": {
+        "avg_sharpe": 1.36,
+        "avg_max_drawdown_pct": 8.60,
+        "avg_profit_factor": 2.78,
+    },
+    "command": (
+        "PYTHONPATH=. python3 backend/backtest/backtrader_eval.py "
+        "--symbols 300308 688008 --start 2025-11-01 --end 2026-05-14 --legacy"
+    ),
+}
+
 # ── A股手续费 ─────────────────────────────────────────────────────────
 
 class AShareCommission(bt.CommInfoBase):
@@ -225,6 +255,7 @@ def run_one(symbol: str, name: str, df_raw: pd.DataFrame, start: str, end: str,
     cerebro = bt.Cerebro()
     cerebro.broker.set_cash(100_000)
     cerebro.broker.addcommissioninfo(AShareCommission())
+    cerebro.broker.set_slippage_perc(A_SHARE_SLIPPAGE_PERC)
     cerebro.adddata(PandasDataExt(dataname=df_bt), name=symbol)
     cerebro.addstrategy(
         TechSignalStrategy,

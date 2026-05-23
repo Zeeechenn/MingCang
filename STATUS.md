@@ -76,17 +76,23 @@
 
 ## 验证摘要
 
-| 指标 | 最低标准 | 实际 |
-|------|---------|------|
-| Sharpe（含 0.20% 手续费 + 0.10% 滑点） | > 0.8 | **1.36** ✅ |
-| 最大回撤 | < 15% | **8.60%** ✅ |
-| 净盈亏比 | ≥ 1.3 | **2.78** ✅ |
+历史 M1.3 公开摘要为 **N=2 单股回测逐股均值**，不是组合级权益曲线指标，也不再作为系统级验收结论单独引用。
+
+| 指标 | 历史逐股均值 | 口径 |
+|------|-------------|------|
+| Sharpe | **1.36** | N=2 单股均值 |
+| 最大回撤 | **8.60%** | N=2 单股均值 |
+| 净盈亏比 | **2.78** | profit factor 均值 |
+
+固定复现范围：`300308, 688008`，区间 `2025-11-01 ~ 2026-05-14`，命令：
+`PYTHONPATH=. python3 backend/backtest/backtrader_eval.py --symbols 300308 688008 --start 2025-11-01 --end 2026-05-14 --legacy`。
+当前回测脚本已显式建模 0.20% 往返手续费/印花税与每次成交 0.10% 滑点；最新数值以重跑输出为准。
 
 ---
 
 ## 测试套件
 
-- `PYTHONPATH=. pytest -q` → **300 passed, 1 warning**（2026-05-21 M11 agent-ready hardening 后）
+- `PYTHONPATH=. pytest -q` → **379 passed**（2026-05-23 M17-M21 评审修复 + yfinance qfq 收口 + QFII 缓存 TTL 后）。`tests/test_agent_context.py` 的 2 个 MCP smoke 用例需 `pip install -e ".[agent]"` 装可选 `mcp` 包后才能跑。
 - `python3 -m compileall backend tests` → 通过
 - `cd frontend && node --test src/*.test.js src/pages/*.test.js` → **9 passed**
 - `cd frontend && npm run build` → 通过（57 modules，约 453 KB / gzip 142 KB）

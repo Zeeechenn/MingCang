@@ -5,14 +5,15 @@ from typing import cast
 
 import anthropic
 
+from backend.config import settings
 from backend.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
-_MODELS = {
-    "fast":    "claude-sonnet-4-6",
-    "capable": "claude-sonnet-4-6",
-}
+def _model_for_tier(model_tier: str) -> str:
+    if model_tier == "capable":
+        return settings.anthropic_model_capable
+    return settings.anthropic_model_fast
 
 
 def _llm_retry(max_attempts: int = 3, delay: float = 2.0):
@@ -51,7 +52,7 @@ class AnthropicProvider(LLMProvider):
         """Call Anthropic tool-use API and return the tool input dict."""
         try:
             kwargs = dict(
-                model=_MODELS.get(model_tier, _MODELS["fast"]),
+                model=_model_for_tier(model_tier),
                 max_tokens=max_tokens,
                 tools=[tool],
                 tool_choice={"type": "tool", "name": tool["name"]},

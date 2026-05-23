@@ -4,6 +4,7 @@ import logging
 import time
 from typing import Any
 
+from backend.config import settings
 from backend.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -27,10 +28,10 @@ def _llm_retry(max_attempts: int = 3, delay: float = 2.0):
         return wrapper
     return decorator
 
-_MODELS = {
-    "fast":    "anthropic/claude-sonnet-4.6",
-    "capable": "anthropic/claude-sonnet-4.6",
-}
+def _model_for_tier(model_tier: str) -> str:
+    if model_tier == "capable":
+        return settings.openai_model_capable
+    return settings.openai_model_fast
 
 
 class OpenAIProvider(LLMProvider):
@@ -79,7 +80,7 @@ class OpenAIProvider(LLMProvider):
 
         try:
             resp = self._client.chat.completions.create(  # type: ignore[call-overload]
-                model=_MODELS.get(model_tier, _MODELS["fast"]),
+                model=_model_for_tier(model_tier),
                 max_tokens=max_tokens,
                 tools=[{"type": "function", "function": function_def}],
                 tool_choice={"type": "function", "function": {"name": tool["name"]}},

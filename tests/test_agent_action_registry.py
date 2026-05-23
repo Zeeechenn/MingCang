@@ -82,3 +82,41 @@ def test_agent_security_reads_settings_when_env_not_in_os(monkeypatch):
     monkeypatch.setattr(settings, "stocksage_agent_remote_write_actions", "watchlist.add")
 
     require_agent_access("write", api_key="secret", action="watchlist.add")
+
+
+def test_execute_action_validates_payload_before_handler(test_db):
+    from fastapi import HTTPException
+
+    from backend.agent.action_registry import execute_registered_action
+
+    with pytest.raises(HTTPException) as exc:
+        execute_registered_action("watchlist.add", {}, test_db)
+
+    assert exc.value.status_code == 400
+    assert "symbol" in exc.value.detail
+
+
+def test_execute_action_enforces_allowed_modes(monkeypatch, test_db):
+    from fastapi import HTTPException
+
+    from backend.agent import action_registry
+    from backend.agent.action_registry import ActionDefinition, execute_registered_action
+
+    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
+    monkeypatch.setitem(
+        action_registry._ACTIONS,
+        "local.only",
+        ActionDefinition(
+            name="local.only",
+            input_schema={"type": "object", "required": [], "properties": {}},
+            risk_level="low",
+            requires_confirmation=False,
+            allowed_modes=("local",),
+            handler=lambda payload, db: {"ok": True},
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        execute_registered_action("local.only", {}, test_db)
+
+    assert exc.value.status_code == 403

@@ -205,7 +205,7 @@ def fetch_cn_daily_akshare_tx(symbol: str, days: int = 365) -> pd.DataFrame:
 
 @_retry(max_attempts=3, delay=1.0)
 def fetch_cn_daily_tushare(symbol: str, days: int = 365) -> pd.DataFrame:
-    """A-share unadjusted daily data via Tushare Pro when TUSHARE_TOKEN is configured."""
+    """A-share unadjusted daily data via Tushare Pro; not used in fallback until qfq conversion exists."""
     if not settings.tushare_token:
         raise ValueError("TUSHARE_TOKEN is not configured")
     try:
@@ -227,7 +227,12 @@ def fetch_cn_daily_tushare(symbol: str, days: int = 365) -> pd.DataFrame:
 
 @_retry(max_attempts=3, delay=1.0)
 def fetch_cn_daily_yfinance(symbol: str, days: int = 365) -> pd.DataFrame:
-    """Fallback A-share daily data via Yahoo Finance suffixes."""
+    """Yahoo Finance A-share daily data。
+
+    yfinance 的 `auto_adjust=True` 返回后复权含分红再投，与其余 CN 源
+    （efinance/eastmoney/akshare 全部 qfq）口径不一致，会导致除权日 OHLC
+    与 ATR/技术分错位。仅保留函数供手动调试，**不再注册到 CN fallback**。
+    """
     ticker = yf.Ticker(cn_yfinance_ticker(symbol))
     df = ticker.history(period=f"{days}d", interval="1d", auto_adjust=True)
     if df.empty:
@@ -254,9 +259,7 @@ def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
     register_daily_provider("akshare_em_cn", {"CN"}, fetch_cn_daily_akshare_em, priority=20, cooldown_seconds=60)
     register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=30, cooldown_seconds=30)
     register_daily_provider("akshare_tx_cn", {"CN"}, fetch_cn_daily_akshare_tx, priority=40, cooldown_seconds=30)
-    if settings.tushare_token:
-        register_daily_provider("tushare_cn", {"CN"}, fetch_cn_daily_tushare, priority=80, cooldown_seconds=120)
-    register_daily_provider("yfinance_cn", {"CN"}, fetch_cn_daily_yfinance, priority=90, cooldown_seconds=120)
+    # M19.2: yfinance 对 A 股是后复权含分红再投，与其余源 qfq 口径冲突，不进入 CN fallback。
     register_daily_provider("yfinance_us", {"US"}, fetch_us_daily, priority=90, cooldown_seconds=120)
     df, provider = fetch_daily_with_fallback(symbol, market, days)
     logger.debug("fetch_daily provider=%s symbol=%s market=%s rows=%d",

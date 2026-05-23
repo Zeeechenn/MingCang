@@ -6,6 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from fastapi import HTTPException
+from jsonschema import ValidationError, validate
+
+from backend.agent.security import agent_mode
 
 Handler = Callable[[dict, object], dict]
 
@@ -28,6 +31,43 @@ def _object_schema(required: list[str], properties: dict) -> dict:
         "properties": properties,
         "additionalProperties": True,
     }
+
+
+RUNTIME_CONFIG_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "paper_trading_profile": {"type": "string", "enum": ["auto", "test1_legacy_qlib", "new_framework"]},
+        "new_framework_entry_threshold": {"type": "number"},
+        "test1_entry_threshold": {"type": "number"},
+        "weight_quant": {"type": "number", "minimum": 0, "maximum": 1},
+        "weight_technical": {"type": "number", "minimum": 0, "maximum": 1},
+        "weight_sentiment": {"type": "number", "minimum": 0, "maximum": 1},
+        "adx_filter_enabled": {"type": "boolean"},
+        "regime_filter_enabled": {"type": "boolean"},
+        "multi_agent_enabled": {"type": "boolean"},
+        "risk_manager_enabled": {"type": "boolean"},
+        "director_min_confidence": {"type": "number"},
+        "long_term_team_enabled": {"type": "boolean"},
+        "trailing_stop_enabled": {"type": "boolean"},
+        "take_profit_exit_enabled": {"type": "boolean"},
+        "max_position_per_stock": {"type": "number", "minimum": 0, "maximum": 1},
+        "max_position_per_sector": {"type": "number", "minimum": 0, "maximum": 1},
+        "max_total_equity_pct": {"type": "number", "minimum": 0, "maximum": 1},
+        "financial_backfill_years": {"type": "integer", "minimum": 1},
+        "tavily_supplement_threshold": {"type": "integer", "minimum": 0},
+        "anspire_news_days": {"type": "integer", "minimum": 1},
+        "anspire_news_max_results": {"type": "integer", "minimum": 1},
+        "anspire_news_max_add": {"type": "integer", "minimum": 0},
+        "anspire_news_min_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "schedule_daily_review_time": {"type": "string"},
+        "schedule_longterm_monday_dow": {"type": "string"},
+        "schedule_longterm_monday_time": {"type": "string"},
+        "schedule_longterm_friday_dow": {"type": "string"},
+        "schedule_longterm_friday_time": {"type": "string"},
+    },
+    "additionalProperties": False,
+    "minProperties": 1,
+}
 
 
 def _watchlist_add(payload: dict, db) -> dict:
@@ -163,7 +203,7 @@ _ACTIONS: dict[str, ActionDefinition] = {
     ),
     "config.update": ActionDefinition(
         name="config.update",
-        input_schema=_object_schema([], {}),
+        input_schema=RUNTIME_CONFIG_SCHEMA,
         risk_level="high",
         requires_confirmation=True,
         allowed_modes=("local", "remote"),
@@ -190,10 +230,10 @@ _ACTIONS: dict[str, ActionDefinition] = {
         input_schema=_object_schema(["key", "value"], {
             "key": {"type": "string"},
             "value": {"type": "string"},
-            "category": {"type": "string"},
+            "category": {"type": ["string", "null"]},
             "scope": {"type": "string"},
-            "symbol": {"type": "string"},
-            "ttl_days": {"type": "integer"},
+            "symbol": {"type": ["string", "null"]},
+            "ttl_days": {"type": ["integer", "null"]},
         }),
         risk_level="high",
         requires_confirmation=True,
@@ -221,4 +261,13 @@ def action_metadata(name: str) -> dict:
 
 def execute_registered_action(name: str, payload: dict, db) -> dict:
     definition = get_action_definition(name)
+    mode = agent_mode()
+    if mode not in definition.allowed_modes:
+        raise HTTPException(403, f"action {name} is not allowed in {mode} mode")
+    try:
+        validate(instance=payload, schema=definition.input_schema)
+    except ValidationError as exc:
+        path = ".".join(str(item) for item in exc.path)
+        detail = f"invalid payload for {name}: {path + ': ' if path else ''}{exc.message}"
+        raise HTTPException(400, detail) from exc
     return definition.handler(payload, db)

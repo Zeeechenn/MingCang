@@ -33,8 +33,10 @@ def compute_rsrs(df: pd.DataFrame, window: int = 18, zscore_lookback: int = 600)
     """
     df = df.copy()
     df["rsrs_beta"] = _rolling_beta(df["low"], df["high"], window)
-    mean = df["rsrs_beta"].rolling(zscore_lookback, min_periods=window * 5).mean()
-    std = df["rsrs_beta"].rolling(zscore_lookback, min_periods=window * 5).std()
+    min_periods = min(zscore_lookback, window * 5)
+    mean = df["rsrs_beta"].rolling(zscore_lookback, min_periods=min_periods).mean()
+    std = df["rsrs_beta"].rolling(zscore_lookback, min_periods=min_periods).std()
+    std = std.where(std >= 1e-9)
     df["rsrs_z"] = (df["rsrs_beta"] - mean) / std
     return df
 
@@ -42,10 +44,12 @@ def compute_rsrs(df: pd.DataFrame, window: int = 18, zscore_lookback: int = 600)
 def latest_rsrs_z(index_close_high_low: pd.DataFrame, window: int = 18,
                   zscore_lookback: int = 600) -> float | None:
     """
-    便捷函数：给定指数最近 OHLC（或仅 close 用 ±0.5% 模拟 high/low），返回最新 z 值。
+    便捷函数：给定指数最近 OHLC，返回最新 z 值。
     无足够数据时返回 None。
     """
     if len(index_close_high_low) < window + 20:
+        return None
+    if "high" not in index_close_high_low.columns or "low" not in index_close_high_low.columns:
         return None
     df = compute_rsrs(index_close_high_low, window=window, zscore_lookback=zscore_lookback)
     z = df["rsrs_z"].iloc[-1]

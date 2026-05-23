@@ -5,6 +5,20 @@
 
 ---
 
+## [M17-M21] 评审修复最小交付包（2026-05-23）
+
+### Fixed
+- M17.0：`aggregate_v2` 的 regime 衰减不再覆盖 Risk Manager 的否决/降级 recommendation，并同步衰减正仓位。
+- M18.0：Backtrader 回测显式设置 0.10% 成交滑点；`STATUS.md` 验证摘要改为 N=2 逐股均值限定口径。
+- M19.0-M19.3：PIT 财报过滤改用 `disclosure_date`，Q1/Q3 披露日回填 period 名称修正，CN 日线 fallback 不再注册不复权 Tushare 与后复权 yfinance（口径统一为 qfq），QFII 抓取失败不再永久缓存为空，披露窗口内空结果按 7 天 TTL 过期。
+- M20.0-M20.1：RSRS 对缺失/共线 OHLC 返回中性 `None`，不再放大浮点噪声；涨跌停阈值按主板/创业板/科创板/北交所前缀区分。
+- M21.0-M21.3：补齐远程写路由 agent guard，恢复 LLM `model_tier` 分层，runtime config 更新走整体验证，Action Registry 执行前校验 mode 与 payload schema。
+
+### Tests
+- 新增/更新 M17-M21 聚焦回归；本轮聚焦套件 `54 passed`。
+
+---
+
 ## [M14] 股票长期记忆与跨入口召回（2026-05-23）
 
 ### Added

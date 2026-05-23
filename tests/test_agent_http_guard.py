@@ -36,3 +36,34 @@ def test_http_agent_write_guard_honors_allowlist(monkeypatch):
         agent_write_guard("config.update")(FakeRequest({"x-stocksage-agent-api-key": "secret"}))
 
     assert exc.value.status_code == 403
+
+
+def test_sensitive_write_routes_are_registered_with_agent_guard():
+    from fastapi.routing import APIRoute
+
+    from backend.api.routes import router
+
+    expected = {
+        ("/system/kill-switch/trigger", "POST"),
+        ("/system/kill-switch/reset", "POST"),
+        ("/model/train", "POST"),
+        ("/system/initialize", "POST"),
+        ("/ai/chat", "POST"),
+        ("/ai/chat/stream", "POST"),
+        ("/ai/sessions", "POST"),
+        ("/ai/sessions/{session_id}/archive", "POST"),
+        ("/research/{symbol}/review", "POST"),
+    }
+    routes = {
+        (route.path, method): route
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods
+    }
+
+    for key in expected:
+        route = routes[key]
+        assert any(
+            getattr(dep.call, "__qualname__", "").startswith("agent_write_guard.")
+            for dep in route.dependant.dependencies
+        ), f"{key} missing agent_write_guard dependency"

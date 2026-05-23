@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from backend.agent.http_guard import require_http_agent_write_key
+from backend.agent.http_guard import agent_write_guard, require_http_agent_write_key
 from backend.api.schemas import AIChatRequest, AIChatResponse
 from backend.data.database import ChatMessage, ChatSession, PendingAIAction, Position, Stock, get_db
 
@@ -388,7 +388,10 @@ def list_chat_sessions(include_archived: bool = False, db: Session = Depends(get
     return [_chat_session_to_dict(row, db) for row in rows]
 
 
-@router.post("/ai/sessions")
+@router.post(
+    "/ai/sessions",
+    dependencies=[Depends(agent_write_guard("ai.sessions.create"))],
+)
 def create_chat_session(payload: dict | None = None, db: Session = Depends(get_db)):
     payload = payload or {}
     row = _ensure_session(
@@ -414,7 +417,10 @@ def list_chat_messages(session_id: str, db: Session = Depends(get_db)):
     return [_message_to_dict(msg) for msg in messages]
 
 
-@router.post("/ai/sessions/{session_id}/archive")
+@router.post(
+    "/ai/sessions/{session_id}/archive",
+    dependencies=[Depends(agent_write_guard("ai.sessions.archive"))],
+)
 def archive_chat_session(session_id: str, db: Session = Depends(get_db)):
     row = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if row is None:
@@ -425,7 +431,11 @@ def archive_chat_session(session_id: str, db: Session = Depends(get_db)):
     return {"status": "archived", "id": session_id}
 
 
-@router.post("/ai/chat", response_model=AIChatResponse)
+@router.post(
+    "/ai/chat",
+    response_model=AIChatResponse,
+    dependencies=[Depends(agent_write_guard("ai.chat"))],
+)
 def chat(request: AIChatRequest, db: Session = Depends(get_db)):
     """Chat with the project-scoped AI assistant."""
     session = _ensure_session(db, request.session_id, request.mode, title=request.message[:24])
@@ -461,7 +471,10 @@ def chat(request: AIChatRequest, db: Session = Depends(get_db)):
     return response
 
 
-@router.post("/ai/chat/stream")
+@router.post(
+    "/ai/chat/stream",
+    dependencies=[Depends(agent_write_guard("ai.chat.stream"))],
+)
 def chat_stream(request: AIChatRequest, db: Session = Depends(get_db)):
     """SSE-compatible chat endpoint. Keeps /ai/chat behavior and streams answer chunks."""
     def generate():

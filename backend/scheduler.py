@@ -205,19 +205,10 @@ def _build_regime(db, stocks):
     import pandas as pd
 
     from backend.analysis.timing.regime import market_regime
-    from backend.data.database import IndexPrice, Price
+    from backend.data.database import Price
 
-    # HS300 OHLC — index_prices 只存 close，high/low 用 ±0.5% 估算
-    rows = (db.query(IndexPrice.date, IndexPrice.close)
-            .filter(IndexPrice.symbol == "sh000300")
-            .order_by(IndexPrice.date.asc()).all())
+    # HS300 OHLC — 没有真实 high/low 时不合成，RSRS 保持中性。
     index_df = None
-    if rows:
-        df = pd.DataFrame(rows, columns=["date", "close"]).set_index("date")
-        # 用 close ±0.5% 模拟 high/low（无 OHLC 时 RSRS 的退化估计）
-        df["high"] = df["close"] * 1.005
-        df["low"] = df["close"] * 0.995
-        index_df = df
 
     # 板块扩散：用自选股池近30日价格
     sector_dfs = {}
@@ -319,7 +310,7 @@ def _analyze_postmarket_stock(stock, db, context: dict) -> dict | None:
         logger.warning("not enough data for %s (%d rows), skipping", stock.symbol, len(df))
         return None
 
-    tech = technical_score(df, market=stock.market)
+    tech = technical_score(df, market=stock.market, symbol=stock.symbol)
     close = tech["latest"]["close"]
     atr = tech["latest"]["atr14"] or 0.0
     date_str = df.index[-1]

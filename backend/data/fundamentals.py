@@ -558,7 +558,7 @@ def sync_disclosure_dates(db, years: int = 3) -> int:
     updated = 0
 
     for year in range(current_year - years + 1, current_year + 1):
-        for period_name in ("年报", "三季报", "半年报", "一季报"):
+        for period_name in ("年报", "三季", "半年报", "一季"):
             period_str = f"{year}{period_name}"
             report_date = _period_to_report_date(year, period_name)
             if report_date is None:

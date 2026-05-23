@@ -49,6 +49,13 @@ def test_compute_asset_turnover():
     assert compute_asset_turnover(1000, 0) is None
 
 
+def test_disclosure_period_names_cover_q1_and_q3():
+    from backend.data.fundamentals import _period_to_report_date
+
+    assert _period_to_report_date(2024, "一季") == "2024-03-31"
+    assert _period_to_report_date(2024, "三季") == "2024-09-30"
+
+
 # ── Piotroski F-Score ─────────────────────────────────────────────────
 
 def test_piotroski_data_insufficient(test_db):

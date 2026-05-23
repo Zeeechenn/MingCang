@@ -7,7 +7,19 @@ import pandas as pd
 from backend.analysis.factors import add_all_factors
 from backend.config import settings
 
-LIMIT_THRESHOLD = 9.5  # A股涨跌停实际触发阈值（名义10%，实际约9.5%）
+_MAIN_BOARD_LIMIT_THRESHOLD = 9.5  # 主板涨跌停实际触发阈值（名义10%，实际约9.5%）
+
+
+def _limit_threshold(symbol: str | None = None) -> float:
+    """Return A-share limit threshold by board prefix."""
+    if not symbol:
+        return _MAIN_BOARD_LIMIT_THRESHOLD
+    code = str(symbol).strip()
+    if code.startswith(("300", "301", "688", "689")):
+        return 19.5
+    if code.startswith(("8", "4")):
+        return 29.5
+    return _MAIN_BOARD_LIMIT_THRESHOLD
 
 
 def score_trend(df: pd.DataFrame) -> float:
@@ -82,7 +94,7 @@ def score_volume(df: pd.DataFrame) -> float:
     return 0.0
 
 
-def check_limit_status(df: pd.DataFrame, market: str = "CN") -> dict:
+def check_limit_status(df: pd.DataFrame, market: str = "CN", symbol: str | None = None) -> dict:
     """
     检测A股涨跌停状态。
     limit_down 时止损信号不可当日执行（T+1 + 跌停无买盘）。
@@ -98,8 +110,9 @@ def check_limit_status(df: pd.DataFrame, market: str = "CN") -> dict:
                 "change_pct": 0.0, "stop_loss_executable": True}
 
     change_pct = (curr_close - prev_close) / prev_close * 100
-    limit_up = change_pct >= LIMIT_THRESHOLD
-    limit_down = change_pct <= -LIMIT_THRESHOLD
+    threshold = _limit_threshold(symbol)
+    limit_up = bool(change_pct >= threshold)
+    limit_down = bool(change_pct <= -threshold)
 
     return {
         "status": "limit_up" if limit_up else ("limit_down" if limit_down else "normal"),
@@ -110,7 +123,7 @@ def check_limit_status(df: pd.DataFrame, market: str = "CN") -> dict:
     }
 
 
-def technical_score(df_raw: pd.DataFrame, market: str = "CN") -> dict:
+def technical_score(df_raw: pd.DataFrame, market: str = "CN", symbol: str | None = None) -> dict:
     """
     输入原始 OHLCV DataFrame，返回技术分析结果。
     阶段B 升级：综合分乘以 ADX 过滤系数（震荡市衰减 50%）。
@@ -129,7 +142,7 @@ def technical_score(df_raw: pd.DataFrame, market: str = "CN") -> dict:
     composite = raw_composite * adx_factor
 
     last = df.iloc[-1]
-    limit = check_limit_status(df, market)
+    limit = check_limit_status(df, market, symbol=symbol)
     return {
         "score": round(composite, 1),
         "raw_score": round(raw_composite, 1),

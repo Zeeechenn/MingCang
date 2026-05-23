@@ -16,13 +16,6 @@ from backend.llm import get_provider, has_runtime_llm_provider
 
 logger = logging.getLogger(__name__)
 
-RECOMMENDATION_MAP = [
-    (25,  "可小仓试错"),
-    (0,   "可关注"),
-    (-20, "观望"),
-    (-101, "规避"),
-]
-
 
 def _score_to_recommendation(score: float) -> str:
     """Delegate score to recommendation string via signal_policy."""
@@ -324,11 +317,12 @@ def aggregate_v2(
     # 阶段A regime 过滤层：综合分二次衰减（在 risk_manager 之后，最后兜底）
     if regime is not None:
         from backend.analysis.timing.regime import apply_regime_filter
-        new_score, dampened = apply_regime_filter(result["composite_score"], regime)
+        old_score = result["composite_score"]
+        new_score, dampened = apply_regime_filter(old_score, regime)
         if dampened:
             result["composite_score"] = new_score
-            result["recommendation"] = _score_to_recommendation(new_score)
-            result["confidence"] = _score_to_confidence(new_score)
+            if old_score > 0 and result.get("position_pct", 0) > 0:
+                result["position_pct"] = round(result["position_pct"] * (new_score / old_score), 4)
             result["regime_dampened"] = True
 
     return result

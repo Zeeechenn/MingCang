@@ -10,9 +10,16 @@ import re
 import subprocess
 import time
 
+from backend.config import settings
 from backend.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _model_for_tier(model_tier: str) -> str:
+    if model_tier == "capable":
+        return settings.local_cli_model_capable
+    return settings.local_cli_model_fast
 
 
 def _cli_retry(max_attempts: int = 3, delay: float = 2.0):
@@ -72,7 +79,7 @@ class LocalCLIProvider(LLMProvider):
 
         try:
             proc = subprocess.run(
-                ["claude", "-p", "--output-format", "text"],
+                ["claude", "-p", "--model", _model_for_tier(model_tier), "--output-format", "text"],
                 input=full_prompt,
                 capture_output=True,
                 text=True,

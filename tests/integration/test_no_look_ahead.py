@@ -38,10 +38,16 @@ def seeded_db(test_db):
     test_db.add(LongTermLabel(symbol="600519", date="2024-10-15", label="规避",
                               score=-40, expires_at="2024-10-25"))  # 未来
 
-    # FinancialMetric
-    test_db.add(FinancialMetric(symbol="600519", report_date="2024-06-30", revenue=1e9))
-    test_db.add(FinancialMetric(symbol="600519", report_date="2024-09-30", revenue=1.1e9))
-    test_db.add(FinancialMetric(symbol="600519", report_date="2024-12-31", revenue=1.2e9))  # 未来季报
+    # FinancialMetric：PIT 必须看 disclosure_date，而不是 report_date。
+    test_db.add(FinancialMetric(
+        symbol="600519", report_date="2024-06-30", disclosure_date="2024-08-20", revenue=1e9,
+    ))
+    test_db.add(FinancialMetric(
+        symbol="600519", report_date="2024-09-30", disclosure_date="2024-10-28", revenue=1.1e9,
+    ))
+    test_db.add(FinancialMetric(
+        symbol="600519", report_date="2024-12-31", disclosure_date="2025-03-28", revenue=1.2e9,
+    ))  # 未来季报
 
     # NewsItem（用 datetime 字段）
     test_db.add(NewsItem(symbol="600519", title="历史新闻",
@@ -90,15 +96,15 @@ def test_pit_session_filters_long_term_label(seeded_db):
     assert labels[0].date == "2024-09-20"
 
 
-def test_pit_session_filters_financial_metric_by_report_date(seeded_db):
+def test_pit_session_filters_financial_metric_by_disclosure_date(seeded_db):
     from backend.data.database import FinancialMetric
     from backend.data.point_in_time import PITSession
 
     pit = PITSession(seeded_db, as_of="2024-10-01")
     rows = pit.query(FinancialMetric).all()
-    assert len(rows) == 2
+    assert len(rows) == 1
     for r in rows:
-        assert r.report_date <= "2024-10-01"
+        assert r.disclosure_date <= "2024-10-01"
 
 
 def test_pit_session_filters_news_by_published_at(seeded_db):
@@ -163,4 +169,4 @@ def test_simulated_decision_path_uses_only_historical_data(seeded_db):
     assert all(p.date <= "2024-10-01" for p in prices)
     assert all(s.date <= "2024-10-01" for s in signals)
     assert all(label.date <= "2024-10-01" for label in labels)
-    assert all(f.report_date <= "2024-10-01" for f in fins)
+    assert all(f.disclosure_date <= "2024-10-01" for f in fins)
