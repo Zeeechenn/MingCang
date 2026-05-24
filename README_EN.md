@@ -11,6 +11,7 @@ StockSage positions itself as **a research substrate for agents, not an agent it
 A complete multi-agent pipeline — Bull/Bear three-round debate + Research Director + Risk Manager + Portfolio Manager — is built in, enabled on demand and defaulting to single-agent for daily postmarket runs to control token spend. Local dev sessions are trusted by default; remote exposure requires an API key + write switch + action allowlist (three gates) and stays read-only by default.
 
 [![CI](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/Zeeechenn/stock-sage?logo=github&color=success)](https://github.com/Zeeechenn/stock-sage/releases)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
 ![Agent](https://img.shields.io/badge/agent--ready-Codex%20%7C%20Claude%20Code%20%7C%20Cursor-8957e5)
