@@ -15,7 +15,7 @@ It supports research, reviews and risk alerts only — **it does not predict pri
 
 **Language**: [简体中文](README.md) · [English](README_EN.md)
 
-**Contents**: [Highlights](#-highlights) · [Quick Start](#-quick-start) · [Recommended Usage](#-recommended-usage) · [Agent Usage Guide](#-agent-usage-guide) · [Configuration](#-configuration) · [Architecture](#-architecture) · [Cautions](#-cautions) · [More Docs](#-more-docs) · [Disclaimer](#-disclaimer)
+**Contents**: [Highlights](#-highlights) · [Quick Start](#-quick-start) · [Recommended Usage](#-recommended-usage) · [Agent Usage Guide](#-agent-usage-guide) · [Configuration](#-configuration) · [Architecture](#-architecture) · [Roadmap](#-roadmap) · [Cautions](#-cautions) · [More Docs](#-more-docs) · [Disclaimer](#-disclaimer)
 
 ---
 
@@ -208,6 +208,20 @@ These are **current project recommendations, not hard-coded trading advice**. Ad
 ## 🖼 Architecture
 
 ![StockSage System Architecture](docs/assets/architecture.svg)
+
+---
+
+## 🗺 Roadmap
+
+The next phase expands StockSage along three axes — taking it from "personal A-share research" to **a cross-market, cross-device research workspace**.
+
+| Direction | Plan | Status |
+|---|---|---|
+| 🌐 **Multi-market support** | Beyond A-shares, ingest HKEX (HK) and US-market quotes, news, and basic fundamentals; reuse the existing layered signals, long-term research and memory stack. | Planned |
+| 🎨 **Frontend polish** | Web console UX work — research dashboards, signal detail views, portfolio views, memory browser, and mobile responsiveness. | In progress |
+| 📱 **Client apps** | Native desktop / mobile clients so local data and the agent workflow work without a CLI or a browser. | Upcoming |
+
+> Detailed milestones, sub-tasks and timelines live in [docs/ROADMAP.md](docs/ROADMAP.md). Suggestions welcome via GitHub Issues / Discussions.
 
 ---
 
