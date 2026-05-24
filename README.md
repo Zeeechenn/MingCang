@@ -6,6 +6,10 @@ StockSage 把行情、新闻、财务、QFII、持仓、复盘和长期记忆，
 
 它只做研究、复盘和风险提示，**不预测价格，不自动下单，最终决策始终由用户负责**。
 
+StockSage 的定位是 **agent 的研究底座，而不是 agent 本身**——通过 MCP / CLI 把上下文、记忆和健康检查暴露成工具集，让 Codex / Claude Code / Cursor 这类外层 agent 直接驱动；研究结论由机构级审计层兜底（DSR、PBO、Walk-Forward、Point-in-Time 拦截、IC 显著性、Kill Switch），每次判断通过 FinMem 风格的分层决策记忆和全文检索审计日志留下可回溯证据。
+
+同时自带 Bull/Bear 三轮辩论 + Research Director + Risk Manager + Portfolio Manager 完整多 Agent 流水线，按需启用，日常盘后默认走单 agent 控制 token；本地 dev 默认信任，远程暴露则需 API key + 写开关 + action allowlist 三重门，远程默认只读。
+
 [![CI](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)

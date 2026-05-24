@@ -6,6 +6,10 @@ StockSage organizes market data, news, fundamentals, QFII flows, positions, revi
 
 It supports research, reviews and risk alerts only — **it does not predict prices, place orders, or make the final investment decision for the user**.
 
+StockSage positions itself as **a research substrate for agents, not an agent itself** — it exposes context, memory and health checks as a tool set via MCP / CLI so outer agents like Codex, Claude Code, or Cursor can drive it directly. Research conclusions are anchored by an institutional-grade audit layer (DSR, PBO, Walk-Forward, Point-in-Time interception, IC significance, Kill Switch), and every decision leaves a traceable evidence trail through FinMem-style layered decision memory and full-text-search audit logs.
+
+A complete multi-agent pipeline — Bull/Bear three-round debate + Research Director + Risk Manager + Portfolio Manager — is built in, enabled on demand and defaulting to single-agent for daily postmarket runs to control token spend. Local dev sessions are trusted by default; remote exposure requires an API key + write switch + action allowlist (three gates) and stays read-only by default.
+
 [![CI](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
