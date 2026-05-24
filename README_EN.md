@@ -1,6 +1,6 @@
 # StockSage
 
-> 🧠 A local-first personal A-share research workspace · Agent-ready · Auditable & traceable
+> 🎯 A local-first personal A-share research workspace · Agent-ready · Auditable & traceable
 
 StockSage organizes market data, news, fundamentals, QFII flows, positions, reviews and long-term memory in a single local SQLite store, then layers technical indicators, LLM news sentiment, long-term research, portfolio risk control and auditable memory on top — to give individual investors **a traceable research workspace**.
 
@@ -27,7 +27,7 @@ It supports research, reviews and risk alerts only — **it does not predict pri
 | 🤖 **Agent-ready** | Natively works with Codex, Claude Code, Claude Desktop, and Cursor over both CLI and MCP. |
 | 🔗 **Multi-source data** | efinance / Eastmoney / AkShare fallback by default; optional Tushare, yfinance, Tavily, Anspire enrichments. |
 | 🧩 **Layered signals** | Technical indicators + LLM news sentiment + long-term analyst team + portfolio risk — each layer independently reviewable. |
-| 🧠 **Auditable memory** | Project memory, layered decision memory and chat summaries each stored in their own bucket, every write audit-logged. |
+| 📒 **Auditable memory** | Project memory, layered decision memory and chat summaries each stored in their own bucket, every write audit-logged. |
 | 🛡 **Risk-first** | Stop-loss / take-profit levels come from ATR formulas and portfolio constraints — LLMs never predict prices directly. |
 
 > Current focus: **agent-ready usage**, data quality and research-review workflows. Not an automated trading system. The Web console is still evolving.
@@ -224,7 +224,7 @@ These are **current project recommendations, not hard-coded trading advice**. Ad
   - **Tushare** is used only as a supplementary A-share daily-bar source, calling the `daily` unadjusted endpoint; `daily` requires 120+ points, with the basic tier allowing 500 calls/minute at up to 6,000 rows per call. See [daily bars](https://www.tushare.pro/document/2?doc_id=27) · [permissions](https://www.tushare.pro/document/2?doc_id=108).
   - **Bark**'s `api.day.app` is the push entry point; the key comes from the app's test URL / device key. Public tutorials make no guarantee of free quota or SLA — self-host for high-frequency push. See [Bark tutorial](https://github.com/Finb/Bark/blob/master/docs/en-us/tutorial.md).
 
-### 🧠 Usage Habits
+### 💡 Usage Habits
 
 - Before trading, research or reviews, read project context and project memory — **do not rely on the current chat window alone**.
 - Long-term memory writes require explicit user intent; one-off questions and ordinary coding preferences should **not** enter trading-system memory.

@@ -1,6 +1,6 @@
 # StockSage
 
-> 🧠 本地优先的个人 A 股研究工作台 · Agent-ready · 可审计、可追溯
+> 🎯 本地优先的个人 A 股研究工作台 · Agent-ready · 可审计、可追溯
 
 StockSage 把行情、新闻、财务、QFII、持仓、复盘和长期记忆，统一组织在本地 SQLite 中，再用技术指标、LLM 新闻情绪、长期研究、组合风控和分层记忆，拼成一套**给个人投资者用的可追溯研究工作台**。
 
@@ -27,7 +27,7 @@ StockSage 把行情、新闻、财务、QFII、持仓、复盘和长期记忆，
 | 🤖 **Agent-Ready** | 原生适配 Codex、Claude Code、Claude Desktop、Cursor，CLI 与 MCP 双通道开箱即用。 |
 | 🔗 **多源行情** | efinance / Eastmoney / AkShare 默认 fallback；可选接入 Tushare、yfinance、Tavily、Anspire。 |
 | 🧩 **分层信号** | 技术指标 + LLM 新闻情绪 + 长期分析师团 + 组合风控，每层独立、可单独复盘。 |
-| 🧠 **可审计记忆** | 项目记忆、分层决策记忆、聊天摘要分桶落库，每次写入都有审计日志。 |
+| 📒 **可审计记忆** | 项目记忆、分层决策记忆、聊天摘要分桶落库，每次写入都有审计日志。 |
 | 🛡 **风险优先** | 止盈止损全部由 ATR 公式与组合约束生成，LLM 不直接预测价格。 |
 
 > 当前聚焦 **agent 化使用体验**、数据质量与研究复盘能力；不是自动交易系统，Web 控制台仍在演进中。
@@ -224,7 +224,7 @@ STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS=
   - **Tushare** 只作为 A 股日线行情补充，调 `daily` 未复权接口；日线 `daily` 需 120 积分起，基础积分每分钟 500 次、每次最多 6,000 条。见 [日线行情](https://www.tushare.pro/document/2?doc_id=27) · [权限说明](https://www.tushare.pro/document/2?doc_id=108)。
   - **Bark** `api.day.app` 是推送入口，key 来自 App 测试 URL / 设备 key；公开教程未承诺免费额度或 SLA，高频推送建议自建。见 [Bark tutorial](https://github.com/Finb/Bark/blob/master/docs/en-us/tutorial.md)。
 
-### 🧠 使用习惯
+### 💡 使用习惯
 
 - 交易、研究、复盘前应先读取项目上下文与项目记忆，**不要只依赖当前聊天窗口**。
 - 长期记忆写入必须有明确用户意图；一次性问题和普通编码偏好**不要**进入交易系统记忆。
