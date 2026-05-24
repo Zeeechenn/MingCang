@@ -44,6 +44,16 @@ make agent              # 进入终端 pi shell，开始用自然语言对话
 
 最小本地配置只需 `AI_PROVIDER=local_cli`（走本地 Claude CLI），**不需要任何云 LLM key**。
 
+如果想使用自己的 Anthropic / OpenAI 或兼容接口 key，先复制并编辑 `.env`：
+
+```bash
+cp .env.example .env
+# 在 .env 中设置 AI_PROVIDER=anthropic + ANTHROPIC_API_KEY
+# 或 AI_PROVIDER=openai + OPENAI_API_KEY（兼容接口再填 OPENAI_BASE_URL）
+```
+
+配置完成后仍然从终端进入项目目录运行 `make agent-setup && make agent`；Web 控制台和 MCP 接入见下方推荐使用方式。
+
 验证一切正常：
 
 ```bash

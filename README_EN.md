@@ -44,6 +44,16 @@ make agent              # Enter the terminal pi shell and start asking in natura
 
 The minimum local setup only needs `AI_PROVIDER=local_cli` (uses the local Claude CLI) — **no cloud LLM key required**.
 
+If you prefer to use your own Anthropic / OpenAI or OpenAI-compatible key, copy and edit `.env` first:
+
+```bash
+cp .env.example .env
+# Set AI_PROVIDER=anthropic + ANTHROPIC_API_KEY
+# Or AI_PROVIDER=openai + OPENAI_API_KEY (and OPENAI_BASE_URL for compatible endpoints)
+```
+
+After configuration, you still enter the project from the terminal with `make agent-setup && make agent`; the Web console and MCP entry points are listed in Recommended Usage below.
+
 Verify things are healthy:
 
 ```bash
