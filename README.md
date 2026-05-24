@@ -91,16 +91,7 @@ make agent
 
 研究和健康检查会直接读取本地上下文；自选、持仓、记忆、配置等写操作会先 dry-run 并要求你明确确认，再通过 `backend.agent.cli action ... --confirm` 执行。
 
-**方式 B：启动 Web 控制台**
-
-```bash
-git clone <repo-url> && cd stock-sage
-pip install ".[dev]"
-cp .env.example .env
-python3 backend/data/database.py
-PYTHONPATH=. uvicorn backend.main:app --reload
-cd frontend && npm install && npm run dev
-```
+**方式 B：启动 Web 控制台（开发中）**
 
 浏览器访问 http://localhost:5173 打开 Web 控制台；后端 API 文档位于 http://localhost:8000/docs。
 
