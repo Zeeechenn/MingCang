@@ -1,6 +1,5 @@
 import os
 from datetime import datetime
-from pathlib import Path
 
 from sqlalchemy import (
     Boolean,
@@ -576,17 +575,10 @@ def _seed_default_memory() -> None:
 
 
 def _should_migrate_local_memory() -> bool:
-    """Only ingest home-directory layered memory for explicit or default local DB runs."""
+    """Only ingest home-directory layered memory when explicitly requested."""
     flag = os.environ.get("STOCKSAGE_MIGRATE_LOCAL_MEMORY")
     if flag is not None:
         return flag.strip().lower() in {"1", "true", "yes"}
-    try:
-        url = settings.database_url
-        if url.startswith("sqlite:///"):
-            actual = Path(url.removeprefix("sqlite:///")).resolve()
-            return actual == _DEFAULT_DB_PATH
-    except Exception:
-        return False
     return False
 
 

@@ -210,3 +210,22 @@ def test_mirror_json_written(test_db, tmp_path, monkeypatch):
     data = json.loads(mirror.read_text())
     assert "300308" in data
     assert data["300308"]["label"] == "值得持有"
+
+
+def test_mirror_json_skipped_by_default(test_db, tmp_path, monkeypatch):
+    """默认不应写入用户 Home 目录镜像文件。"""
+    from backend.agents.long_term import storage
+
+    home_mirror = tmp_path / "home" / ".stock-sage" / "long_term_labels.json"
+    monkeypatch.setattr(storage, "MIRROR_PATH", None)
+    monkeypatch.setattr(storage.settings, "long_term_label_mirror_path", "")
+
+    label = LongTermLabel(
+        symbol="300308", date="2026-05-15",
+        label="值得持有", score=65,
+        votes={"track": "值得持有"}, key_findings=["test"],
+        expires_at="2026-05-25",
+    )
+    storage.save_label(label, test_db)
+
+    assert not home_mirror.exists()

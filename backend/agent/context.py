@@ -271,13 +271,6 @@ def _watchlist(db: Session) -> dict:
     }
 
 
-def _paper_trading_rules(memory_snapshot: dict) -> dict:
-    keys = {row["key"]: row for row in memory_snapshot.get("ai_memory", [])}
-    return {
-        "test2_no_5day_forced_exit": "test2_no_5day_forced_exit" in keys,
-    }
-
-
 def stock_sage_context(
     db: Session,
     *,
@@ -313,7 +306,6 @@ def stock_sage_context(
         },
         "memory": memory["database"],
         "memory_context": memory_context,
-        "paper_trading_rules": _paper_trading_rules(memory),
         "positions": _open_positions(db),
         "watchlist": _watchlist(db),
     }

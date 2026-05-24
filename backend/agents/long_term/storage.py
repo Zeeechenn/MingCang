@@ -14,11 +14,20 @@ from pathlib import Path
 from typing import cast
 
 from backend.agents.long_term.base import LongTermLabel, VoteLabel
+from backend.config import settings
 from backend.data.database import LongTermLabel as LongTermLabelORM
 
 logger = logging.getLogger(__name__)
 
-MIRROR_PATH = Path.home() / ".stock-sage" / "long_term_labels.json"
+MIRROR_PATH: Path | None = None
+
+
+def _mirror_path() -> Path | None:
+    """Return the optional label mirror path; empty means DB-only storage."""
+    if MIRROR_PATH is not None:
+        return MIRROR_PATH
+    configured = settings.long_term_label_mirror_path.strip()
+    return Path(configured).expanduser() if configured else None
 
 
 def save_label(label: LongTermLabel, db) -> None:
@@ -46,7 +55,10 @@ def save_label(label: LongTermLabel, db) -> None:
 
 
 def _write_mirror(db) -> None:
-    """把所有 active label 写到 ~/.stock-sage/long_term_labels.json"""
+    """把所有 active label 写到可选镜像 JSON 文件。"""
+    mirror_path = _mirror_path()
+    if mirror_path is None:
+        return
     try:
         today = datetime.utcnow().strftime("%Y-%m-%d")
         rows = (db.query(LongTermLabelORM)
@@ -62,8 +74,8 @@ def _write_mirror(db) -> None:
                 "key_findings": json.loads(r.key_findings_json) if r.key_findings_json else [],
                 "expires_at": r.expires_at,
             }
-        MIRROR_PATH.parent.mkdir(parents=True, exist_ok=True)
-        MIRROR_PATH.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        mirror_path.parent.mkdir(parents=True, exist_ok=True)
+        mirror_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
         logger.warning("镜像写入失败: %s", e)
 

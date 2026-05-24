@@ -63,7 +63,7 @@ include-package-data = false
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["backend*"]
-exclude = ["tests*", "frontend*", "docs*", "paper_trading*"]
+exclude = ["tests*", "frontend*", "docs*"]
 
 [tool.ruff]
 target-version = "py311"

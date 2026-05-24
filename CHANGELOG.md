@@ -243,7 +243,7 @@
 
 ### Removed — A 组（2026-05-16）
 - 5 个零引用活动代码文件：`realtime.py` / `portfolio_backtest.py` / `signal_stats.py` / `signal_stats_universe.py` / `stock_picker.py`
-- 4 个极薄占位文档：`paper_trading/results.md` / `paper_trading/watchlist.md` / `docs/ARCHITECTURE.md` / `docs/MEMORY_DESIGN.md`
+- 4 个极薄占位文档：本地验证材料 / 本地关注池 / `docs/ARCHITECTURE.md` / `docs/MEMORY_DESIGN.md`
 - 3 个 legacy 目录：`backend/analysis/legacy/` / `backend/backtest/legacy/` / `backend/data/legacy/`
 
 ---
@@ -349,7 +349,7 @@ legacy 归档 / position_sizer → combo_weights / position_sizing → single_po
 
 ### M1.7 双 profile 切换系统
 
-`SignalWeights` dataclass + `active_signal_weights(as_of)` / `paper_trading_profile` auto 模式 / `signal_policy.py` / `trailing_stop.py`
+`SignalWeights` dataclass + `active_signal_weights(as_of)` / signal profile auto 模式 / `signal_policy.py` / `trailing_stop.py`
 
 ### M1.8 前端复盘卡片
 

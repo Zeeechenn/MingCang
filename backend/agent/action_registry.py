@@ -42,6 +42,7 @@ RUNTIME_CONFIG_SCHEMA = {
     "type": "object",
     "properties": {
         "paper_trading_profile": {"type": "string", "enum": ["auto", "test1_legacy_qlib", "new_framework"]},
+        "signal_profile": {"type": "string", "enum": ["auto", "test1_legacy_qlib", "new_framework"]},
         "new_framework_entry_threshold": {"type": "number"},
         "test1_entry_threshold": {"type": "number"},
         "weight_quant": {"type": "number", "minimum": 0, "maximum": 1},

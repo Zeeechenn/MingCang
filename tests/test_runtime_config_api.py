@@ -23,7 +23,7 @@ def test_update_runtime_config_mutates_allowed_settings(monkeypatch):
 
     try:
         response = update_runtime_config({
-            "paper_trading_profile": "new_framework",
+            "signal_profile": "new_framework",
             "new_framework_entry_threshold": 31,
             "adx_filter_enabled": True,
         })

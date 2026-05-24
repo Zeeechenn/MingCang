@@ -8,7 +8,7 @@ StockSage combines a local data foundation, multi-source market/news feeds, tech
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-M2%20paper%20trading-yellow)
+![Status](https://img.shields.io/badge/status-agent%20research-yellow)
 
 **Language**: [简体中文](README.md) · [English](README_EN.md)
 
@@ -20,7 +20,7 @@ StockSage combines a local data foundation, multi-source market/news feeds, tech
 
 StockSage is a **local-first** personal A-share research system and an already-agentized investment-research kernel. It organizes market data, news, fundamentals, QFII holdings, index data, positions, reviews and long-term memory in local SQLite, then uses technical indicators, LLM news sentiment, long-term research, portfolio risk control and auditable memory to support traceable decisions.
 
-The project currently focuses on **paper-trading validation** and **agent-ready usage**. It is not an automated trading system, does not ask LLMs to directly predict prices, and will evolve from the current Web console toward a fuller client experience.
+The project currently focuses on **agent-ready usage**, data quality and research-review workflows. It is not an automated trading system, does not ask LLMs to directly predict prices, and will evolve from the current Web console toward a fuller client experience.
 
 ## Agent Usage Guide
 
@@ -33,7 +33,7 @@ StockSage Agent is designed for agent clients such as Codex, Claude Code, Claude
 | **Long-term research** | Run the long-term analyst team across sector thesis, financial quality, prosperity indicators and QFII flow. | Long-term label, score, key findings and hold/avoid rationale. |
 | **Deep research** | Coordinate industry researcher, company researcher, risk reviewer, source auditor and report writer roles. | Markdown research report, core conclusion, risk review and cited sources. |
 | **Memory management** | Read or write long-term rules, risk preferences, research indexes, chat summaries and layered decision memory. | Memory summary, recall results and memory-write confirmations. |
-| **Reviews and paper trading** | Analyze test performance, signal attribution, win rate, drawdown, exit reasons and risk-rule execution. | Review summary, performance attribution and rule-calibration suggestions. |
+| **Reviews and validation** | Analyze signal performance, attribution, win rate, drawdown, exit reasons and risk-rule execution. | Review summary, performance attribution and rule-calibration suggestions. |
 | **Project health** | Check data coverage, scheduler, API, config, tests and docs. | Health report, anomalies and next maintenance steps. |
 
 **Example prompts**:
@@ -42,7 +42,6 @@ StockSage Agent is designed for agent clients such as Codex, Claude Code, Claude
 Read project memory, then research whether 300308 is still worth following.
 Run an AI computing value-chain topic research report covering 300308 and 300394.
 Run the long-term analyst team and refresh long-term labels for my watchlist.
-Summarize test-2 paper-trading performance and identify whether risk rules need adjustment.
 Check current data coverage and scheduler health.
 ```
 
@@ -85,7 +84,6 @@ Once inside pi, you can ask:
 ```text
 Check StockSage health.
 Research 300308 with memory, news, positions and long-term labels.
-Summarize test-2 paper-trading performance.
 Add 300394 to my watchlist.
 ```
 
@@ -164,7 +162,7 @@ python3 -m backend.agent.cli health --pretty
 
 ## Recommended Configuration
 
-Production currently defaults to the `new_framework` signal weighting. Based on existing backtests and early test-1 / test-2 comparisons, the recommendation is to **temporarily exclude the quant layer from the composite score** and keep only technical and news-sentiment signals:
+Production currently defaults to the `new_framework` signal weighting. Based on existing backtests and validation results, the recommendation is to **temporarily exclude the quant layer from the composite score** and keep only technical and news-sentiment signals:
 
 | Variable | Recommended value | Meaning |
 |---|---:|---|
@@ -173,7 +171,7 @@ Production currently defaults to the `new_framework` signal weighting. Based on 
 | `WEIGHT_SENTIMENT` | `0.4` | Weight of news-sentiment / event signals. |
 | `NEW_FRAMEWORK_ENTRY_THRESHOLD` | `25.0` | Composite score must exceed this to become a small-position trial candidate. |
 
-These are current project recommendations, **not hard-coded trading advice**. Users can adjust them on the Web config page or in `.env`, and validate their own parameter mix with paper trading, backtests and reviews.
+These are current project recommendations, **not hard-coded trading advice**. Users can adjust them on the Web config page or in `.env`, and validate their own parameter mix with backtests and reviews.
 
 ## Cautions
 

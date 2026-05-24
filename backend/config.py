@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     weight_sentiment: float = 0.4
     new_framework_entry_threshold: float = 25.0
 
-    # 纸上交易验证轨：测试1保留旧三路框架，测试2回到新框架。
+    # Signal profile: legacy Qlib framework or current new framework.
     paper_trading_profile: str = "auto"  # auto / test1_legacy_qlib / new_framework
     test1_start_date: str = "2026-05-13"
     test1_end_date: str = "2026-05-17"
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # Stop loss / take profit
     # 阶段B 参数扫描（8方案）后的最终默认：max_hold=10d 单点提升 Sharpe +0.16，
     # 其余"改进"（ADX 过滤、trailing 1.5×ATR、RR=1.5）单独或叠加都拖累 Sharpe。
-    # 全部可通过 .env 覆盖，便于测试1/2 结束后再调参。
+    # 全部可通过 .env 覆盖，便于验证后再调参。
     atr_period: int = 14
     atr_multiplier: float = 2.0
     risk_reward_ratio: float = 2.0            # 固定止盈参考线仍按 1:2 RR 展示
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
 
     # 阶段B ADX 震荡市过滤
     # 默认关闭：参数扫描显示 ADX 过滤减少入场但每笔质量未提升，Sharpe -0.18
-    # 测试1/2 结束后如发现震荡市连环亏损可再启用
+    # 验证后如发现震荡市连环亏损可再启用
     adx_filter_enabled: bool = False
     adx_threshold: float = 20.0
 
@@ -133,6 +133,7 @@ class Settings(BaseSettings):
     jingqi_strong_pctile: float = 0.70
     jingqi_weak_pctile: float = 0.30
     long_term_label_ttl_days: int = 10
+    long_term_label_mirror_path: str = ""
     long_term_avoid_blocks_buy: bool = True
     long_term_overvalued_position_factor: float = 0.5
     long_term_watch_score_cap: float = 30.0
@@ -218,8 +219,8 @@ def active_signal_weights(as_of: date | None = None) -> SignalWeights:
     """
     返回当前信号融合权重。
 
-    测试1（2026-05-13 ~ 2026-05-20）是旧框架有效性验证，保留 Qlib。
-    测试2 和生产默认使用新框架，Qlib 权重为 0。
+    Legacy profile keeps Qlib enabled. Production default uses new_framework,
+    where Qlib weight is 0.
     """
     current = as_of or date.today()
     profile = settings.paper_trading_profile

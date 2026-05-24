@@ -8,7 +8,7 @@ RUFF ?= $(PYTHON) -m ruff
 MYPY ?= $(PYTHON) -m mypy
 PRE_COMMIT ?= $(PYTHON) -m pre_commit
 
-.PHONY: help install precommit-install test frontend-test lint fmt typecheck check verify dev build coverage-snapshot paper-stats agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
+.PHONY: help install precommit-install test frontend-test lint fmt typecheck check verify dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
 
 help:
 	@echo "StockSage Makefile commands:"
@@ -22,7 +22,6 @@ help:
 	@echo "  check        lint + typecheck + test 一键全跑（PR 前用）"
 	@echo "  verify       后端/前端/构建全量验证"
 	@echo "  coverage-snapshot 输出当前数据覆盖快照"
-	@echo "  paper-stats  统计纸面交易结果"
 	@echo "  agent-setup  配置 StockSage pi/agent 本地运行环境"
 	@echo "  agent        启动 StockSage pi 研究型终端 agent"
 	@echo "  agent-dev    启动 StockSage pi 开发型终端 agent"
@@ -70,9 +69,6 @@ build:
 
 coverage-snapshot:
 	PYTHONPATH=. $(PYTHON) -m backend.tools.coverage_snapshot
-
-paper-stats:
-	PYTHONPATH=. $(PYTHON) -m paper_trading.stats
 
 agent-setup:
 	bash scripts/agent_setup.sh

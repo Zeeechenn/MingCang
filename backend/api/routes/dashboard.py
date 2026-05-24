@@ -1,10 +1,5 @@
-"""Dashboard summary route + Test1 / Test2 metadata."""
+"""Dashboard summary route."""
 from __future__ import annotations
-
-import json
-import logging
-from datetime import date
-from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -13,71 +8,7 @@ from backend.api.routes._shared import signal_to_schema
 from backend.data.database import IndexPrice, Position, Price, Signal, get_db
 from backend.decision.signal_policy import is_entry_signal
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-TEST1_POSITIONS = [
-    {
-        "symbol": "300308",
-        "name": "中际旭创",
-        "entry_date": "2026-05-13",
-        "entry_price": 999.68,
-        "stop_loss": 990.15,
-        "take_profit": 1262.49,
-        "status": "持有中",
-        "pnl_pct": 8.13,
-    },
-    {
-        "symbol": "603986",
-        "name": "兆易创新",
-        "entry_date": "2026-05-13",
-        "entry_price": 344.00,
-        "stop_loss": 323.28,
-        "take_profit": 425.31,
-        "status": "持有中",
-        "pnl_pct": 3.86,
-    },
-    {
-        "symbol": "300750",
-        "name": "宁德时代",
-        "entry_date": "2026-05-14",
-        "entry_price": 449.38,
-        "stop_loss": 395.57,
-        "take_profit": 493.69,
-        "status": "持有中⚠️",
-        "pnl_pct": -4.70,
-    },
-    {
-        "symbol": "300394",
-        "name": "天孚通信",
-        "entry_date": "2026-05-15",
-        "entry_price": 394.52,
-        "stop_loss": 358.23,
-        "take_profit": 498.61,
-        "status": "持有中",
-        "pnl_pct": 2.66,
-    },
-]
-
-TEST2_UNIVERSE_PATH = Path(__file__).resolve().parents[3] / "paper_trading" / "test2_universe.json"
-
-
-def _load_test2_universe() -> tuple[list[dict], bool]:
-    """Single source of truth for the test2 paper-trading universe.
-
-    Falls back to an empty list with a debug log rather than crashing the
-    dashboard route, since the universe is informational metadata.
-    """
-    try:
-        data = json.loads(TEST2_UNIVERSE_PATH.read_text(encoding="utf-8"))
-        return data.get("stocks", []), True
-    except FileNotFoundError:
-        logger.debug("test2_universe.json missing at %s", TEST2_UNIVERSE_PATH)
-        return [], False
-    except Exception as e:
-        logger.warning("test2_universe.json load failed: %s", e)
-        return [], False
 
 
 def _manual_positions_summary(db: Session) -> dict:
@@ -129,18 +60,8 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
     from backend.data.quality import build_data_coverage_report
     from backend.ops import kill_switch
 
-    today = date.fromisoformat(as_of) if as_of else date.today()
-    test1_start = date.fromisoformat(settings.test1_start_date)
-    test1_end = date.fromisoformat(settings.test1_end_date)
-    if test1_start <= today <= test1_end:
-        active_test = "test1"
-    elif date(2026, 5, 18) <= today <= date(2026, 7, 18):
-        active_test = "test2"
-    else:
-        active_test = "between_tests"
-
     coverage = build_data_coverage_report(db)
-    weights = active_signal_weights(today)
+    weights = active_signal_weights()
     latest_price_date = db.query(Price.date).order_by(Price.date.desc()).first()
     latest_signal_date = db.query(Signal.date).order_by(Signal.date.desc()).first()
     latest_date = latest_signal_date[0] if latest_signal_date else None
@@ -158,7 +79,6 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
         entry_count = sum(1 for row in rows if is_entry_signal(row.recommendation, include_legacy=True))
 
     db_path = settings.database_url.removeprefix("sqlite:///")
-    test2_universe, test2_universe_available = _load_test2_universe()
     return {
         "system": {
             "database_ok": True,
@@ -171,34 +91,6 @@ def dashboard_summary(as_of: str | None = None, db: Session = Depends(get_db)):
                 "quant": weights.quant,
                 "technical": weights.technical,
                 "sentiment": weights.sentiment,
-            },
-        },
-        "paper_trading": {
-            "active_test": active_test,
-            "test1": {
-                "period": "2026-05-13 ~ 2026-05-17",
-                "rule_version": "test1_legacy_qlib",
-                "entry_threshold": settings.test1_entry_threshold,
-                "forced_exit": True,
-                "forced_exit_unit": "5 个 A 股交易日",
-                "positions": len(TEST1_POSITIONS),
-                "position_pct": 0.20,
-                "total_position_pct": 0.80,
-                "holdings": TEST1_POSITIONS,
-            },
-            "test2": {
-                "period": "2026-05-18 ~ 2026-07-18",
-                "rule_version": "new_framework",
-                "entry_threshold": settings.new_framework_entry_threshold,
-                "forced_exit": False,
-                "position_pct": settings.max_position_per_stock,
-                "max_positions": 3,
-                "total_position_pct": 0.45,
-                "universe": test2_universe,
-                "universe_available": test2_universe_available,
-                "trailing_stop_enabled": settings.trailing_stop_enabled,
-                "trailing_atr_mult": settings.trailing_atr_mult,
-                "take_profit_exit_enabled": settings.take_profit_exit_enabled,
             },
         },
         "positions": _manual_positions_summary(db),

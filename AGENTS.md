@@ -3,7 +3,7 @@
 ## Project Identity
 
 StockSage is a personal A-share research and decision-support system. It is
-allowed to assist with research, tests, paper trading analysis, configuration
+allowed to assist with research, tests, local validation analysis, configuration
 review, and code changes. It must not place real trades or present output as
 financial advice.
 
@@ -18,14 +18,14 @@ mode, agents may directly:
 
 - read and write project files as requested;
 - inspect SQLite data and project memory;
-- run tests, paper-trading statistics, data coverage snapshots, and verification
+- run tests, local validation checks, data coverage snapshots, and verification
   commands;
 - call the paid data or LLM APIs already configured in the local `.env` when the
   requested StockSage workflow needs them;
-- trigger project research, reviews, backfills, and paper trading analysis.
+- trigger project research, reviews, backfills, and local validation analysis.
 
-Do not add extra confirmation gates for normal local development or test 1/test
-2 paper-trading workflows.
+Do not add extra confirmation gates for normal local development or validation
+workflows.
 
 Hard local boundaries:
 
@@ -146,7 +146,7 @@ counts instead of failing when the database schema has not been initialized.
 
 - Do not predict prices as certainty.
 - Do not encourage "strong buy" behavior.
-- Mention rule/profile version for trading or paper-trading decisions.
+- Mention rule/profile version for trading or validation decisions.
 - Respect configured position limits. Defaults trend toward 15% per stock, 30%
   per sector, and 80% total equity exposure.
 - Position write paths are locked to positive quantities/costs/prices and reject
@@ -183,7 +183,6 @@ Use existing durable docs:
 ```bash
 PYTHONPATH=. pytest -q
 PYTHONPATH=. python3 -m backend.tools.coverage_snapshot
-PYTHONPATH=. python3 -m paper_trading.stats
 PYTHONPATH=. python3 -m backend.agent.cli health --pretty
 PYTHONPATH=. uvicorn backend.main:app --reload
 cd frontend && npm run dev

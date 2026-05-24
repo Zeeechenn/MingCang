@@ -10,7 +10,7 @@
 |---|---|---|
 | M0 | 系统骨架 | ✅ 完成 |
 | M1 | 严肃化与质量门槛 | ✅ 完成 |
-| M2 | 纸上交易验证 | ⏳ 进行中 |
+| M2 | 本地验证材料 | 🏠 本地维护，不进入 GitHub |
 | M3 | 可信度审计层 | ✅ 完成 |
 | M4 | 多 Agent 决策深化 | 🟡 大部分完成，LangGraph / full FinMem 后置 |
 | M5 | 自动化执行 | 🔲 后置 |
@@ -28,8 +28,8 @@
 
 | Profile | quant | technical | sentiment | entry_threshold | 触发条件 |
 |---|---|---|---|---|---|
-| `test1_legacy_qlib` | 0.45 | 0.40 | 0.15 | 20 | 测试 1 期间 2026-05-13 ~ 05-20 |
-| `new_framework` | 0.0 | 0.6 | 0.4 | 25 | 测试 2 起 / 生产默认 |
+| `test1_legacy_qlib` | 0.45 | 0.40 | 0.15 | 20 | 旧 Qlib 验证 profile |
+| `new_framework` | 0.0 | 0.6 | 0.4 | 25 | 生产默认 |
 
 综合评分范围：-100（规避）→ +100（可小仓试错）
 
@@ -130,7 +130,7 @@ curl http://localhost:8000/api/signals/eval/600519?days=60
 
 ## Agent-Ready Snapshot
 
-- 本地 Codex / Claude Code 使用 StockSage 时默认信任，可直接跑测试、查 DB、运行纸上交易统计和项目研究流程。
+- 本地 Codex / Claude Code 使用 StockSage 时默认信任，可直接跑测试、查 DB、运行验证和项目研究流程。
 - 远程 agent 暴露必须显式设置 `STOCKSAGE_AGENT_MODE=remote`，并配置 `STOCKSAGE_AGENT_API_KEY`；stdio MCP 工具调用需传入 `api_key` 参数，远程写操作默认关闭。
 - 项目记忆入口在 `backend/agent/context.py`，MCP 启动入口为 `PYTHONPATH=. python3 -m backend.agent.mcp_server`；未初始化数据库时 health/context 返回空状态，不抛出缺表错误。
 - 盘后批处理已接入 Portfolio Manager：单股信号先生成，再统一做组合层裁剪；最终仓位写入 `position_pct`，原始单股仓位保留在 `trader_position_pct`，裁剪原因进入 `portfolio_decision` / evidence。

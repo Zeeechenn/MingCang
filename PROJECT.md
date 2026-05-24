@@ -40,7 +40,7 @@ runtime databases and personal trading records stay outside Git tracking.
 |---|---|---|
 | **M0** | 系统骨架 | ✅ 完成 |
 | **M1** | 严肃化与质量门槛 | ✅ 完成 |
-| **M2** | 纸上交易验证 | ⏳ 进行中 |
+| **M2** | 本地验证材料 | 🏠 本地维护，不进入 GitHub |
 | **M3** | 可信度审计层（DSR/PBO/WF/PIT/KillSwitch） | ✅ 完成 |
 | **M4** | 多 Agent 决策深化 | 🟡 大部分（M4.1/4.2/4.3/4.6 已落地，M4.4/4.5 暂缓） |
 | **M5** | 自动化执行 | 🔲 后置 |

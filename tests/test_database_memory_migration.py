@@ -48,10 +48,10 @@ def test_seed_default_memory_honors_explicit_migration_flag(monkeypatch, tmp_pat
     assert called["migrated"] is True
 
 
-def test_should_migrate_local_memory_for_default_database_path(monkeypatch):
+def test_should_not_migrate_local_memory_for_default_database_path_without_flag(monkeypatch):
     from backend.data import database
 
     monkeypatch.delenv("STOCKSAGE_MIGRATE_LOCAL_MEMORY", raising=False)
     monkeypatch.setattr(database.settings, "database_url", f"sqlite:///{database._DEFAULT_DB_PATH}")
 
-    assert database._should_migrate_local_memory() is True
+    assert database._should_migrate_local_memory() is False

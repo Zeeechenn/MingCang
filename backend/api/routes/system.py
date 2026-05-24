@@ -27,6 +27,7 @@ router = APIRouter()
 
 RUNTIME_CONFIG_KEYS = {
     "paper_trading_profile",
+    "signal_profile",
     "new_framework_entry_threshold",
     "test1_entry_threshold",
     "weight_quant",
@@ -133,14 +134,18 @@ def update_runtime_config(payload: dict):
         if key not in RUNTIME_CONFIG_KEYS:
             raise HTTPException(400, f"Unsupported runtime config key: {key}")
 
+    normalized = dict(payload)
+    if "signal_profile" in normalized:
+        normalized["paper_trading_profile"] = normalized.pop("signal_profile")
+
     data = settings.model_dump()
-    data.update(payload)
+    data.update(normalized)
     try:
         validated = Settings.model_validate(data)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(400, f"Invalid runtime config: {exc}") from exc
 
-    for key in payload:
+    for key in normalized:
         object.__setattr__(settings, key, getattr(validated, key))
 
     return _runtime_config_payload()

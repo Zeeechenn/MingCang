@@ -33,7 +33,7 @@ const SECTIONS = [
 
 const SECTION_COPY = {
   decision: ['01 · 决策引擎', '规则草稿', '控制综合分如何计算，以及哪些信号可以进入可小仓试错。'],
-  portfolio: ['02 · 组合规则', '仓位草稿', '集中展示纸面交易仓位、止损止盈和退出保护的后端参数。'],
+  portfolio: ['02 · 组合规则', '仓位草稿', '集中展示仓位、止损止盈和退出保护的后端参数。'],
   agents: ['03 · LLM 与 Agent', '辩论草稿', '控制多空辩论、仲裁置信度和记忆读取边界。'],
   data: ['04 · 数据源', '数据草稿', '检查价格、财报、新闻覆盖率，并保留本地优先的数据源策略。'],
   schedule: ['05 · 调度', '日历草稿', '展示 A 股交易日相关的盘前、盘后、止损检查调度入口。'],
@@ -391,7 +391,7 @@ export default function AdminPage() {
     setMessage('')
     try {
       const updated = await updateRuntimeConfig({
-        paper_trading_profile: profile,
+        signal_profile: profile,
         new_framework_entry_threshold: threshold,
         director_min_confidence: confidence / 100,
         regime_filter_enabled: limitGuard,
@@ -813,7 +813,7 @@ export default function AdminPage() {
                   ['当前', '读取配置快照'],
                   ['05-16', 'M6.1 数据覆盖完成'],
                   ['05-16', 'M4.9 exit 实验完成'],
-                  ['05-15', '测试 1 信号更新'],
+                  ['05-15', '信号规则更新'],
                 ].map(([time, text]) => (
                   <div key={`${time}-${text}`} className="grid grid-cols-[52px_1fr] gap-3 border-b border-stone-300 pb-3 text-sm last:border-0 last:pb-0 dark:border-slate-700">
                     <span className="font-mono text-xs text-stone-500 dark:text-slate-400">{time}</span>

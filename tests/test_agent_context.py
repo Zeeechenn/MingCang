@@ -24,9 +24,9 @@ def test_memory_snapshot_summarizes_project_memory(test_db, tmp_path):
     _prepare_memory_schema(test_db)
     remember(
         test_db,
-        "test2_no_5day_forced_exit",
-        "测试 2 没有 5 日强平规则。",
-        category="paper_trading_rules",
+        "validation_rule",
+        "本地验证材料不进入 GitHub。",
+        category="validation_rules",
         scope="global",
         force=True,
     )
@@ -59,7 +59,7 @@ def test_memory_snapshot_summarizes_project_memory(test_db, tmp_path):
     assert snapshot["files"]["medium_markdown"] == 1
     assert snapshot["files"]["plain_symbol_markdown"] == 1
     assert snapshot["files"]["backup_files"] == ["ai_memory_2026-05-19.json"]
-    assert snapshot["ai_memory"][0]["key"] == "test2_no_5day_forced_exit"
+    assert snapshot["ai_memory"][0]["key"] == "validation_rule"
     assert snapshot["recent_audit"][0]["event_type"] == "decision_memory.save"
 
 
@@ -119,9 +119,9 @@ def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_
     _prepare_memory_schema(test_db)
     remember(
         test_db,
-        "test2_no_5day_forced_exit",
-        "测试 2 没有 5 日强平规则。",
-        category="paper_trading_rules",
+        "validation_rule",
+        "本地验证材料不进入 GitHub。",
+        category="validation_rules",
         scope="global",
         force=True,
     )
@@ -158,7 +158,6 @@ def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_
 
     assert context["agent_mode"] == "local"
     assert context["memory"]["ai_memory_count"] == 1
-    assert context["paper_trading_rules"]["test2_no_5day_forced_exit"] is True
     assert context["positions"]["open_count"] == 1
     assert context["symbol_context"]["symbol"] == "300308"
     assert context["symbol_context"]["latest_signal"]["recommendation"] == "可小仓试错"

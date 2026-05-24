@@ -117,12 +117,8 @@
 - [x] AI Chat 增加 SSE 流式输出；长回复 1 秒内有首字反馈。
 - [x] Chat 消息支持 Markdown 渲染，优先复用 `reviewContent.js` 或引入轻量 renderer。
 
-### M10.4 Paper Trading 自动统计（必做 / P1）
-- [x] 统一 paper trade 结构：entry、exit、reason、fees、gross/net pnl、holding_days、signal_snapshot。
-- [x] 自动计算胜率、平均收益、盈亏比、最大回撤、单笔最大亏损、手续费后收益。
-- [x] 按 profile / recommendation / exit_reason 分组统计 test1/test2 表现。
-- [x] 每个交易日更新后自动生成 test summary，减少手工维护误差。
-- [x] 测试 2 积累 20+ 交易日后，再讨论阈值、exit、权重是否需要调整。
+### M10.4 本地验证统计（已转本地维护）
+- [x] 本地验证材料不进入 GitHub；公开仓库只保留生产代码、回测、复盘和质量检查入口。
 
 ### M10.5 长期工程基础（后置 / P3）
 - [ ] 数据库迁移体系：先保留 `create_all + runtime patch`，中期引入 Alembic baseline。
@@ -143,7 +139,7 @@
 ## M11 Agent-Ready 本地/远程双模式接口 ✅（2026-05-21）
 
 ### M11.0 Agent 文档契约 ✅
-- [x] `AGENTS.md` 升级为本地 agent 操作手册：本地 Codex / Claude Code 默认信任，可直接跑测试、查 DB、运行纸上交易统计、调用已配置的项目 API。
+- [x] `AGENTS.md` 升级为本地 agent 操作手册：本地 Codex / Claude Code 默认信任，可直接跑测试、查 DB、运行验证、调用已配置的项目 API。
 - [x] `CLAUDE.md` 通过 `@AGENTS.md` 复用共享规则，只保留 Claude Code 特有说明。
 - [x] 明确 Codex/Claude 自身 LLM 调用与 StockSage `.env` 中项目运行时 LLM/API key 分离。
 
@@ -210,8 +206,8 @@
 
 ### M13.1 pi 项目本地配置 ✅
 - [x] 新增 `.pi/SYSTEM.md`，定义 StockSage pi 终端 agent 的研究边界、金融风险边界和写操作确认规则。
-- [x] 新增 `.pi/skills/stock-sage-research/SKILL.md`，覆盖健康检查、个股研究、记忆工作、纸上交易复盘和 confirmed action workflow。
-- [x] 新增 `.pi/prompts/`：个股研究、纸上交易复盘、健康检查、记忆快照模板。
+- [x] 新增 `.pi/skills/stock-sage-research/SKILL.md`，覆盖健康检查、个股研究、记忆工作、复盘和 confirmed action workflow。
+- [x] 新增 `.pi/prompts/`：个股研究、健康检查、记忆快照模板。
 
 ### M13.2 启动入口与文档 ✅
 - [x] `make agent-setup`：检查 Python、安装 agent extra、创建 `.env`、初始化 DB，并提示 pi 安装与 provider key 配置。
@@ -790,7 +786,7 @@
         `--model`，完全忽略 tier。
 - [x] **触发面**：`sentiment.analyze_news` 显式传 `model_tier="fast"` 期望走
       Haiku-级价位，实际全部走 Sonnet；盘后批量 ≥88 只股票一次=88 次
-      Sonnet 调用，与项目记忆「测试2 token 暴涨」证据吻合。
+      Sonnet 调用，与项目记忆中的 token 暴涨证据吻合。
 - [x] **修复**：恢复 fast/capable 真实分层（如
       `claude-haiku-4-5-20251001` / `claude-sonnet-4-6`）；OpenAIProvider
       `_MODELS` 去掉 `anthropic/` 前缀，并允许 `settings.openai_model_fast`
@@ -856,23 +852,9 @@
 
 ---
 
-## M2 纸上交易验证 ⏳（旧 Phase 6.5 + 执行计划 D）
+## M2 本地验证材料 🏠
 
-详细规则与持仓作为本地验证材料维护，不进入 GitHub。
-
-### M2.1 测试 1（用户主导，2026-05-13 ~ 05-20，1 周）
-宽撒网验证系统完整性。**含 5 个交易日强平规则**（仅本测试适用）。
-
-### M2.2 测试 2（人工 / AI 辅助，2026-05-21 ~ 2026-07-21，2 个月强测试）
-精选 7 股，阈值 25。**无 5 日强平** — 让趋势完整运行。中期复盘节点：6/3、6/20、7/4。
-
-### M2.3 测试 1 收盘后汇总（2026-05-20）
-- [ ] 汇总持仓 / 信号准确率 / 与系统建议的对照
-
-### M2.4 测试 2 启动 checklist（2026-05-21）
-- [ ] 启动当日执行 checklist
-
-> 测试 2 收尾时（约 2026-07-21）会有 ≥20 笔真实交易样本，可与 M1 严肃回测、M4.6 多 Agent 对比、M4.8 阈值扫描、M4.9 exit 实验交叉验证。
+本地验证材料、个人记录和临时统计不进入 GitHub。公开仓库只维护可复现的生产代码、回测工具、质量检查和通用复盘入口。
 
 ---
 
@@ -908,7 +890,7 @@
 **待做**：
 - [ ] **M4.4 LangGraph 重构 pipeline** —— 暂缓。
       M4.7 修复后两路结果几乎一致，多 Agent 架构在此样本上不显优势。
-      触发条件：测试2 结束（~6/3）拿到 ≥10 笔真实交易 + path B 显示 Sharpe ≥ path A + 0.3。
+      触发条件：本地验证拿到 ≥10 笔样本 + path B 显示 Sharpe ≥ path A + 0.3。
 - [ ] **M4.5 FinMem 完整替换 `decision_memory.py`** —— 暂缓。
       memory_layered 已部分实现，重写需 ≥30 笔样本证明"记忆深度 → Sharpe 改善"。
 - [x] **回填历史 signals（2026-05-16）** — `backend/backtest/backfill_signals.py`
@@ -919,8 +901,7 @@
 - [x] **M4.8 entry_threshold 扫描（2026-05-16）** — `backend/backtest/sweep_threshold.py`
       在 460 信号上扫 9 档阈值（5–45），Sharpe 单调上升到 25 (3.12) 后崩塌（trades→1）。
       最优档 = **25**（19 trades / 57.9% win / Sharpe 3.12 / drawdown -39%）。
-      验证 `new_framework_entry_threshold=25` 正确；`test1_entry_threshold=20` 偏低，
-      但已无影响（测试 1 收盘 5/20，未在生产开新仓）。7 测试覆盖。
+      验证 `new_framework_entry_threshold=25` 正确。7 测试覆盖。
 - [x] **M4.9 exit 逻辑实验（2026-05-16）** — `backend/backtest/exit_sweep.py`
       在 19 个 entries（threshold=25）上跑 8 种 exit。Sharpe 排名：
       trailing_atr_2_5x (3.38) > fixed_5d (3.12) > fixed_10d (2.97) > atr_1_5x_3x (2.85) >
@@ -935,7 +916,7 @@
 
 QMT/miniQMT 券商对接；盘中实时止损；半自动→全自动渐进。
 
-**门槛**：M2 纸上交易验证通过 + M3.2 walk-forward 在独立 holdout 上验证通过。
+**门槛**：本地验证通过 + M3.2 walk-forward 在独立 holdout 上验证通过。
 
 ---
 
