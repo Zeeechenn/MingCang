@@ -7,8 +7,9 @@ allowed to assist with research, tests, paper trading analysis, configuration
 review, and code changes. It must not place real trades or present output as
 financial advice.
 
-When a user says `项目s`, `项目S`, `project s`, or `Project S`, treat that as
-this repository: `/path/to/stock-sage`.
+When a user refers to this project by an informal alias (for example
+`项目s`, `项目S`, `project s`, or `Project s`), treat that as this
+repository root.
 
 ## Local-First Agent Mode
 

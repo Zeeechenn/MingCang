@@ -4,7 +4,7 @@
 
 StockSage 把本地数据底座、多源行情与新闻、技术与情感分析、长期研究、组合风控和可审计记忆，组织成一套可追溯的辅助决策系统。它只做研究、复盘和风险提示，**不预测价格、不自动下单，最终决策始终由用户负责**。
 
-![Tests](https://img.shields.io/badge/tests-300%20pytest%20%2B%209%20node-brightgreen)
+[![CI](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
 ![License](https://img.shields.io/badge/license-MIT-blue)

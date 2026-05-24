@@ -28,7 +28,7 @@ python3 backend/data/database.py
 ### 测试
 
 ```bash
-PYTHONPATH=. pytest -q          # 全量，应 103 passed
+PYTHONPATH=. pytest -q          # 全量用例应全部通过
 PYTHONPATH=. pytest tests/test_kill_switch.py -v  # 单文件
 ```
 

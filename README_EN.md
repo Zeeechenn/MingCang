@@ -4,7 +4,7 @@
 
 StockSage combines a local data foundation, multi-source market/news feeds, technical and sentiment analysis, long-term research, portfolio risk control and auditable memory into one traceable research system. It supports research, reviews and risk alerts only — **it does not predict prices, place orders or make the final investment decision for the user**.
 
-![Tests](https://img.shields.io/badge/tests-300%20pytest%20%2B%209%20node-brightgreen)
+[![CI](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
 ![License](https://img.shields.io/badge/license-MIT-blue)
