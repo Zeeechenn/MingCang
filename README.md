@@ -39,7 +39,7 @@ StockSage 把行情、新闻、财务、QFII、持仓、复盘和长期记忆，
 ```bash
 git clone <repo-url> && cd stock-sage
 make agent-setup        # 检查 Python、安装依赖、创建 .env、初始化数据库
-make agent              # 进入终端 pi shell，开始用自然语言对话
+make agent              # 进入终端 shell，开始用自然语言对话
 ```
 
 最小本地配置只需 `AI_PROVIDER=local_cli`（走本地 Claude CLI），**不需要任何云 LLM key**。
@@ -60,7 +60,7 @@ cp .env.example .env
 python3 -m backend.agent.cli health --pretty
 ```
 
-进入 pi shell 后可以直接问：
+进入终端 shell 后可以直接问：
 
 ```text
 检查 StockSage 健康状态。
@@ -77,7 +77,7 @@ python3 -m backend.agent.cli health --pretty
 | 方式 | 适合场景 | 入口 |
 |---|---|---|
 | **A. 交给 Codex / Claude Code** | 把仓库丢给 agent，让它自己读 README、跑健康检查、配 `.env` | 任意 agent 客户端 |
-| **A2. 终端 pi Agent** | 想要自带研究/复盘对话界面 | `make agent-setup && make agent` |
+| **A2. 终端 Agent** | 想要自带研究/复盘对话界面 | `make agent-setup && make agent` |
 | **B. Web 控制台**（开发中） | 想要图形化的研究看板 | <http://localhost:5173>（API: <http://localhost:8000/docs>） |
 | **C. Docker / compose** | 想要一键部署整套前后端 | `cp .env.example .env && make docker-up` |
 | **D. 接入 MCP 工具** | 想把 StockSage 作为外层 agent 的工具集 | `make agent-mcp && make agent-mcp-config` |
@@ -95,7 +95,7 @@ python3 -m backend.agent.cli health --pretty
 </details>
 
 <details>
-<summary><b>方式 A2 — 终端 pi Agent</b></summary>
+<summary><b>方式 A2 — 终端 Agent</b></summary>
 
 `make agent-setup` 会检查 Python、安装 StockSage agent 依赖、创建 `.env`、初始化数据库，并提示安装 pi。V1 默认把同一把 Anthropic/OpenAI key 用于 pi 外层对话和 StockSage 内部 LLM runtime；如果选 `AI_PROVIDER=local_cli`，StockSage 内部 LLM 会走本地 Claude CLI。
 

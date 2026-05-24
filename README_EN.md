@@ -39,7 +39,7 @@ It supports research, reviews and risk alerts only — **it does not predict pri
 ```bash
 git clone <repo-url> && cd stock-sage
 make agent-setup        # Check Python, install deps, create .env, init the DB
-make agent              # Enter the terminal pi shell and start asking in natural language
+make agent              # Enter the terminal shell and start asking in natural language
 ```
 
 The minimum local setup only needs `AI_PROVIDER=local_cli` (uses the local Claude CLI) — **no cloud LLM key required**.
@@ -60,7 +60,7 @@ Verify things are healthy:
 python3 -m backend.agent.cli health --pretty
 ```
 
-Inside the pi shell you can ask directly:
+Inside the terminal shell you can ask directly:
 
 ```text
 Check StockSage health.
@@ -77,7 +77,7 @@ Add 300394 to my watchlist.
 | Option | When to use | Entry |
 |---|---|---|
 | **A. Hand the project to Codex / Claude Code** | Drop the repo at an agent and let it read the README, run health, configure `.env` itself | Any agent client |
-| **A2. Terminal pi Agent** | You want a built-in research / review chat interface | `make agent-setup && make agent` |
+| **A2. Terminal Agent** | You want a built-in research / review chat interface | `make agent-setup && make agent` |
 | **B. Web console** (in development) | You want a graphical research dashboard | <http://localhost:5173> (API: <http://localhost:8000/docs>) |
 | **C. Docker / compose** | You want a one-shot deployment of backend + frontend | `cp .env.example .env && make docker-up` |
 | **D. Connect MCP tools** | You want StockSage as a tool surface for an outer agent | `make agent-mcp && make agent-mcp-config` |
@@ -95,7 +95,7 @@ Add 300394 to my watchlist.
 </details>
 
 <details>
-<summary><b>Option A2 — terminal pi Agent</b></summary>
+<summary><b>Option A2 — terminal Agent</b></summary>
 
 `make agent-setup` checks Python, installs StockSage agent dependencies, creates `.env`, initializes the database, and prompts for pi installation if needed. V1 defaults to reusing one Anthropic/OpenAI key for both the outer pi chat model and the StockSage internal LLM runtime. If you pick `AI_PROVIDER=local_cli`, the internal LLM workflows use the local Claude CLI instead.
 
