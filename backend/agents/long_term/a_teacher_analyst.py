@@ -1,7 +1,7 @@
 """
 A 老师赛道分析师（LLM 主导，五层框架）
 
-参考 ~/.claude/skills/a-teacher/SKILL.md 的方法论：
+参考 .pi/skills/a-teacher/SKILL.md（fallback：~/.claude/skills/a-teacher/SKILL.md）的方法论：
   1. 供应链数据核查
   2. 海外领先指标
   3. 周期 vs 结构性
@@ -31,7 +31,13 @@ from backend.llm import get_provider
 
 logger = logging.getLogger(__name__)
 
-SKILL_MD_PATH = Path.home() / ".claude" / "skills" / "a-teacher" / "SKILL.md"
+# 优先级：项目内 .pi/skills/a-teacher/SKILL.md > 用户全局 ~/.claude/skills/...> _FALLBACK_SYSTEM
+# 项目内版本随 git 同步到 GitHub，避免在其他机器/服务器上退化到精简兜底版
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SKILL_MD_CANDIDATES = (
+    _PROJECT_ROOT / ".pi" / "skills" / "a-teacher" / "SKILL.md",
+    Path.home() / ".claude" / "skills" / "a-teacher" / "SKILL.md",
+)
 
 # 兜底用的精简 system prompt（SKILL.md 不可达时用）
 _FALLBACK_SYSTEM = """你是 A老师（小红书 @A也叫艾利克斯）风格的研究员，对 A 股科技/硬件赛道做研究级判断。
@@ -100,18 +106,20 @@ _A_TEACHER_TOOL = {
 
 
 def _load_skill_system_prompt() -> str:
-    """读 ~/.claude/skills/a-teacher/SKILL.md 作 system prompt，失败用兜底"""
-    try:
-        if SKILL_MD_PATH.exists():
-            raw = SKILL_MD_PATH.read_text(encoding="utf-8")
-            # 剥离 YAML frontmatter（避免 `---` 开头让 CLI argparser 把整段当 option）
-            if raw.startswith("---"):
-                end = raw.find("\n---", 3)
-                if end != -1:
-                    raw = raw[end + 4:].lstrip()
-            return raw
-    except Exception as e:
-        logger.warning("读取 SKILL.md 失败: %s", e)
+    """按候选路径优先级读 SKILL.md 作 system prompt，全部失败时用兜底"""
+    for path in SKILL_MD_CANDIDATES:
+        try:
+            if path.exists():
+                raw = path.read_text(encoding="utf-8")
+                # 剥离 YAML frontmatter（避免 `---` 开头让 CLI argparser 把整段当 option）
+                if raw.startswith("---"):
+                    end = raw.find("\n---", 3)
+                    if end != -1:
+                        raw = raw[end + 4:].lstrip()
+                logger.debug("a_teacher SKILL.md loaded from %s", path)
+                return raw
+        except Exception as e:
+            logger.warning("读取 SKILL.md 失败 %s: %s", path, e)
     return _FALLBACK_SYSTEM
 
 
