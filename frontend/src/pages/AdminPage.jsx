@@ -587,7 +587,7 @@ export default function AdminPage() {
                   <SettingRow label="财报回填年限" hint="长期研究团队同步财务数据时回看的年份数量。">
                     <NumberInput value={financialYears} min={1} max={10} onChange={setFinancialYears} suffix="年" />
                   </SettingRow>
-                  <SettingRow label="Tavily 新闻补充阈值" hint="DB 内新闻数量低于该值时，触发联网补充。">
+                  <SettingRow label="新闻补缺阈值" hint="DB 内新闻数量低于该值时，先触发 Anspire 严格补缺；Tavily 配 key 后每轮信号都会补充。">
                     <NumberInput value={tavilyThreshold} min={0} max={10} onChange={setTavilyThreshold} />
                   </SettingRow>
                   <SettingRow label="Anspire 新闻窗口" hint="短线新闻搜索回看天数。">

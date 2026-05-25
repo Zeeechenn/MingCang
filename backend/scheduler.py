@@ -276,7 +276,7 @@ def _postmarket_news_sentiment(stock, db) -> dict:
             news_audits = news_audits + anspire_audits
             logger.info("Anspire补充 %s: +%d条 (DB=%d条)",
                         stock.symbol, len(anspire_titles[:slots]), db_title_count)
-    if len(titles) < settings.tavily_supplement_threshold:
+    if settings.tavily_api_key:
         tavily_titles = fetch_titles_tavily(stock.symbol, stock.name)
         if tavily_titles:
             titles = titles + tavily_titles

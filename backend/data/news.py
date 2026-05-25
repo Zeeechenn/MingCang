@@ -429,7 +429,9 @@ def search_titles_tavily(query: str, days: int = 1, max_results: int = 5) -> lis
 
     import requests
     try:
-        resp = requests.post(
+        session = requests.Session()
+        session.trust_env = False
+        resp = session.post(
             "https://api.tavily.com/search",
             json={
                 "api_key": settings.tavily_api_key,
@@ -439,7 +441,6 @@ def search_titles_tavily(query: str, days: int = 1, max_results: int = 5) -> lis
                 "days": days,
                 "include_answer": False,
             },
-            proxies={"http": None, "https": None},  # type: ignore[dict-item]  # 直连，绕过系统代理
             timeout=10,
         )
         resp.raise_for_status()

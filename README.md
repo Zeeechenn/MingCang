@@ -169,7 +169,7 @@ StockSage 已经把研究、记忆、复盘、健康检查全部 agent 化。重
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` 时供 StockSage 内部 LLM 调用。 | 可选；选 Anthropic runtime 时必需 | Anthropic Console 创建 key |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` | `AI_PROVIDER=openai` 时供 OpenAI 或兼容 endpoint 使用。 | 可选；选 OpenAI runtime 时必需 | 对应平台创建 key；第三方兼容接口需同时填 `OPENAI_BASE_URL` |
-| `TAVILY_API_KEY` | 24 小时内新闻不足时补充实时搜索；`backfill_coverage --use-tavily` 与长期 A-teacher 证据搜索也会用。 | 可选 | [Tavily](https://app.tavily.com/) 创建 API key |
+| `TAVILY_API_KEY` | 信号生成时补充实时搜索；`backfill_coverage --use-tavily` 与长期 A-teacher 证据搜索也会用。 | 可选 | [Tavily](https://app.tavily.com/) 创建 API key |
 | `ANSPIRE_API_KEY` | 盘后情感链路的严格事件型新闻补缺，过滤行情页、资料页与噪音。 | 可选 | [Anspire AI Search](https://aisearch.anspire.cn) 创建 key |
 | `BARK_KEY` / `BARK_SERVER` | iOS Bark 推送盘后信号、止损预警、熔断提醒。 | 可选；未配置则静默跳过 | Bark App 复制设备 key；默认 `https://api.day.app`，自建服务时改 `BARK_SERVER` |
 | `STOCKSAGE_AGENT_API_KEY` | `STOCKSAGE_AGENT_MODE=remote` 时用于远程 agent / MCP / HTTP 写鉴权。 | 本地不需要；远程暴露时必需 | 自己生成高强度随机串；按需开启 `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED` 和 action allowlist |

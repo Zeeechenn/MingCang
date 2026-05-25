@@ -163,9 +163,9 @@ class Settings(BaseSettings):
     kronos_pred_len: int = 5              # 预测未来几个交易日
     kronos_weight_in_quant: float = 0.4  # Kronos 在量化信号层内的权重（其余归 Qlib）
 
-    # Tavily Search API（补充实时新闻，DB 24h内新闻不足时触发）
+    # Tavily Search API（补充实时新闻；配置 key 后每轮信号都会补充）
     tavily_api_key: str = ""             # 填入你的 Tavily API Key
-    tavily_supplement_threshold: int = 3  # DB新闻 < 此值时触发Tavily补充
+    tavily_supplement_threshold: int = 3  # DB新闻 < 此值时先触发 Anspire 严格补缺
 
     # Anspire Search API（严格补缺：只补事件型新闻，不补行情/F10/资料页）
     anspire_api_key: str = ""             # 填入你的 Anspire API Key
