@@ -76,8 +76,8 @@ def fetch_tickflow_daily(
     """Fetch daily OHLCV bars from TickFlow without writing local state."""
     resolved_base_url = (base_url or settings.tickflow_base_url).rstrip("/")
     resolved_api_key = api_key if api_key is not None else settings.tickflow_api_key
-    headers = {"x-api-key": resolved_api_key} if resolved_api_key else {}
-    params = {
+    headers: dict[str, str] = {"x-api-key": resolved_api_key} if resolved_api_key else {}
+    params: dict[str, str | int] = {
         "symbol": tickflow_symbol(symbol, market),
         "period": "1d",
         "count": max(1, min(int(days), 10000)),
