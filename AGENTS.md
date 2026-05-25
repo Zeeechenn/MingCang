@@ -83,6 +83,31 @@ project-owned memory over assistant-only chat memory:
 4. `decision_memory_layered` and `~/.stock-sage/memory/*.md`
 5. recent `audit_log_fts` entries
 
+## Single-Stock Research Output
+
+When Codex, Claude Code, pi, Cursor or another local agent runs single-stock
+research, include the research copilot shadow conclusion in the answer whenever
+available. This applies to terminal or agent-driven research even when the Web
+copilot card is not being used.
+
+For one-stock research, first load the stock context with:
+
+```bash
+python3 -m backend.agent.cli stock-context <symbol> --pretty
+```
+
+If the context contains `copilot`, report both tracks:
+
+- official rule conclusion;
+- copilot stance and summary;
+- shadow position;
+- risks and validation questions;
+- whether it is marked as a reverse-risk shadow suggestion.
+
+If no copilot record exists, say that the stock currently has no copilot shadow
+opinion. Do not invent a shadow conclusion from the main signal, and do not let
+the copilot modify official signals, stop loss, take profit, or real positions.
+
 ## First-Run Checklist For External Agents
 
 When Codex, Claude Code, pi, Cursor or another local agent opens this repository

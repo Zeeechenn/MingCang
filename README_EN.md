@@ -30,7 +30,7 @@ A complete multi-agent pipeline — Bull/Bear three-round debate + Research Dire
 |---|---|
 | 🗂 **Local-first** | Market data, news, fundamentals, QFII, positions, reviews and long-term memory all live in a local SQLite — offline-capable and auditable. |
 | 🤖 **Agent-ready** | Natively works with Codex, Claude Code, Claude Desktop, and Cursor over both CLI and MCP. |
-| 🔗 **Multi-source data** | efinance / Eastmoney / AkShare fallback by default; optional Tushare, yfinance, Tavily, Anspire enrichments. |
+| 🔗 **Multi-source data** | efinance / Eastmoney / AkShare fallback by default; optional Tushare, yfinance, TickFlow, Tavily, Anspire enrichments. |
 | 🧩 **Layered signals** | Technical indicators + LLM news sentiment + long-term analyst team + portfolio risk — each layer independently reviewable. |
 | 📒 **Auditable memory** | Project memory, layered decision memory and chat summaries each stored in their own bucket, every write audit-logged. |
 | 🛡 **Risk-first** | Stop-loss / take-profit levels come from ATR formulas and portfolio constraints — LLMs never predict prices directly. |
@@ -173,13 +173,16 @@ StockSage reads all external keys from `.env` in the project root. **Never commi
 | `ANSPIRE_API_KEY` | Fills strict event-style news gaps for the postmarket sentiment pipeline, filtering out market pages, profile pages and noisy sources. | Optional | Register at [Anspire AI Search](https://aisearch.anspire.cn), create a key on the API Keys page |
 | `BARK_KEY` / `BARK_SERVER` | iOS Bark push for postmarket signals, stop-loss alerts and circuit-breaker warnings. | Optional; pushes silently skipped if unset | Copy the device key from the Bark app; default server is `https://api.day.app` — override `BARK_SERVER` if self-hosting |
 | `STOCKSAGE_AGENT_API_KEY` | Authenticates remote agent / MCP / HTTP writes when `STOCKSAGE_AGENT_MODE=remote`. | Not needed locally; required when exposing the agent remotely | Generate a long random string; enable `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED` and the action allowlist on demand |
-| `TUSHARE_TOKEN` | Supplementary A-share daily-bar provider; once set, joins the CN fallback chain to pull unadjusted OHLCV via Tushare `daily`. | Optional | Get a token from [Tushare](https://tushare.pro/) |
+| `TUSHARE_TOKEN` | A-share daily-bar debug source; current `daily` output is unadjusted, so it is not registered in the CN production fallback chain. | Optional | Get a token from [Tushare](https://tushare.pro/) |
+| `TICKFLOW_ENABLED` / `TICKFLOW_API_KEY` / `TICKFLOW_BASE_URL` | TickFlow A-share daily-bar source; disabled by default, and when enabled uses `forward_additive` adjusted prices as the preferred CN provider. | Optional; requires `TICKFLOW_ENABLED=true` | Get a key from [TickFlow](https://tickflow.org/); default base URL is `https://api.tickflow.org` |
 
 **A typical local setup**:
 
 ```env
 AI_PROVIDER=local_cli
 TUSHARE_TOKEN=your_tushare_token_here
+TICKFLOW_ENABLED=false
+TICKFLOW_API_KEY=your_tickflow_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
 ANSPIRE_API_KEY=your_anspire_api_key_here
 BARK_KEY=your_bark_device_key_here
@@ -246,11 +249,12 @@ The next phase expands StockSage along three axes — taking it from "personal A
 
 ### 📊 Data & Quotas
 
-- **Data sources and corresponding API keys**: A-share daily bars use the efinance / Eastmoney / AkShare fallback chain; setting `TUSHARE_TOKEN` appends Tushare `daily`, with yfinance as the final fallback. A-share fundamentals, QFII and base news go through AkShare / Eastmoney (no key required). Real-time news enrichment uses `TAVILY_API_KEY`; strict event-style news gap-filling uses `ANSPIRE_API_KEY`; iOS push uses `BARK_KEY`; remote agent auth uses `STOCKSAGE_AGENT_API_KEY`.
+- **Data sources and corresponding API keys**: A-share daily bars use the efinance / Eastmoney / AkShare fallback chain by default; setting `TICKFLOW_ENABLED=true` with `TICKFLOW_API_KEY` makes TickFlow the preferred CN provider using `forward_additive` adjusted prices, with the original fallback chain retained behind it. Tushare `daily` is currently kept only as an unadjusted debug source and is not used in production signals. A-share fundamentals, QFII and base news go through AkShare / Eastmoney (no key required). Real-time news enrichment uses `TAVILY_API_KEY`; strict event-style news gap-filling uses `ANSPIRE_API_KEY`; iOS push uses `BARK_KEY`; remote agent auth uses `STOCKSAGE_AGENT_API_KEY`.
 - **Free / trial quotas** (public information as of 2026-05-23):
   - **Tavily** Researcher free tier offers 1,000 credits / month; StockSage currently uses basic search (~1 credit per request); development keys default to 100 RPM, production keys to 1,000 RPM (paid plan or PAYGO required). See [Tavily Credits](https://docs.tavily.com/documentation/api-credits) · [Rate Limits](https://docs.tavily.com/documentation/rate-limits).
   - **Anspire** public docs mention checking each resource package's total quota and usage in the console but give no fixed free-quota figure; treat the [Anspire console](https://aisearch.anspire.cn) resource-package page as authoritative. See [usage guide](https://open.anspire.cn/document/docs/openPlatform/).
-  - **Tushare** is used only as a supplementary A-share daily-bar source, calling the `daily` unadjusted endpoint; `daily` requires 120+ points, with the basic tier allowing 500 calls/minute at up to 6,000 rows per call. See [daily bars](https://www.tushare.pro/document/2?doc_id=27) · [permissions](https://www.tushare.pro/document/2?doc_id=108).
+  - **Tushare** is currently only an A-share daily-bar debug source, calling the unadjusted `daily` endpoint, and is not registered in the CN production fallback chain; `daily` requires 120+ points, with the basic tier allowing 500 calls/minute at up to 6,000 rows per call. See [daily bars](https://www.tushare.pro/document/2?doc_id=27) · [permissions](https://www.tushare.pro/document/2?doc_id=108).
+  - **TickFlow** can optionally become the preferred A-share daily source; StockSage currently uses `forward_additive`, which TickFlow documents as aligned with Eastmoney / Tonghuashun-style adjusted prices. Realtime quotes, minute bars, and higher-frequency access depend on the plan. See [quickstart](https://docs.tickflow.org/zh-Hans/quickstart) · [API overview](https://docs.tickflow.org/zh-Hans/api-reference/introduction).
   - **Bark**'s `api.day.app` is the push entry point; the key comes from the app's test URL / device key. Public tutorials make no guarantee of free quota or SLA — self-host for high-frequency push. See [Bark tutorial](https://github.com/Finb/Bark/blob/master/docs/en-us/tutorial.md).
 
 ### 💡 Usage Habits
