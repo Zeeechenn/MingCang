@@ -165,6 +165,8 @@ def record_decision_run(
             "llm_arbitration": result.get("llm_arbitration"),
             "director": result.get("director"),
             "regime": result.get("regime"),
+            "research_constraints": result.get("research_constraints", []),
+            "research_conflicts": result.get("research_conflicts", []),
             "trace": trace,
         }),
         risk_decision_json=_json({
@@ -180,6 +182,7 @@ def record_decision_run(
             "trader_position_pct": result.get("trader_position_pct"),
             "portfolio_decision": result.get("portfolio_decision"),
             "allocation_rationale": result.get("allocation_rationale"),
+            "official_action": result.get("official_action"),
             "confidence": result.get("confidence"),
         }),
         notes=notes,
@@ -349,5 +352,25 @@ def review_latest_signal(db, symbol: str) -> dict | None:
     )
     if run is not None:
         run.eval_result_json = _json(review)
+    if not correct:
+        try:
+            from backend.memory.stock_memory import create_stock_memory
+            create_stock_memory(
+                db,
+                symbol=symbol,
+                memory_type="lesson",
+                summary=(
+                    f"{sig.date} {sig.recommendation} 复盘未兑现："
+                    f"{'；'.join(reasons)}，次日收益 {ret:.2f}%"
+                ),
+                evidence=review,
+                source_type="signal_review",
+                source_ref=f"review:{symbol}:{sig.date}",
+                importance=4,
+                confidence=0.7,
+                status="watching",
+            )
+        except Exception:
+            pass
     db.commit()
     return review

@@ -43,12 +43,19 @@ def remember_deep_research(
     )
     for symbol in symbols:
         pointer_summary = f"{symbol} 研究索引：{clipped_summary}"
+        base_evidence = {
+            "topic": topic,
+            "symbol": symbol,
+            "symbols": symbols,
+            "report_path": report_path,
+            "dossier_role": "deep_research",
+        }
         create_stock_memory(
             db,
             symbol=symbol,
             memory_type="research_pointer",
             summary=pointer_summary,
-            evidence={"topic": topic, "symbol": symbol, "symbols": symbols, "report_path": report_path},
+            evidence={**base_evidence, "constraint_type": "research_pointer"},
             source_type="deep_research",
             source_ref=f"{report_path}#research:{symbol}",
             importance=3,
@@ -59,7 +66,7 @@ def remember_deep_research(
             symbol=symbol,
             memory_type="thesis",
             summary=f"{symbol} {topic} 深度研究候选结论：{clipped_summary}",
-            evidence={"topic": topic, "symbol": symbol, "report_path": report_path},
+            evidence={**base_evidence, "constraint_type": "thesis"},
             source_type="deep_research_candidate",
             source_ref=f"{report_path}#thesis:{symbol}",
             importance=3,
@@ -72,7 +79,7 @@ def remember_deep_research(
                 symbol=symbol,
                 memory_type="risk",
                 summary=f"{symbol} {topic} 深度研究候选风险：{clipped_summary}",
-                evidence={"topic": topic, "symbol": symbol, "report_path": report_path},
+                evidence={**base_evidence, "constraint_type": "risk"},
                 source_type="deep_research_candidate",
                 source_ref=f"{report_path}#risk:{symbol}",
                 importance=3,
@@ -85,7 +92,7 @@ def remember_deep_research(
                 symbol=symbol,
                 memory_type="event",
                 summary=f"{symbol} {topic} 深度研究候选事件：{clipped_summary}",
-                evidence={"topic": topic, "symbol": symbol, "report_path": report_path},
+                evidence={**base_evidence, "constraint_type": "event"},
                 source_type="deep_research_candidate",
                 source_ref=f"{report_path}#event:{symbol}",
                 importance=2,
