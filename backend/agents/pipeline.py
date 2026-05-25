@@ -62,6 +62,8 @@ class AgentDecision:
     risk: dict               # RiskDecision fields
     regime: dict | None
     reasoning: str
+    trader_position_pct: float | None = None
+    risk_position_pct: float | None = None
     decision_trace: list[dict] = field(default_factory=list)  # step span 记录
 
     def to_signal_dict(self) -> dict:
@@ -87,6 +89,8 @@ class AgentDecision:
             "take_profit": self.take_profit,
             "breakdown": self.breakdown,
             "position_pct": self.position_pct,
+            "trader_position_pct": self.trader_position_pct,
+            "risk_position_pct": self.risk_position_pct,
             "limit_status": self.risk.get("limit_status", "normal"),
             "llm_arbitration": arbitration,
             "director": self.director,
@@ -244,6 +248,8 @@ def run_pipeline(
         },
         risk={
             "approved": risk.approved,
+            "trader_position_pct": proposal.position_pct,
+            "risk_position_pct": final_pos,
             "veto_reason": risk.veto_reason,
             "risk_notes": risk.risk_notes,
             "limit_status": (limit_status or {}).get("status", "normal"),
@@ -252,5 +258,7 @@ def run_pipeline(
         },
         regime=regime.to_dict() if regime else None,
         reasoning=reasoning,
+        trader_position_pct=proposal.position_pct,
+        risk_position_pct=final_pos,
         decision_trace=trace,
     )

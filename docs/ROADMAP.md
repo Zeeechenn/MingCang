@@ -191,9 +191,11 @@
 - [x] 测试：`tests/test_external_data_sources.py` 覆盖 observe-only policy、默认离线行为和显式 probe 挂载。
 
 ### M12 后续可选
-- [ ] 从 `a-stock-data` 只挑 1 个证据型数据集试点，例如两融、龙虎榜或解禁；先进入 evidence / risk review，不进入买卖评分。
+- [x] 从 `a-stock-data` 只挑 1 个证据型数据集试点：先选两融 `margin_trading`，
+      仅作为 observe-only evidence trial 暴露字段、PIT 要求、失败策略和 promotion gate；
+      不联网、不写库、不进入买卖评分。
 - [ ] 对任何新端点先补 provider health / PIT 时间戳 / 字段归一化 / 测试，再考虑写入 SQLite。
-- [ ] 连续观测稳定后，再决定是否加入定时任务；默认仍不改变现有 efinance / AkShare / yfinance 行情 fallback 链路。
+- [x] TickFlow 经实测可提供更新的 A 股日线；默认仍关闭，但配置 `TICKFLOW_ENABLED=true` 和 key 后，以 `forward_additive` 口径作为 CN 优先 provider，原 fallback 保留在后。
 
 ---
 
@@ -401,7 +403,8 @@
 - [x] M16.1 回测与统计评审 ✅（2026-05-23）→ 结论 + 修复项见 M18
 - [x] M16.2 数据层与 PIT 评审 ✅（2026-05-23）→ 结论 `docs/reviews/2026-05-23-m16.2.md`、修复项见 M19
 - [x] M16.3 量化与分析评审 ✅（2026-05-23）→ 结论 `docs/reviews/2026-05-23-m16.3.md`、修复项见 M20
-- [ ] M16.4 前端评审 → 结论 + 修复项
+- [x] M16.4 前端评审 ✅（2026-05-25）→ 补危险写操作确认；EvidenceCard 展示
+      trader / risk / portfolio 三层仓位；前端 node tests + build 通过。
 - [x] M16.5 基础设施评审 ✅（2026-05-23）→ 结论 `docs/reviews/2026-05-23-m16.5.md`、修复项见 M21
 > 每级独立可交付；P1 缺陷即时升级为修复里程碑，不等整轮评审结束。
 
@@ -480,20 +483,25 @@
   ```
 
 ### M17.1 金融逻辑与证据一致性（建议 / P2）
-- [ ] **无新闻事件时 sentiment 信号被腰斩**：`agents/trader.py:62`
+- [x] **无新闻事件时 sentiment 信号被腰斩**：`agents/trader.py:62`
       `sent_combined = sent.score*0.5 + news.score*0.5`，而 `news_analyst` 在
       `key_events` 为空时返回 `score=0`（`analyst.py:124-131`）。无事件时
       `sent_combined = 0.5*sent.score`，`weight_sentiment=0.4` 的标称权重实际只兑现
       ~20%（无事件）~ ~36%（有事件），随 LLM 是否抽出离散事件漂移；且
       `breakdown["sentiment"]` 写完整 `sent.score`，与真实贡献对不上。确认是否设计意图——
       若是，文档化并让 breakdown 反映实际贡献；若否，改为稳定权重分配。
-- [ ] **证据链仓位归属错位**：`scheduler.py:476-477` 把 `trader_position_pct` 赋成
+      2026-05-25 已改为无事件时使用 `sentiment_only_no_news_events`，有事件时才
+      sentiment/news 50:50 blend；`breakdown.sentiment` 表示实际入权重的有效分，
+      `sentiment_raw` 保留原始情绪分。
+- [x] **证据链仓位归属错位**：`scheduler.py:476-477` 把 `trader_position_pct` 赋成
       `result["position_pct"]`，但此值已是风控调整后仓位（trader 原始
       `proposal.position_pct` 在 `run_pipeline` 被 `final_pos` 覆盖，从未持久化）。
       `harness.py:108-122` 的 trace 把这个风控值标成 "trader"、把组合层 target 标成
       "risk_manager `approved position`"——真正的 trader 提案仓位无处可查。另外
       `aggregate_v2` regime 衰减更新了 score 却未同步 `position_pct`。让 pipeline
       显式透传 trader 原始仓位，trace 三步（trader/risk/portfolio）各自标对来源。
+      2026-05-25 已新增 `trader_position_pct` / `risk_position_pct` / 最终
+      `position_pct` 三层留痕，PortfolioManager 继续消费风控后仓位。
 
 ### M17.2 健壮性与清理（排期 / P3）
 - [ ] **分析师重复计算**：`aggregate_v2` 为分歧检测构建一次 4 路 report，
@@ -556,16 +564,19 @@
       ② 固定 universe + 区间 + settings 跑 `backtrader_eval` 锁定头条数字的快照回归。
 
 ### M18.1 口径一致性与统计误用（建议 / P2）
-- [ ] **成本只进了一条路**：`compare_paths`/`sweep_threshold`/`exit_sweep`/
+- [x] **成本只进了一条路**：`compare_paths`/`sweep_threshold`/`exit_sweep`/
       `exit_logic_experiment` 全部用毛收益 `(exit_close-entry_close)/entry_close`
       （`compare_paths.py:349`、`sweep_threshold.py:114-117`、`exit_sweep.py:213`、
       `exit_logic_experiment.py:170`），零手续费零滑点。阈值扫描与退出策略选择基于
       零成本毛收益，系统性偏向高换手策略（短止损 / `fixed_3d`），选出的「最优档位 /
       最优退出」在真实成本下可能反转。统一加成本扣减，与 `backtrader_eval` 对齐。
-- [ ] **Sharpe 年化口径三套并存**：`exit_logic_experiment.py:82` 用 `√252`
+      2026-05-25 新增 `backend/backtest/costs.py`，按 0.20% 往返手续费/印花税
+      + 买卖各 0.10% 滑点扣减净收益。
+- [x] **Sharpe 年化口径三套并存**：`exit_logic_experiment.py:82` 用 `√252`
       （把每笔多日交易当 1 天，严重过度年化）、`compare_paths.py:166` 与
       `sweep_threshold.py:57` 用 `√(252/5)`、`exit_sweep.py:118` 用 `√(252/avg_hold)`。
       同一策略换模块跑出不同 Sharpe。统一为按实际平均持仓天数年化。
+      2026-05-25 `annualized_sharpe(..., avg_hold_days=...)` 已接入上述四条路径。
 - [ ] **DSR 的 trial 数语义误用**：`walk_forward.py:139-141` 把
       `expected_max_sharpe(metric_values, n_trials=窗口数)`——窗口是同一策略的顺序
       评估，不是 multiple-testing 的 N 个竞争策略；`backtrader_eval.py:329-330` 把
@@ -648,6 +659,8 @@
 - [x] 统一所有 provider 输出 qfq，或对非 qfq provider 做口径转换 / 禁用 tushare
       作为日线 provider。Tushare 与 yfinance（auto_adjust=True 为后复权含分红再投）
       均不再注册到 CN fallback，函数保留供调试。
+- [x] TickFlow `forward_additive` 口径按官方文档与东方财富/同花顺对齐；实测时间戳需按
+      `Asia/Shanghai` 转交易日，修正后才允许作为显式启用的 CN fallback。
 
 ### M19.3 QFII 失败结果被永久缓存为空（必做 / P2）✅（2026-05-23）
 - [x] **缺陷**：`data/qfii_holdings.py` `_fetch_single_quarter` 异常与"确无 QFII
@@ -724,9 +737,10 @@
       / `limit_down=False`；主板 +10% 仍判 `limit_up=True`。
 
 ### M20.2 P3 收尾
-- [ ] **sentiment 缓存**：`sentiment._cache` 加上限 + LRU；命中返回 `dict(...)`
+- [x] **sentiment 缓存**：`sentiment._cache` 加上限 + LRU；命中返回 `dict(...)`
       副本；缓存键改 `_titles_hash(sorted(titles[:15]))`，与实际 prompt 对齐；
-      失败结果按短 TTL 缓存以免持续重试。
+      失败结果按短 TTL 缓存以免持续重试。2026-05-25 已先完成 LRU 上限和副本返回；
+      失败短 TTL 仍可后续补。
 - [ ] **qlib 训练质量门槛**：`qlib_engine.train` 在落盘前比对 IC，
       `ic < settings.qlib_train_ic_floor`（建议默认 0.02）时保留旧模型并
       只写一份 `lgbm_alpha_candidate.pkl`，留 promotion 步骤；当前
@@ -834,24 +848,33 @@
         500。
 
 ### M21.4 P3 收尾
-- [ ] **kill switch 状态文件原子化**：`ops/kill_switch._write_state` 改为
+- [x] **kill switch 状态文件原子化**：`ops/kill_switch._write_state` 改为
       写临时文件 + `os.replace`；`_read_state` 区分「不存在 / 读失败」两种
       情形——读失败时不可默认未激活，应记 warning 且保守视为激活
-      （或返回特定哨兵让上层决定）。
+      （或返回特定哨兵让上层决定）。2026-05-25 已完成。
 - [ ] **schema 管理单一化**：`database._ensure_runtime_schema` 改为对比
       `Base.metadata.tables` 的列集合与 `PRAGMA table_info` 的差异自动补
       ALTER；或接入 Alembic。删掉重复的 `CREATE TABLE IF NOT EXISTS` 段。
 - [ ] **`datetime.utcnow` 残留迁移**：`database.py` 全部 `default=datetime.utcnow`
       / `kill_switch.py:89,168` / `routes/system.py:202` 替换为 timezone-aware
       调用（如 `lambda: datetime.now(UTC)`）。
-- [ ] **`system_health` entry 列表对齐**：硬编码
+- [x] **`system_health` entry 列表对齐**：硬编码
       `["可小仓试错","买入","强买"]` 改为
-      `entry_recommendations(include_legacy=True)`。
-- [ ] **`test1_end_date` 默认值订正**：从 `2026-05-17` 改回 `2026-05-20`
+      `entry_recommendations(include_legacy=True)`。2026-05-25 已完成。
+- [x] **`test1_end_date` 默认值订正**：从 `2026-05-17` 改回 `2026-05-20`
       与 `STATUS.md` / docstring 一致；`.env.example` 补 `TEST1_START_DATE`
-      / `TEST1_END_DATE` 条目。
+      / `TEST1_END_DATE` 条目。（2026-05-25 完成；`test_signal_policy` 边界用例同步到 05-21）
 - [ ] **`cli action --confirm` 跳过冗余 `init_db`**：仅当探测到关键表缺失
       时才跑迁移，否则直接打开 session。
+- [ ] **ATR 窄止损统计分析**：在测试1+测试2 全部 `closed` 仓位上统计
+      `ATR / 买入价` 分布，重点看 ATR 占比 <0.5% 的样本是否系统性触发"假止损"
+      （盘中跌穿幅度 <0.5% 即被切）。如果该子集胜率明显低于整体且未止损时
+      多数能回正，则评估两种修正：① 加 ATR 下限
+      `max(ATR×2, 买入价×3%)`；② 改用 trailing ATR×2.5（test2 已在用）。
+      触发条件：测试2 跑满 2 个月（≥2026-07-18）后启动。先出统计报告，
+      不直接改测试1（规则已冻结）。来源：300308 中际旭创 2026-05-13 开仓，
+      ATR≈0.48% × 买入价导致止损线只低 0.95%，05-19 盘中跌穿 0.13% 即触发；
+      如果不止损，05-22 收盘 +2.56%（n=1 不足以改规则，需聚合统计）。
 
 ### M21 最小交付包
 - [x] M21.0（全部漏挂路由 + 回归测试）+ M21.1 + M21.2 + M21.3，各配一条

@@ -117,7 +117,7 @@ def _build_decision_trace(result: dict) -> list[dict]:
             output_summary=(
                 result.get("veto_reason")
                 or "; ".join(risk_notes[:2])
-                or f"approved position={result.get('position_pct')}"
+                or f"approved position={result.get('risk_position_pct', result.get('position_pct'))}"
             ),
         ),
     ]
@@ -180,6 +180,7 @@ def record_decision_run(
             "take_profit": result.get("take_profit"),
             "position_pct": result.get("position_pct"),
             "trader_position_pct": result.get("trader_position_pct"),
+            "risk_position_pct": result.get("risk_position_pct"),
             "portfolio_decision": result.get("portfolio_decision"),
             "allocation_rationale": result.get("allocation_rationale"),
             "official_action": result.get("official_action"),

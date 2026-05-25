@@ -1,6 +1,7 @@
-"""本地 Claude Code CLI LLM Provider（本地开发替代 API key）
+"""本地 CLI LLM Provider（本地开发替代 API key）
 
-通过 `claude -p` 子进程调用当前 CLI 会话，无需任何 API key。
+优先通过 `claude -p` 子进程调用当前 CLI 会话；若 Claude CLI 未登录，
+回退到 `codex exec`。
 生产环境切换回 openai/anthropic provider 即可。
 """
 import functools
@@ -43,7 +44,7 @@ def _cli_retry(max_attempts: int = 3, delay: float = 2.0):
 
 class LocalCLIProvider(LLMProvider):
     """
-    通过 `claude -p` 子进程调用本地 Claude Code CLI，无需 API key。
+    通过本地 Claude Code / Codex CLI 调用 LLM，无需项目 API key。
 
     使用方式：在 .env 中设置 AI_PROVIDER=local_cli。
     生产时改回 AI_PROVIDER=openai 或 AI_PROVIDER=anthropic。
@@ -62,7 +63,7 @@ class LocalCLIProvider(LLMProvider):
         max_tokens: int = 400,
         model_tier: str = "fast",
     ) -> dict:
-        """通过 claude -p 子进程调用 CLI，强制返回符合 tool schema 的 JSON。"""
+        """通过本地 CLI 子进程调用 LLM，强制返回符合 tool schema 的 JSON。"""
         schema_str = json.dumps(tool["input_schema"], ensure_ascii=False, indent=2)
         tool_name = tool["name"]
 
@@ -78,24 +79,56 @@ class LocalCLIProvider(LLMProvider):
         full_prompt = "\n\n".join(parts)
 
         try:
-            proc = subprocess.run(
+            claude = subprocess.run(
                 ["claude", "-p", "--model", _model_for_tier(model_tier), "--output-format", "text"],
                 input=full_prompt,
                 capture_output=True,
                 text=True,
                 timeout=self._timeout,
             )
-            if proc.returncode != 0:
-                logger.warning("LocalCLI stderr: %s", proc.stderr[:300])
-            return self._extract_json(proc.stdout)
+            if claude.returncode != 0:
+                logger.warning("LocalCLI Claude stderr: %s", claude.stderr[:300])
+            data = self._extract_json(claude.stdout)
+            if data:
+                return data
+            return self._complete_with_codex(full_prompt)
         except subprocess.TimeoutExpired:
             logger.warning("LocalCLIProvider: 超时（%ds）", self._timeout)
             return {}
         except FileNotFoundError:
-            logger.error("LocalCLIProvider: `claude` 命令未找到，请确认 Claude Code CLI 已安装")
-            return {}
+            logger.warning("LocalCLIProvider: `claude` 命令未找到，尝试 Codex CLI")
+            return self._complete_with_codex(full_prompt)
         except Exception as e:
             logger.warning("LocalCLIProvider: 调用异常: %s", e)
+            return {}
+
+    def _complete_with_codex(self, full_prompt: str) -> dict:
+        """Fallback to Codex CLI when Claude CLI is unavailable or logged out."""
+        try:
+            proc = subprocess.run(
+                [
+                    "codex", "exec",
+                    "--ephemeral",
+                    "--skip-git-repo-check",
+                    "-s", "read-only",
+                    "-",
+                ],
+                input=full_prompt,
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
+            )
+            if proc.returncode != 0:
+                logger.warning("LocalCLI Codex stderr: %s", proc.stderr[:300])
+            return self._extract_json(proc.stdout)
+        except subprocess.TimeoutExpired:
+            logger.warning("LocalCLIProvider Codex: 超时（%ds）", self._timeout)
+            return {}
+        except FileNotFoundError:
+            logger.error("LocalCLIProvider: `codex` 命令未找到")
+            return {}
+        except Exception as e:
+            logger.warning("LocalCLIProvider Codex: 调用异常: %s", e)
             return {}
 
     @staticmethod

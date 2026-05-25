@@ -44,6 +44,17 @@ def test_reset_clears_state():
     assert kill_switch.current_state() is None
 
 
+def test_corrupt_state_is_treated_as_active(tmp_path):
+    from backend.ops import kill_switch
+
+    kill_switch.STATE_PATH.write_text("{not json", encoding="utf-8")
+
+    assert kill_switch.is_active() is True
+    state = kill_switch.current_state()
+    assert state["active"] is True
+    assert "读取失败" in state["reason"]
+
+
 def test_detect_consecutive_losses_counts_trailing_only():
     from backend.ops import kill_switch
     # 最后 3 笔亏损

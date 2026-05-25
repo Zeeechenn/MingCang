@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # Signal profile: legacy Qlib framework or current new framework.
     paper_trading_profile: str = "auto"  # auto / test1_legacy_qlib / new_framework
     test1_start_date: str = "2026-05-13"
-    test1_end_date: str = "2026-05-17"
+    test1_end_date: str = "2026-05-20"
     test1_multi_agent_enabled: bool = False
     test1_weight_quant: float = 0.45
     test1_weight_technical: float = 0.40

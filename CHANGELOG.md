@@ -5,6 +5,24 @@
 
 ---
 
+## [M23] 信号证据链、回测口径与运行硬化（2026-05-25）
+
+### Fixed
+- M17.1：无关键新闻事件时不再把 sentiment 有效贡献隐式腰斩；有事件时才与 news 分 50/50，breakdown 同步记录有效分与原始情绪分。
+- M17.1：决策证据链拆分 `trader_position_pct`、`risk_position_pct` 与最终 `position_pct`，Portfolio Manager 继续基于风控后仓位裁剪。
+- M18.1：`compare_paths`、`sweep_threshold`、`exit_sweep`、`exit_logic_experiment` 统一扣除 A 股标准往返成本，并复用按平均持仓天数年化的 Sharpe helper。
+- M16.4：前端危险写操作补确认；EvidenceCard 显示交易员 / 风控后 / 最终三层仓位。
+- M20/M21 P3：sentiment cache 加 LRU 上限并返回副本；kill switch 状态写入改原子替换，读坏状态时保守视为已触发；system health 入场建议列表复用统一 helper。
+
+### Added
+- M12：`/api/system/external-data-sources` catalog 增加 `a_stock_data.margin_trading` 两融 observe-only evidence trial，明确字段、PIT 要求、失败策略和 promotion gate，不写库、不影响信号。
+- Local CLI provider 在 Claude CLI 无 JSON/未登录时回退到 `codex exec`。
+
+### Tests
+- 新增/更新 trader evidence、backtest costs、sentiment cache、kill switch、external data source 和前端 evidence summary 覆盖。
+
+---
+
 ## [M22] 持仓完整性与本地状态隔离（2026-05-24）
 
 ### Fixed

@@ -256,6 +256,7 @@ export default function PositionsPage() {
                   <PnlText value={item.realized_pnl}>{signedMoney(item.realized_pnl)} / {signedPct(item.realized_pnl_pct)}</PnlText>
                   <button
                     onClick={async () => {
+                      if (!window.confirm(`永久删除 ${item.symbol} 的平仓记录？`)) return
                       await deleteClosedPosition(item.id)
                       load()
                     }}

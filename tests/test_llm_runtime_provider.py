@@ -88,6 +88,24 @@ def test_local_cli_provider_passes_model_for_tier(mock_run, monkeypatch):
     assert "claude-haiku" in mock_run.call_args.args[0]
 
 
+@patch("backend.llm.local_cli_provider.subprocess.run")
+def test_local_cli_provider_falls_back_to_codex_when_claude_returns_no_json(mock_run):
+    from backend.llm.local_cli_provider import LocalCLIProvider
+
+    mock_run.side_effect = [
+        MagicMock(returncode=1, stdout="Not logged in · Please run /login", stderr=""),
+        MagicMock(returncode=0, stdout='codex\n{"ok": true}', stderr=""),
+    ]
+
+    result = LocalCLIProvider(timeout=1).complete_structured(
+        "prompt",
+        {"name": "tool", "input_schema": {"type": "object"}},
+    )
+
+    assert result == {"ok": True}
+    assert mock_run.call_args_list[1].args[0][:2] == ["codex", "exec"]
+
+
 @patch("backend.analysis.sentiment.get_provider")
 def test_analyze_news_skips_provider_when_runtime_disabled(mock_get_provider):
     from backend.analysis import sentiment

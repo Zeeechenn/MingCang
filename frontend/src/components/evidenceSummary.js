@@ -8,6 +8,7 @@ export function getPortfolioActionSummary(finalAction = {}) {
   return {
     finalPosition: fmtPct(finalAction.position_pct) || '-',
     traderPosition: fmtPct(finalAction.trader_position_pct),
+    riskPosition: fmtPct(finalAction.risk_position_pct),
     rationale: finalAction.allocation_rationale || portfolioDecision.rationale || null,
     action: portfolioDecision.action || null,
   }

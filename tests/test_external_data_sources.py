@@ -6,12 +6,17 @@ def test_external_source_catalog_prioritizes_evidence_before_signal_inputs():
     assert catalog["policy"]["production_signal_impact"] == "none"
     assert catalog["policy"]["first_stage_rule"] == "observe_only"
     assert catalog["summary"]["source_count"] >= 2
-    assert catalog["summary"]["recommended_first"] == ["a_stock_data", "ftshare"]
+    assert catalog["summary"]["recommended_first"] == ["a_stock_data.margin_trading", "ftshare"]
 
     a_stock = catalog["sources"]["a_stock_data"]
     assert a_stock["recommended_stage"] == "evidence_trial"
     assert "margin_trading" in a_stock["high_value_datasets"]
     assert "limit_up_lhb" in a_stock["high_value_datasets"]
+    trial = catalog["evidence_trials"]["a_stock_data.margin_trading"]
+    assert trial["signal_impact"] == "none"
+    assert trial["write_policy"] == "no_database_writes"
+    assert "financing_balance" in trial["required_fields"]
+    assert "do_not_block_signal_generation" == trial["failure_policy"]
 
     ftshare = catalog["sources"]["ftshare"]
     assert ftshare["recommended_stage"] == "provider_probe"

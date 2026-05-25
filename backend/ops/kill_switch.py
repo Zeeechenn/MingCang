@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -45,7 +46,7 @@ class KillSwitchState:
 
 
 def _read_state() -> KillSwitchState | None:
-    """Read kill switch state from disk, returning None if absent or corrupt."""
+    """Read kill switch state from disk, treating corrupt state as active."""
     if not STATE_PATH.exists():
         return None
     try:
@@ -53,7 +54,12 @@ def _read_state() -> KillSwitchState | None:
         return KillSwitchState(**data)
     except Exception as e:
         logger.warning("kill_switch 状态文件读取失败: %s", e)
-        return None
+        return KillSwitchState(
+            active=True,
+            reason="kill_switch 状态文件读取失败，保守视为已触发",
+            triggered_at=datetime.utcnow().isoformat(timespec="seconds"),
+            metadata={"error": str(e), "path": str(STATE_PATH)},
+        )
 
 
 def _write_state(state: KillSwitchState | None) -> None:
@@ -63,10 +69,12 @@ def _write_state(state: KillSwitchState | None) -> None:
         if STATE_PATH.exists():
             STATE_PATH.unlink()
         return
-    STATE_PATH.write_text(
+    tmp_path = STATE_PATH.with_name(f"{STATE_PATH.name}.tmp")
+    tmp_path.write_text(
         json.dumps(state.to_dict(), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    os.replace(tmp_path, STATE_PATH)
 
 
 def is_active() -> bool:

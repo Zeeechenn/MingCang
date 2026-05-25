@@ -26,6 +26,21 @@ class ExternalSource:
     risk_notes: list[str]
 
 
+@dataclass(frozen=True)
+class ExternalEvidenceTrial:
+    id: str
+    source_id: str
+    dataset: str
+    stage: str
+    signal_impact: str
+    write_policy: str
+    intended_use: list[str]
+    required_fields: list[str]
+    pit_requirements: list[str]
+    failure_policy: str
+    promotion_gate: list[str]
+
+
 FTSHARE_STOCK_LIST_URL = "https://market.ft.tech/data/api/v1/market/data/stock-list"
 
 
@@ -125,6 +140,7 @@ def _sources() -> list[ExternalSource]:
 def build_external_source_catalog() -> dict:
     """Return a stable, conservative catalog for candidate external sources."""
     sources = {source.id: asdict(source) for source in _sources()}
+    evidence_trials = {trial.id: asdict(trial) for trial in _evidence_trials()}
     return {
         "policy": {
             "first_stage_rule": "observe_only",
@@ -134,11 +150,50 @@ def build_external_source_catalog() -> dict:
         },
         "summary": {
             "source_count": len(sources),
-            "recommended_first": ["a_stock_data", "ftshare"],
+            "recommended_first": ["a_stock_data.margin_trading", "ftshare"],
             "next_safe_step": "probe_and_measure_before_ingestion",
         },
         "sources": sources,
+        "evidence_trials": evidence_trials,
     }
+
+
+def _evidence_trials() -> list[ExternalEvidenceTrial]:
+    """Return observe-only evidence trials that are approved for design work."""
+    return [
+        ExternalEvidenceTrial(
+            id="a_stock_data.margin_trading",
+            source_id="a_stock_data",
+            dataset="margin_trading",
+            stage="evidence_trial",
+            signal_impact="none",
+            write_policy="no_database_writes",
+            intended_use=[
+                "risk_review",
+                "evidence_card_auxiliary_context",
+                "deep_research_question_generation",
+            ],
+            required_fields=[
+                "symbol",
+                "trade_date",
+                "financing_balance",
+                "financing_buy_amount",
+                "securities_lending_balance",
+                "source_url_or_endpoint",
+            ],
+            pit_requirements=[
+                "trade_date must be <= decision as_of date",
+                "provider timestamp must be preserved when available",
+                "missing or stale data must be displayed as unavailable, not neutral",
+            ],
+            failure_policy="do_not_block_signal_generation",
+            promotion_gate=[
+                "provider health measured for at least 2 trading weeks",
+                "field normalization covered by tests",
+                "no composite_score or position_pct dependency",
+            ],
+        )
+    ]
 
 
 def _fetch_json(url: str, timeout_seconds: float) -> dict:

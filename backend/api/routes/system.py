@@ -218,9 +218,11 @@ def system_health(db: Session = Depends(get_db)):
 
     recent_losses = 0
     try:
+        from backend.decision.signal_policy import entry_recommendations
+
         recent_signals = (
             db.query(Signal)
-            .filter(Signal.recommendation.in_(["可小仓试错", "买入", "强买"]))
+            .filter(Signal.recommendation.in_(entry_recommendations(include_legacy=True)))
             .order_by(Signal.date.desc())
             .limit(10)
             .all()

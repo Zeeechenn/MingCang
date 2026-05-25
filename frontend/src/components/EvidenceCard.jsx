@@ -60,7 +60,10 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
               <div>止盈：{finalAction.take_profit ?? '-'}</div>
               <div>仓位：{portfolioAction.finalPosition}</div>
               {portfolioAction.traderPosition && (
-                <div className="text-xs text-gray-500">单股：{portfolioAction.traderPosition}</div>
+                <div className="text-xs text-gray-500">交易员：{portfolioAction.traderPosition}</div>
+              )}
+              {portfolioAction.riskPosition && (
+                <div className="text-xs text-gray-500">风控后：{portfolioAction.riskPosition}</div>
               )}
               {portfolioAction.rationale && (
                 <div className="text-xs text-gray-500">{portfolioAction.rationale}</div>

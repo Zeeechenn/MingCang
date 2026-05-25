@@ -14,11 +14,12 @@ M4.6 双路径并排回测：aggregator（旧）vs multi_agent pipeline（新）
 """
 from __future__ import annotations
 
-import math
 import statistics
 from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+
+from backend.backtest.costs import annualized_sharpe, net_return
 
 
 @dataclass
@@ -127,9 +128,9 @@ def _path_b(inp: SignalInput) -> dict:
 
 
 def _exit_logic_5d(inp: SignalInput) -> float:
-    """统一退出：T+5 收盘价对入场价的收益率"""
+    """统一退出：T+5 收盘价对入场价的净收益率。"""
     r = inp.forward_return_at(5)
-    return r if r is not None else 0.0
+    return net_return(r if r is not None else 0.0)
 
 
 def _max_drawdown(returns: Sequence[float]) -> float:
@@ -162,8 +163,7 @@ def _compute_metrics(path_name: str, trade_returns: list[float], n_entry: int) -
     wins = [r for r in trade_returns if r > 0]
     losses = [r for r in trade_returns if r <= 0]
     mean = statistics.mean(trade_returns)
-    stdev = statistics.pstdev(trade_returns)
-    sharpe = mean / stdev * math.sqrt(252 / 5) if stdev > 0 else 0.0   # 5 日持仓
+    sharpe = annualized_sharpe(trade_returns, avg_hold_days=5)
     pl = (
         statistics.mean(wins) / abs(statistics.mean(losses))
         if wins and losses and statistics.mean(losses) != 0

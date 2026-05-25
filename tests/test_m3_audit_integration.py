@@ -190,6 +190,8 @@ def test_postmarket_batch_applies_portfolio_manager_before_persist(monkeypatch):
                 "recommendation": "可小仓试错",
                 "confidence": "中",
                 "composite_score": 80,
+                "trader_position_pct": 0.20,
+                "risk_position_pct": 0.15,
                 "position_pct": 0.15,
             },
             "quant_result": {"score": 80, "model": "fake"},
@@ -202,6 +204,8 @@ def test_postmarket_batch_applies_portfolio_manager_before_persist(monkeypatch):
                 "recommendation": "可小仓试错",
                 "confidence": "中",
                 "composite_score": 70,
+                "trader_position_pct": 0.20,
+                "risk_position_pct": 0.15,
                 "position_pct": 0.15,
             },
             "quant_result": {"score": 70, "model": "fake"},
@@ -233,10 +237,12 @@ def test_postmarket_batch_applies_portfolio_manager_before_persist(monkeypatch):
     by_symbol = dict(persisted)
     assert stats["portfolio_allocated"] == 2
     assert by_symbol["HIGH"]["position_pct"] == 0.15
-    assert by_symbol["HIGH"]["trader_position_pct"] == 0.15
+    assert by_symbol["HIGH"]["trader_position_pct"] == 0.20
+    assert by_symbol["HIGH"]["risk_position_pct"] == 0.15
     assert by_symbol["HIGH"]["portfolio_decision"]["action"] == "open"
     assert by_symbol["LOW"]["position_pct"] == 0.0
-    assert by_symbol["LOW"]["trader_position_pct"] == 0.15
+    assert by_symbol["LOW"]["trader_position_pct"] == 0.20
+    assert by_symbol["LOW"]["risk_position_pct"] == 0.15
     assert by_symbol["LOW"]["portfolio_decision"]["action"] == "reject"
     assert alerts == [("HIGH", 0.15), ("LOW", 0.0)]
 

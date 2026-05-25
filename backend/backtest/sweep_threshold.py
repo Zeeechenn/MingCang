@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import statistics
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
 from backend.backtest.compare_paths import SignalInput, _max_drawdown, _no_llm_settings, _path_a
+from backend.backtest.costs import annualized_sharpe, net_return
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +53,7 @@ def _metrics(threshold: float, returns: list[float]) -> ThresholdMetrics:
     wins = [r for r in returns if r > 0]
     losses = [r for r in returns if r <= 0]
     mean = statistics.mean(returns)
-    stdev = statistics.pstdev(returns)
-    sharpe = mean / stdev * math.sqrt(252 / 5) if stdev > 0 else 0.0
+    sharpe = annualized_sharpe(returns, avg_hold_days=5)
     pl = (
         statistics.mean(wins) / abs(statistics.mean(losses))
         if wins and losses and statistics.mean(losses) != 0
@@ -112,9 +111,9 @@ def sweep(
         for inp, s in scored:
             if s > t:
                 if len(inp.forward_returns) >= exit_days:
-                    returns.append(inp.forward_returns[exit_days - 1])
+                    returns.append(net_return(inp.forward_returns[exit_days - 1]))
                 elif inp.forward_returns:
-                    returns.append(inp.forward_returns[-1])
+                    returns.append(net_return(inp.forward_returns[-1]))
         out_rows.append(_metrics(t, returns))
 
     recommended = _recommend(out_rows)

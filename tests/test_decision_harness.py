@@ -48,6 +48,7 @@ def test_record_decision_run_preserves_portfolio_decision(test_db):
         "composite_score": 72,
         "position_pct": 0.10,
         "trader_position_pct": 0.15,
+        "risk_position_pct": 0.12,
         "portfolio_decision": {
             "symbol": "600519",
             "target_position_pct": 0.10,
@@ -68,6 +69,7 @@ def test_record_decision_run_preserves_portfolio_decision(test_db):
     final_action = get_decision_evidence(test_db, "600519")[0]["final_action"]
     assert final_action["position_pct"] == 0.10
     assert final_action["trader_position_pct"] == 0.15
+    assert final_action["risk_position_pct"] == 0.12
     assert final_action["portfolio_decision"]["action"] == "reduce"
 
 

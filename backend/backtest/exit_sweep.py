@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import statistics
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -30,6 +29,7 @@ from backend.backtest.compare_paths import (
     _no_llm_settings,
     _path_a,
 )
+from backend.backtest.costs import annualized_sharpe, net_return_from_prices
 from backend.backtest.exit_logic_experiment import (
     _exit_atr_bracket,
     _exit_fixed,
@@ -112,10 +112,8 @@ def _metrics(name: str, trades: list[tuple[float, str, int]]) -> ExitStrategyMet
     wins = [r for r in returns if r > 0]
     losses = [r for r in returns if r <= 0]
     mean = statistics.mean(returns)
-    stdev = statistics.pstdev(returns)
     avg_hold = statistics.mean(hold_days)
-    # 年化 sharpe：以平均持仓天数标定
-    sharpe = mean / stdev * math.sqrt(252 / max(avg_hold, 1)) if stdev > 0 else 0.0
+    sharpe = annualized_sharpe(returns, avg_hold_days=avg_hold)
     pl = (
         statistics.mean(wins) / abs(statistics.mean(losses))
         if wins and losses and statistics.mean(losses) != 0
@@ -210,7 +208,7 @@ def run_exit_sweep(
                 if exit_idx <= 0:
                     continue
                 exit_close = all_rows[exit_idx].close
-                ret = (exit_close - inp.close) / inp.close
+                ret = net_return_from_prices(inp.close, exit_close)
                 hold_days = exit_idx   # entry @ 0
                 results[name].append((ret, reason, hold_days))
     finally:

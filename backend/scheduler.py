@@ -447,13 +447,14 @@ def _apply_portfolio_decision(batch_items: list[tuple[Any, dict]], db) -> int:
     for stock, analysis in batch_items:
         result = analysis["result"]
         current = current_weights.get(stock.symbol, 0.0)
+        risk_position_pct = float(result.get("risk_position_pct", result.get("position_pct")) or 0.0)
         candidates.append(PortfolioCandidate(
             symbol=stock.symbol,
             sector=getattr(stock, "industry", None) or "未分类",
             composite_score=float(result.get("composite_score") or 0.0),
             recommendation=result.get("recommendation") or "观望",
             confidence=result.get("confidence") or "低",
-            suggested_position_pct=float(result.get("position_pct") or 0.0),
+            suggested_position_pct=risk_position_pct,
             is_existing=current > 0,
             current_position_pct=current,
         ))
@@ -466,8 +467,9 @@ def _apply_portfolio_decision(batch_items: list[tuple[Any, dict]], db) -> int:
         allocation = by_symbol.get(stock.symbol)
         if allocation is None:
             continue
-        trader_position_pct = float(result.get("position_pct") or 0.0)
-        result["trader_position_pct"] = trader_position_pct
+        risk_position_pct = float(result.get("risk_position_pct", result.get("position_pct")) or 0.0)
+        result.setdefault("trader_position_pct", risk_position_pct)
+        result["risk_position_pct"] = risk_position_pct
         result["position_pct"] = allocation["target_position_pct"]
         result["allocation_rationale"] = allocation["rationale"]
         result["portfolio_decision"] = {

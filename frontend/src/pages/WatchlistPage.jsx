@@ -505,6 +505,7 @@ export default function WatchlistPage() {
   useEffect(() => { load() }, [])
 
   async function handleRemove(symbol) {
+    if (!window.confirm(`从自选股移除 ${symbol}？`)) return
     await removeStock(symbol)
     load()
   }

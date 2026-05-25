@@ -365,6 +365,7 @@ export default function AdminPage() {
   }
 
   async function handleInitialize() {
+    if (!window.confirm('立即执行冷启动初始化？这会触发行情、财报、披露日和信号生成任务。')) return
     setMessage('')
     try {
       await startInitialize()
@@ -387,6 +388,7 @@ export default function AdminPage() {
   const [sectionEyebrow, sectionTitle, sectionDescription] = SECTION_COPY[active] || SECTION_COPY.decision
 
   async function handleSaveRuntime() {
+    if (!window.confirm('应用当前运行时配置？该设置只影响当前后端进程。')) return
     setSaving(true)
     setMessage('')
     try {
@@ -428,7 +430,8 @@ export default function AdminPage() {
     }
   }
 
-  async function runAction(key, fn, successText) {
+  async function runAction(key, fn, successText, confirmText = '') {
+    if (confirmText && !window.confirm(confirmText)) return
     setActionBusy(key)
     setMessage('')
     try {
@@ -445,6 +448,7 @@ export default function AdminPage() {
   async function handleDeepResearch(e) {
     e.preventDefault()
     if (!deepTopic.trim()) return
+    if (!window.confirm('立即生成专题深度研究？该操作可能调用本地或云端 LLM。')) return
     setActionBusy('deep')
     setMessage('')
     setDeepResult(null)
@@ -573,7 +577,7 @@ export default function AdminPage() {
                     <Toggle value={longTermTeam} onChange={setLongTermTeam} />
                   </SettingRow>
                   <SettingRow label="手动长期团" hint="立即提交长期研究团队后台任务。">
-                    <ActionButton disabled={actionBusy === 'longterm'} onClick={() => runAction('longterm', triggerLongTermTeam, '长期分析师团已提交后台任务')}>
+                    <ActionButton disabled={actionBusy === 'longterm'} onClick={() => runAction('longterm', triggerLongTermTeam, '长期分析师团已提交后台任务', '立即运行长期分析师团？')}>
                       跑长期团
                     </ActionButton>
                   </SettingRow>
@@ -756,18 +760,18 @@ export default function AdminPage() {
                   <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{modelStatus.updated_at}</div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <ActionButton disabled={actionBusy === 'train'} onClick={() => runAction('train', trainModel, '模型训练已提交后台任务')}>
+                  <ActionButton disabled={actionBusy === 'train'} onClick={() => runAction('train', trainModel, '模型训练已提交后台任务', '立即提交模型训练任务？')}>
                     训练模型
                   </ActionButton>
-                  <ActionButton disabled={actionBusy === 'longterm'} onClick={() => runAction('longterm', triggerLongTermTeam, '长期分析师团已提交后台任务')}>
+                  <ActionButton disabled={actionBusy === 'longterm'} onClick={() => runAction('longterm', triggerLongTermTeam, '长期分析师团已提交后台任务', '立即运行长期分析师团？')}>
                     跑长期团
                   </ActionButton>
                   {killSwitch ? (
-                    <ActionButton danger disabled={actionBusy === 'reset'} onClick={() => runAction('reset', resetKillSwitch, '熔断已重置')}>
+                    <ActionButton danger disabled={actionBusy === 'reset'} onClick={() => runAction('reset', resetKillSwitch, '熔断已重置', '确认重置熔断状态？')}>
                       重置熔断
                     </ActionButton>
                   ) : (
-                    <ActionButton danger disabled={actionBusy === 'trigger'} onClick={() => runAction('trigger', () => triggerKillSwitch('manual from admin'), '熔断已触发')}>
+                    <ActionButton danger disabled={actionBusy === 'trigger'} onClick={() => runAction('trigger', () => triggerKillSwitch('manual from admin'), '熔断已触发', '确认手动触发熔断？')}>
                       触发熔断
                     </ActionButton>
                   )}

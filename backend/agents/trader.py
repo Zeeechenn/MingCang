@@ -42,6 +42,17 @@ def _score_to_confidence(score: float) -> str:
     return "低"
 
 
+def _news_has_events(news: AnalystReport | None) -> bool:
+    """Return whether the news analyst has real event evidence."""
+    if news is None:
+        return False
+    raw = news.raw if isinstance(news.raw, dict) else {}
+    events = raw.get("events")
+    if events is not None:
+        return bool(events)
+    return bool([item for item in news.key_findings if item != "无关键事件"])
+
+
 def propose(
     reports: dict[str, AnalystReport],
     researcher: ResearcherConclusion,
@@ -59,7 +70,14 @@ def propose(
     sent = reports.get("sentiment")
     news = reports.get("news")
 
-    sent_combined = (sent.score if sent else 0) * 0.5 + (news.score if news else 0) * 0.5
+    sent_score = sent.score if sent else 0
+    news_score = news.score if news else 0
+    if _news_has_events(news):
+        sent_combined = sent_score * 0.5 + news_score * 0.5
+        sentiment_mode = "sentiment_news_blend"
+    else:
+        sent_combined = sent_score
+        sentiment_mode = "sentiment_only_no_news_events"
     weights = active_signal_weights()
     composite = (
         (quant.score if quant else 0) * weights.quant
@@ -87,16 +105,19 @@ def propose(
     reasoning = (
         f"四路得分 [tech={tech.score if tech else 0:.0f} "
         f"quant={quant.score if quant else 0:.0f} "
-        f"sent={sent.score if sent else 0:.0f} "
-        f"news={news.score if news else 0:.0f}] "
+        f"sent={sent_score:.0f} "
+        f"news={news_score:.0f} "
+        f"sent_effective={sent_combined:.0f}] "
         f"→ 综合 {composite:+.0f}（{researcher.action_bias}调节后，{weights.profile}）。"
     )
 
     breakdown = {
         "quant": quant.score if quant else 0,
         "technical": tech.score if tech else 0,
-        "sentiment": sent.score if sent else 0,
-        "news": news.score if news else 0,
+        "sentiment": round(sent_combined, 1),
+        "sentiment_raw": sent_score,
+        "news": news_score,
+        "sentiment_mode": sentiment_mode,
         "signal_profile": weights.profile,
     }
 

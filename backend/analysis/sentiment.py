@@ -1,10 +1,12 @@
 """LLM 新闻情感分析"""
 import hashlib
+from collections import OrderedDict
 
 from backend.config import settings
 from backend.llm import get_provider, has_runtime_llm_provider
 
-_cache: dict[str, dict] = {}  # 进程内缓存，避免相同新闻重复调用 API
+_CACHE_MAX_SIZE = 256
+_cache: OrderedDict[str, dict] = OrderedDict()  # 进程内 LRU 缓存，避免相同新闻重复调用 API
 
 SYSTEM_PROMPT = "你是专业的A股新闻分析师。分析新闻标题列表，评估对股票的短期情感影响。sentiment范围-1.0到1.0，key_events最多3条。"
 
@@ -45,7 +47,23 @@ _DISABLED_FALLBACK = {
 
 def _titles_hash(titles: list[str]) -> str:
     """Return MD5 hex digest of sorted title list for cache keying."""
-    return hashlib.md5("|".join(sorted(titles)).encode()).hexdigest()
+    return hashlib.md5("|".join(sorted(titles[:15])).encode()).hexdigest()
+
+
+def _cache_get(key: str) -> dict | None:
+    """Return a copy of cached data and refresh LRU order."""
+    if key not in _cache:
+        return None
+    value = _cache.pop(key)
+    _cache[key] = value
+    return dict(value)
+
+
+def _cache_set(key: str, value: dict) -> None:
+    """Store a copy in bounded LRU cache."""
+    _cache[key] = dict(value)
+    while len(_cache) > _CACHE_MAX_SIZE:
+        _cache.popitem(last=False)
 
 
 def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
@@ -60,8 +78,9 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
         return _DISABLED_FALLBACK.copy()
 
     cache_key = _titles_hash(titles)
-    if cache_key in _cache:
-        return _cache[cache_key]
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
 
     context = f"股票代码：{symbol}\n" if symbol else ""
     prompt = context + "新闻标题：\n" + "\n".join(f"- {t}" for t in titles[:15])
@@ -79,5 +98,5 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
 
     data["sentiment"] = max(-1.0, min(1.0, float(data.get("sentiment", 0))))
     data["key_events"] = data.get("key_events", [])[:3]
-    _cache[cache_key] = data
-    return data
+    _cache_set(cache_key, data)
+    return dict(data)

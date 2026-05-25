@@ -6,10 +6,10 @@
 """
 from __future__ import annotations
 
-import math
 import statistics
 from collections import Counter
 
+from backend.backtest.costs import annualized_sharpe, net_return_from_prices
 from backend.data.database import Price, SessionLocal, Signal
 from backend.data.point_in_time import pit_session
 from backend.decision.signal_policy import entry_recommendations
@@ -78,8 +78,7 @@ def _metrics(returns: list[float], reasons: list[str]) -> dict:
     wins = [r for r in returns if r > 0]
     losses = [r for r in returns if r <= 0]
     mean = statistics.mean(returns)
-    stdev = statistics.pstdev(returns)
-    sharpe = mean / stdev * math.sqrt(252) if stdev else 0.0
+    sharpe = annualized_sharpe(returns, avg_hold_days=5)
     profit_loss = (
         statistics.mean(wins) / abs(statistics.mean(losses))
         if wins and losses and statistics.mean(losses) != 0
@@ -167,7 +166,7 @@ def _run_scan(
             entry = rows[entry_idx].close
             for name, fn in experiments.items():
                 exit_idx, reason = fn(rows, entry_idx, sig_by_date)
-                ret = (rows[exit_idx].close - entry) / entry
+                ret = net_return_from_prices(entry, rows[exit_idx].close)
                 results[name]["returns"].append(ret)
                 results[name]["reasons"].append(reason)
 
