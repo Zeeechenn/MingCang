@@ -70,6 +70,8 @@ def test_fetch_daily_registers_cn_multi_source_chain(monkeypatch):
     def fake_fetch(symbol, market_name, days):
         return pd.DataFrame([{"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]), "efinance_cn"
 
+    monkeypatch.setattr(market.settings, "tickflow_enabled", False)
+    monkeypatch.setattr(market.settings, "tickflow_api_key", "")
     monkeypatch.setattr(market, "fetch_daily_with_fallback", fake_fetch)
 
     df = market.fetch_daily("600519", "CN", days=30)

@@ -226,6 +226,24 @@ def fetch_cn_daily_tushare(symbol: str, days: int = 365) -> pd.DataFrame:
 
 
 @_retry(max_attempts=3, delay=1.0)
+def fetch_cn_daily_tickflow(symbol: str, days: int = 365) -> pd.DataFrame:
+    """A-share daily data via TickFlow forward_additive adjustment."""
+    if not settings.tickflow_enabled:
+        raise ValueError("TICKFLOW_ENABLED is false")
+    if not settings.tickflow_api_key:
+        raise ValueError("TICKFLOW_API_KEY is not configured")
+
+    from backend.data.tickflow import fetch_tickflow_daily
+
+    return fetch_tickflow_daily(
+        symbol,
+        "CN",
+        days=days,
+        adjust="forward_additive",
+    )
+
+
+@_retry(max_attempts=3, delay=1.0)
 def fetch_cn_daily_yfinance(symbol: str, days: int = 365) -> pd.DataFrame:
     """Yahoo Finance A-share daily data。
 
@@ -257,6 +275,8 @@ def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
     register_daily_provider("efinance_cn", {"CN"}, fetch_cn_daily_efinance, priority=0, cooldown_seconds=60)
     register_daily_provider("eastmoney_cn", {"CN"}, fetch_cn_daily, priority=10, cooldown_seconds=60)
     register_daily_provider("akshare_em_cn", {"CN"}, fetch_cn_daily_akshare_em, priority=20, cooldown_seconds=60)
+    if settings.tickflow_enabled and settings.tickflow_api_key:
+        register_daily_provider("tickflow_cn", {"CN"}, fetch_cn_daily_tickflow, priority=-10, cooldown_seconds=30)
     register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=30, cooldown_seconds=30)
     register_daily_provider("akshare_tx_cn", {"CN"}, fetch_cn_daily_akshare_tx, priority=40, cooldown_seconds=30)
     # M19.2: yfinance 对 A 股是后复权含分红再投，与其余源 qfq 口径冲突，不进入 CN fallback。

@@ -1,4 +1,4 @@
-"""External A-share data source readiness catalog and opt-in probes.
+"""External data source readiness catalog and opt-in probes.
 
 This module intentionally does not register production market providers. It
 keeps candidate sources observable before any endpoint is allowed into signal
@@ -89,6 +89,36 @@ def _sources() -> list[ExternalSource]:
                 "Repository is small and should not become a direct runtime dependency.",
             ],
         ),
+        ExternalSource(
+            id="tickflow",
+            name="TickFlow",
+            repository_url="https://tickflow.org/",
+            recommended_stage="provider_probe",
+            high_value_datasets=[
+                "daily_kline",
+                "realtime_quote",
+                "minute_kline",
+                "market_depth",
+                "financial_metrics",
+                "cross_market_universes",
+            ],
+            useful_for=[
+                "source_availability_monitoring",
+                "future_cn_hk_us_market_data",
+                "future_intraday_or_realtime_dashboard",
+                "financial_quality_cross_check",
+            ],
+            integration_notes=[
+                "Keep disabled by default behind TICKFLOW_ENABLED until data parity is measured.",
+                "Use HTTP probe first; do not expose the API key to frontend code.",
+                "Match StockSage's adjusted-price policy before registering as a signal provider.",
+            ],
+            risk_level="medium",
+            risk_notes=[
+                "Useful features depend on API key plan and channel permissions.",
+                "Realtime, minute bars, WebSocket and market depth can consume paid quota.",
+            ],
+        ),
     ]
 
 
@@ -152,6 +182,9 @@ def probe_ftshare_stock_list(symbol: str = "600519", timeout_seconds: float = 5.
 
 def probe_external_sources(symbol: str = "600519") -> dict:
     """Run explicit, side-effect-free probes for candidate external sources."""
+    from backend.data.tickflow import probe_tickflow_daily
+
     return {
         "ftshare": probe_ftshare_stock_list(symbol=symbol),
+        "tickflow": probe_tickflow_daily(symbol=symbol, market="CN"),
     }

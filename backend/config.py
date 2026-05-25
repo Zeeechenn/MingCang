@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     schedule_premarket: str = "08:30"
     schedule_postmarket: str = "16:00"
     tushare_token: str = ""
+    tickflow_enabled: bool = False
+    tickflow_api_key: str = ""
+    tickflow_base_url: str = "https://api.tickflow.org"
+    tickflow_timeout_seconds: float = 10.0
     log_level: str = "INFO"
 
     # Signal weights (must sum to 1.0)
