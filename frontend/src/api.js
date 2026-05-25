@@ -252,6 +252,9 @@ export const getLongTermLabel = (symbol) =>
 export const getResearchState = (symbol) =>
   request(`/research/${symbol}`)
 
+export const getResearchDossier = (symbol) =>
+  request(`/research/${symbol}/dossier`)
+
 export const refreshResearchCopilot = (symbol) =>
   request(`/research/${symbol}/copilot`, { method: 'POST' })
 

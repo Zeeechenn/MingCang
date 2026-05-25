@@ -199,6 +199,20 @@ class ResearchStateOut(BaseModel):
     updated_at: str | None = None
 
 
+class ResearchDossierOut(BaseModel):
+    symbol: str
+    stock: dict | None = None
+    latest_signal: SignalOut | None = None
+    long_term_label: LongTermLabelOut | None = None
+    research_state: ResearchStateOut
+    evidence: list[DecisionRunOut] = []
+    stock_memory: list[dict] = []
+    deep_research: list[dict] = []
+    conflicts: list[dict] = []
+    official_action: dict = {}
+    missing: list[str] = []
+
+
 class DataCoverageStockOut(BaseModel):
     symbol: str
     name: str | None = None

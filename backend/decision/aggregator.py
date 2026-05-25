@@ -148,6 +148,8 @@ def aggregate(
     sentiment_result: dict | None = None,
     kronos_result: dict | None = None,
     reflection_context: str = "",
+    long_term_label=None,
+    memory_context: dict | None = None,
 ) -> dict:
     """
     多路信号加权融合，计算止盈止损，输出最终建议。
@@ -208,15 +210,34 @@ def aggregate(
         "sentiment": round(sentiment_score * 100, 1),
     }
 
+    from backend.decision.research_constraints import apply_research_constraints
+    from backend.portfolio import suggest_position_pct
+
+    recommendation = _score_to_recommendation(composite)
+    confidence = _score_to_confidence(composite)
+    position_pct = suggest_position_pct(composite, confidence)
+    constrained = apply_research_constraints(
+        recommendation=recommendation,
+        composite_score=composite,
+        position_pct=position_pct,
+        long_term_label=long_term_label,
+        memory_context=memory_context,
+    )
+
     result = {
-        "composite_score": composite,
-        "recommendation": _score_to_recommendation(composite),
-        "confidence": _score_to_confidence(composite),
+        "composite_score": constrained.composite_score,
+        "recommendation": constrained.recommendation,
+        "confidence": confidence,
         "stop_loss": stop_loss,
         "take_profit": take_profit,
         "stop_loss_executable": stop_loss_executable,
         "limit_status": limit.get("status", "normal"),
         "breakdown": breakdown,
+        "position_pct": constrained.position_pct,
+        "risk_notes": constrained.risk_notes,
+        "research_constraints": constrained.constraints,
+        "research_conflicts": constrained.conflicts,
+        "official_action": constrained.final_action,
         "rule_version": f"aggregate_v1:{weights.profile}",
     }
     if llm_arb:

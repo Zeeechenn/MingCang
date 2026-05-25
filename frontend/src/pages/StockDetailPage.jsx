@@ -6,6 +6,7 @@ import {
   getNews,
   getSignalEval,
   getSignalEvidence,
+  getResearchDossier,
   getResearchState,
   getDataCoverage,
   getLongTermLabel,
@@ -19,6 +20,7 @@ import Chart from '../components/Chart'
 import NewsSidebar from '../components/NewsSidebar'
 import EvidenceCard from '../components/EvidenceCard'
 import ResearchCopilotCard from '../components/ResearchCopilotCard'
+import { getDossierActionView } from '../components/dossierSummary'
 
 const PANEL = 'rounded-sm border border-stone-300/80 bg-[#faf6ec] dark:border-slate-700 dark:bg-[#1d232e]'
 const INSET = 'rounded-sm border border-stone-300 bg-[#f3eddc] dark:border-slate-700 dark:bg-[#161b25]'
@@ -35,6 +37,83 @@ function labelTone(label) {
   if (label === '估值偏高') return 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-200'
   if (label === '规避') return 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200'
   return 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700 dark:text-cyan-200'
+}
+
+function conflictTone(severity) {
+  if (severity === 'high') return 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-200'
+  if (severity === 'medium') return 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-200'
+  return 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700 dark:text-cyan-200'
+}
+
+function DossierPanel({ dossier, signal }) {
+  const view = getDossierActionView(dossier || {}, signal || {})
+  const constraints = view.constraints
+  const conflicts = view.conflicts
+  return (
+    <section className={PANEL}>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-300/80 p-4 dark:border-slate-700">
+        <div>
+          <div className={LABEL}>研究档案</div>
+          <h2 className="mt-1 text-sm font-semibold text-stone-950 dark:text-slate-100">官方动作与约束</h2>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-stone-500 dark:text-slate-400">{signal?.date || '-'}</div>
+          <div className="mt-1 text-sm font-semibold text-stone-950 dark:text-slate-100">
+            {view.recommendation}
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3 p-4 md:grid-cols-3">
+        <div className={INSET}>
+          <div className="p-3">
+            <div className={LABEL}>最终仓位</div>
+            <div className="mt-2 font-mono text-xl font-semibold text-stone-950 dark:text-slate-100">
+              {view.finalPosition}
+            </div>
+            {view.traderPosition !== '-' && (
+              <div className="mt-1 text-xs text-stone-500 dark:text-slate-400">单股原始 {view.traderPosition}</div>
+            )}
+          </div>
+        </div>
+        <div className={INSET}>
+          <div className="p-3">
+            <div className={LABEL}>约束状态</div>
+            <div className="mt-2 text-sm text-stone-700 dark:text-slate-300">
+              {view.constrainedLabel}
+            </div>
+            <div className="mt-1 text-xs text-stone-500 dark:text-slate-400">
+              约束 {view.constraintCount} · 冲突 {view.conflictCount}
+            </div>
+          </div>
+        </div>
+        <div className={INSET}>
+          <div className="p-3">
+            <div className={LABEL}>深度研究</div>
+            <div className="mt-2 text-sm text-stone-700 dark:text-slate-300">
+              {view.deepResearchCount ? `${view.deepResearchCount} 条研究索引` : '暂无深度研究索引'}
+            </div>
+            {view.firstDeepResearchSummary && (
+              <div className="mt-1 line-clamp-2 text-xs text-stone-500 dark:text-slate-400">{view.firstDeepResearchSummary}</div>
+            )}
+          </div>
+        </div>
+      </div>
+      {(conflicts.length > 0 || constraints.length > 0) && (
+        <div className="space-y-2 border-t border-stone-300/80 p-4 dark:border-slate-700">
+          {conflicts.slice(0, 3).map((item, index) => (
+            <div key={`conflict-${index}`} className={`rounded-sm border px-3 py-2 text-sm ${conflictTone(item.severity)}`}>
+              {item.summary || item.type}
+            </div>
+          ))}
+          {!conflicts.length && constraints.slice(0, 3).map((item, index) => (
+            <div key={`constraint-${index}`} className="rounded-sm border border-stone-300 bg-[#f3eddc] px-3 py-2 text-sm text-stone-700 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-300">
+              {item.summary || item.label || item.type}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
 }
 
 function LongTermPanel({ label, research, reviewing, notice, onReview }) {
@@ -127,6 +206,7 @@ function SignalHistoryPanel({ signals }) {
 export default function StockDetailPage({ theme = 'dark' }) {
   const { symbol } = useParams()
   const [signal, setSignal] = useState(null)
+  const [dossier, setDossier] = useState(null)
   const [prices, setPrices] = useState([])
   const [news, setNews] = useState(null)
   const [evalData, setEvalData] = useState(null)
@@ -150,6 +230,7 @@ export default function StockDetailPage({ theme = 'dark' }) {
     setExtrasLoading(true)
     setError('')
     setSignal(null)
+    setDossier(null)
     setPrices([])
     Promise.all([
       getLatestSignal(symbol).catch(() => null),
@@ -162,18 +243,21 @@ export default function StockDetailPage({ theme = 'dark' }) {
     }).finally(() => setCoreLoading(false))
 
     Promise.all([
+      getResearchDossier(symbol).catch(() => null),
       getNews(symbol, 48).catch(() => []),
       getSignalEvidence(symbol, 5).catch(() => []),
       getResearchState(symbol).catch(() => null),
       getDataCoverage().catch(() => null),
       getLongTermLabel(symbol).catch(() => null),
       getSignals(symbol, 8).catch(() => []),
-    ]).then(([nw, ev, rs, cov, lt, sigHistory]) => {
+    ]).then(([ds, nw, ev, rs, cov, lt, sigHistory]) => {
+      setDossier(ds)
+      if (ds?.latest_signal) setSignal(ds.latest_signal)
       setNews(nw)
-      setEvidence(ev)
-      setResearch(rs)
+      setEvidence(ds?.evidence || ev)
+      setResearch(ds?.research_state || rs)
       setCoverage(cov)
-      setLongTerm(lt)
+      setLongTerm(ds?.long_term_label || lt)
       setHistory(sigHistory)
     }).finally(() => setExtrasLoading(false))
   }, [symbol])
@@ -290,6 +374,7 @@ export default function StockDetailPage({ theme = 'dark' }) {
                 notice={notice}
                 onReview={handleReviewLatest}
               />
+              <DossierPanel dossier={dossier} signal={signal} />
               <SignalCard signal={signal} />
               <ResearchCopilotCard
                 copilot={research?.copilot}

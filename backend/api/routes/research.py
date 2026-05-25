@@ -8,11 +8,20 @@ from backend.agent.http_guard import agent_write_guard
 from backend.api.schemas import (
     DeepResearchRequest,
     DeepResearchResponse,
+    ResearchDossierOut,
     ResearchStateOut,
 )
 from backend.data.database import get_db
 
 router = APIRouter()
+
+
+@router.get("/research/{symbol}/dossier", response_model=ResearchDossierOut)
+def get_symbol_research_dossier(symbol: str, db: Session = Depends(get_db)):
+    """Return the unified research dossier for one symbol."""
+    from backend.research.dossier import build_research_dossier
+
+    return build_research_dossier(db, symbol)
 
 
 @router.get("/research/{symbol}", response_model=ResearchStateOut)

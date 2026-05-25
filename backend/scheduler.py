@@ -345,6 +345,8 @@ def _analyze_postmarket_stock(stock, db, context: dict) -> dict | None:
             atr=atr,
             sentiment_result=sentiment_result,
             reflection_context=reflection,
+            long_term_label=lt_label,
+            memory_context=memory_context,
         )
     result["news_audit"] = sentiment_result.get("news_audit", [])
     return {

@@ -35,6 +35,86 @@ def test_aggregate_non_finite_composite_falls_back_to_neutral(monkeypatch):
     assert result["recommendation"] == "观望"
 
 
+def test_default_aggregate_respects_long_term_avoid_label(monkeypatch):
+    from backend.agents.long_term.base import LongTermLabel
+    from backend.decision import aggregator
+
+    monkeypatch.setattr(aggregator.settings, "paper_trading_profile", "new_framework")
+    monkeypatch.setattr(aggregator.settings, "weight_quant", 0.0)
+    monkeypatch.setattr(aggregator.settings, "weight_technical", 0.6)
+    monkeypatch.setattr(aggregator.settings, "weight_sentiment", 0.4)
+    monkeypatch.setattr(aggregator.settings, "long_term_team_enabled", True)
+
+    label = LongTermLabel(
+        symbol="300308",
+        date="2026-05-25",
+        label="规避",
+        score=-60,
+        votes={"track": "规避"},
+        key_findings=["基本面风险未解除"],
+        expires_at="2026-06-04",
+    )
+    result = aggregator.aggregate(
+        quant_score=0,
+        technical_result={"score": 80, "limit": {}},
+        sentiment_score=0.8,
+        close=10,
+        atr=1,
+        long_term_label=label,
+    )
+
+    assert result["recommendation"] == "观望"
+    assert result["position_pct"] == 0.0
+    assert any("规避" in note for note in result["risk_notes"])
+    assert result["research_conflicts"]
+
+
+def test_default_aggregate_downgrades_entry_when_long_term_missing(monkeypatch):
+    from backend.decision import aggregator
+
+    monkeypatch.setattr(aggregator.settings, "paper_trading_profile", "new_framework")
+    monkeypatch.setattr(aggregator.settings, "weight_quant", 0.0)
+    monkeypatch.setattr(aggregator.settings, "weight_technical", 0.6)
+    monkeypatch.setattr(aggregator.settings, "weight_sentiment", 0.4)
+    monkeypatch.setattr(aggregator.settings, "long_term_team_enabled", True)
+
+    result = aggregator.aggregate(
+        quant_score=0,
+        technical_result={"score": 80, "limit": {}},
+        sentiment_score=0.8,
+        close=10,
+        atr=1,
+        long_term_label=None,
+    )
+
+    assert result["recommendation"] == "可关注"
+    assert result["position_pct"] == 0.0
+    assert any("长期标签缺失" in note for note in result["risk_notes"])
+
+
+def test_default_aggregate_surfaces_memory_constraints(monkeypatch):
+    from backend.decision import aggregator
+
+    monkeypatch.setattr(aggregator.settings, "paper_trading_profile", "new_framework")
+    monkeypatch.setattr(aggregator.settings, "weight_quant", 0.0)
+    monkeypatch.setattr(aggregator.settings, "weight_technical", 0.6)
+    monkeypatch.setattr(aggregator.settings, "weight_sentiment", 0.4)
+    monkeypatch.setattr(aggregator.settings, "long_term_team_enabled", False)
+
+    result = aggregator.aggregate(
+        quant_score=0,
+        technical_result={"score": 80, "limit": {}},
+        sentiment_score=0.8,
+        close=10,
+        atr=1,
+        memory_context={"text": "【300308 股票长期记忆】\n- [risk|重要5|watching] 海外订单兑现风险"},
+    )
+
+    assert result["recommendation"] == "可小仓试错"
+    assert any(c["type"] == "risk" for c in result["research_constraints"])
+    assert any(c["type"] == "memory_risk" for c in result["research_conflicts"])
+
+
 def test_position_sizer_preserves_caps_for_small_candidate_sets():
     from backend.portfolio.combo_weights import equal_weight, size_positions
 

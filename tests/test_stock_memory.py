@@ -257,6 +257,107 @@ def test_deep_research_memory_writes_stock_research_pointer(test_db):
     assert thesis_rows[0]["source_type"] == "deep_research_candidate"
 
 
+def test_research_dossier_recalls_deep_research_pointer(test_db, sample_stocks):
+    from backend.memory.research_memory import remember_deep_research
+    from backend.research.dossier import build_research_dossier
+
+    remember_deep_research(
+        test_db,
+        topic="AI算力产业链",
+        summary="订单兑现是核心验证点，估值拥挤是主要风险",
+        symbols=["300308"],
+        report_path="/tmp/report.md",
+    )
+
+    dossier = build_research_dossier(test_db, "300308")
+
+    assert dossier["symbol"] == "300308"
+    assert dossier["stock"]["name"] == "中际旭创"
+    assert len(dossier["deep_research"]) == 1
+    assert "AI算力产业链" in dossier["deep_research"][0]["evidence"]["topic"]
+    assert "latest_signal" in dossier["missing"]
+    assert "copilot" in dossier["missing"]
+
+
+def test_research_dossier_combines_signal_label_memory_and_action(test_db, sample_stocks):
+    from backend.agents.long_term.base import LongTermLabel
+    from backend.agents.long_term.storage import save_label
+    from backend.data.database import Signal
+    from backend.decision.harness import record_decision_run
+    from backend.memory.stock_memory import create_stock_memory
+    from backend.research.dossier import build_research_dossier
+
+    test_db.add(Signal(
+        symbol="300308",
+        date="2026-05-25",
+        quant_score=0,
+        technical_score=80,
+        sentiment_score=80,
+        composite_score=60,
+        recommendation="可小仓试错",
+        confidence="高",
+        stop_loss=9,
+        take_profit=12,
+        limit_status="normal",
+        rule_version="aggregate_v1:new_framework",
+    ))
+    save_label(LongTermLabel(
+        symbol="300308",
+        date="2026-05-25",
+        label="规避",
+        score=-50,
+        votes={"track": "规避"},
+        key_findings=["深研风险未解除"],
+        expires_at="2999-01-01",
+    ), test_db)
+    create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="risk",
+        summary="海外订单兑现不足时避免追高",
+        source_type="test",
+        importance=5,
+    )
+    record_decision_run(
+        test_db,
+        run_type="postmarket",
+        symbol="300308",
+        as_of="2026-05-25",
+        result={
+            "rule_version": "aggregate_v1:new_framework",
+            "recommendation": "观望",
+            "confidence": "高",
+            "composite_score": 60,
+            "breakdown": {"technical": 80, "sentiment": 80, "quant": 0},
+            "risk_notes": ["长期团'规避'阻断入场"],
+            "research_conflicts": [{
+                "type": "short_long_conflict",
+                "severity": "high",
+                "summary": "短线入场信号与长期规避标签冲突",
+            }],
+            "official_action": {
+                "recommendation": "观望",
+                "position_pct": 0.0,
+                "is_constrained": True,
+                "constraint_count": 1,
+                "conflict_count": 1,
+            },
+            "stop_loss": 9,
+            "take_profit": 12,
+            "position_pct": 0.0,
+        },
+    )
+
+    dossier = build_research_dossier(test_db, "300308")
+
+    assert dossier["latest_signal"]["recommendation"] == "可小仓试错"
+    assert dossier["long_term_label"]["label"] == "规避"
+    assert dossier["official_action"]["recommendation"] == "观望"
+    assert dossier["official_action"]["is_constrained"] is True
+    assert any(c["type"] == "short_long_conflict" for c in dossier["conflicts"])
+    assert any(row["memory_type"] == "risk" for row in dossier["stock_memory"])
+
+
 def test_deep_research_memory_keeps_per_symbol_pointers(test_db):
     from backend.memory.research_memory import remember_deep_research
     from backend.memory.stock_memory import list_stock_memories
