@@ -43,7 +43,7 @@
 
 单股研究入口：`POST /api/research/{symbol}/prepare` 尽力回填数据并返回 dossier；`GET /api/research/{symbol}/dossier` 读取信号、长期标签、copilot、记忆、专题调研索引和缺失项。
 
-长期专家团入口：`POST /api/long-term/{symbol}/run` 同步运行单股专家团，`POST /api/long-term/run` 后台批量刷新自选股。长期标签包含 `quality` / `constraint_eligible` / `quality_notes`；只有可信且 `constraint_eligible=true` 的标签会约束官方动作，失败或证据不足标签只展示。
+长期专家团入口：`POST /api/long-term/{symbol}/run` 同步运行单股专家团，`POST /api/long-term/run` 后台批量刷新自选股。长期标签包含 `quality` / `constraint_eligible` / `quality_notes`；当前 `LONG_TERM_CONSTRAINTS_ENABLED=false`，长期标签默认只展示/留痕、不改官方动作；验证通过后再开启可信标签约束。
 
 专题研究入口：`POST /api/research/deep/run` 或
 `PYTHONPATH=. python3 -m backend.research.deep_research --topic "AI算力产业链" --symbols 300308,300394`。

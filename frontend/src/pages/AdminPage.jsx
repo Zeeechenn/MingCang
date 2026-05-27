@@ -267,6 +267,7 @@ export default function AdminPage() {
   const [multiAgent, setMultiAgent] = useState(true)
   const [riskManager, setRiskManager] = useState(true)
   const [longTermTeam, setLongTermTeam] = useState(true)
+  const [longTermConstraints, setLongTermConstraints] = useState(false)
   const [trailingStop, setTrailingStop] = useState(false)
   const [weightQuant, setWeightQuant] = useState(0)
   const [weightTechnical, setWeightTechnical] = useState(60)
@@ -321,6 +322,7 @@ export default function AdminPage() {
       if (runtimeConfig?.multi_agent_enabled !== undefined) setMultiAgent(Boolean(runtimeConfig.multi_agent_enabled))
       if (runtimeConfig?.risk_manager_enabled !== undefined) setRiskManager(Boolean(runtimeConfig.risk_manager_enabled))
       if (runtimeConfig?.long_term_team_enabled !== undefined) setLongTermTeam(Boolean(runtimeConfig.long_term_team_enabled))
+      if (runtimeConfig?.long_term_constraints_enabled !== undefined) setLongTermConstraints(Boolean(runtimeConfig.long_term_constraints_enabled))
       if (runtimeConfig?.trailing_stop_enabled !== undefined) setTrailingStop(Boolean(runtimeConfig.trailing_stop_enabled))
       if (runtimeConfig?.raw_weights) {
         setWeightQuant(Math.round((runtimeConfig.raw_weights.weight_quant || 0) * 100))
@@ -407,6 +409,7 @@ export default function AdminPage() {
         multi_agent_enabled: multiAgent,
         risk_manager_enabled: riskManager,
         long_term_team_enabled: longTermTeam,
+        long_term_constraints_enabled: longTermConstraints,
         trailing_stop_enabled: trailingStop,
         weight_quant: weightQuant / 100,
         weight_technical: weightTechnical / 100,
@@ -579,8 +582,11 @@ export default function AdminPage() {
                   <SettingRow label="多 Agent 决策" hint="控制盘后是否走 Analyst → Director → Researcher → Trader → RiskManager。">
                     <Toggle value={multiAgent} onChange={setMultiAgent} />
                   </SettingRow>
-                  <SettingRow label="长期分析师团" hint="控制周频长期标签，以及长期标签对短线信号的约束。">
+                  <SettingRow label="长期分析师团" hint="控制周频长期标签生成和展示，不单独改变官方动作。">
                     <Toggle value={longTermTeam} onChange={setLongTermTeam} />
+                  </SettingRow>
+                  <SettingRow label="长期约束官方动作" hint="关闭时长期标签只展示和留痕，不改推荐、分数或仓位；验证通过后再开启。">
+                    <Toggle value={longTermConstraints} onChange={setLongTermConstraints} danger />
                   </SettingRow>
                   <SettingRow label="手动长期团" hint="立即提交长期研究团队后台任务。">
                     <ActionButton disabled={actionBusy === 'longterm'} onClick={() => runAction('longterm', triggerLongTermTeam, '长期分析师团已提交后台任务', '立即运行长期分析师团？')}>

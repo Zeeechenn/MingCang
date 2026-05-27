@@ -186,6 +186,7 @@ def run_pipeline(
     from backend.agents.trader import _score_to_recommendation
     if long_term_label is not None and long_term_label.label == "观望" \
             and settings.long_term_team_enabled \
+            and settings.long_term_constraints_enabled \
             and bool(getattr(long_term_label, "constraint_eligible", False)):
         cap = settings.long_term_watch_score_cap
         if proposal.composite_score > cap:

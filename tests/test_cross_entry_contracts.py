@@ -49,6 +49,7 @@ WEB_HEALTH_KEYS = {
     "consecutive_losses_threshold",
     "scheduler",
     "runtime_readiness",
+    "feature_flags",
     "llm_budget_alert",   # M25.3: daily LLM cost alert status
 }
 
@@ -149,3 +150,4 @@ def test_web_system_contracts_keep_monitoring_fields(test_db, sample_stocks):
         "news_24h_count",
     }
     assert {"provider", "usable", "reason", "local_cli", "search"} <= set(health["runtime_readiness"])
+    assert health["feature_flags"]["long_term_constraints_enabled"] in {True, False}

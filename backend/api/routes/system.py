@@ -39,6 +39,7 @@ RUNTIME_CONFIG_KEYS = {
     "risk_manager_enabled",
     "director_min_confidence",
     "long_term_team_enabled",
+    "long_term_constraints_enabled",
     "trailing_stop_enabled",
     "take_profit_exit_enabled",
     "max_position_per_stock",
@@ -92,6 +93,7 @@ def _runtime_config_payload() -> dict:
         "risk_manager_enabled": settings.risk_manager_enabled,
         "director_min_confidence": settings.director_min_confidence,
         "long_term_team_enabled": settings.long_term_team_enabled,
+        "long_term_constraints_enabled": settings.long_term_constraints_enabled,
         "trailing_stop_enabled": settings.trailing_stop_enabled,
         "take_profit_exit_enabled": settings.take_profit_exit_enabled,
         "max_position_per_stock": settings.max_position_per_stock,
@@ -303,6 +305,10 @@ def system_health(db: Session = Depends(get_db)):
         "consecutive_losses_threshold": kill_switch.DEFAULT_CONSECUTIVE_LOSSES,
         "scheduler": scheduler_state,
         "runtime_readiness": runtime_readiness(settings),
+        "feature_flags": {
+            "long_term_team_enabled": settings.long_term_team_enabled,
+            "long_term_constraints_enabled": settings.long_term_constraints_enabled,
+        },
         "llm_budget_alert": llm_budget_alert,
     }
 

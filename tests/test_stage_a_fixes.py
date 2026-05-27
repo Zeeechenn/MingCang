@@ -1,6 +1,7 @@
 import math
 
 import pandas as pd
+import pytest
 
 
 def test_calc_rsi_single_direction_and_flat_are_finite():
@@ -35,7 +36,7 @@ def test_aggregate_non_finite_composite_falls_back_to_neutral(monkeypatch):
     assert result["recommendation"] == "观望"
 
 
-def test_default_aggregate_respects_long_term_avoid_label(monkeypatch):
+def test_default_aggregate_shows_long_term_avoid_label_without_enforcement(monkeypatch):
     from backend.agents.long_term.base import LongTermLabel
     from backend.decision import aggregator
 
@@ -44,6 +45,46 @@ def test_default_aggregate_respects_long_term_avoid_label(monkeypatch):
     monkeypatch.setattr(aggregator.settings, "weight_technical", 0.6)
     monkeypatch.setattr(aggregator.settings, "weight_sentiment", 0.4)
     monkeypatch.setattr(aggregator.settings, "long_term_team_enabled", True)
+    monkeypatch.setattr(aggregator.settings, "long_term_constraints_enabled", False)
+
+    label = LongTermLabel(
+        symbol="300308",
+        date="2026-05-25",
+        label="规避",
+        score=-60,
+        votes={"track": "规避"},
+        key_findings=["基本面风险未解除"],
+        expires_at="2026-06-04",
+        quality="trusted",
+        constraint_eligible=True,
+        quality_notes=["test trusted label"],
+    )
+    result = aggregator.aggregate(
+        quant_score=0,
+        technical_result={"score": 80, "limit": {}},
+        sentiment_score=0.8,
+        close=10,
+        atr=1,
+        long_term_label=label,
+    )
+
+    assert result["recommendation"] == "可小仓试错"
+    assert result["position_pct"] > 0.0
+    assert any("验证模式" in note for note in result["risk_notes"])
+    assert any(c["type"] == "long_term_label" for c in result["research_constraints"])
+    assert result["research_conflicts"] == []
+
+
+def test_default_aggregate_respects_long_term_avoid_label_when_enforced(monkeypatch):
+    from backend.agents.long_term.base import LongTermLabel
+    from backend.decision import aggregator
+
+    monkeypatch.setattr(aggregator.settings, "paper_trading_profile", "new_framework")
+    monkeypatch.setattr(aggregator.settings, "weight_quant", 0.0)
+    monkeypatch.setattr(aggregator.settings, "weight_technical", 0.6)
+    monkeypatch.setattr(aggregator.settings, "weight_sentiment", 0.4)
+    monkeypatch.setattr(aggregator.settings, "long_term_team_enabled", True)
+    monkeypatch.setattr(aggregator.settings, "long_term_constraints_enabled", True)
 
     label = LongTermLabel(
         symbol="300308",
@@ -108,10 +149,12 @@ def test_default_aggregate_ignores_untrusted_long_term_avoid_label(monkeypatch):
     assert any("未通过质量门" in note for note in result["risk_notes"])
 
 
-def test_research_constraints_do_not_block_entry_for_failed_long_term_label(monkeypatch):
+@pytest.mark.parametrize("enforcement_enabled", [False, True])
+def test_research_constraints_do_not_block_entry_for_failed_long_term_label(monkeypatch, enforcement_enabled):
     from backend.decision import research_constraints
 
     monkeypatch.setattr(research_constraints.settings, "long_term_team_enabled", True)
+    monkeypatch.setattr(research_constraints.settings, "long_term_constraints_enabled", enforcement_enabled)
     failed_label = {
         "label": "规避",
         "key_findings": ["LLM 调用失败，默认观望"],
@@ -206,6 +249,83 @@ def test_risk_manager_does_not_downgrade_strong_buy_without_long_term_label():
     decision = review(proposal, regime=None, long_term_label=None)
     assert decision.final_recommendation == "强买"
     assert not any("长期标签缺失" in note for note in decision.risk_notes)
+
+
+def test_risk_manager_shows_long_term_label_without_enforcement(monkeypatch):
+    from backend.agents.long_term.base import LongTermLabel
+    from backend.agents.risk_manager import review
+    from backend.agents.trader import TraderProposal
+
+    monkeypatch.setattr("backend.agents.risk_manager.settings.long_term_team_enabled", True)
+    monkeypatch.setattr("backend.agents.risk_manager.settings.long_term_constraints_enabled", False)
+
+    proposal = TraderProposal(
+        composite_score=70,
+        recommendation="强买",
+        confidence="高",
+        stop_loss=9,
+        take_profit=12,
+        position_pct=0.2,
+        breakdown={},
+        reasoning="test",
+    )
+    label = LongTermLabel(
+        symbol="300308",
+        date="2026-05-25",
+        label="规避",
+        score=-60,
+        votes={"track": "规避"},
+        key_findings=["基本面风险未解除"],
+        expires_at="2026-06-04",
+        quality="trusted",
+        constraint_eligible=True,
+        quality_notes=["test trusted label"],
+    )
+
+    decision = review(proposal, regime=None, long_term_label=label)
+
+    assert decision.final_recommendation == "强买"
+    assert decision.veto_reason is None
+    assert decision.adjusted_position_pct == 0.2
+    assert any("验证模式" in note for note in decision.risk_notes)
+
+
+def test_risk_manager_enforces_long_term_label_when_enabled(monkeypatch):
+    from backend.agents.long_term.base import LongTermLabel
+    from backend.agents.risk_manager import review
+    from backend.agents.trader import TraderProposal
+
+    monkeypatch.setattr("backend.agents.risk_manager.settings.long_term_team_enabled", True)
+    monkeypatch.setattr("backend.agents.risk_manager.settings.long_term_constraints_enabled", True)
+
+    proposal = TraderProposal(
+        composite_score=70,
+        recommendation="强买",
+        confidence="高",
+        stop_loss=9,
+        take_profit=12,
+        position_pct=0.2,
+        breakdown={},
+        reasoning="test",
+    )
+    label = LongTermLabel(
+        symbol="300308",
+        date="2026-05-25",
+        label="规避",
+        score=-60,
+        votes={"track": "规避"},
+        key_findings=["基本面风险未解除"],
+        expires_at="2026-06-04",
+        quality="trusted",
+        constraint_eligible=True,
+        quality_notes=["test trusted label"],
+    )
+
+    decision = review(proposal, regime=None, long_term_label=label)
+
+    assert decision.final_recommendation == "观望"
+    assert decision.veto_reason and "规避" in decision.veto_reason
+    assert decision.adjusted_position_pct == 0.0
 
 
 def test_aggregate_v2_regime_dampening_preserves_risk_manager_decision(monkeypatch):

@@ -13,6 +13,8 @@ def test_action_registry_exposes_metadata_for_known_actions():
     assert definition.requires_confirmation is True
     assert "local" in definition.allowed_modes
     assert definition.input_schema["type"] == "object"
+    config_definition = get_action_definition("config.update")
+    assert "long_term_constraints_enabled" in config_definition.input_schema["properties"]
 
 
 def test_pending_action_includes_registry_metadata(test_db):

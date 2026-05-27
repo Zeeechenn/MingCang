@@ -98,15 +98,19 @@ def apply_research_constraints(
 
     if settings.long_term_team_enabled and label:
         eligible = _label_constraint_eligible(long_term_label)
+        enforcement_enabled = bool(settings.long_term_constraints_enabled)
         constraints.append({
             "type": "long_term_label",
             "source": "long_term",
             "label": label,
             "constraint_eligible": eligible,
+            "enforcement_enabled": enforcement_enabled,
             "summary": finding or f"长期标签：{label}",
         })
         if not eligible:
             notes.append(f"长期团标签未通过质量门，仅展示不约束: {finding}")
+        elif not enforcement_enabled:
+            notes.append(f"长期团标签处于验证模式，仅展示不约束官方动作: {finding}")
         elif label == "规避" and is_entry and settings.long_term_avoid_blocks_buy:
             final_rec = "观望"
             final_pos = 0.0

@@ -109,6 +109,7 @@ def test_runtime_config_updates_weights_positions_data_and_review_times():
         "max_total_equity_pct": 0.7,
         "tavily_supplement_threshold": 4,
         "anspire_news_max_add": 3,
+        "long_term_constraints_enabled": True,
         "schedule_daily_review_time": "15:30",
         "schedule_longterm_monday_dow": "tue",
         "schedule_longterm_monday_time": "09:30",
@@ -119,6 +120,7 @@ def test_runtime_config_updates_weights_positions_data_and_review_times():
     assert updated["max_position_per_stock"] == 0.2
     assert updated["max_total_equity_pct"] == 0.7
     assert updated["data_draft"]["tavily_supplement_threshold"] == 4
+    assert updated["long_term_constraints_enabled"] is True
     assert updated["schedule"]["daily_review_time"] == "15:30"
     assert updated["schedule"]["longterm_monday_dow"] == "tue"
     assert updated["schedule"]["longterm_friday_dow"] == "thu"
@@ -132,6 +134,7 @@ def test_runtime_config_updates_weights_positions_data_and_review_times():
         "max_total_equity_pct": original["max_total_equity_pct"],
         "tavily_supplement_threshold": original["data_draft"]["tavily_supplement_threshold"],
         "anspire_news_max_add": original["data_draft"]["anspire_news_max_add"],
+        "long_term_constraints_enabled": original["long_term_constraints_enabled"],
         "schedule_daily_review_time": original["schedule"]["daily_review_time"],
         "schedule_longterm_monday_dow": original["schedule"]["longterm_monday_dow"],
         "schedule_longterm_monday_time": original["schedule"]["longterm_monday_time"],

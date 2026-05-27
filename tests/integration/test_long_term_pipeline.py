@@ -101,11 +101,12 @@ def test_weekly_job_generates_labels_for_all_stocks(
 @patch("backend.agents.long_term.team.piotroski_analyst.analyze")
 @patch("backend.agents.long_term.team.jingqi_analyst.analyze")
 def test_postmarket_pipeline_respects_avoid_label(
-    mock_jingqi, mock_pio, mock_at, test_db,
+    mock_jingqi, mock_pio, mock_at, test_db, monkeypatch,
 ):
     """端到端：'规避' label 应让短期信号被风险经理否决"""
     from backend.decision.aggregator import aggregate_v2
 
+    monkeypatch.setattr("backend.config.settings.long_term_constraints_enabled", True)
     _seed_stocks_with_data(test_db)
 
     # 给 600036 标"规避"
@@ -153,11 +154,12 @@ def test_postmarket_pipeline_respects_avoid_label(
 @patch("backend.agents.long_term.team.piotroski_analyst.analyze")
 @patch("backend.agents.long_term.team.jingqi_analyst.analyze")
 def test_postmarket_pipeline_respects_overvalued_label(
-    mock_jingqi, mock_pio, mock_at, test_db,
+    mock_jingqi, mock_pio, mock_at, test_db, monkeypatch,
 ):
     """'估值偏高' label → 仓位 × 0.5"""
     from backend.decision.aggregator import aggregate_v2
 
+    monkeypatch.setattr("backend.config.settings.long_term_constraints_enabled", True)
     _seed_stocks_with_data(test_db)
     save_label(LongTermLabel(
         symbol="603986", date=_date_before(1),

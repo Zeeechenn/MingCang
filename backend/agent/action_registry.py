@@ -56,6 +56,7 @@ RUNTIME_CONFIG_SCHEMA = {
         "risk_manager_enabled": {"type": "boolean"},
         "director_min_confidence": {"type": "number"},
         "long_term_team_enabled": {"type": "boolean"},
+        "long_term_constraints_enabled": {"type": "boolean"},
         "trailing_stop_enabled": {"type": "boolean"},
         "take_profit_exit_enabled": {"type": "boolean"},
         "max_position_per_stock": {"type": "number", "minimum": 0, "maximum": 1},

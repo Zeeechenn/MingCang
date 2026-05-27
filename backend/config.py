@@ -145,6 +145,7 @@ class Settings(BaseSettings):
     jingqi_weak_pctile: float = 0.30
     long_term_label_ttl_days: int = 10
     long_term_label_mirror_path: str = ""
+    long_term_constraints_enabled: bool = False
     long_term_avoid_blocks_buy: bool = True
     long_term_overvalued_position_factor: float = 0.5
     long_term_watch_score_cap: float = 30.0
