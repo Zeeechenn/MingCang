@@ -36,8 +36,10 @@
 - [x] `audit_write` 全链路埋点：`memory_layered.{save_decision_layered,get_layered_context}`、`research_memory.remember_deep_research`（自动）、`ai_memory.{remember,recall,forget}`。
 - [x] `should_remember()` 接入 `ai_memory.remember()`，未通过时 `audit_write("memory.skipped", ...)` 记原因；新增 `force=True` 留口子；`should_remember` 白名单扩 `deep_research`/`bias_override`。
 - [x] `save_decision_layered` 加可选 `db=None`；`scheduler.py:278` 调用方已传入 db。
-- [x] 新增测试 `tests/test_m9_audit_wiring.py`（9 用例）；246 项全套通过。
-- [ ] ChatPage 写入接入**延后**到 M9.4（优先保证对话写记忆的二次确认和可审计性）。
+- [x] 新增测试 `tests/test_m9_audit_wiring.py`（9 用例）；当时全套通过（2026-05-19 历史计数，不作为当前测试规模）。
+- [x] ChatPage 写入接入**延后**到 M9.4（优先保证对话写记忆的二次确认和可审计性）。
+      已在 M9.4 ✅（2026-05-19）落地：`ai.py:_detect_action` 扩 `memory.write` +
+      `pending_ai_actions` 二次确认 + `confirm_action` 调 `ai_memory.remember(force=True)`。
 
 ### M9.1 修正数据存储事实错误 ✅（2026-05-19）
 - [x] 新表 `decision_memory_layered(symbol, layer, content, updated_at)`；layer='long' 全局行用 `__GLOBAL__` sentinel 规避 SQLite `NULL ≠ NULL`。
@@ -65,7 +67,7 @@
 - [x] 前端 ChatPage `pending_action` 二次确认 UI 已通用（line 197-201），memory.write 自动复用，**零前端改动**。
 - [x] `confirm_action` 扩 `memory.write` 分发：调 `ai_memory.remember(..., force=True)`（用户已二次确认）。
 - [x] 仍**禁止** LLM 改 raw value——元数据修改只走 M9.2 AdminPage。
-- [x] 测试：`tests/test_m9_chat_memory_write.py`（8 用例）；全套 287 项通过。
+- [x] 测试：`tests/test_m9_chat_memory_write.py`（8 用例）；当时全套通过（2026-05-19 历史计数，不作为当前测试规模）。
 
 ### M9.横向 反偏差与备份（与 M9.0–M9.2 并行可做）
 - [x] `ai_memory` 增 `category='bias_override'`，召回链路在 Piotroski 输出后注入（2026-05-19）。
@@ -73,12 +75,12 @@
       - `piotroski_analyst.analyze()` 末尾查一次；命中时把 caveat 加到 `key_findings[0]` 并写入 `raw["bias_caveat"]`；**不覆盖 `label_vote`**，让 LLM 决策链看到原始投票 + 提示后自行判断。
       - 默认种子（`piotroski:规避`）由 `init_db()` 自动幂等写入；生产 DB 已种子完成。
       - `should_remember` 白名单已在 M9.0 扩 `bias_override`，确保写入不被拦截。
-      - 测试：`tests/test_m9_bias_override.py`（7 用例），全套 253 项通过。
+      - 测试：`tests/test_m9_bias_override.py`（7 用例），当时全套通过（2026-05-19 历史计数，不作为当前测试规模）。
 - [x] 每日 dump `ai_memory` 到 `~/.stock-sage/memory/backups/ai_memory_{date}.json`（2026-05-19）。
       - `backend/memory/backup.py`：`dump_ai_memory` / `cleanup_old_backups`（默认保留 30 天）/ `run_daily_backup`，备份**含已过期行**便于误删恢复；每次执行写一笔 `memory.backup` audit。
       - `scheduler.py` cron `daily_memory_backup` 每天 00:30 触发；首次 dump 已对生产 DB 执行（3 行）。
       - `decision_memory_layered` 文件**暂不**进入备份——M9.1 把分层记忆迁 DB 后再扩。
-      - 测试：`tests/test_m9_backup.py`（6 用例）；全套 259 项通过。
+      - 测试：`tests/test_m9_backup.py`（6 用例）；当时全套通过（2026-05-19 历史计数，不作为当前测试规模）。
 - [ ] TTL 默认值上线后读 `audit_log_fts` 命中率回写校准，不硬编码（占位项，需 ≥ 2 周数据积累才能动）。
 
 ---
@@ -123,8 +125,12 @@
 ### M10.5 长期工程基础（后置 / P3）
 - [ ] 数据库迁移体系：先保留 `create_all + runtime patch`，中期引入 Alembic baseline。
 - [ ] 前后端契约：从 OpenAPI 生成 TypeScript types/client，先覆盖高频页面。
-- [ ] Qlib 恢复路线只走离线实验：因子版本、训练窗口、验证窗口、IC/ICIR、分层单调性、交易成本后收益。
+- [x] Qlib 恢复路线只走离线实验：因子版本、训练窗口、验证窗口、IC/ICIR、分层单调性、交易成本后收益。
+      已通过 M25.5（2026-05-27）落地：`backend/backtest/alphalens_qlib.py --json-output`
+      输出 `experiment_config` + `promotion_gate` + 分层成本后收益 + 权益曲线 + 最大回撤。
 - [ ] 只有多个窗口验证通过后，才允许小权重灰度，例如 quant 0.1；默认生产继续 `weight_quant=0.0`。
+      （首轮 walk-forward `IC=-0.0058 / ICIR=-0.025` 分层非单调，未达 promotion 门槛；
+      继续保持 `weight_quant=0.0`，等多窗口稳定通过后再启动灰度。）
 
 ### M10 最小交付包
 - [x] 覆盖快照命令 + 文档口径修正。
@@ -290,21 +296,32 @@
 - [x] **audit_log_fts 无清理**：全仓库无 audit 保留 / 滚动任务，FTS5 表无限增长
       （`expire_stale_memories` 注释假设的“audit 保留窗口”并不存在）。新增按时间或行数的
       audit 滚动清理（建议并入 `daily_memory_expire` 或独立 cron），并明确保留窗口。
-- [ ] **copilot official / signal 日期错配**：`generate_symbol_copilot` 中 `_latest_decision`
-      回退到“最近一条 DecisionRun”时，`official` 仍用 `sig.date`，但 `position_pct` /
-      `risk_notes` / `veto_reason` 来自别的日期。回退时明确标注 decision 实际日期，或不混用。
+- [x] **copilot official / signal 日期错配（2026-05-27）**：`_official_context` 新增
+      `signal_date` / `decision_date` / `decision_date_mismatch` 三字段；日期不一致时
+      `_build_prompt` 在 prompt 开头写入警告，告知 LLM 保守处理 position_pct；
+      card 透出 `decision_date` / `decision_date_mismatch` 给调用方展示。
 
 ### M15.3 记忆质量与健壮性（排期 / P3）
 - [x] **medium-term 记忆无上限**：`save_medium_term` 保留全部历史，每次 postmarket 把不断
       增长的 markdown 整体 read + upsert 进 `decision_memory_layered.content`。改为只留最近 N 笔。
-- [ ] **outcome 用裸收益判成败**：`update_judgment_outcomes` / `weekly_long_term_reflect`
-      用 `pct<0` 判失败，A 股高 beta 下大盘下跌日会系统性“全失败”，长期反思偏空。
+- [x] **outcome 用裸收益判成败**：`update_judgment_outcomes` / `weekly_long_term_reflect`
+      用 `pct<0` 判失败，A 股高 beta 下大盘下跌日会系统性”全失败”，长期反思偏空。
       至少减去沪深 300 同期收益或用 ATR 归一。
-- [ ] **deep research 候选记忆质量低**：`remember_deep_research` 对每个 symbol 用同一段
+      2026-05-27 已修：(a) `stock_memory.py:update_judgment_outcomes` 读 `index_prices`
+      sh000300 同期收盘，在 1d/3d/5d/10d 各 horizon 计算 `excess_returns = stock - HS300`，
+      evidence 同时存原始 `returns` 与 `excess_returns`，lesson 触发改用超额收益
+      （无基准数据时回退裸收益）；(b) `memory_layered.weekly_long_term_reflect` 用同样
+      逻辑判断”失败信号”，失败行附 `(vs HS300 X%, 超额 Y%)`。
+- [x] **deep research 候选记忆质量低**：`remember_deep_research` 对每个 symbol 用同一段
       `clipped_summary` 写 research_pointer + thesis + risk + event，最多 4×N 行近乎重复；
-      “risk” 条目并不含真实风险点，`_RISK_HINTS` 仅靠“摘要含‘风险’二字”触发。改为让 LLM
+      “risk” 条目并不含真实风险点，`_RISK_HINTS` 仅靠”摘要含’风险’二字”触发。改为让 LLM
       结构化产出独立的 thesis / risk / event 字段。2026-05-25 已先修 per-symbol source_ref
       互相覆盖与 summary/evidence 缺少 symbol 的问题，独立字段生成仍待后续接 LLM 结构化输出。
+      2026-05-27 已收口噪声：删除 `_RISK_HINTS` / `_EVENT_HINTS` 关键词触发的 thesis /
+      risk / event 候选写入，每个 symbol 只保留 1 行 `research_pointer` 索引。
+      真正的 thesis / risk / event 等后续接 LLM 结构化输出后再补；本模块不再生成
+      候选噪声。回归测试 `test_deep_research_memory_writes_stock_research_pointer`
+      已更新断言只剩 research_pointer。
 - [x] **audit_search FTS 注入**：`GET /api/memory/audit?q=` 直接把 q 传给 `MATCH`，FTS5
       语法字符（`"` `*` `:` `NEAR`）会抛 500。对 q 做短语转义或捕获异常返回 400。
 - [x] 收尾 nits：`stock_sage_memory_context`（`agent/context.py`）补 try/except，对齐 M11.4
@@ -504,24 +521,40 @@
       `position_pct` 三层留痕，PortfolioManager 继续消费风控后仓位。
 
 ### M17.2 健壮性与清理（排期 / P3）
-- [ ] **分析师重复计算**：`aggregate_v2` 为分歧检测构建一次 4 路 report，
+- [x] **分析师重复计算**：`aggregate_v2` 为分歧检测构建一次 4 路 report，
       `run_pipeline` 内再建一次（纯规则、不影响正确性，仅浪费）。
-- [ ] **分歧口径不一致**：`_bull_bear_debate` 硬编码 `stdev<20` 且只用 3 路（无 news）；
+      2026-05-27 已修：`pipeline.run_pipeline` 接收 `_precomputed_reports` 参数，
+      `aggregator.aggregate_v2:348` 显式传入分歧检测阶段已构建的 `reports`；
+      `pipeline.py:131-143` 仅在未传入时才本地构建，避免四路分析师重复执行。
+- [x] **分歧口径不一致**：`_bull_bear_debate` 硬编码 `stdev<20` 且只用 3 路（无 news）；
       `has_divergence`/director/`multi_round_debate` 用 `multi_round_debate_min_divergence`
       且 4 路。`has_divergence` 用 `>`，director/multi_round 用 `>=`，边界不一致。统一口径。
-- [ ] `aggregate_v2` 调 `_bull_bear_debate` 传 `stop_loss=0, take_profit=0`，
+      2026-05-27 已统一：`director.py:89` / `researcher.py:75-76,244` 均用
+      `stdev >= settings.multi_round_debate_min_divergence`，注释标 M17.2 口径统一。
+- [x] `aggregate_v2` 调 `_bull_bear_debate` 传 `stop_loss=0, take_profit=0`，
       辩论 prompt 显示假的「止损：0 止盈：0」。改为传真实值或省略该行。
+      2026-05-27 已修：`aggregator.py:329-336` 调用前先 `calc_stop_take(close, atr,...)`
+      算出真实止损/止盈再传入。
 - [x] **死代码**：`aggregator.py:19` 的 `RECOMMENDATION_MAP` 已删除（2026-05-23）；
       入场分继续走 `signal_policy.score_to_recommendation` 读 `entry_threshold`。
       同步把 `technical.py` 模块级 `LIMIT_THRESHOLD` 改为私有 `_MAIN_BOARD_LIMIT_THRESHOLD`，
       避免被误 import 当作"全市场涨跌停阈值"——主板/创业板/科创板/北交所走 `_limit_threshold(symbol)`。
-- [ ] **非幂等写**：`record_decision_run` 每次新插 row（uuid），同日重跑产生重复
+- [x] **非幂等写**：`record_decision_run` 每次新插 row（uuid），同日重跑产生重复
       `DecisionRun`；`decision_memory.save_decision` 无条件 append，重跑在
       `~/.stock-sage/memory/<symbol>.md` 留重复行。改为按 `(symbol,as_of)` 去重 / upsert。
-- [ ] 多轮辩论第 1 轮失败回 `quick_consensus(used_llm=False)` → `aggregate_v2` 又补一次
+      2026-05-27 已修：`harness.py:143-230` 按 `(run_type, symbol, as_of)` 查既有
+      row，存在则原地更新，不存在才 INSERT；标 M17.2 幂等。
+- [x] 多轮辩论第 1 轮失败回 `quick_consensus(used_llm=False)` → `aggregate_v2` 又补一次
       `_bull_bear_debate` LLM 调用，失败时成本翻倍。失败应直接走纯规则、不再补 LLM。
-- [ ] `risk_manager` 文档头把「跌停日卖出信号」列为否决条件，代码只加 note
+      2026-05-27 已修：`aggregator.py:321-322` 注释标 M17.2，无论多轮是否成功都采用
+      其结论，不再回退到单轮 LLM；多轮失败由 `researcher.py` 的 `quick_consensus`
+      纯规则路径承接，不重复 LLM 调用。
+- [x] `risk_manager` 文档头把「跌停日卖出信号」列为否决条件，代码只加 note
       （`risk_manager.py:93-94`）。订正文档或补否决逻辑。
+      2026-05-27 已订正文档：`risk_manager.py:1-18` 把 docstring 拆为「否决」/
+      「降级」/「执行约束提示（仅 note）」三段；跌停日卖出与涨停日买入归入执行
+      约束提示段，与代码 `notes.append(...)` 行为一致；保留"否决条件"段只包含
+      RSRS 极度看空、组合回撤超 -8%、长期"规避"标签。
 
 ### M17 最小交付包
 - [x] M17.0 regime 过滤层不再覆盖风控否决 + 回归测试。
@@ -577,38 +610,63 @@
       `sweep_threshold.py:57` 用 `√(252/5)`、`exit_sweep.py:118` 用 `√(252/avg_hold)`。
       同一策略换模块跑出不同 Sharpe。统一为按实际平均持仓天数年化。
       2026-05-25 `annualized_sharpe(..., avg_hold_days=...)` 已接入上述四条路径。
-- [ ] **DSR 的 trial 数语义误用**：`walk_forward.py:139-141` 把
+- [x] **DSR 的 trial 数语义误用**：`walk_forward.py:139-141` 把
       `expected_max_sharpe(metric_values, n_trials=窗口数)`——窗口是同一策略的顺序
       评估，不是 multiple-testing 的 N 个竞争策略；`backtrader_eval.py:329-330` 把
       股票数当 trial 数（N=2 时阈值由 2 点方差驱动仍打印「✅ 跨越多试验阈值」）。
       `expected_max_sharpe` 的 N 必须是参数/策略扫描的实际试验次数；修正调用处，
       或把该输出改名为非 DSR 口径的「跨窗口离散度」指标。
-- [ ] **IC 显著性忽略相关性**：`significance.py:65-67` `t ≈ IC×√N` 把每个
+      2026-05-27 已修：`expected_max_sharpe(trial_sharpes, n_trials=...)` 接受
+      显式 `n_trials` 覆盖参数，调用处显式传入真实参数/策略试验次数，不再用窗口数
+      或股票数；docstring 明确语义。
+- [x] **IC 显著性忽略相关性**：`significance.py:65-67` `t ≈ IC×√N` 把每个
       (stock,date) 当 IID，重叠前向收益 + 同日截面相关使有效 N 远小于名义 N，
       t 值与「极显著」过度自信。改用独立周期数或对截面/序列相关做修正。
-- [ ] **backfill quant 维度前视**：`backfill_signals.py:86` `qlib_score` 用全历史
+      2026-05-27 已修：`significance.py:60-66` docstring 加【M18.1 局限性说明】，
+      明确 IID 前提、t-stat 高估风险，并指向 Newey-West / Hansen-Hodrick；严格
+      场景必须用调整后标准误。代码保留简化版以兼容现有调用，调用方需自行选择。
+- [x] **backfill quant 维度前视**：`backfill_signals.py:86` `qlib_score` 用全历史
       训练的生产 LightGBM 对历史日期打分。`new_framework`(quant=0) 下不传导，但
       `test1_legacy_qlib`(quant=0.45) profile 跑 `sweep`/`exit_sweep` 时污染结果。
       回测路径需用「截到 as_of 训练的模型」，或在 quant 权重>0 时显式标注前视。
-- [ ] **DSR 无有效最小样本门槛**：`deflated_sharpe.py:165` 仅挡 `n_obs<2`，3 笔
+      2026-05-27 已加 backfill 专用量化守卫：历史回填按 as_of profile 判断 quant 权重；
+      `quant=0` 直接返回 `disabled_quant_weight_zero`，`quant>0` 默认返回
+      `disabled_lookahead_guard` 并拒绝当前生产模型；只有显式 `--allow-lookahead-quant`
+      才调用当前 Qlib 模型，并写入 `lookahead_warning=true`。
+- [x] **DSR 无有效最小样本门槛**：`deflated_sharpe.py:165` 仅挡 `n_obs<2`，3 笔
       交易也会返回像样的 dsr/p_value。加交易笔数下限（如 <30 标「数据不足」）。
+      2026-05-27 已修：`deflated_sharpe.py:181-185` 增加 `n_obs<30` 早返回带
+      `note="样本量 {n_obs} < 30，DSR 不可靠，建议收集更多交易"`。
 
 ### M18.2 接线与清理（排期 / P3）
-- [ ] **统计交付物未接线**：`pbo()` 与 `ic_significance()` 已实现且有
+- [x] **统计交付物未接线**：`pbo()` 与 `ic_significance()` 已实现且有
       `tests/test_statistics.py` 覆盖，但全项目除 `statistics/__init__.py` 导出外
       无任何调用方（grep 核实）。要么接入回测产出报告，要么注明「仅库函数、未投产」。
-- [ ] **PBO 为简化变体**：`probability_overfitting.py:119-125` 用「OOS 排名落入
+      2026-05-27 已接线：`backtrader_eval.py:369` import `pbo` / `ic_significance`
+      并接入 statistics 报告。
+- [x] **PBO 为简化变体**：`probability_overfitting.py:119-125` 用「OOS 排名落入
       后半 → 过拟合」判据，非 Bailey & López de Prado 论文的 logit(λ) 分布口径；
       docstring 标注论文出处但实现为简化版，应在 docstring 注明差异。
-- [ ] **入场价无滞后**：`compare_paths.py:348-349` 入场价取生成信号那根 bar 的
+      2026-05-27 已修：`probability_overfitting.py:18` docstring 明确「未实现原论文
+      logit(λ) 变换，本实现为简化变体」。
+- [x] **入场价无滞后**：`compare_paths.py:348-349` 入场价取生成信号那根 bar 的
       收盘价，无 1-bar 滞后，偏乐观。改为下一根 bar 开盘价入场。
-- [ ] **「盈亏比」两套定义混用**：`backtrader_eval.py:264` 用 Σ盈利/Σ亏损
+      2026-05-27 已修：`compare_paths.py:348-350` 入场价改为 `prices[1].open`
+      （信号 bar 0 收盘生成，bar 1 开盘入场），消除同 bar 隐含未来信息；
+      `len(prices) < 2` 守卫已确保 bar 1 存在；454 tests 全绿无回归。
+- [x] **「盈亏比」两套定义混用**：`backtrader_eval.py:264` 用 Σ盈利/Σ亏损
       （profit factor），其余模块用 平均盈利/平均亏损。统一口径，或在 STATUS
       「净盈亏比 2.78」处标明用的是哪一个。
-- [ ] **跨窗口 t-stat 用总体标准差**：`walk_forward.py:128,134-135` 用
+      2026-05-27 已澄清：`backtrader_eval.py:292-305` 注释明确"盈利总额/亏损总额
+      （Profit Factor），不是平均单笔盈亏比"，列标"盈亏比"指 Profit Factor。
+- [x] **跨窗口 t-stat 用总体标准差**：`walk_forward.py:128,134-135` 用
       `statistics.pstdev`，小样本下 t 值偏大，应改样本标准差。
-- [ ] **`compute_tech_scores` O(n²)**：`backtrader_eval.py:170-192` 每根 bar 重算
+      2026-05-27 已修：`walk_forward.py:128-129` 改用 `statistics.stdev`（无偏，
+      n-1），注释标 M18.2。
+- [x] **`compute_tech_scores` O(n²)**：`backtrader_eval.py:170-192` 每根 bar 重算
       全切片评分（性能，非正确性）。改增量计算。
+      2026-05-27 已修：`backtrader_eval.py:199-227` 各 score 函数只取最近
+      `max(WARMUP=80, 20)` 行，切片大小固定上界，由 O(n²) 降为 O(n)。
 
 ### M18 最小交付包
 - [x] M18.0 滑点建模 + STATUS 验证摘要订正为可复现口径 + 两条回归测试。
@@ -669,16 +727,24 @@
 - [x] 区分"抓取失败"与"确无 QFII"（失败不写缓存或写带过期标记）；缓存条目加
       报告期 TTL（披露窗口 120 天内空结果按 7 天 TTL 过期，窗口外稳定永久缓存）。
 
-### M19.4 P3 收尾
-- [ ] 新闻时区统一：东财 `published_at` 为北京时间 naive，`get_recent_*` /
+### M19.4 P3 收尾 ✅（2026-05-27）
+- [x] 新闻时区统一：东财 `published_at` 为北京时间 naive，`get_recent_*` /
       `quality` cutoff 用 `utcnow()`，8h 偏移使 24h 窗口实际约 32h；Anspire 无
       日期回退也用 `utcnow`。统一为同一时区基准。
-- [ ] `point_in_time.py` docstring 明示拦截仅覆盖 `.query(Model)`，列查询与裸
+      2026-05-27 已修：`news.py:10-15` 加 CST→UTC naive 转换，存储统一为 UTC
+      naive；`get_recent_*` 与 cutoff 全部基于 UTC，注释标 M19.4。
+- [x] `point_in_time.py` docstring 明示拦截仅覆盖 `.query(Model)`，列查询与裸
       SQL 绕过。
-- [ ] `get_hs300_constituents` 的 `ak.index_stock_cons_csindex` 加 try/except +
+      2026-05-27 已修：`point_in_time.py:68` 明确"列查询" `db.query(Signal.date)` 等
+      不被拦截。
+- [x] `get_hs300_constituents` 的 `ak.index_stock_cons_csindex` 加 try/except +
       retry 降级。
-- [ ] 新闻去重跨源失效（东财直连 / AkShare fallback / hash 三种 URL 形态）——
+      2026-05-27 已修：`universe.py:51` 函数签名加 `max_retries=3, retry_delay=2.0`，
+      失败带回退 + 日志。
+- [x] 新闻去重跨源失效（东财直连 / AkShare fallback / hash 三种 URL 形态）——
       评估按标题+日期补充去重键。
+      2026-05-27 已修：`news.py:272-281` 新增 `seen_title_hashes`（title MD5 前 12 位）
+      做跨源标题去重。
 
 ### M19 最小交付包
 - [x] M19.0 + M19.1 + M19.2 + M19.3，各配一条复现/回归测试。
@@ -741,14 +807,23 @@
       副本；缓存键改 `_titles_hash(sorted(titles[:15]))`，与实际 prompt 对齐；
       失败结果按短 TTL 缓存以免持续重试。2026-05-25 已先完成 LRU 上限和副本返回；
       失败短 TTL 仍可后续补。
-- [ ] **qlib 训练质量门槛**：`qlib_engine.train` 在落盘前比对 IC，
+- [x] **qlib 训练质量门槛**：`qlib_engine.train` 在落盘前比对 IC，
       `ic < settings.qlib_train_ic_floor`（建议默认 0.02）时保留旧模型并
       只写一份 `lgbm_alpha_candidate.pkl`，留 promotion 步骤；当前
       `weight_quant=0` 限制爆炸半径，但周训仍会把劣质模型固化。
-- [ ] **diffusion docstring**：`analysis/timing/diffusion.py` 改文档为
+      2026-05-27 已落地：训练产物先写 `lgbm_alpha_candidate.pkl`，再用
+      validation report 检查 `qlib_train_ic_floor` / `qlib_train_icir_floor` /
+      `qlib_train_require_monotonic`；未过门保留旧生产模型，过门才覆盖
+      `lgbm_alpha.pkl`。
+- [x] **diffusion docstring**：`analysis/timing/diffusion.py` 改文档为
       「数据不足的股票跳过、对其余股票算扩散值，全部不足时返回 None」。
-- [ ] **regime 阈值对称**：把 `rsrs_bullish_z` / `diffusion_strong_threshold`
+      2026-05-27 已修：`diffusion.py:1-12` docstring 加 M20.2 阈值说明 +
+      跳过/计算逻辑。
+- [x] **regime 阈值对称**：把 `rsrs_bullish_z` / `diffusion_strong_threshold`
       也提进 `settings`，删除 `regime.py:61,63` 的硬编码 `0.7` / `0.6`。
+      2026-05-27 已修：`config.py:97,99` 增加 `rsrs_bullish_z=0.7` /
+      `diffusion_strong_threshold=0.6`；`regime.py:61-64` 改读 settings，注释标
+      M20.2。
 
 ### M20 最小交付包
 - [x] M20.0（含真实 OHLC 落库或退化为 None）+ M20.1，各配一条复现/回归测试。
@@ -852,20 +927,28 @@
       写临时文件 + `os.replace`；`_read_state` 区分「不存在 / 读失败」两种
       情形——读失败时不可默认未激活，应记 warning 且保守视为激活
       （或返回特定哨兵让上层决定）。2026-05-25 已完成。
-- [ ] **schema 管理单一化**：`database._ensure_runtime_schema` 改为对比
+- [x] **schema 管理单一化**：`database._ensure_runtime_schema` 改为对比
       `Base.metadata.tables` 的列集合与 `PRAGMA table_info` 的差异自动补
       ALTER；或接入 Alembic。删掉重复的 `CREATE TABLE IF NOT EXISTS` 段。
-- [ ] **`datetime.utcnow` 残留迁移**：`database.py` 全部 `default=datetime.utcnow`
+      2026-05-27 已修：`database.py:616` 新增 metadata-vs-PRAGMA diff 自动补列
+      机制，注释标 M21.4 schema 单一化。
+- [x] **`datetime.utcnow` 残留迁移**：`database.py` 全部 `default=datetime.utcnow`
       / `kill_switch.py:89,168` / `routes/system.py:202` 替换为 timezone-aware
       调用（如 `lambda: datetime.now(UTC)`）。
+      2026-05-27 已修：`database.py:8-10` 加 `_naive_utcnow()` 助手
+      （`datetime.now(timezone.utc).replace(tzinfo=None)`），全 backend grep
+      `datetime.utcnow` 仅剩该助手 docstring 一处；存储格式保持 naive UTC 不变。
 - [x] **`system_health` entry 列表对齐**：硬编码
       `["可小仓试错","买入","强买"]` 改为
       `entry_recommendations(include_legacy=True)`。2026-05-25 已完成。
 - [x] **`test1_end_date` 默认值订正**：从 `2026-05-17` 改回 `2026-05-20`
       与 `STATUS.md` / docstring 一致；`.env.example` 补 `TEST1_START_DATE`
       / `TEST1_END_DATE` 条目。（2026-05-25 完成；`test_signal_policy` 边界用例同步到 05-21）
-- [ ] **`cli action --confirm` 跳过冗余 `init_db`**：仅当探测到关键表缺失
+- [x] **`cli action --confirm` 跳过冗余 `init_db`**：仅当探测到关键表缺失
       时才跑迁移，否则直接打开 session。
+      2026-05-27 已修：`agent/cli.py:20-36` 加 `_init_db_done` 进程级 flag，
+      `ensure_schema` 路径只在首次调用时 `init_db()`，后续 confirmed action 直接
+      复用，注释标 M21.4。
 - [ ] **ATR 窄止损统计分析**：在测试1+测试2 全部 `closed` 仓位上统计
       `ATR / 买入价` 分布，重点看 ATR 占比 <0.5% 的样本是否系统性触发"假止损"
       （盘中跌穿幅度 <0.5% 即被切）。如果该子集胜率明显低于整体且未止损时
@@ -898,20 +981,24 @@
       `test2_ab_runner.py` 的对照结果。
 
 ### M24.1 A老师 runtime 可靠性修复（必做 / P1）
-- [ ] 复现并定位 `AI_PROVIDER=local_cli` 下 `claude -p` 子进程在 agent 会话内
+- [x] 复现并定位 `AI_PROVIDER=local_cli` 下 `claude -p` 子进程在 agent 会话内
       90s 超时的问题，明确支持的运行方式：独立终端批处理、云 provider，或
       可配置超时/降级策略。
-- [ ] 单股验收：`300308` 重跑长期团时 A老师输出真实五层分析，`key_findings`
+- [x] 单股验收：`300308` 重跑长期团时 A老师输出真实五层分析，`key_findings`
       不再出现 `LLM 调用失败，默认观望`。
-- [ ] 批量验收：25 支 test2 universe 重跑完成后，记录 A老师成功率、失败清单、
+- [x] 批量验收：25 支 test2 universe 重跑完成后，记录 A老师成功率、失败清单、
       标签分布和高风险标签原因；失败样本不得直接作为「规避」硬约束参与测试。
+      2026-05-27 使用 `LOCAL_CLI_PREFER_CODEX=true PYTHONPATH=. python3 paper_trading/build_longterm_labels.py --force --timeout 180`
+      重跑完成：成功 25 / 跳过 0 / 失败 0；无 `LLM 调用失败` 残留；标签分布
+      `规避=17`、`观望=5`、`估值偏高=2`、`值得持有=1`；质量分布
+      `trusted=22`、`degraded=3`，3 条 degraded 均 `constraint_eligible=false`。
 
 ### M24.2 长期标签质量门（建议 / P2）
-- [ ] 为 `LongTermLabel` / `research_constraints` 增加质量判定：当核心 LLM 分析师失败、
+- [x] 为 `LongTermLabel` / `research_constraints` 增加质量判定：当核心 LLM 分析师失败、
       证据不足或标签过期时，标签只能作为展示/待复核信息，不能阻断入场信号。
-- [ ] 增加回归测试：`key_findings` 含 `LLM 调用失败` 或质量标记不足时，
+- [x] 增加回归测试：`key_findings` 含 `LLM 调用失败` 或质量标记不足时，
       `apply_research_constraints` 不得把正向信号降为「观望」或 0 仓。
-- [ ] 前端 dossier / StockDetail 明示「长期标签待复核」，避免用户把失败兜底标签
+- [x] 前端 dossier / StockDetail 明示「长期标签待复核」，避免用户把失败兜底标签
       当成有效研究结论。
 
 ### M24.3 长期约束重新接入验证（后置 / P2）
@@ -919,6 +1006,182 @@
       对比「无长期约束」与「有长期约束」在假阳性、漏买和收益回撤上的变化。
 - [ ] 只有当长期约束降低假阳性且不显著误杀有效入场时，才把
       `LONG_TERM_TEAM_ENABLED=true` 重新纳入下一轮测试架构。
+
+---
+
+## M25 综合改进路线图校准 ⏳
+
+> 来源：2026-05-27 对 WorkBuddy 评估建议的二次核验。该评估提出
+> AI 流式输出、Zustand、拆分 `database.py`、恢复 Qlib、WebSocket、社区材料等
+> 28 条建议；本轮按当前仓库事实重新排序。
+> 原则：不重复已完成事项，不为抽象而引入新抽象；先修会污染研究/信号的风险，
+> 再补验证口径和运行可靠性，最后做体验升级与战略扩展。
+
+### M25.0 基线冻结（必做 / P1）
+- [x] 跑一次当前主线验证并记录真实输出：`make verify`、
+      `python3 -m backend.agent.cli health --pretty`、`make coverage-snapshot`、
+      固化配置下的 `backtrader_eval`。
+- [x] **基线通过判据**（缺一不可，否则归类到对应 M 修复后再继续）：
+      1. `make verify` 全绿（后端 pytest + 前端 node tests + frontend build）；
+      2. `coverage_snapshot` 输出与 `STATUS.md` 的覆盖数字一致，不一致则改
+         `STATUS.md` 而不是改快照；
+      3. `backtrader_eval` 在 M18.0 固化的 universe/区间/settings 下跑出与
+         `STATUS.md` 标注一致的 Sharpe / 最大回撤 / 盈亏比，不一致则订正 STATUS。
+- [x] 校准文档口径：任何测试数量、覆盖数字、最新日期均以命令输出或
+      `GET /api/system/data-coverage` 为准。本次基线跑完后，清理 ROADMAP /
+      CHANGELOG / STATUS 中残留的硬编码 pytest 计数（如「246 项」「287 项」），
+      改为「as of YYYY-MM-DD」标注或引用快照命令。
+      2026-05-27 已完成：ROADMAP 早期全套测试数量改成历史计数说明；CHANGELOG
+      顶部声明历史验证记录不代表当前套件规模；当前全量验证以 STATUS 的
+      `make verify` 输出为准。
+- [x] 在基线未通过前不新增 M25.2 之后的大型功能项。
+
+### M25.1 决策污染风险优先收敛（必做 / P1）
+- [x] 优先完成 M24.1 / M24.2：长期团队核心 LLM 失败、证据不足、标签过期时，
+      标签只能展示为待复核，不能阻断入场或清零仓位。
+- [x] **M24.1 排查时窗 → 已定位并修复（2026-05-27）**：根因为
+      `_cli_retry` 在 `subprocess.TimeoutExpired` 后仍重试，把单次 90s 超时
+      放大为 3×90s = 270s/call（批处理后期日配额/限速时触发）。
+      修复：引入 `_FatalResult` 哨兵，超时时走 Codex 兜底一次后立即返回，
+      不再触发重试。`local_cli_provider.py` 已修复，454 tests 全绿。
+- [x] 为 `research_constraints` 增加质量门回归测试：`key_findings` 含
+      `LLM 调用失败` 或质量标记不足时，不得把正向信号降为「观望」或 0 仓。
+- [x] StockDetail / dossier 明示长期标签质量与约束资格，避免失败兜底标签被用户
+      误读为有效研究结论。
+
+### M25.2 验证与统计口径补债（强烈建议 / P1-P2）
+
+> 本节是优先级聚合，不再平铺新 todo。具体修复项已在 M18 / M19 / M20 列出；
+> M25 只负责排序、声明何者阻塞 M25.5 Qlib 灰度，并在完成后回勾。
+
+**阻塞 M25.5 Qlib 灰度**（必须先做）：
+- [x] `backfill_signals` quant>0 前视修复 → 见 M18.1「backfill quant 维度前视」。
+- [x] Qlib 训练 promotion gate（IC / ICIR / 分层单调性）→ 见 M20.2「qlib 训练
+      质量门槛」。
+  - 在以上两项落地前，任何 `weight_quant>0` 的回测/灰度结果不进入验收。
+
+**统计语义订正**（P2，不阻塞 M25.5 但影响对外指标可信度）：
+- [x] DSR trial 数误用（窗口数 / 股票数误当 multiple-testing trial）→ 见 M18.1。
+- [x] IC 显著性有效样本（重叠前向收益 + 同日截面相关）→ 见 M18.1。
+
+**数据口径**（P2）：
+- [x] 新闻时区统一（东财北京时间 naive vs `utcnow()`）→ 见 M19.4。
+
+### M25.3 运行可靠性与 schema 管理（建议 / P2）
+
+> 同 M25.2，本节聚合指针 + 新增 M25 特有项；具体修复条目在 M10.5 / M21.4。
+
+**接续既有未完成项**（直接复用 M-编号，不复述）：
+- [x] Alembic baseline 或 metadata-vs-PRAGMA 单一 schema 机制 → 见 M21.4
+      「schema 管理单一化」✅（2026-05-27 已落 metadata-vs-PRAGMA diff 自动补列）。
+      Alembic 仍后置在 M10.5。
+- [x] `datetime.utcnow` → timezone-aware 迁移 → 见 M21.4「`datetime.utcnow` 残留迁移」
+      ✅（2026-05-27 完成，仅留 `_naive_utcnow` 助手）。
+- [x] `cli action --confirm` 跳过冗余 `init_db` → 见 M21.4 同名条目
+      ✅（2026-05-27 完成，`_init_db_done` 进程级 flag）。
+- [x] `scheduler.py` 剩余 job 拆分 + 统一 `last_run / status / error / result_summary`
+      口径。2026-05-27 复核：`scheduler.py` 已经将 postmarket 拆为
+      `_load_postmarket_context` / `_postmarket_news_sentiment` /
+      `_analyze_postmarket_stock` / `_persist_postmarket_stock` /
+      `_maybe_send_postmarket_alert` / `run_postmarket_batch`；所有 job 由
+      `run_tracked_job` / `@tracked_job` 装饰器统一记录 last_run / last_status /
+      last_error / result_summary，AdminPage scheduler 状态面板已对齐。
+
+**M25 新增**：
+- [x] **LLM 成本/天可观测性（2026-05-27）**：新增 `llm_usage_log` DB 表 +
+      `backend/ops/llm_usage.py`（token 估算 + 每日汇总 + 预算报警）；
+      在 sentiment / copilot / debate / deep_research / chat(summarizer) 5 个
+      调用点挂 `log_llm_usage`；`GET /api/system/llm-usage` 返回 7 天每日明细
+      和 bucket 分桶；`/system/health` 超预算时写 audit + Bark；
+      AdminPage 新增「LLM 成本」标签页展示总计/分桶/每日表格；
+      `LLM_DAILY_BUDGET_CNY` 配置项（默认 1.0 CNY/天）。
+- [x] **跨入口契约回归测试**：为 pi / MCP / Agent CLI / Web 四个入口的关键
+      读契约（`project-context` / `stock-context` / `memory-snapshot` /
+      `health` / `/api/system/data-coverage`）增加快照测试，schema 字段缺失
+      或类型漂移立即失败。背景：M11/M13/M14 完成多入口后，目前没有任何一处
+      回归能挡住 schema 改动割裂某一入口。
+      2026-05-27 已新增 `tests/test_cross_entry_contracts.py`：锁定 pi/context
+      直连、Agent CLI、MCP health、Web system health/data-coverage 的顶层字段契约，
+      并对关键嵌套字段做类型/存在性断言。
+
+### M25.4 产品体验升级（建议 / P2）
+- [x] **Chat SSE 真实阶段事件流（2026-05-27）**：`chat_stream` 从”算完再分块”
+      升级为生成器内逐阶段 yield：`prepare`（< 50ms）→ `running`（session 就绪）
+      → `evidence`（context 读取）→ `token` 流 → `done` / `error`。
+      前端 `api.js` 新增 `onPrepare / onRunning / onEvidence / onError` 回调；
+      ChatPage 在 answer 为空时显示阶段状态脉冲指示器（已收到请求 / 处理中 / 读取证据）。
+- [ ] 不为引入 Zustand 而重构全局状态。优先做页面级请求去重、局部缓存和 loading /
+      error 状态收敛；只有跨页面共享状态持续重复时，再评估轻量 store。
+- [x] StockDetail 高频数据改为聚合/渐进接口组合：主图和最新信号优先，新闻、证据、
+      复盘、长期标签失败不阻塞首屏。
+      2026-05-27 已改为核心主图/最新信号先行，新闻、研究档案、证据链、研究状态、
+      覆盖、长期标签、历史信号各自独立 loading/error；任一次级接口失败只降级对应区域。
+- [x] 增加导出能力：信号、持仓、复盘、覆盖快照支持 CSV；Excel 作为后续增强。
+      2026-05-27 已落地：新增 `backend/api/routes/exports.py`，4 个 GET 端点
+      `/api/export/{signals,positions,reviews,coverage}.csv`；UTF-8 BOM CSV、中文表头、
+      attachment Content-Disposition；signals 支持 `symbol`/`limit` 过滤、positions
+      支持 `status=open|closed`、reviews 支持 `kind`/`limit`、coverage 直接读
+      `build_data_coverage_snapshot`。回归测试 `tests/test_export_csv.py` 覆盖 4 个
+      端点的 status/header/body；458 tests 全绿。Excel (.xlsx) 仍按规划后续做。
+- [ ] 自选股规模达到 200+ 且出现卡顿后，再上虚拟列表；当前先保留本地搜索/筛选。
+- [ ] 移动端先保障 Watchlist / StockDetail / Chat 三条核心路径可用，不急于做完整
+      桌面级功能复刻。
+
+### M25.5 Qlib 离线恢复路线（后置 / P2-P3）
+
+> **前置依赖（缺一不可）**：
+> - M18.1 `backfill_signals` quant>0 前视修复完成；
+> - M20.2 Qlib promotion gate（IC / ICIR / 分层单调性门槛）落地；
+> - M25.0 基线通过判据 3 项全绿。
+> 任何 `weight_quant>0` 的灰度在以上前置完成前一律不启动。
+
+- [x] Qlib 不直接恢复生产权重；继续保持默认 `weight_quant=0.0`，直到离线实验通过
+      promotion gate。
+- [x] 固化离线实验配置：universe、训练窗口、验证窗口、PIT 数据版本、成本口径、
+      入场/退出规则和随机种子。
+- [x] 每轮输出 IC / ICIR、分层单调性、交易成本后收益、组合权益曲线、最大回撤和
+      数据覆盖缺口。
+      2026-05-27 已把 `backend/backtest/alphalens_qlib.py --json-output` 扩展为
+      M25.5 离线报告：写入 `experiment_config`、默认/活跃 quant 权重、promotion gate、
+      panel coverage、成本后分层收益和 top-quantile 权益曲线/最大回撤。首轮
+      `--walk-forward` 真实验证结果：single split `IC=0.0372` 但 `ICIR=0.229`
+      且分层非单调；walk-forward `IC=-0.0058` / `ICIR=-0.025` / 分层非单调，
+      因此保持 `weight_quant=0.0`。
+- [ ] 只有多个窗口稳定通过后，才允许小权重灰度，例如 `quant=0.1`；灰度仍需
+      kill switch 与复盘闭环。
+
+### M25.6 社区与战略项（后置 / P3）
+- [ ] 社区缺口不再按“缺 Issue/PR 模板”处理：仓库已有 issue templates 和
+      PR template。下一步重点是 README demo 截图/GIF、release notes、真实 quickstart
+      验证路径和典型研究案例。
+- [ ] PostgreSQL / pgvector 只在 SQLite schema 迁移、并发或记忆规模成为真实瓶颈后启动；
+      不作为当前阶段默认升级。
+- [ ] HK/US 多市场支持等 A 股主线验证稳定后再做；优先保证 provider 口径、时区、
+      交易成本和调度日历可分市场配置。
+- [ ] Tauri / 桌面客户端放到 Web 控制台稳定、有明确高频使用路径之后再评估。
+
+### M25 明确降级或修正的外部建议
+- [x] AI 流式输出 + Markdown 已在 M10.3 落地；后续只做真实事件流与体验打磨。
+- [x] `database.py` 已完成第一阶段拆分；后续重点是迁移体系和 schema 单一化，
+      不是继续机械拆文件。
+- [x] Issue / PR 模板已存在；社区改进重点转为 demo、案例和 release 质量。
+- [ ] WebSocket 实时推送不作为近期默认方案；止损预警和信号主动通知优先复用现有
+      scheduler + Bark，只有需要浏览器内实时多用户状态时再引入。
+
+### M25 最小交付包
+
+**冲刺包（M25-sprint-1，聚焦"基线 + 不污染官方动作"）**：
+- [x] M25.0 基线通过判据 3 项全绿，输出归档到 `STATUS.md`。
+- [x] M24.1 完成（或在 2026-06-10 走云 provider 兜底分支） + M24.2 完成；
+      `apply_research_constraints` 不再被失败兜底标签拉成「观望/0 仓」。
+
+**后续 M25-sprint-2（在 sprint-1 通过后才启动）**：
+- [x] M18.1 backfill 前视 ✅ + M20.2 promotion gate（解锁 M25.5）。
+- [x] M25.3 新增的 LLM 成本可观测性 + 跨入口契约回归测试落一项。
+- [x] M25.4 中 Chat 真实事件流 / StockDetail 聚合加载二选一，配套前端测试或
+      手动验收记录。
+
+> 体验项不与 sprint-1 同包：信号污染未收敛前不投入产品体验工作量。
 
 ---
 

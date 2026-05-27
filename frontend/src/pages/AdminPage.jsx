@@ -3,6 +3,7 @@ import {
   getDashboardSummary,
   getDataCoverage,
   getInitializeStatus,
+  getLLMUsage,
   getModelStatus,
   getRuntimeConfig,
   getSystemHealth,
@@ -29,6 +30,7 @@ const SECTIONS = [
   ['schedule', '调度', 'A 股日历'],
   ['risk', '熔断开关', '风控保护'],
   ['memory', '记忆管理', '元数据 / 召回日志'],
+  ['llmcost', 'LLM 成本', '7 天用量'],
 ]
 
 const SECTION_COPY = {
@@ -39,6 +41,7 @@ const SECTION_COPY = {
   schedule: ['05 · 调度', '日历草稿', '展示 A 股交易日相关的盘前、盘后、止损检查调度入口。'],
   risk: ['06 · 熔断开关', '风控草稿', '集中管理会阻断调度或跳过交易建议的保护性开关。'],
   memory: ['07 · 记忆管理', '受控编辑', '查看活跃记忆 / 删除固定 / 改 TTL / 召回审计日志（M9.2）。'],
+  llmcost: ['08 · LLM 成本', '7 天滚动', '每次 LLM 调用的 token 估算和 CNY 成本，按 bucket 分桶。'],
 }
 
 function SettingRow({ label, hint, children, danger = false }) {
@@ -291,6 +294,7 @@ export default function AdminPage() {
   const [deepResult, setDeepResult] = useState(null)
   const [initStatus, setInitStatus] = useState(null)
   const initPollingRef = useState(null)
+  const [llmUsage, setLlmUsage] = useState(null)
 
   async function loadAdmin() {
     Promise.all([
@@ -300,13 +304,15 @@ export default function AdminPage() {
       getSystemStatus().catch(() => null),
       getSystemHealth().catch(() => null),
       getModelStatus().catch(() => null),
-    ]).then(([dashboard, dataCoverage, runtimeConfig, status, healthData, model]) => {
+      getLLMUsage(7).catch(() => null),
+    ]).then(([dashboard, dataCoverage, runtimeConfig, status, healthData, model, usage]) => {
       setSummary(dashboard)
       setCoverage(dataCoverage)
       setRuntime(runtimeConfig)
       setSystemStatus(status)
       setHealth(healthData)
       setModelStatus(model)
+      setLlmUsage(usage)
       if (runtimeConfig?.profile) setProfile(runtimeConfig.profile)
       if (runtimeConfig?.new_framework_entry_threshold) setThreshold(Math.round(runtimeConfig.new_framework_entry_threshold))
       if (runtimeConfig?.director_min_confidence !== undefined) setConfidence(Math.round(runtimeConfig.director_min_confidence * 100))
@@ -661,7 +667,94 @@ export default function AdminPage() {
                   <MemorySection />
                 </div>
               )}
-              {active !== 'memory' && (
+              {active === 'llmcost' && (
+                <div className="py-2 space-y-4">
+                  {!llmUsage ? (
+                    <p className="text-xs text-stone-500 dark:text-slate-400">加载中…</p>
+                  ) : (
+                    <>
+                      {/* 7 天汇总 */}
+                      <div>
+                        <div className={`${LABEL} mb-2`}>7 天总计</div>
+                        <div className="flex flex-wrap gap-3 text-xs">
+                          <span className="rounded border border-stone-300 dark:border-slate-600 px-2 py-1">
+                            调用 <strong>{llmUsage.total?.calls ?? 0}</strong> 次
+                          </span>
+                          <span className="rounded border border-stone-300 dark:border-slate-600 px-2 py-1">
+                            tokens_in <strong>{(llmUsage.total?.tokens_in ?? 0).toLocaleString()}</strong>
+                          </span>
+                          <span className="rounded border border-stone-300 dark:border-slate-600 px-2 py-1">
+                            tokens_out <strong>{(llmUsage.total?.tokens_out ?? 0).toLocaleString()}</strong>
+                          </span>
+                          <span className="rounded border border-stone-300 dark:border-slate-600 px-2 py-1">
+                            估算成本 <strong>¥{(llmUsage.total?.cost_estimate_cny ?? 0).toFixed(4)}</strong>
+                          </span>
+                        </div>
+                      </div>
+                      {/* Bucket 分桶 */}
+                      {llmUsage.buckets && Object.keys(llmUsage.buckets).length > 0 && (
+                        <div>
+                          <div className={`${LABEL} mb-2`}>按 Bucket 分桶</div>
+                          <table className="w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="text-stone-500 dark:text-slate-400">
+                                <th className="text-left pb-1 pr-4 font-medium">bucket</th>
+                                <th className="text-right pb-1 pr-4 font-medium">调用</th>
+                                <th className="text-right pb-1 pr-4 font-medium">tokens_in</th>
+                                <th className="text-right pb-1 pr-4 font-medium">tokens_out</th>
+                                <th className="text-right pb-1 font-medium">¥ 估算</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Object.entries(llmUsage.buckets).map(([bk, v]) => (
+                                <tr key={bk} className="border-t border-stone-200 dark:border-slate-700">
+                                  <td className="py-1 pr-4 font-mono">{bk}</td>
+                                  <td className="text-right py-1 pr-4">{v.calls}</td>
+                                  <td className="text-right py-1 pr-4">{v.tokens_in.toLocaleString()}</td>
+                                  <td className="text-right py-1 pr-4">{v.tokens_out.toLocaleString()}</td>
+                                  <td className="text-right py-1">¥{v.cost_estimate_cny.toFixed(4)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {/* 每日明细 */}
+                      {llmUsage.daily && llmUsage.daily.length > 0 && (
+                        <div>
+                          <div className={`${LABEL} mb-2`}>每日明细（最近 7 天）</div>
+                          <table className="w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="text-stone-500 dark:text-slate-400">
+                                <th className="text-left pb-1 pr-4 font-medium">日期</th>
+                                <th className="text-right pb-1 pr-4 font-medium">调用</th>
+                                <th className="text-right pb-1 pr-4 font-medium">tokens_in</th>
+                                <th className="text-right pb-1 pr-4 font-medium">tokens_out</th>
+                                <th className="text-right pb-1 font-medium">¥ 估算</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {llmUsage.daily.map((d) => (
+                                <tr key={d.date} className="border-t border-stone-200 dark:border-slate-700">
+                                  <td className="py-1 pr-4 font-mono">{d.date}</td>
+                                  <td className="text-right py-1 pr-4">{d.calls}</td>
+                                  <td className="text-right py-1 pr-4">{d.tokens_in.toLocaleString()}</td>
+                                  <td className="text-right py-1 pr-4">{d.tokens_out.toLocaleString()}</td>
+                                  <td className="text-right py-1">¥{d.cost_estimate_cny.toFixed(4)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {!llmUsage.total?.calls && (
+                        <p className="text-xs text-stone-500 dark:text-slate-400">暂无记录（数据将在下次 LLM 调用后开始累积）</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {active !== 'memory' && active !== 'llmcost' && (
                 <SettingRow label="保存运行时配置" hint="只影响当前后端进程；重启后仍以 .env 为准。">
                   <ActionButton onClick={handleSaveRuntime} disabled={saving}>
                     {saving ? '保存中' : '应用'}

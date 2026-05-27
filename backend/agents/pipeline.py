@@ -113,6 +113,7 @@ def run_pipeline(
     portfolio_drawdown_pct: float = 0.0,
     limit_status: dict | None = None,
     long_term_label=None,                 # LongTermLabel | None
+    _precomputed_reports: list[AnalystReport] | None = None,  # M17.2 避免重复计算
 ) -> AgentDecision:
     """
     主入口。调用方（aggregator）需准备：
@@ -121,18 +122,25 @@ def run_pipeline(
       • sentiment_result: analyze_news() 返回值
       • regime:           market_regime() 返回值（可选，None 则跳过 RM 的 regime 检查）
       • llm_arbitration:  分歧时 _bull_bear_debate() 返回值（可选）
+      • _precomputed_reports: 已计算好的 AnalystReport 列表（由 aggregate_v2 传入避免重复）
     """
     trace: list[dict] = []
 
-    # 1. Analysts
+    # 1. Analysts（M17.2：如调用方已算好直接复用，避免四路分析师重复计算）
     t0 = time.perf_counter()
-    reports: dict[str, AnalystReport] = {
-        "technical": technical_analyst(technical_result),
-        "quant": quant_analyst(qlib_result),
-        "sentiment": sentiment_analyst(sentiment_result),
-        "news": news_analyst(sentiment_result),
-    }
-    report_list = list(reports.values())
+    if _precomputed_reports is not None:
+        report_list = _precomputed_reports
+        reports: dict[str, AnalystReport] = {
+            r.role: r for r in report_list
+        }
+    else:
+        reports = {
+            "technical": technical_analyst(technical_result),
+            "quant": quant_analyst(qlib_result),
+            "sentiment": sentiment_analyst(sentiment_result),
+            "news": news_analyst(sentiment_result),
+        }
+        report_list = list(reports.values())
     trace.append(_step_record(
         "analysts",
         (time.perf_counter() - t0) * 1000,

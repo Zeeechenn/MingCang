@@ -108,6 +108,31 @@ def test_default_aggregate_ignores_untrusted_long_term_avoid_label(monkeypatch):
     assert any("未通过质量门" in note for note in result["risk_notes"])
 
 
+def test_research_constraints_do_not_block_entry_for_failed_long_term_label(monkeypatch):
+    from backend.decision import research_constraints
+
+    monkeypatch.setattr(research_constraints.settings, "long_term_team_enabled", True)
+    failed_label = {
+        "label": "规避",
+        "key_findings": ["LLM 调用失败，默认观望"],
+        "quality": "failed",
+        "constraint_eligible": False,
+        "quality_notes": ["A老师 LLM 调用失败"],
+    }
+
+    result = research_constraints.apply_research_constraints(
+        recommendation="可小仓试错",
+        composite_score=66.0,
+        position_pct=0.12,
+        long_term_label=failed_label,
+    )
+
+    assert result.recommendation == "可小仓试错"
+    assert result.position_pct == 0.12
+    assert result.conflicts == []
+    assert any("仅展示不约束" in note for note in result.risk_notes)
+
+
 def test_default_aggregate_does_not_downgrade_entry_when_long_term_missing(monkeypatch):
     from backend.decision import aggregator
 

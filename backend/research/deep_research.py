@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from backend.config import BASE_DIR
@@ -476,7 +476,7 @@ def run_deep_research(
       4. execute the plan and re-evaluate
     """
     clean_symbols = [s.strip() for s in symbols if s.strip()]
-    day = as_of or datetime.utcnow().strftime("%Y-%m-%d")
+    day = as_of or datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     as_of_dt = datetime.strptime(day, "%Y-%m-%d")
     names = _symbol_names(db, clean_symbols)
     prices = [_latest_price_context(db, symbol) for symbol in clean_symbols]

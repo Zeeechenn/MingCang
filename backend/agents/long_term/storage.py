@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timezone
 from pathlib import Path
 from typing import cast
 
@@ -28,6 +28,10 @@ def _mirror_path() -> Path | None:
         return MIRROR_PATH
     configured = settings.long_term_label_mirror_path.strip()
     return Path(configured).expanduser() if configured else None
+
+
+def _json_list(raw: str | None) -> list:
+    return json.loads(raw) if raw else []
 
 
 def save_label(label: LongTermLabel, db) -> None:
@@ -63,7 +67,7 @@ def _write_mirror(db) -> None:
     if mirror_path is None:
         return
     try:
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
         rows = (db.query(LongTermLabelORM)
                   .filter(LongTermLabelORM.expires_at >= today)
                   .all())
@@ -88,7 +92,7 @@ def _write_mirror(db) -> None:
 
 def get_active_label(symbol: str, db) -> LongTermLabel | None:
     """取 TTL 未过期的最新一条（按 date 倒序），过期返回 None"""
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     row = (db.query(LongTermLabelORM)
              .filter(LongTermLabelORM.symbol == symbol,
                      LongTermLabelORM.expires_at >= today)
@@ -106,13 +110,13 @@ def get_active_label(symbol: str, db) -> LongTermLabel | None:
         expires_at=row.expires_at,
         quality=cast(LabelQuality, getattr(row, "quality", "degraded") or "degraded"),
         constraint_eligible=bool(getattr(row, "constraint_eligible", False)),
-        quality_notes=json.loads(row.quality_notes_json) if getattr(row, "quality_notes_json", None) else [],
+        quality_notes=_json_list(getattr(row, "quality_notes_json", None)),
     )
 
 
 def bulk_get_labels(symbols: list[str], db) -> dict[str, LongTermLabel]:
     """批量取，盘后 job 一次性查 10+ 只股"""
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     rows = (db.query(LongTermLabelORM)
               .filter(LongTermLabelORM.symbol.in_(symbols),
                       LongTermLabelORM.expires_at >= today)
@@ -133,7 +137,7 @@ def bulk_get_labels(symbols: list[str], db) -> dict[str, LongTermLabel]:
             expires_at=r.expires_at,
             quality=cast(LabelQuality, getattr(r, "quality", "degraded") or "degraded"),
             constraint_eligible=bool(getattr(r, "constraint_eligible", False)),
-            quality_notes=json.loads(r.quality_notes_json) if getattr(r, "quality_notes_json", None) else [],
+            quality_notes=_json_list(getattr(r, "quality_notes_json", None)),
         )
         for sym, r in by_symbol.items()
     }

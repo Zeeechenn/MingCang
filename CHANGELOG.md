@@ -2,6 +2,41 @@
 
 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
 各里程碑按完成时间倒序排列。
+历史条目中的测试数量只记录当时验证输出；当前套件规模与最新通过状态以 `STATUS.md` 的 `make verify` 摘要为准。
+
+---
+
+## [M25.3/M25.4/M15.2] LLM 成本观测 + Chat SSE 阶段流 + Copilot 日期修复（2026-05-27）
+
+### Fixed
+- **M15.2 copilot 日期错配**：`_official_context` 新增 `signal_date` / `decision_date` /
+  `decision_date_mismatch`；回退时 prompt 写入日期警告，card 暴露字段。
+- **M25.4 Chat SSE 假流式**：`chat_stream` 改为真实阶段 generator（prepare → running →
+  evidence → token… → done/error），前端 `api.js` + `ChatPage.jsx` 接新事件。
+
+### Added
+- **M25.3 LLM 成本可观测性**：
+  - `llm_usage_log` DB 表（每次调用写入 bucket/tokens_in/tokens_out/cost_cny）
+  - `backend/ops/llm_usage.py`：token 估算（≈3 chars/token 中英混合）、持久化、7 天汇总、预算报警
+  - 5 个调用点挂 `log_llm_usage`：sentiment / copilot / debate / deep_research / chat
+  - `GET /api/system/llm-usage?days=N` 端点
+  - `GET /api/system/health` 超 `LLM_DAILY_BUDGET_CNY`（默认 1 CNY）时写 audit + Bark
+  - AdminPage 新增「LLM 成本」标签页（7 天总计 + bucket 分桶 + 每日明细表格）
+
+### Tests
+- 454 tests 全绿；`test_web_system_contracts_keep_monitoring_fields` 更新加入 `llm_budget_alert`
+
+---
+
+## [M24.1] LocalCLI 超时重试放大修复（2026-05-27）
+
+### Fixed
+- **根因定位**：`_cli_retry` 在 `subprocess.TimeoutExpired` 后仍触发重试，把单次 90s 超时放大为 3×90s+6s = 276s/call；触发时机为批处理后期命中 claude 日配额/限速（正常调用 5–20s，远低于 90s 阈值）。
+- 引入 `_FatalResult` 哨兵异常：`TimeoutExpired` 时走 Codex 兜底一次后抛出 `_FatalResult`，`_cli_retry` 捕获后直接返回结果，不再重试。
+- 超时 warning 日志增加 `prompt_len`，便于未来复查是否因大 prompt 引起。
+
+### Tests
+- 454 tests 全绿；`test_local_cli_provider_falls_back_to_codex_when_claude_times_out` 已按新行为更新，语义与预期一致。
 
 ---
 
@@ -46,7 +81,7 @@
 - M21.0-M21.3：补齐远程写路由 agent guard，恢复 LLM `model_tier` 分层，runtime config 更新走整体验证，Action Registry 执行前校验 mode 与 payload schema。
 
 ### Tests
-- 新增/更新 M17-M21 聚焦回归；本轮聚焦套件 `54 passed`。
+- 新增/更新 M17-M21 聚焦回归；历史聚焦套件 `54 passed`。
 
 ---
 
@@ -140,7 +175,7 @@
 
 ### Notes
 - 记忆系统管理建议报告已移出项目仓库，保留在本地私有工作区。
-- 验证：
+- 历史验证：
   - `pytest tests/test_frontend_expansion_api.py tests/test_memory.py` → **10 passed, 1 warning**
   - `node --test frontend/src/pages/chatArchive.test.js frontend/src/pages/reviewContent.test.js` → **4 passed**
   - `cd frontend && npm run build` → 通过
@@ -170,8 +205,8 @@
 ### Notes
 - 深度研究默认输出到 `docs/research/YYYY-MM-DD-主题.md`。
 - 当前深度研究为本地数据库优先的确定性流程；后续如接入 OpenAI `web_search` 或 Local Deep Research MCP，应保持手动触发，不接入 `job_postmarket()`。
-- 验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider tests/test_news_audit.py tests/test_deep_research.py` → **8 passed, 1 warning**
-- 验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **217 passed, 1 warning**
+- 历史验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider tests/test_news_audit.py tests/test_deep_research.py` → **8 passed, 1 warning**
+- 历史验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **217 passed, 1 warning**
 
 ---
 
@@ -217,9 +252,9 @@
 - 扩容后 Qlib regression 验证未通过：80/20 IC=-0.0074、ICIR=-0.034；walk-forward IC=+0.0026、ICIR=+0.009，Top-Bottom=-0.0011，分层非单调
 - 决策：暂不恢复 quant 权重，暂不启用 Ranker；先补真实披露日/资金流/市值等更强因子，再考虑 100–300 只 × 3–5 年可信验证
 - 数据覆盖快照：active 70 / price covered 70 / two-year price covered 69 / financial covered 10 / news 24h covered 0
-- 验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **208 passed, 1 warning**
-- 验证：`PYTHONDONTWRITEBYTECODE=1 python3 -m compileall backend tests` → 通过
-- 验证：`cd frontend && npm run build` → 通过
+- 历史验证：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. pytest -q -p no:cacheprovider` → **208 passed, 1 warning**
+- 历史验证：`PYTHONDONTWRITEBYTECODE=1 python3 -m compileall backend tests` → 通过
+- 历史验证：`cd frontend && npm run build` → 通过
 
 ---
 

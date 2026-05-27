@@ -1,7 +1,7 @@
 """Layer 2 persistent memory helpers."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import text
 
@@ -11,7 +11,7 @@ from backend.memory.should_remember import should_remember
 
 def _utc_now() -> datetime:
     """Return the current UTC datetime."""
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _ensure_schema(db) -> None:

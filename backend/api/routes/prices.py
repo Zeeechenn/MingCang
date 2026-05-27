@@ -1,7 +1,7 @@
 """Price bar routes."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -15,7 +15,7 @@ router = APIRouter()
 @router.get("/prices/{symbol}", response_model=list[PriceBar])
 def get_prices(symbol: str, days: int = 120, db: Session = Depends(get_db)):
     """Return OHLCV price bars for a symbol over the past days."""
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
     rows = (
         db.query(Price)
         .filter(Price.symbol == symbol, Price.date >= cutoff)

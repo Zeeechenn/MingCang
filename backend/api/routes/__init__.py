@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from backend.api.routes import (
     ai,
     dashboard,
+    exports,
     memory,
     model,
     news,
@@ -49,6 +50,7 @@ router.include_router(reviews.router)
 router.include_router(skills.router)
 router.include_router(ai.router)
 router.include_router(memory.router)
+router.include_router(exports.router)
 
 
 # Re-exports for tests that import endpoint functions directly.

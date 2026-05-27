@@ -1,5 +1,13 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _utcnow() -> datetime:
+    """Return current UTC time as timezone-naive datetime (SQLite compatible).
+
+    M21.4: 替代已弃用的 datetime.utcnow()，保持存储格式不变（naive UTC）。
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 from sqlalchemy import (
     Boolean,
@@ -42,7 +50,7 @@ class Stock(Base):
     market: Mapped[str] = mapped_column(String)                      # "CN" or "US"
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     industry: Mapped[str | None] = mapped_column(String, nullable=True)     # 申万一级行业（由 sync_industry 回填）
-    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class Position(Base):
@@ -63,8 +71,8 @@ class Position(Base):
     realized_pnl_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, default="open")  # open / closed
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class Price(Base):
@@ -93,7 +101,7 @@ class NewsItem(Base):
     source: Mapped[str] = mapped_column(String, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)       # LLM 生成摘要
     sentiment_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # -1.0 ~ +1.0
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class IndexPrice(Base):
@@ -124,7 +132,7 @@ class Signal(Base):
     llm_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)     # LLM 综合判断理由
     rule_version: Mapped[str | None] = mapped_column(String, nullable=True)     # 决策规则版本
     data_timestamp: Mapped[str | None] = mapped_column(String, nullable=True)   # 信号使用的数据日期/时间戳
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class SentimentCache(Base):
@@ -134,8 +142,8 @@ class SentimentCache(Base):
     symbol: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     titles_hash: Mapped[str] = mapped_column(String, index=True)
     result_json: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class FinancialMetric(Base):
@@ -164,7 +172,7 @@ class FinancialMetric(Base):
     roe: Mapped[float | None] = mapped_column(Float, nullable=True)              # 计算: 净利润 / 净资产
     asset_turnover: Mapped[float | None] = mapped_column(Float, nullable=True)   # 计算: 收入 / 总资产
     raw_json: Mapped[str | None] = mapped_column(Text, nullable=True)          # 完整原始字段备份
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class MarketSnapshot(Base):
@@ -185,7 +193,7 @@ class MarketSnapshot(Base):
     margin_balance: Mapped[float | None] = mapped_column(Float, nullable=True)
     large_order_net_inflow: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str | None] = mapped_column(String, nullable=True)
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class LongTermLabel(Base):
@@ -206,7 +214,7 @@ class LongTermLabel(Base):
     quality: Mapped[str] = mapped_column(String, default="degraded")    # trusted/degraded/failed
     constraint_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
     quality_notes_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class DecisionRun(Base):
@@ -232,7 +240,7 @@ class DecisionRun(Base):
     final_action_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     eval_result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class ResearchState(Base):
@@ -251,8 +259,8 @@ class ResearchState(Base):
     copilot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_signal_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_review_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class ReviewRun(Base):
@@ -266,7 +274,7 @@ class ReviewRun(Base):
     path: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="created")
     payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class PendingAIAction(Base):
@@ -278,7 +286,7 @@ class PendingAIAction(Base):
     status: Mapped[str] = mapped_column(String, default="pending")  # pending / executed / cancelled / failed
     result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
@@ -295,7 +303,7 @@ class DecisionMemoryLayered(Base):
     symbol: Mapped[str | None] = mapped_column(String, nullable=True, index=True)  # NULL for long
     layer: Mapped[str] = mapped_column(String, nullable=False, index=True)   # 'medium' / 'long'
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class StockMemoryItem(Base):
@@ -312,8 +320,8 @@ class StockMemoryItem(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     status: Mapped[str] = mapped_column(String, default="active", index=True)
     ttl_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
@@ -326,8 +334,8 @@ class ChatSession(Base):
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # M9.3 window summarizer output
     summary_until_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # last compressed msg id
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class ChatMessage(Base):
@@ -338,7 +346,18 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)
     payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class LlmUsageLog(Base):
+    """Per-call LLM token usage log for cost observability."""
+    __tablename__ = "llm_usage_log"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bucket: Mapped[str] = mapped_column(String, index=True)  # sentiment/copilot/debate/chat/deep_research
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    cost_estimate_cny: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
 
 
 def get_latest_price_date(symbol: str, db) -> str | None:
@@ -592,10 +611,46 @@ def _ensure_runtime_schema() -> None:
         """))
 
 
+def _verify_schema_consistency() -> list[str]:
+    """
+    M21.4 schema 单一化：检查 ORM 模型列与 PRAGMA table_info 的差异，
+    以日志警告形式暴露"meta vs PRAGMA diff"问题，不阻断启动。
+
+    返回所有差异描述列表（空列表表示一致）。
+    """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    diffs: list[str] = []
+    try:
+        from sqlalchemy import inspect as _inspect
+        inspector = _inspect(engine)
+        for mapper in Base.registry.mappers:
+            table_name = mapper.persist_selectable.name
+            try:
+                pragma_cols = {r["name"] for r in inspector.get_columns(table_name)}
+            except Exception:
+                continue
+            orm_cols = {c.name for c in mapper.persist_selectable.columns}
+            extra_in_pragma = pragma_cols - orm_cols
+            missing_in_pragma = orm_cols - pragma_cols
+            if extra_in_pragma:
+                msg = f"[schema] {table_name}: PRAGMA 有但 ORM 无 → {extra_in_pragma}"
+                _log.debug(msg)
+                diffs.append(msg)
+            if missing_in_pragma:
+                msg = f"[schema] {table_name}: ORM 有但 PRAGMA 无 → {missing_in_pragma}"
+                _log.warning(msg)
+                diffs.append(msg)
+    except Exception as e:
+        diffs.append(f"[schema] consistency check 失败: {e}")
+    return diffs
+
+
 def init_db() -> None:
     """Create all ORM tables and apply runtime schema patches."""
     Base.metadata.create_all(engine)
     _ensure_runtime_schema()
+    _verify_schema_consistency()
     _seed_default_memory()
 
 

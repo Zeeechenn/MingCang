@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -88,7 +88,7 @@ def _pending(action: str, payload: dict, user_message: str, db: Session) -> dict
         payload_json=_json(payload),
         status="pending",
         user_message=user_message,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(row)
     db.commit()
@@ -372,8 +372,8 @@ def _ensure_session(db: Session, session_id: str | None, mode: str, title: str |
         id=uuid4().hex,
         title=title or "新对话",
         mode=mode,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
     )
     db.add(row)
     db.commit()
@@ -392,9 +392,9 @@ def _save_message(
         role=role,
         content=content,
         payload_json=_json(payload or {}),
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
     ))
-    session.updated_at = datetime.utcnow()
+    session.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     try:
         from backend.memory.summarizer import summarize_if_needed
@@ -487,8 +487,8 @@ def archive_chat_session(session_id: str, db: Session = Depends(get_db)):
     row = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if row is None:
         raise HTTPException(404, "chat session not found")
-    row.archived_at = datetime.utcnow()
-    row.updated_at = datetime.utcnow()
+    row.archived_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     return {"status": "archived", "id": session_id}
 
@@ -538,18 +538,75 @@ def chat(request: AIChatRequest, db: Session = Depends(get_db)):
     dependencies=[Depends(agent_write_guard("ai.chat.stream"))],
 )
 def chat_stream(request: AIChatRequest, db: Session = Depends(get_db)):
-    """SSE-compatible chat endpoint. Keeps /ai/chat behavior and streams answer chunks."""
+    """SSE streaming chat with real stage events.
+
+    Event sequence:
+      prepare  — immediately on receipt (< 50 ms); signals the server is alive
+      running  — session created, user message saved, computation starting
+      evidence — context / action detection complete, entering LLM or data path
+      meta     — full resource / citation / pending_action metadata (before tokens)
+      token    — incremental answer chunks (24-char blocks)
+      done     — final payload mirrors /ai/chat response JSON
+      error    — if an exception occurs; carries {"message": "..."}
+    """
     def generate():
-        response = chat(request, db)
-        payload = response.model_dump()
-        yield _sse("meta", {
-            "used_resources": response.used_resources,
-            "citations": response.citations,
-            "pending_action": response.pending_action,
-        })
-        for chunk in _text_chunks(response.answer):
-            yield _sse("token", {"text": chunk})
-        yield _sse("done", payload)
+        # Stage 1 – immediate acknowledgement before any I/O
+        yield _sse("prepare", {"mode": request.mode})
+
+        try:
+            session = _ensure_session(
+                db, request.session_id, request.mode,
+                title=request.message[:24],
+            )
+            _save_message(db, session, "user", request.message, {"mode": request.mode})
+
+            # Stage 2 – session ready, processing starts
+            yield _sse("running", {"session_id": session.id})
+
+            if request.mode == "long_term_team":
+                # Long-term team is slow; signal that this path is running
+                yield _sse("running", {"stage": "long_term_team", "session_id": session.id})
+                response = _long_term_answer(request.message, db)
+            else:
+                action = _detect_action(request.message, db)
+                if action:
+                    action_name, payload = action
+                    pending = _pending(action_name, payload, request.message, db)
+                    response = AIChatResponse(
+                        answer="我已经识别出一个项目操作，请确认后执行。",
+                        used_resources=["ai_action_parser"],
+                        pending_action=pending,
+                    )
+                else:
+                    # Stage 3 – context building (memory + copilot lookup)
+                    yield _sse("evidence", {"stage": "context"})
+                    response = _context_answer(request.message, db, session.id)
+
+            _save_message(
+                db,
+                session,
+                "assistant",
+                response.answer,
+                {
+                    "session_id": session.id,
+                    "used_resources": response.used_resources,
+                    "citations": response.citations,
+                    "pending_action": response.pending_action,
+                },
+            )
+
+            payload = response.model_dump()
+            yield _sse("meta", {
+                "used_resources": response.used_resources,
+                "citations": response.citations,
+                "pending_action": response.pending_action,
+            })
+            for chunk in _text_chunks(response.answer):
+                yield _sse("token", {"text": chunk})
+            yield _sse("done", payload)
+
+        except Exception as exc:  # noqa: BLE001
+            yield _sse("error", {"message": str(exc)})
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -586,7 +643,7 @@ def confirm_action(
     result = _execute_action(row.action, payload, db)
     row.status = "executed"
     row.result_json = _json(result)
-    row.executed_at = datetime.utcnow()
+    row.executed_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     return {"status": "executed", "result": result}
 

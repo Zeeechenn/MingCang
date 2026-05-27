@@ -252,9 +252,10 @@ def test_deep_research_memory_writes_stock_research_pointer(test_db):
     assert len(rows) == 1
     assert rows[0]["summary"] == "300308 研究索引：报告摘要，不包含原始长文正文"
     assert rows[0]["source_ref"] == "/tmp/report.md#research:300308"
-    thesis_rows = list_stock_memories(test_db, symbol="300308", memory_type="thesis")
-    assert len(thesis_rows) == 1
-    assert thesis_rows[0]["source_type"] == "deep_research_candidate"
+    # M15.3: 不再批量生成 thesis/risk/event candidate 噪声；真正的结构化字段需 LLM 输出
+    assert list_stock_memories(test_db, symbol="300308", memory_type="thesis") == []
+    assert list_stock_memories(test_db, symbol="300308", memory_type="risk") == []
+    assert list_stock_memories(test_db, symbol="300308", memory_type="event") == []
 
 
 def test_research_dossier_recalls_deep_research_pointer(test_db, sample_stocks):

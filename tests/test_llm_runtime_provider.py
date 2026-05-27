@@ -1,3 +1,4 @@
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from backend.agents.analyst import AnalystReport
@@ -130,6 +131,40 @@ def test_local_cli_provider_falls_back_to_codex_when_claude_returns_no_json(mock
 
     assert result == {"ok": True}
     assert mock_run.call_args_list[1].args[0][:2] == ["codex", "exec"]
+
+
+@patch("backend.llm.local_cli_provider.subprocess.run")
+def test_local_cli_provider_falls_back_to_codex_when_claude_times_out(mock_run):
+    from backend.llm.local_cli_provider import LocalCLIProvider
+
+    mock_run.side_effect = [
+        subprocess.TimeoutExpired(cmd=["claude"], timeout=1),
+        MagicMock(returncode=0, stdout='codex\n{"ok": true}', stderr=""),
+    ]
+
+    result = LocalCLIProvider(timeout=1).complete_structured(
+        "prompt",
+        {"name": "tool", "input_schema": {"type": "object"}},
+    )
+
+    assert result == {"ok": True}
+    assert mock_run.call_args_list[1].args[0][:2] == ["codex", "exec"]
+
+
+@patch("backend.llm.local_cli_provider.subprocess.run")
+def test_local_cli_provider_can_prefer_codex(mock_run, monkeypatch):
+    from backend.llm.local_cli_provider import LocalCLIProvider
+
+    monkeypatch.setattr("backend.config.settings.local_cli_prefer_codex", True)
+    mock_run.return_value = MagicMock(returncode=0, stdout='codex\n{"ok": true}', stderr="")
+
+    result = LocalCLIProvider(timeout=1).complete_structured(
+        "prompt",
+        {"name": "tool", "input_schema": {"type": "object"}},
+    )
+
+    assert result == {"ok": True}
+    assert mock_run.call_args_list[0].args[0][:2] == ["codex", "exec"]
 
 
 @patch("backend.analysis.sentiment.get_provider")

@@ -23,13 +23,27 @@ def _model_for_tier(model_tier: str) -> str:
     return settings.local_cli_model_fast
 
 
+class _FatalResult(Exception):
+    """非可重试错误（子进程超时等），携带已计算的最终结果直接返回。"""
+    def __init__(self, result: dict) -> None:
+        self.result = result
+
+
 def _cli_retry(max_attempts: int = 3, delay: float = 2.0):
-    """子进程调用失败时指数退避重试"""
+    """子进程调用失败时指数退避重试。
+
+    仅对"返回空 JSON"（模型输出格式错误等可恢复错误）重试。
+    _FatalResult 异常由 complete_structured 在超时/不可恢复时抛出，
+    _cli_retry 直接返回其 result，不触发重试——避免 3×90s 放大效应。
+    """
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             for attempt in range(max_attempts):
-                result = fn(*args, **kwargs)
+                try:
+                    result = fn(*args, **kwargs)
+                except _FatalResult as e:
+                    return e.result
                 if result:
                     return result
                 if attempt < max_attempts - 1:
@@ -78,6 +92,9 @@ class LocalCLIProvider(LLMProvider):
         )
         full_prompt = "\n\n".join(parts)
 
+        if settings.local_cli_prefer_codex:
+            return self._complete_with_codex(full_prompt)
+
         try:
             claude = subprocess.run(
                 ["claude", "-p", "--model", _model_for_tier(model_tier), "--output-format", "text"],
@@ -91,10 +108,18 @@ class LocalCLIProvider(LLMProvider):
             data = self._extract_json(claude.stdout)
             if data:
                 return data
+            # Claude 可用但输出非 JSON（格式错误），尝试 Codex 兜底
             return self._complete_with_codex(full_prompt)
         except subprocess.TimeoutExpired:
-            logger.warning("LocalCLIProvider: 超时（%ds）", self._timeout)
-            return {}
+            # 超时 = CLI 挂住（配额耗尽/限速）。
+            # 尝试 Codex 一次（不同服务，不受同一配额影响），
+            # 然后抛 _FatalResult 告知 _cli_retry 不再重试，避免 3×90s 放大。
+            logger.warning(
+                "LocalCLIProvider Claude: 超时（%ds），prompt_len=%d；"
+                "可能是日配额耗尽，尝试 Codex 兜底后不再重试",
+                self._timeout, len(full_prompt),
+            )
+            raise _FatalResult(self._complete_with_codex(full_prompt))
         except FileNotFoundError:
             logger.warning("LocalCLIProvider: `claude` 命令未找到，尝试 Codex CLI")
             return self._complete_with_codex(full_prompt)

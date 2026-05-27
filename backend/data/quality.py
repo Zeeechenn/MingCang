@@ -1,7 +1,7 @@
 """Data coverage and provider reliability reports."""
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 from sqlalchemy import func
 
@@ -12,7 +12,7 @@ from backend.data.providers import get_provider_health
 def build_data_coverage_report(db) -> dict:
     """Build a compact coverage report for active stocks."""
     stocks = db.query(Stock).filter(Stock.active).order_by(Stock.symbol).all()
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
     rows: list[dict] = []
 
     for stock in stocks:

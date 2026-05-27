@@ -3,7 +3,11 @@
 参考：东北证券 20190924 研报。
 
 原版基于板块成分股，本实现简化为"自选股池中价格在 MA20 上方的占比"。
-> 0.6 视为板块强势；< 0.3 视为板块弱势。
+
+M20.2 阈值说明（可通过 settings 调整）：
+  • 强势阈值：diffusion > settings.diffusion_strong_threshold（默认 0.6）
+  • 弱势阈值：diffusion < settings.diffusion_threshold（默认 0.3）
+  • 此处 sector_diffusion() 只做计算；阈值判断在 regime.py 的 market_regime() 中完成。
 """
 from __future__ import annotations
 

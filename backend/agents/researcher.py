@@ -73,7 +73,8 @@ def has_divergence(reports: list[AnalystReport], threshold: float | None = None)
         return False
     scores = [r.score for r in reports]
     threshold = settings.multi_round_debate_min_divergence if threshold is None else threshold
-    return statistics.stdev(scores) > threshold
+    # M17.2 口径统一：aggregator 用 stdev < threshold 跳过（即 >= 触发），此处对齐 >=
+    return statistics.stdev(scores) >= threshold
 
 
 def debate(reports: list[AnalystReport], llm_arbitration: dict | None = None) -> ResearcherConclusion:
@@ -260,6 +261,12 @@ def multi_round_debate(
         prompt=bull_prompt, tool=_BULL_OPENING_TOOL,
         max_tokens=300, model_tier="fast",
     )
+    try:
+        import json as _json
+        from backend.ops.llm_usage import log_llm_usage
+        log_llm_usage("deep_research", bull_prompt, _json.dumps(bull_data))
+    except Exception:
+        pass
     bull_valid, bull_err = _validate_tool_output(bull_data, _BULL_OPENING_TOOL)
     if not bull_valid:
         return quick_consensus(reports, fallback_reason=f"round1_invalid:{bull_err}")
@@ -283,6 +290,11 @@ def multi_round_debate(
         prompt=bear_prompt, tool=_BEAR_REBUTTAL_TOOL,
         max_tokens=400, model_tier="fast",
     )
+    try:
+        from backend.ops.llm_usage import log_llm_usage
+        log_llm_usage("deep_research", bear_prompt, _json.dumps(bear_data))
+    except Exception:
+        pass
     bear_valid, bear_err = _validate_tool_output(bear_data, _BEAR_REBUTTAL_TOOL)
     bear_empty = bear_valid and not bear_data.get("rebuttals")
     if not bear_valid or bear_empty:
@@ -332,6 +344,11 @@ def multi_round_debate(
         prompt=final_prompt, tool=_FINAL_ADJUDICATION_TOOL,
         max_tokens=400, model_tier="capable",
     )
+    try:
+        from backend.ops.llm_usage import log_llm_usage
+        log_llm_usage("deep_research", final_prompt, _json.dumps(final_data))
+    except Exception:
+        pass
     final_valid, final_err = _validate_tool_output(final_data, _FINAL_ADJUDICATION_TOOL)
     final_empty = final_valid and not final_data.get("action_bias")
     if not final_valid or final_empty:

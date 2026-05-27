@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -215,7 +215,7 @@ def system_health(db: Session = Depends(get_db)):
         latest_price_date = row[0] if row else None
         if latest_price_date:
             last = datetime.strptime(latest_price_date, "%Y-%m-%d")
-            data_age_days = (datetime.utcnow() - last).days
+            data_age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - last).days
     except Exception:
         db_ok = False
 
@@ -257,6 +257,40 @@ def system_health(db: Session = Depends(get_db)):
         and not (ks_state and ks_state.get("active"))
     )
 
+    # LLM 成本报警（M25.3）：超预算时写 audit + Bark
+    llm_budget_alert = {}
+    try:
+        from backend.ops.llm_usage import check_daily_budget_alert
+        llm_budget_alert = check_daily_budget_alert(
+            budget_cny=settings.llm_daily_budget_cny, db=db
+        )
+        if llm_budget_alert.get("alert"):
+            try:
+                from backend.notification.bark import send_bark
+                send_bark(
+                    settings.bark_key,
+                    title="StockSage LLM 日预算超限",
+                    body=(
+                        f"今日 LLM 成本 ¥{llm_budget_alert['today_cny']:.4f}"
+                        f"，预算 ¥{llm_budget_alert['budget_cny']:.2f}"
+                    ),
+                    server=settings.bark_server,
+                )
+            except Exception:
+                pass
+            try:
+                from backend.memory.audit import audit_write
+                audit_write(
+                    db,
+                    "llm_budget_alert",
+                    f"LLM 日成本 ¥{llm_budget_alert['today_cny']:.4f} 超预算 ¥{llm_budget_alert['budget_cny']:.2f}",
+                    related_scope="global",
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     return {
         "healthy": healthy,
         "db_ok": db_ok,
@@ -269,7 +303,18 @@ def system_health(db: Session = Depends(get_db)):
         "consecutive_losses_threshold": kill_switch.DEFAULT_CONSECUTIVE_LOSSES,
         "scheduler": scheduler_state,
         "runtime_readiness": runtime_readiness(settings),
+        "llm_budget_alert": llm_budget_alert,
     }
+
+
+@router.get("/system/llm-usage")
+def get_llm_usage(days: int = 7, db: Session = Depends(get_db)):
+    """LLM token 用量与成本汇总（M25.3）。
+
+    返回滚动 N 天的每日用量曲线和按 bucket 分桶统计。
+    """
+    from backend.ops.llm_usage import get_usage_summary
+    return get_usage_summary(days=days, db=db)
 
 
 @router.post(

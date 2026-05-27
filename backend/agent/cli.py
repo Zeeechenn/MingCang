@@ -17,6 +17,9 @@ from backend.agent.context import (
 from backend.agent.security import AgentSecurityError, require_agent_access
 from backend.data.database import SessionLocal, init_db
 
+# M21.4：init_db 幂等但每次调用仍需遍历 PRAGMA，进程内只需运行一次
+_init_db_done: bool = False
+
 
 def _json_default(value: Any) -> str:
     return str(value)
@@ -27,8 +30,10 @@ def _emit(payload: dict, *, pretty: bool = False) -> None:
 
 
 def _with_db(fn: Callable[[Any], dict], *, ensure_schema: bool = False) -> dict:
-    if ensure_schema:
+    global _init_db_done
+    if ensure_schema and not _init_db_done:
         init_db()
+        _init_db_done = True
     db = SessionLocal()
     try:
         return fn(db)

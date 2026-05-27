@@ -28,10 +28,33 @@ from typing import Any
 import pandas as pd
 from scipy.stats import spearmanr
 
+from backend.backtest.costs import A_SHARE_ROUND_TRIP_COST
+from backend.config import active_signal_weights, settings
 from backend.data.database import SessionLocal, Stock
 from backend.data.qlib_data import FEATURE_COLS, build_training_data
 
 warnings.filterwarnings("ignore")
+
+OFFLINE_EXPERIMENT_CONFIG = {
+    "purpose": "qlib_offline_recovery_only",
+    "production_quant_weight": 0.0,
+    "universe": "active CN stocks from local Stock table, intersected with qlib feature panel",
+    "pit_data_version": "local SQLite snapshot via backend.data.qlib_data.build_training_data",
+    "single_split": {
+        "train_window": "oldest 80% rows by date, with inner 80/20 early-stopping split",
+        "validation_window": "latest 20% rows by date",
+    },
+    "walk_forward": {
+        "train_window": "rolling 12 calendar months",
+        "validation_window": "next 2 calendar months",
+    },
+    "entry_exit_rules": "offline rank validation only; no production entry or exit orders are emitted",
+    "costs": {
+        "a_share_round_trip_cost": A_SHARE_ROUND_TRIP_COST,
+        "application": "subtract once from each held-horizon quantile return",
+    },
+    "random_seed": 42,
+}
 
 
 def load_panel(db) -> pd.DataFrame:
@@ -94,6 +117,82 @@ def quantile_returns(predictions: pd.DataFrame, n_groups: int = 5) -> pd.DataFra
     return pd.DataFrame(rows)
 
 
+def data_coverage_report(panel: pd.DataFrame) -> dict:
+    """Summarize panel coverage gaps for offline Qlib validation reports."""
+    if panel.empty:
+        return {
+            "n_dates": 0,
+            "n_symbols": 0,
+            "expected_symbol_dates": 0,
+            "observed_symbol_dates": 0,
+            "missing_symbol_dates": 0,
+            "coverage_ratio": 0.0,
+            "feature_null_cells": 0,
+        }
+
+    n_dates = int(panel["date"].nunique())
+    n_symbols = int(panel["symbol"].nunique())
+    expected = n_dates * n_symbols
+    observed = int(panel[["date", "symbol"]].drop_duplicates().shape[0])
+    missing = max(expected - observed, 0)
+    feature_null_cells = int(panel[FEATURE_COLS].isna().sum().sum())
+    return {
+        "n_dates": n_dates,
+        "n_symbols": n_symbols,
+        "expected_symbol_dates": expected,
+        "observed_symbol_dates": observed,
+        "missing_symbol_dates": missing,
+        "coverage_ratio": round(observed / expected, 6) if expected else 0.0,
+        "feature_null_cells": feature_null_cells,
+    }
+
+
+def equity_curve_report(quantile_rows: pd.DataFrame) -> dict:
+    """Build a simple top-quantile net-return equity curve summary."""
+    if quantile_rows.empty or "bucket" not in quantile_rows:
+        return {"points": [], "max_drawdown": None, "final_return": None}
+
+    top_bucket = int(quantile_rows["bucket"].max())
+    top = quantile_rows[quantile_rows["bucket"] == top_bucket].sort_values("date")
+    equity = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    points = []
+    for _, row in top.iterrows():
+        net_ret = float(row["ret"]) - A_SHARE_ROUND_TRIP_COST
+        equity *= 1 + net_ret
+        peak = max(peak, equity)
+        max_drawdown = max(max_drawdown, (peak - equity) / peak if peak else 0.0)
+        points.append({
+            "date": str(pd.to_datetime(row["date"]).date()),
+            "equity": round(equity, 6),
+            "net_return": round(net_ret, 6),
+        })
+    return {
+        "points": points,
+        "max_drawdown": round(max_drawdown, 6),
+        "final_return": round(equity - 1, 6),
+    }
+
+
+def offline_experiment_config(panel: pd.DataFrame) -> dict:
+    """Return frozen offline-recovery metadata without enabling production Qlib."""
+    weights = active_signal_weights()
+    return {
+        **OFFLINE_EXPERIMENT_CONFIG,
+        "production_quant_weight": settings.weight_quant,
+        "active_signal_profile": weights.profile,
+        "active_quant_weight": weights.quant,
+        "promotion_gate": {
+            "ic_floor": settings.qlib_train_ic_floor,
+            "icir_floor": settings.qlib_train_icir_floor,
+            "require_monotonic": settings.qlib_train_require_monotonic,
+        },
+        "panel_start": str(panel["date"].min().date()) if not panel.empty else None,
+        "panel_end": str(panel["date"].max().date()) if not panel.empty else None,
+    }
+
+
 def build_validation_report(
     predictions: pd.DataFrame,
     label: str = "",
@@ -115,7 +214,12 @@ def build_validation_report(
     q = quantile_returns(predictions, n_groups=n_groups)
     by_bucket = q.groupby("bucket")["ret"].agg(["mean", "count"]) if not q.empty else pd.DataFrame()
     quantiles = [
-        {"bucket": int(idx), "mean_return": round(float(row["mean"]), 6), "count": int(row["count"])}
+        {
+            "bucket": int(idx),
+            "mean_return": round(float(row["mean"]), 6),
+            "net_mean_return": round(float(row["mean"]) - A_SHARE_ROUND_TRIP_COST, 6),
+            "count": int(row["count"]),
+        }
         for idx, row in by_bucket.iterrows()
     ]
     top_bottom = None
@@ -143,6 +247,7 @@ def build_validation_report(
             "top_bottom": round(top_bottom, 6) if top_bottom is not None else None,
         },
         "quantiles": quantiles,
+        "equity_curve": equity_curve_report(q),
         "gates": gates,
         "recommendation": "eligible_for_quant_review" if all(gates.values()) else "keep_quant_disabled",
     }
@@ -280,12 +385,14 @@ def main() -> None:
         print("=" * 70)
 
         reports: dict[str, Any] = {
+            "experiment_config": offline_experiment_config(panel),
             "panel": {
                 "n_rows": len(panel),
                 "n_features": len(FEATURE_COLS),
                 "n_stocks": int(panel["symbol"].nunique()),
                 "start": str(panel["date"].min().date()),
                 "end": str(panel["date"].max().date()),
+                "coverage": data_coverage_report(panel),
             },
             "single_split": single_split(panel),
         }

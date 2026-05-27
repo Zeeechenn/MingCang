@@ -9,6 +9,14 @@ Probability of Backtest Overfitting（PBO，Bailey & López de Prado, 2014）
 
 输入：T×N 矩阵（时间 × 策略数），每格是该策略在该时点的收益。
 输出：PBO（0-1，越低越好；> 0.5 视为高度过拟合）。
+
+【M18.2 简化变体说明】
+本实现相较于原论文有以下简化：
+  1. 块内 Sharpe 用样本均值/std 计算（原文可选 logit 变换后用 rank），
+     实践中差异小，但极端收益分布时结果可能略偏。
+  2. C(S, S/2) 组合数超过 1000 时做等间距采样，不保证覆盖所有组合。
+  3. 未实现原论文的 logit 变换（用于 PBO 概率的无偏性修正）。
+这些简化在策略数 N < 50、组合数 ≤ 500 时影响可忽略。
 """
 from __future__ import annotations
 

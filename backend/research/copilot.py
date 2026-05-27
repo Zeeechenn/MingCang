@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from backend.config import settings
 from backend.data.database import DecisionRun, LongTermLabel, NewsItem, ResearchState, Signal
@@ -113,7 +113,7 @@ def _latest_decision(symbol: str, as_of: str, db) -> DecisionRun | None:
 
 
 def _latest_news(symbol: str, db, *, limit: int = 8) -> list[dict]:
-    cutoff = datetime.utcnow() - timedelta(days=14)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=14)
     rows = (
         db.query(NewsItem)
         .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
@@ -152,6 +152,14 @@ def _latest_long_term(symbol: str, db) -> dict | None:
 
 
 def _official_context(sig: Signal, decision: DecisionRun | None) -> dict:
+    """Build official context dict.
+
+    When ``decision`` comes from a different date than ``sig`` (fallback lookup),
+    ``decision_date`` will differ from ``signal_date`` and
+    ``decision_date_mismatch`` will be True.  Callers should surface this so
+    users know that position_pct / risk_notes / veto_reason are from a stale
+    decision run.
+    """
     final_action = _parse(decision.final_action_json, {}) if decision else {}
     risk = _parse(decision.risk_decision_json, {}) if decision else {}
     agent_outputs = _parse(decision.agent_outputs_json, {}) if decision else {}
@@ -160,9 +168,15 @@ def _official_context(sig: Signal, decision: DecisionRun | None) -> dict:
         "technical": sig.technical_score,
         "sentiment": sig.sentiment_score,
     }
+    decision_date: str | None = decision.as_of if decision else None
+    mismatch = bool(decision_date and decision_date != sig.date)
     return {
         "symbol": sig.symbol,
+        "signal_date": sig.date,
+        # Keep "date" as the signal date for backward compatibility.
         "date": sig.date,
+        "decision_date": decision_date,
+        "decision_date_mismatch": mismatch,
         "recommendation": sig.recommendation,
         "confidence": sig.confidence,
         "composite_score": sig.composite_score,
@@ -218,8 +232,17 @@ def _build_prompt(official: dict, news: list[dict], long_term: dict | None) -> s
             "allowed_existing_position_multipliers": [0.7, 1.0, 1.1],
         },
     }
+    note = ""
+    if official.get("decision_date_mismatch"):
+        note = (
+            f"注意：本次 official_signal 中的 position_pct / risk_notes / veto_reason "
+            f"来自 decision_date={official['decision_date']}，"
+            f"而信号日期为 signal_date={official['signal_date']}，存在日期错配。"
+            "在生成 shadow_position_pct 时请保守处理。\n"
+        )
     return (
-        "请基于以下本地证据生成精简副驾驶卡。"
+        note
+        + "请基于以下本地证据生成精简副驾驶卡。"
         "官方信号和止盈止损不会被你修改；shadow_position_pct 只是影子建议。\n"
         + json.dumps(payload, ensure_ascii=False, sort_keys=True)
     )
@@ -227,7 +250,7 @@ def _build_prompt(official: dict, news: list[dict], long_term: dict | None) -> s
 
 def _research_state(symbol: str, db) -> ResearchState:
     state = db.query(ResearchState).filter(ResearchState.symbol == symbol).first()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     if state is None:
         state = ResearchState(
             symbol=symbol,
@@ -252,21 +275,31 @@ def generate_symbol_copilot(symbol: str, db) -> dict:
     news = _latest_news(symbol, db)
     long_term = _latest_long_term(symbol, db)
 
+    _copilot_prompt = _build_prompt(official, news, long_term)
     data = get_provider().complete_structured(
-        prompt=_build_prompt(official, news, long_term),
+        prompt=_copilot_prompt,
         tool=_COPILOT_TOOL,
         system=_SYSTEM_PROMPT,
         max_tokens=700,
         model_tier="fast",
     )
+    try:
+        from backend.ops.llm_usage import log_llm_usage
+        log_llm_usage("copilot", _SYSTEM_PROMPT + _copilot_prompt, json.dumps(data))
+    except Exception:
+        pass
     if not data:
         raise CopilotUnavailable("LLM copilot returned empty result")
 
     shadow_position, risk_conflict, position_note = _bounded_shadow_position(official, data)
+    decision_date_mismatch = official.get("decision_date_mismatch", False)
     card = {
         "symbol": symbol,
         "as_of": sig.date,
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds"),
+        "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+        # Surface decision date so UI / callers can warn when it differs from signal date.
+        "decision_date": official.get("decision_date"),
+        "decision_date_mismatch": decision_date_mismatch,
         "stance": data.get("stance", "中性"),
         "event_read": str(data.get("event_read", ""))[:160],
         "technical_read": str(data.get("technical_read", ""))[:160],

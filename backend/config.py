@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     openai_model_capable: str = "gpt-4o"
     local_cli_model_fast: str = "claude-haiku-4-5-20251001"
     local_cli_model_capable: str = "claude-sonnet-4-6"
+    local_cli_timeout_seconds: int = 90
+    local_cli_prefer_codex: bool = False
+    qlib_train_ic_floor: float = 0.02
+    qlib_train_icir_floor: float = 0.3
+    qlib_train_require_monotonic: bool = True
 
     database_url: str = f"sqlite:///{BASE_DIR}/stock-sage.db"
     schedule_premarket: str = "08:30"
@@ -88,8 +93,10 @@ class Settings(BaseSettings):
     regime_filter_enabled: bool = True
     rsrs_window: int = 18
     rsrs_lookback: int = 600
-    rsrs_bearish_z: float = -0.7
-    diffusion_threshold: float = 0.3
+    rsrs_bearish_z: float = -0.7    # RSRS z-score < 此值视为极度看空（RiskManager否决买入）
+    rsrs_bullish_z: float = 0.7     # M20.2: RSRS z-score > 此值视为强势（原为硬编码0.7）
+    diffusion_threshold: float = 0.3         # 板块扩散 < 此值视为弱势（触发衰减/降级）
+    diffusion_strong_threshold: float = 0.6  # M20.2: 板块扩散 > 此值视为强势（原为硬编码0.6）
     regime_dampen_factor: float = 0.7
 
     # 阶段B ADX 震荡市过滤
@@ -181,6 +188,9 @@ class Settings(BaseSettings):
     # Bark 推送通知（可选，iOS App）
     bark_key: str = ""                    # Bark App 设备密钥
     bark_server: str = "https://api.day.app"  # 自建 Bark 服务时可替换
+
+    # LLM 成本监控（M25.3）：超过日预算（CNY）时发 Bark 报警
+    llm_daily_budget_cny: float = 1.0     # 默认 1 元/天预算上限
 
     # 调度器开关（false = 手动触发，不自动跑定时任务）
     scheduler_enabled: bool = False

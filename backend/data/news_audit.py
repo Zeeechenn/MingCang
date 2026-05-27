@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone, timezone
 from urllib.parse import urlparse
 
 from backend.data.news import RawNews
@@ -99,7 +99,7 @@ def audit_news_items(
     This is intentionally deterministic and cheap enough for the daily signal
     path. It does not crawl pages or call an LLM.
     """
-    current = now or datetime.utcnow()
+    current = now or datetime.now(timezone.utc).replace(tzinfo=None)
     seen_groups: set[str] = set()
     audits: list[NewsAudit] = []
     for item in items:

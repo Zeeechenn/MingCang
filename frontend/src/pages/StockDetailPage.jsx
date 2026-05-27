@@ -21,6 +21,11 @@ import NewsSidebar from '../components/NewsSidebar'
 import EvidenceCard from '../components/EvidenceCard'
 import ResearchCopilotCard from '../components/ResearchCopilotCard'
 import { getDossierActionView } from '../components/dossierSummary'
+import {
+  createSecondaryLoadingStatus,
+  hasSecondaryLoading,
+  markStockDetailSection,
+} from './stockDetailProgress'
 
 const PANEL = 'rounded-sm border border-stone-300/80 bg-[#faf6ec] dark:border-slate-700 dark:bg-[#1d232e]'
 const INSET = 'rounded-sm border border-stone-300 bg-[#f3eddc] dark:border-slate-700 dark:bg-[#161b25]'
@@ -43,6 +48,20 @@ function conflictTone(severity) {
   if (severity === 'high') return 'border-red-500/35 bg-red-500/10 text-red-700 dark:text-red-200'
   if (severity === 'medium') return 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-200'
   return 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700 dark:text-cyan-200'
+}
+
+function labelQualityView(label) {
+  if (!label) return null
+  if (label.constraint_eligible) {
+    return {
+      text: '已通过质量门，可约束官方动作',
+      tone: 'border-cyan-600/30 bg-cyan-600/10 text-cyan-700 dark:text-cyan-200',
+    }
+  }
+  return {
+    text: label.quality === 'failed' ? '待复核，仅展示，不约束官方动作' : '证据不足，仅展示，不约束官方动作',
+    tone: 'border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-200',
+  }
 }
 
 function DossierPanel({ dossier, signal }) {
@@ -117,6 +136,7 @@ function DossierPanel({ dossier, signal }) {
 }
 
 function LongTermPanel({ label, research, reviewing, notice, onReview }) {
+  const qualityView = labelQualityView(label)
   return (
     <section className={PANEL}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-300/80 p-4 dark:border-slate-700">
@@ -145,6 +165,11 @@ function LongTermPanel({ label, research, reviewing, notice, onReview }) {
                   <span className={`rounded-sm border px-2 py-1 text-xs font-semibold ${labelTone(label.label)}`}>
                     {label.label}
                   </span>
+                  {qualityView && (
+                    <span className={`rounded-sm border px-2 py-1 text-xs font-semibold ${qualityView.tone}`}>
+                      {qualityView.text}
+                    </span>
+                  )}
                   <span className="font-mono text-sm font-semibold text-stone-950 dark:text-slate-100">
                     {signed(label.score, 1)}
                   </span>
@@ -152,6 +177,11 @@ function LongTermPanel({ label, research, reviewing, notice, onReview }) {
                 <div className="mt-3 font-mono text-xs text-stone-500 dark:text-slate-400">
                   {label.date} · 有效至 {label.expires_at}
                 </div>
+                {label.quality_notes?.length > 0 && (
+                  <div className="mt-2 text-xs leading-relaxed text-stone-500 dark:text-slate-400">
+                    {label.quality_notes.slice(0, 2).join(' / ')}
+                  </div>
+                )}
               </>
             ) : (
               <div className="mt-3 text-sm text-stone-500 dark:text-slate-400">暂无有效长期标签</div>
@@ -203,6 +233,24 @@ function SignalHistoryPanel({ signals }) {
   )
 }
 
+function SectionNotice({ status, label }) {
+  if (status?.loading) {
+    return (
+      <div className="rounded-sm border border-stone-300/80 bg-[#faf6ec] px-3 py-2 text-xs text-stone-500 dark:border-slate-700 dark:bg-[#1d232e] dark:text-slate-400">
+        {label}加载中…
+      </div>
+    )
+  }
+  if (status?.error) {
+    return (
+      <div className="rounded-sm border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">
+        {label}暂不可用：{status.error}
+      </div>
+    )
+  }
+  return null
+}
+
 export default function StockDetailPage({ theme = 'dark' }) {
   const { symbol } = useParams()
   const [signal, setSignal] = useState(null)
@@ -221,45 +269,75 @@ export default function StockDetailPage({ theme = 'dark' }) {
   const [copilotLoading, setCopilotLoading] = useState(false)
   const [copilotError, setCopilotError] = useState('')
   const [coreLoading, setCoreLoading] = useState(true)
-  const [extrasLoading, setExtrasLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [coreError, setCoreError] = useState('')
+  const [sectionStatus, setSectionStatus] = useState(createSecondaryLoadingStatus)
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
+    let cancelled = false
+    const settleSection = (name, patch) => {
+      if (!cancelled) setSectionStatus((prev) => markStockDetailSection(prev, name, patch))
+    }
+    const loadSection = (name, request, applyData) => {
+      settleSection(name, { loading: true, error: '' })
+      request
+        .then((data) => {
+          if (!cancelled) applyData(data)
+        })
+        .catch((e) => {
+          settleSection(name, { error: e.message || '加载失败' })
+        })
+        .finally(() => {
+          settleSection(name, { loading: false })
+        })
+    }
+
     setCoreLoading(true)
-    setExtrasLoading(true)
-    setError('')
+    setCoreError('')
+    setSectionStatus(createSecondaryLoadingStatus())
     setSignal(null)
     setDossier(null)
     setPrices([])
-    Promise.all([
-      getLatestSignal(symbol).catch(() => null),
-      getPrices(symbol, 120).catch(() => []),
-    ]).then(([sig, px]) => {
-      setSignal(sig)
-      setPrices(px)
-    }).catch(e => {
-      setError(e.message)
-    }).finally(() => setCoreLoading(false))
+    setNews(null)
+    setEvalData(null)
+    setEvidence([])
+    setResearch(null)
+    setCoverage(null)
+    setLongTerm(null)
+    setHistory([])
 
-    Promise.all([
-      getResearchDossier(symbol).catch(() => null),
-      getNews(symbol, 48).catch(() => []),
-      getSignalEvidence(symbol, 5).catch(() => []),
-      getResearchState(symbol).catch(() => null),
-      getDataCoverage().catch(() => null),
-      getLongTermLabel(symbol).catch(() => null),
-      getSignals(symbol, 8).catch(() => []),
-    ]).then(([ds, nw, ev, rs, cov, lt, sigHistory]) => {
+    Promise.allSettled([
+      getLatestSignal(symbol),
+      getPrices(symbol, 120),
+    ]).then(([sig, px]) => {
+      if (cancelled) return
+      const failures = []
+      if (sig.status === 'fulfilled') setSignal(sig.value)
+      else failures.push('最新信号')
+      if (px.status === 'fulfilled') setPrices(px.value)
+      else failures.push('价格主图')
+      setCoreError(failures.length ? `${failures.join('、')}加载失败` : '')
+    }).finally(() => {
+      if (!cancelled) setCoreLoading(false)
+    })
+
+    loadSection('dossier', getResearchDossier(symbol), (ds) => {
       setDossier(ds)
       if (ds?.latest_signal) setSignal(ds.latest_signal)
-      setNews(nw)
-      setEvidence(ds?.evidence || ev)
-      setResearch(ds?.research_state || rs)
-      setCoverage(cov)
-      setLongTerm(ds?.long_term_label || lt)
-      setHistory(sigHistory)
-    }).finally(() => setExtrasLoading(false))
+      if (ds?.evidence) setEvidence(ds.evidence)
+      if (ds?.research_state) setResearch(ds.research_state)
+      if (ds?.long_term_label) setLongTerm(ds.long_term_label)
+    })
+    loadSection('news', getNews(symbol, 48), setNews)
+    loadSection('evidence', getSignalEvidence(symbol, 5), setEvidence)
+    loadSection('research', getResearchState(symbol), setResearch)
+    loadSection('coverage', getDataCoverage(), setCoverage)
+    loadSection('longTerm', getLongTermLabel(symbol), setLongTerm)
+    loadSection('history', getSignals(symbol, 8), setHistory)
+
+    return () => {
+      cancelled = true
+    }
   }, [symbol])
 
   useEffect(() => {
@@ -349,16 +427,22 @@ export default function StockDetailPage({ theme = 'dark' }) {
         </div>
       </div>
 
-      {coreLoading ? (
-        <div className="py-20 text-center text-stone-500 dark:text-slate-400">加载中…</div>
-      ) : error ? (
-        <div className="py-20 text-center text-red-600 dark:text-red-300">{error}</div>
-      ) : (
         <div className="space-y-4">
+          {coreError && (
+            <div className="rounded-sm border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">
+              {coreError}
+            </div>
+          )}
           {/* 主图 */}
-          <Chart prices={prices} signal={signal} theme={theme} />
+          {coreLoading ? (
+            <div className="rounded-sm border border-stone-300/80 bg-[#faf6ec] py-20 text-center text-sm text-stone-500 dark:border-slate-700 dark:bg-[#1d232e] dark:text-slate-400">
+              加载主图和最新信号…
+            </div>
+          ) : (
+            <Chart prices={prices} signal={signal} theme={theme} />
+          )}
 
-          {extrasLoading && (
+          {hasSecondaryLoading(sectionStatus) && (
             <div className="rounded-sm border border-stone-300/80 bg-[#faf6ec] px-4 py-3 text-sm text-stone-500 dark:border-slate-700 dark:bg-[#1d232e] dark:text-slate-400">
               正在补充新闻、证据和长期标签...
             </div>
@@ -367,6 +451,8 @@ export default function StockDetailPage({ theme = 'dark' }) {
           {/* 信号卡片 + 新闻侧栏 */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 space-y-4">
+              <SectionNotice status={sectionStatus.longTerm} label="长期标签" />
+              <SectionNotice status={sectionStatus.research} label="研究状态" />
               <LongTermPanel
                 label={longTerm}
                 research={research}
@@ -374,6 +460,7 @@ export default function StockDetailPage({ theme = 'dark' }) {
                 notice={notice}
                 onReview={handleReviewLatest}
               />
+              <SectionNotice status={sectionStatus.dossier} label="研究档案" />
               <DossierPanel dossier={dossier} signal={signal} />
               <SignalCard signal={signal} />
               <ResearchCopilotCard
@@ -382,6 +469,8 @@ export default function StockDetailPage({ theme = 'dark' }) {
                 error={copilotError}
                 onRefresh={handleRefreshCopilot}
               />
+              <SectionNotice status={sectionStatus.evidence} label="证据链" />
+              <SectionNotice status={sectionStatus.coverage} label="数据覆盖" />
               <EvidenceCard evidence={evidence} research={research} coverage={coverage} />
               <SignalEvalCard
                 evalData={evalData}
@@ -389,14 +478,15 @@ export default function StockDetailPage({ theme = 'dark' }) {
                 onDaysChange={setEvalDays}
                 loading={evalLoading}
               />
+              <SectionNotice status={sectionStatus.history} label="历史信号" />
               <SignalHistoryPanel signals={history} />
             </div>
             <div>
-              <NewsSidebar news={news} />
+              <SectionNotice status={sectionStatus.news} label="新闻" />
+              <NewsSidebar news={sectionStatus.news?.error ? [] : news} />
             </div>
           </div>
         </div>
-      )}
     </div>
   )
 }

@@ -125,7 +125,8 @@ def run_walk_forward(
     }
     if metric_values:
         mean = statistics.mean(metric_values)
-        stdev = statistics.pstdev(metric_values) if len(metric_values) > 1 else 0.0
+        # M18.2 修复：t-stat 需用样本标准差（stdev, n-1），不能用总体标准差（pstdev, n）
+        stdev = statistics.stdev(metric_values) if len(metric_values) > 1 else 0.0
         summary["mean"] = round(mean, 4)
         summary["stdev"] = round(stdev, 4)
         summary["min"] = round(min(metric_values), 4)
@@ -134,10 +135,12 @@ def run_walk_forward(
         if stdev > 0 and len(metric_values) > 1:
             t = mean / (stdev / (len(metric_values) ** 0.5))
             summary["t_stat_across_windows"] = round(t, 3)
-        # 用 DSR 估 SR_0
+        # M18.1 n_trials 语义：walk-forward 窗口数 ≠ 参数扫描试验数，
+        # 此处用窗口数估 SR_0 是"多窗口 Sharpe 期望上界"，仅作稳健性参考
         try:
             from backend.backtest.statistics import expected_max_sharpe
-            sr0 = expected_max_sharpe(metric_values, n_trials=len(metric_values))
+            n_w = len(metric_values)
+            sr0 = expected_max_sharpe(metric_values, n_trials=n_w)
             summary["multi_window_sr_threshold"] = round(sr0, 4)
             summary["passes_multi_window_threshold"] = mean > sr0
         except Exception as e:

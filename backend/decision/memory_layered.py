@@ -15,7 +15,7 @@ FinMem 风格分层决策记忆（阶段C）
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from backend.config import settings
@@ -60,7 +60,7 @@ def save_short_term(symbol: str, signal: dict) -> None:
     """写入运行时短期记忆"""
     arr = _SHORT_TERM.setdefault(symbol, [])
     arr.append({
-        "ts": datetime.utcnow().isoformat(),
+        "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "score": signal.get("composite_score"),
         "rec": signal.get("recommendation"),
         "stop": signal.get("stop_loss"),
@@ -272,16 +272,29 @@ def weekly_long_term_reflect(db) -> str | None:
     调度器周末调用：把过去 7 天所有失败信号丢给 Sonnet，写入 long_term_reflection.md。
     返回新增章节的摘要；失败返回 None。
     """
-    from backend.data.database import Price, Signal
+    from backend.data.database import IndexPrice, Price, Signal
     from backend.llm import get_provider
 
-    cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)).strftime("%Y-%m-%d")
     sigs = (db.query(Signal)
             .filter(Signal.date >= cutoff)
             .filter(Signal.recommendation.in_(entry_recommendations(include_legacy=True)))
             .order_by(Signal.date.asc()).all())
     if not sigs:
         return None
+
+    # M15.3 失败判定基准化：用沪深 300 同期收益做超额收益判断，避免大盘大跌日
+    # 把所有正向信号系统性记为"失败"导致长期反思偏空。
+    def _bench_pct(sig_date: str) -> float | None:
+        b0 = (db.query(IndexPrice.close)
+              .filter(IndexPrice.symbol == "sh000300", IndexPrice.date == sig_date)
+              .first())
+        b1 = (db.query(IndexPrice.close)
+              .filter(IndexPrice.symbol == "sh000300", IndexPrice.date > sig_date)
+              .order_by(IndexPrice.date.asc()).first())
+        if not b0 or not b1 or not b0[0]:
+            return None
+        return (b1[0] - b0[0]) / b0[0] * 100
 
     fail_lines = []
     for sig in sigs:
@@ -294,8 +307,11 @@ def weekly_long_term_reflect(db) -> str | None:
         if not sig_row or not next_row:
             continue
         pct = (next_row[0] - sig_row[0]) / sig_row[0] * 100
-        if pct < 0:
-            fail_lines.append(f"- {sig.date} {sig.symbol} 建议{sig.recommendation}(综合分{sig.composite_score:+.0f}) → 实际{pct:+.2f}% 失败")
+        bench_pct = _bench_pct(sig.date)
+        excess = (pct - bench_pct) if bench_pct is not None else pct
+        if excess < 0:
+            bench_note = f" (vs HS300 {bench_pct:+.2f}%, 超额 {excess:+.2f}%)" if bench_pct is not None else " (无 HS300 基准, 用裸收益)"
+            fail_lines.append(f"- {sig.date} {sig.symbol} 建议{sig.recommendation}(综合分{sig.composite_score:+.0f}) → 实际{pct:+.2f}%{bench_note}")
 
     if not fail_lines:
         return None
@@ -332,7 +348,7 @@ def weekly_long_term_reflect(db) -> str | None:
         return None
 
     _ensure_dir()
-    week_label = datetime.utcnow().strftime("%Y-W%V")
+    week_label = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-W%V")
     section = f"\n## {week_label}\n\n失败信号:\n" + "\n".join(fail_lines) + f"\n\n反思:\n{text}\n"
     with LONG_TERM_PATH.open("a", encoding="utf-8") as f:
         f.write(section)

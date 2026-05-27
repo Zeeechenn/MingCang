@@ -345,7 +345,9 @@ def _load_inputs_from_db(
             )
             if len(prices) < 2:
                 continue
-            entry = prices[0].close
+            # M18.2 入场价滞后：信号在 bar 0 收盘生成，实际在 bar 1 开盘入场
+            # （不能用同 bar 收盘，否则隐含未来信息 / 不可成交价）
+            entry = prices[1].open
             fwd = [(p.close - entry) / entry for p in prices[1:]]
             tech = {
                 "score": s.technical_score or 0.0,

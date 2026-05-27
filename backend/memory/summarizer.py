@@ -107,6 +107,12 @@ def summarize_if_needed(
         max_tokens=600,
         model_tier="fast",
     ) or {}
+    try:
+        import json as _json
+        from backend.ops.llm_usage import log_llm_usage
+        log_llm_usage("chat", prompt, _json.dumps(data))
+    except Exception:
+        pass
     new_summary = (data.get("summary") or "").strip()
     if not new_summary:
         return False

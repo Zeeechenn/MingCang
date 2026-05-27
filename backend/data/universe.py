@@ -48,23 +48,40 @@ def filter_universe(
     return out
 
 
-def get_hs300_constituents() -> list[UniverseCandidate]:
-    """Fetch current HS300 constituents from AkShare."""
+def get_hs300_constituents(max_retries: int = 3, retry_delay: float = 2.0) -> list[UniverseCandidate]:
+    """
+    Fetch current HS300 constituents from AkShare.
+
+    M19.4：增加指数退避重试（默认 3 次），避免 AkShare 偶发网络超时导致空列表。
+    """
     try:
         import akshare as ak
     except ImportError:
         logger.error("akshare 未安装")
         return []
 
-    df = ak.index_stock_cons_csindex(symbol="000300")
-    candidates = []
-    for _, row in df.iterrows():
-        raw_code = str(row.get("成分券代码") or row.get("con_code") or row.get("品种代码") or "")
-        code = raw_code.split(".")[0].zfill(6)
-        name = str(row.get("成分券名称") or row.get("con_name") or row.get("品种名称") or code)
-        if code.isdigit() and code != "000000":
-            candidates.append(UniverseCandidate(symbol=code, name=name))
-    return candidates
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            df = ak.index_stock_cons_csindex(symbol="000300")
+            candidates = []
+            for _, row in df.iterrows():
+                raw_code = str(row.get("成分券代码") or row.get("con_code") or row.get("品种代码") or "")
+                code = raw_code.split(".")[0].zfill(6)
+                name = str(row.get("成分券名称") or row.get("con_name") or row.get("品种名称") or code)
+                if code.isdigit() and code != "000000":
+                    candidates.append(UniverseCandidate(symbol=code, name=name))
+            return candidates
+        except Exception as e:
+            last_exc = e
+            if attempt < max_retries - 1:
+                wait = retry_delay * (2 ** attempt)
+                logger.warning("get_hs300_constituents 失败（第%d次），%.1fs后重试: %s",
+                               attempt + 1, wait, e)
+                time.sleep(wait)
+            else:
+                logger.error("get_hs300_constituents 最终失败: %s", e)
+    return []
 
 
 def merge_candidates(*groups: list[UniverseCandidate], limit: int | None = None) -> list[UniverseCandidate]:

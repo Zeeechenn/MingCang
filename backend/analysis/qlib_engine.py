@@ -15,12 +15,14 @@ import numpy as np
 import pandas as pd
 
 from backend.analysis.factors import add_all_factors
+from backend.config import settings
 from backend.data.qlib_data import FEATURE_COLS, build_inference_features
 
 logger = logging.getLogger(__name__)
 
 MODEL_DIR = Path.home() / ".stock-sage" / "models"
 MODEL_PATH = MODEL_DIR / "lgbm_alpha.pkl"
+CANDIDATE_MODEL_PATH = MODEL_DIR / "lgbm_alpha_candidate.pkl"
 
 
 def daily_rank_groups(df: pd.DataFrame) -> list[int]:
@@ -115,6 +117,36 @@ def _momentum_fallback(df: pd.DataFrame) -> dict:
         "momentum_5d": round(float(mom5), 2),
         "momentum_20d": round(float(mom20), 2),
     }
+
+
+def _validation_predictions(model, val_df: pd.DataFrame) -> pd.DataFrame:
+    """Build validation predictions in the format shared with Qlib validation reports."""
+    return pd.DataFrame({
+        "date": val_df["date"].values if "date" in val_df.columns else range(len(val_df)),
+        "symbol": val_df["symbol"].values if "symbol" in val_df.columns else ["__SINGLE__"] * len(val_df),
+        "pred": model.predict(val_df[FEATURE_COLS]),
+        "label": val_df["label"].values,
+    })
+
+
+def _passes_promotion_gate(report: dict, runtime_settings=None) -> bool:
+    """Return whether a trained candidate may replace the production model."""
+    runtime_settings = settings if runtime_settings is None else runtime_settings
+    metrics = report.get("metrics") or {}
+    gates = report.get("gates") or {}
+    ic = float(metrics.get("ic_mean") or 0.0)
+    icir = float(metrics.get("icir") or 0.0)
+    monotonic = bool(gates.get("pass_monotonic"))
+    pass_ic = ic >= runtime_settings.qlib_train_ic_floor
+    pass_icir = icir >= runtime_settings.qlib_train_icir_floor
+    pass_monotonic = monotonic or not runtime_settings.qlib_train_require_monotonic
+    return pass_ic and pass_icir and pass_monotonic
+
+
+def _save_model(model, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump(model, f)
 
 
 def qlib_score(df_raw: pd.DataFrame, symbol: str | None = None, db=None) -> dict:
@@ -239,10 +271,42 @@ def train(
         model_type, len(df), len(train_df), len(val_df), ic,
     )
 
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    with open(MODEL_PATH, "wb") as f:
-        pickle.dump(model, f)
-    logger.info("模型已保存：%s", MODEL_PATH)
+    _save_model(model, CANDIDATE_MODEL_PATH)
+    logger.info("候选模型已保存：%s", CANDIDATE_MODEL_PATH)
+
+    from backend.backtest.alphalens_qlib import build_validation_report
+
+    validation = build_validation_report(
+        _validation_predictions(model, val_df),
+        label=f"train_candidate:{model_type}",
+        sample={
+            "n_rows": len(df),
+            "train_rows": len(train_df),
+            "validation_rows": len(val_df),
+            "n_stocks": int(df["symbol"].nunique()) if "symbol" in df.columns else 1,
+        },
+    )
+    metrics = validation.get("metrics") or {}
+    logger.info(
+        "候选模型验证 | IC=%s ICIR=%s monotonic=%s",
+        metrics.get("ic_mean"),
+        metrics.get("icir"),
+        (validation.get("gates") or {}).get("pass_monotonic"),
+    )
+    if not _passes_promotion_gate(validation):
+        logger.warning(
+            "候选模型未通过 promotion gate，保留旧生产模型：IC=%s (floor %.4f), ICIR=%s (floor %.4f), monotonic=%s",
+            metrics.get("ic_mean"),
+            settings.qlib_train_ic_floor,
+            metrics.get("icir"),
+            settings.qlib_train_icir_floor,
+            (validation.get("gates") or {}).get("pass_monotonic"),
+        )
+        return False
+
+    _save_model(model, MODEL_PATH)
+    _MODEL_CACHE.update({"path_mtime": None, "model": None, "disabled_reason": None})
+    logger.info("候选模型通过 promotion gate，已晋升为生产模型：%s", MODEL_PATH)
     return True
 
 

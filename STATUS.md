@@ -82,13 +82,13 @@
 
 ## 验证摘要
 
-历史 M1.3 公开摘要为 **N=2 单股回测逐股均值**，不是组合级权益曲线指标，也不再作为系统级验收结论单独引用。
+历史 M1.3 公开摘要为 **N=2 单股回测逐股均值**，不是组合级权益曲线指标，也不再作为系统级验收结论单独引用。当前固化复现以 2026-05-27 重跑输出为准。
 
-| 指标 | 历史逐股均值 | 口径 |
+| 指标 | 当前固化复现 | 口径 |
 |------|-------------|------|
-| Sharpe | **1.36** | N=2 单股均值 |
-| 最大回撤 | **8.60%** | N=2 单股均值 |
-| 净盈亏比 | **2.78** | profit factor 均值 |
+| Sharpe | **2.50** | N=2 单股均值 |
+| 最大回撤 | **15.69%** | N=2 单股均值 |
+| 净盈亏比 | **3.13** | profit factor 均值 |
 
 固定复现范围：`300308, 688008`，区间 `2025-11-01 ~ 2026-05-14`，命令：
 `PYTHONPATH=. python3 backend/backtest/backtrader_eval.py --symbols 300308 688008 --start 2025-11-01 --end 2026-05-14 --legacy`。
@@ -100,11 +100,15 @@
 
 - M22 数据完整性修复后，持仓写入路径已锁定正数数量/成本/价格与 CN/US 市场枚举；重复平仓返回 409，不再覆盖首次 realized PnL。
 - 非默认 SQLite 初始化默认跳过本机 `~/.stock-sage/memory` 迁移；确需导入时设置 `STOCKSAGE_MIGRATE_LOCAL_MEMORY=1`。
-- `python3 -m pytest -q -p no:cacheprovider tests/test_llm_runtime_provider.py tests/test_long_term_team.py tests/integration/test_long_term_pipeline.py tests/test_stage_a_fixes.py tests/test_frontend_expansion_api.py tests/test_stock_memory.py` → **66 passed**（2026-05-26 public research readiness focused suite）。
-- `python3 -m pytest -q -p no:cacheprovider` → **439 passed**（2026-05-26 public research readiness）。
+- `python3 -m pytest -q -p no:cacheprovider tests/test_llm_runtime_provider.py tests/test_long_term_team.py tests/integration/test_long_term_pipeline.py tests/test_stage_a_fixes.py tests/test_frontend_expansion_api.py tests/test_stock_memory.py` → **70 passed**（2026-05-27 public research readiness focused suite）。
+- `python3 -m pytest -q -p no:cacheprovider tests/test_backfill_signals.py tests/test_compare_paths.py tests/test_sweep_threshold.py tests/test_exit_sweep.py` → **32 passed**（2026-05-27 backfill look-ahead guard）。
+- `python3 -m pytest -q -p no:cacheprovider tests/test_qlib_ranker.py tests/test_m6_backtest_report.py tests/test_qlib_validation_panel.py` → **8 passed**（2026-05-27 Qlib promotion/offline gate）。
+- `python3 -m pytest -q -p no:cacheprovider tests/test_cross_entry_contracts.py tests/test_agent_cli.py tests/test_agent_context.py tests/test_m10_quality_scheduler.py tests/test_m6_api.py` → **24 passed**（2026-05-27 cross-entry contract regression）。
+- `PYTHONPATH=. python3 backend/backtest/alphalens_qlib.py --walk-forward --json-output /private/tmp/stocksage_qlib_offline_m25_5.json` → 通过；single split `IC=0.0372` / `ICIR=0.229` 且分层非单调，walk-forward `IC=-0.0058` / `ICIR=-0.025` 且分层非单调，继续保持 `weight_quant=0.0`。
+- `python3 -m pytest -q -p no:cacheprovider` → **454 passed**（2026-05-27 M25.4 StockDetail progressive loading）。
 - `python3 -m compileall backend tests` → 通过
-- `cd frontend && node --test src/*.test.js src/pages/*.test.js` → **9 passed**
-- `cd frontend && npm run build` → 通过（57 modules，约 453 KB / gzip 142 KB）
+- `cd frontend && node --test src/*.test.js src/components/*.test.js src/pages/*.test.js` → **19 passed**（2026-05-27 StockDetail progressive loading）
+- `cd frontend && npm run build` → 通过（62 modules，约 470 KB / gzip 146 KB）
 
 ## 环境准备
 

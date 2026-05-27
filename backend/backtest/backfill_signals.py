@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from datetime import date as date_cls
 
 import pandas as pd
 
@@ -58,14 +59,51 @@ def _forward_returns(db, symbol: str, as_of: str, entry_close: float, n: int = 5
     return [(r.close - entry_close) / entry_close for r in rows]
 
 
+def _quant_result_for_backfill(
+    df: pd.DataFrame,
+    symbol: str,
+    as_of: str,
+    db,
+    *,
+    allow_lookahead_quant: bool = False,
+) -> dict:
+    """Return a quant snapshot for historical backfills without silent look-ahead."""
+    from backend.config import active_signal_weights
+
+    weights = active_signal_weights(date_cls.fromisoformat(as_of))
+    if weights.quant <= 0:
+        return {
+            "score": 0.0,
+            "model": "disabled_quant_weight_zero",
+            "quant_weight": weights.quant,
+            "profile": weights.profile,
+        }
+    if not allow_lookahead_quant:
+        return {
+            "score": 0.0,
+            "model": "disabled_lookahead_guard",
+            "quant_weight": weights.quant,
+            "profile": weights.profile,
+            "as_of": as_of,
+            "reason": "historical backfill refuses current production Qlib model because it may be trained on data after as_of",
+        }
+
+    from backend.analysis.qlib_engine import qlib_score
+
+    result = qlib_score(df, symbol=symbol, db=db)
+    result["lookahead_warning"] = True
+    result["as_of"] = as_of
+    return result
+
+
 def generate_input(
     symbol: str, date: str, db,
     *,
     use_llm_news: bool = False,
     market: str = "CN",
+    allow_lookahead_quant: bool = False,
 ) -> SignalInput | None:
     """单点回填：(symbol, date) → SignalInput（无足够数据时返回 None）"""
-    from backend.analysis.qlib_engine import qlib_score
     from backend.analysis.technical import technical_score
 
     df = _load_price_pit(db, symbol, date, days_back=200)
@@ -83,9 +121,15 @@ def generate_input(
         return None
 
     try:
-        quant_result = qlib_score(df, symbol=symbol, db=db)
+        quant_result = _quant_result_for_backfill(
+            df,
+            symbol,
+            date,
+            db,
+            allow_lookahead_quant=allow_lookahead_quant,
+        )
     except Exception as e:
-        logger.debug("qlib_score 失败 %s %s: %s", symbol, date, e)
+        logger.debug("quant backfill 失败 %s %s: %s", symbol, date, e)
         quant_result = {"score": 0.0, "model": "fallback"}
 
     sentiment_result = get_or_backfill(symbol, date, db, use_llm=use_llm_news)
@@ -110,6 +154,7 @@ def iter_window(
     *,
     use_llm_news: bool = False,
     every_n_days: int = 1,
+    allow_lookahead_quant: bool = False,
 ) -> Iterator[SignalInput]:
     """
     迭代生成 [start, end] 内每个 (symbol, date) 的 SignalInput。
@@ -133,7 +178,13 @@ def iter_window(
             ]
             sampled = dates[::every_n_days]
             for d in sampled:
-                inp = generate_input(sym, d, db, use_llm_news=use_llm_news)
+                inp = generate_input(
+                    sym,
+                    d,
+                    db,
+                    use_llm_news=use_llm_news,
+                    allow_lookahead_quant=allow_lookahead_quant,
+                )
                 if inp:
                     yield inp
     finally:
@@ -146,12 +197,14 @@ def backfill_window(
     *,
     use_llm_news: bool = False,
     every_n_days: int = 1,
+    allow_lookahead_quant: bool = False,
 ) -> list[SignalInput]:
     """同 iter_window 但返回 list"""
     return list(iter_window(
         start, end, symbols,
         use_llm_news=use_llm_news,
         every_n_days=every_n_days,
+        allow_lookahead_quant=allow_lookahead_quant,
     ))
 
 
@@ -170,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--symbols", nargs="*", help="指定股票代码（默认全活跃股）")
     ap.add_argument("--use-llm-news", action="store_true",
                     help="对 sentiment cache miss 触发 OpenAI 调用回填")
+    ap.add_argument("--allow-lookahead-quant", action="store_true",
+                    help="允许使用当前生产 Qlib 模型回填历史信号；仅用于显式前视实验")
     args = ap.parse_args(argv)
 
     print(f"# 回填 {args.start} ~ {args.end} every_n_days={args.every_n_days}", flush=True)
@@ -178,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
         symbols=args.symbols,
         use_llm_news=args.use_llm_news,
         every_n_days=args.every_n_days,
+        allow_lookahead_quant=args.allow_lookahead_quant,
     )
     print(f"# 生成 {len(inputs)} 个 SignalInput", flush=True)
 

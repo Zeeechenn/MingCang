@@ -2,7 +2,7 @@
 import hashlib
 import json
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone, timezone
 
 from backend.config import settings
 from backend.llm import get_provider, has_runtime_llm_provider
@@ -122,7 +122,7 @@ def _persistent_cache_set(key: str, titles_hash: str, symbol: str | None, value:
 
         db = SessionLocal()
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             payload = json.dumps(value, ensure_ascii=False)
             row = db.query(SentimentCache).filter(SentimentCache.cache_key == key).first()
             if row:
@@ -174,6 +174,12 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
         max_tokens=300,
         model_tier="fast",
     )
+    try:
+        import json as _json
+        from backend.ops.llm_usage import log_llm_usage
+        log_llm_usage("sentiment", SYSTEM_PROMPT + prompt, _json.dumps(data))
+    except Exception:
+        pass
 
     if not data:
         return {"sentiment": 0.0, "summary": "解析失败", "impact": "short", "key_events": []}

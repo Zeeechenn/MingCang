@@ -85,19 +85,32 @@ export default function ChatPage() {
     try {
       const sessionId = await ensureActiveSession()
       const draftId = `stream-${Date.now()}`
-      setRows((v) => [...v, { id: draftId, role: 'assistant', answer: '', used_resources: [] }])
+      setRows((v) => [...v, { id: draftId, role: 'assistant', answer: '', used_resources: [], _stage: 'prepare' }])
       let streamed = ''
       let finalPayload = null
       try {
         finalPayload = await chatWithAIStream(
           { message: user.content, mode, session_id: sessionId },
           {
+            onPrepare: () => {
+              setRows((v) => v.map((row) => (row.id === draftId ? { ...row, _stage: 'prepare' } : row)))
+            },
+            onRunning: (data) => {
+              const label = data.stage === 'long_term_team' ? '长期研究团队分析中…' : '处理中…'
+              setRows((v) => v.map((row) => (row.id === draftId ? { ...row, _stage: 'running', _stageLabel: label } : row)))
+            },
+            onEvidence: () => {
+              setRows((v) => v.map((row) => (row.id === draftId ? { ...row, _stage: 'evidence', _stageLabel: '读取项目证据…' } : row)))
+            },
             onToken: (chunk) => {
               streamed += chunk
-              setRows((v) => v.map((row) => (row.id === draftId ? { ...row, answer: streamed } : row)))
+              setRows((v) => v.map((row) => (row.id === draftId ? { ...row, answer: streamed, _stage: 'streaming' } : row)))
             },
             onMeta: (meta) => {
               setRows((v) => v.map((row) => (row.id === draftId ? { ...row, ...meta } : row)))
+            },
+            onError: (err) => {
+              setRows((v) => v.map((row) => (row.id === draftId ? { ...row, answer: err.message || '服务异常', _stage: 'error' } : row)))
             },
           },
         )
@@ -227,6 +240,13 @@ export default function ChatPage() {
             )}
             {rows.map((row, index) => (
               <div key={row.id || index} className={`max-w-[86%] rounded-sm border p-3 text-sm leading-relaxed ${row.role === 'user' ? 'ml-auto border-cyan-700/40 bg-cyan-700/10 text-stone-900 dark:text-slate-100' : 'border-stone-300 bg-[#f3eddc] text-stone-700 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-300'}`}>
+                {/* 阶段状态指示器：answer 为空且处于处理阶段时显示 */}
+                {!row.answer && row._stage && row._stage !== 'error' && (
+                  <div className="flex items-center gap-1.5 text-xs text-stone-400 dark:text-slate-500">
+                    <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-500" />
+                    {row._stageLabel || (row._stage === 'prepare' ? '已收到请求…' : row._stage === 'running' ? '处理中…' : '读取证据…')}
+                  </div>
+                )}
                 <ChatMarkdown text={row.content || row.answer} />
                 {row.used_resources?.length > 0 && (
                   <div className="mt-2 font-mono text-[10px] text-stone-500 dark:text-slate-500">resources: {row.used_resources.join(', ')}</div>

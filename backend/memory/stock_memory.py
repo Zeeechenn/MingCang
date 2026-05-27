@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -35,7 +35,7 @@ _TYPE_ORDER = {
 
 
 def _utc_now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _iso(value: Any) -> str | None:
@@ -493,21 +493,48 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
         """), {"symbol": row.symbol, "date": decision_date}).all()
         if len(prices) < 11 or not prices[0].close:
             continue
+        # M15.3 outcome 基准化：用沪深 300 同期收益做相对强弱判断，避免 A 股高 beta
+        # 大盘下跌日把所有正向判断系统性记为"失败"
+        bench_rows = db.execute(text("""
+            SELECT date, close FROM index_prices
+            WHERE symbol = :bench AND date >= :date
+            ORDER BY date ASC
+            LIMIT 11
+        """), {"bench": "sh000300", "date": decision_date}).all()
+        bench_close: dict[str, float] = {r.date: float(r.close) for r in bench_rows if r.close is not None}
+        bench_base = bench_close.get(prices[0].date) if bench_rows else None
         base = float(prices[0].close)
         offsets = [1, 3, 5, 10]
         returns = {}
+        excess_returns: dict[str, float] = {}
         for offset in offsets:
             if len(prices) > offset and prices[offset].close is not None:
-                returns[f"{offset}d"] = round((float(prices[offset].close) - base) / base * 100, 2)
+                stock_ret = (float(prices[offset].close) - base) / base * 100
+                returns[f"{offset}d"] = round(stock_ret, 2)
+                if bench_base:
+                    bench_close_at = bench_close.get(prices[offset].date)
+                    if bench_close_at is not None:
+                        bench_ret = (bench_close_at - bench_base) / bench_base * 100
+                        excess_returns[f"{offset}d"] = round(stock_ret - bench_ret, 2)
         if not returns:
             continue
         summary_bits = "，".join(f"{k}{v:+.2f}%" for k, v in returns.items())
+        if excess_returns:
+            summary_bits += "（vs HS300："
+            summary_bits += "，".join(f"{k}{v:+.2f}%" for k, v in excess_returns.items())
+            summary_bits += "）"
         create_stock_memory(
             db,
             symbol=row.symbol,
             memory_type="outcome",
             summary=f"{decision_date} 判断后表现：{summary_bits}",
-            evidence={"judgment_id": row.id, "returns": returns, "recommendation": recommendation},
+            evidence={
+                "judgment_id": row.id,
+                "returns": returns,
+                "excess_returns": excess_returns,
+                "benchmark": "sh000300" if excess_returns else None,
+                "recommendation": recommendation,
+            },
             source_type="outcome_update",
             source_ref=source_ref,
             importance=3,
@@ -516,7 +543,9 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
         )
         written += 1
 
-        latest_return = next((returns[k] for k in ("10d", "5d", "3d", "1d") if k in returns), None)
+        # M15.3：lesson 触发改用超额收益（excess vs HS300），无基准数据时回退裸收益
+        judgement_returns = excess_returns or returns
+        latest_return = next((judgement_returns[k] for k in ("10d", "5d", "3d", "1d") if k in judgement_returns), None)
         if latest_return is not None and is_entry_signal(recommendation, include_legacy=True) and latest_return < 0:
             lesson_ref = f"lesson:{row.id}"
             if _id_by_source_ref(db, lesson_ref) is None:

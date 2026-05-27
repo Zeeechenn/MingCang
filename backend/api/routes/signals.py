@@ -1,7 +1,7 @@
 """Signal lookup, evaluation, and evidence routes."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -50,7 +50,7 @@ def eval_signals(symbol: str, days: int = 60, db: Session = Depends(get_db)):
     next trading day's close vs. the signal-day close is compared against the
     signal direction.
     """
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
     signals = (
         db.query(Signal)
         .filter(Signal.symbol == symbol, Signal.date >= cutoff)

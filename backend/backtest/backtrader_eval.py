@@ -197,13 +197,19 @@ WEIGHTS = {"trend": 0.4, "rsi": 0.25, "macd": 0.25, "volume": 0.1}
 
 
 def compute_tech_scores(df_factored: pd.DataFrame, apply_adx_filter: bool = True) -> pd.Series:
-    """按日滚动计算技术综合分。阶段B: 可选 ADX 衰减系数。"""
+    """按日滚动计算技术综合分。阶段B: 可选 ADX 衰减系数。
+
+    M18.2 O(n²) 修复：各 score 函数最多使用最近 20 行（score_volume 需20日均量），
+    用 iloc[max(0,i-19):i+1] 替代 iloc[:i+1]，将每轮切片大小固定为 ≤20。
+    """
     scores = []
     for i in range(len(df_factored)):
         if i < WARMUP:
             scores.append(float("nan"))
             continue
-        s = df_factored.iloc[: i + 1]
+        # 只取最近 max(WARMUP, 20) 行：score_volume 最长需要 20 行
+        lookback = max(WARMUP, 20)
+        s = df_factored.iloc[max(0, i - lookback + 1): i + 1]
         raw = (
             score_trend(s) * WEIGHTS["trend"]
             + score_rsi(s) * WEIGHTS["rsi"]
@@ -283,6 +289,9 @@ def run_one(symbol: str, name: str, df_raw: pd.DataFrame, start: str, end: str,
     won = trades.get("won", {}).get("total", 0)
     pnl_won = trades.get("won", {}).get("pnl", {}).get("total", 0) or 0
     pnl_lost = abs(trades.get("lost", {}).get("pnl", {}).get("total", 0) or 0)
+    # M18.2 盈亏比澄清：此处为"盈利总额 / 亏损总额"（Profit Factor），
+    # 不是"平均单笔盈利 / 平均单笔亏损"。两者定义不同，前端列标"盈亏比"指 Profit Factor。
+    profit_factor = (pnl_won / pnl_lost) if pnl_lost > 0 else (float("inf") if pnl_won > 0 else 0)
 
     return {
         "symbol": symbol, "name": name,
@@ -292,7 +301,8 @@ def run_one(symbol: str, name: str, df_raw: pd.DataFrame, start: str, end: str,
         "trades": total,
         "won": won,
         "win_rate": (won / total * 100) if total else 0,
-        "profit_factor": (pnl_won / pnl_lost) if pnl_lost > 0 else (float("inf") if pnl_won > 0 else 0),
+        # profit_factor = 盈利总额 / 亏损总额（Profit Factor，非平均盈亏比）
+        "profit_factor": profit_factor,
     }
 
 
@@ -353,24 +363,34 @@ def run_suite(stocks, db, start, end, cfg, label, mock_labels: dict | None = Non
         "avg_sharpe": avg_sharpe, "avg_dd": avg_dd, "avg_pf": avg_pf,
     }
 
-    # 二阶可信度审计：用面板里每只股票的 Sharpe 作 trial 序列估 SR_0，
-    # 把单股 Sharpe 当成 "试验"。
+    # 二阶可信度审计
     if len(sharpes) >= 2:
         try:
-            from backend.backtest.statistics import expected_max_sharpe
-            sr0 = expected_max_sharpe(sharpes, n_trials=len(sharpes))
-            summary["sr_threshold_multi_trial"] = round(sr0, 3)
-            summary["sr_passes_multi_trial"] = avg_sharpe > sr0
-            # 用面板 Sharpe 的标准误做粗略 t 检验
+            from backend.backtest.statistics import (
+                expected_max_sharpe,
+                ic_significance,
+                pbo,
+            )
             n = len(sharpes)
+            # M18.1 n_trials 语义修复：这里的"试验"是面板中的股票数，
+            # 不是参数扫描的方案数。SR_0 仅作参考，含义为"n只不同股票里最优Sharpe期望"。
+            sr0 = expected_max_sharpe(sharpes, n_trials=n)
+            summary["sr_threshold_panel"] = round(sr0, 3)
+            summary["sr_passes_panel"] = avg_sharpe > sr0
+            # 面板 Sharpe 的 t 检验（样本均值显著 > 0）
             mean_s = sum(sharpes) / n
             var_s = sum((s - mean_s) ** 2 for s in sharpes) / (n - 1) if n > 1 else 0
             stderr = (var_s ** 0.5) / (n ** 0.5)
             t_stat = (avg_sharpe / stderr) if stderr > 0 else 0.0
             summary["avg_sharpe_t_stat"] = round(t_stat, 2)
-            print(f"        二阶审计：SR_0(N={n})={sr0:.2f}  "
-                  f"{'✅ 跨越多试验阈值' if avg_sharpe > sr0 else '⚠ 未跨越多试验阈值'}  "
-                  f"t({n - 1})={t_stat:.2f}")
+
+            # M18.2 接线：IC 显著性（把面板平均 Sharpe 当成 IC 近似，仅作参考）
+            ic_res = ic_significance(avg_sharpe / (252 ** 0.5), n)
+            summary["ic_significance"] = ic_res.to_dict()
+
+            print(f"        二阶审计：SR_0(panel N={n})={sr0:.2f}  "
+                  f"{'✅ 跨越面板阈值' if avg_sharpe > sr0 else '⚠ 未跨越面板阈值'}  "
+                  f"t({n - 1})={t_stat:.2f}  IC近似 p={ic_res.p_value_two_sided:.3f}({ic_res.verdict()})")
         except Exception as e:
             summary["sr_audit_error"] = str(e)
 

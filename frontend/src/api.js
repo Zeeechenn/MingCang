@@ -168,8 +168,12 @@ export async function chatWithAIStream(payload, handlers = {}) {
       if (!block.trim()) continue
       const parsed = parseSseBlock(block)
       const data = parsed.data ? JSON.parse(parsed.data) : {}
+      if (parsed.event === 'prepare') handlers.onPrepare?.(data)
+      if (parsed.event === 'running') handlers.onRunning?.(data)
+      if (parsed.event === 'evidence') handlers.onEvidence?.(data)
       if (parsed.event === 'token') handlers.onToken?.(data.text || '')
       if (parsed.event === 'meta') handlers.onMeta?.(data)
+      if (parsed.event === 'error') handlers.onError?.(data)
       if (parsed.event === 'done') {
         finalPayload = data
         handlers.onDone?.(data)
@@ -208,6 +212,8 @@ export const updateRuntimeConfig = (payload) =>
 export const getSystemStatus = () => request('/system/status')
 
 export const getSystemHealth = () => request('/system/health')
+
+export const getLLMUsage = (days = 7) => request(`/system/llm-usage?days=${days}`)
 
 export const triggerKillSwitch = (reason = 'manual') =>
   request(`/system/kill-switch/trigger?reason=${encodeURIComponent(reason)}`, { method: 'POST' })

@@ -60,7 +60,14 @@ class PITSession:
         return self._as_of
 
     def query(self, *entities, **kwargs) -> Any:
-        """Intercept query and apply date filter for registered PIT models."""
+        """
+        Intercept query and apply date filter for registered PIT models.
+
+        M19.4 重要局限：本方法只拦截「按 ORM 类名查询整个模型」的路径，
+        例如 db.query(Signal) 会被正确过滤。
+        「列查询」路径 db.query(Signal.date) / db.query(Signal.symbol, Signal.date) 等
+        不会被过滤（entities 中 __name__ 属性为 None），回测代码应始终按模型类查询。
+        """
         q = self._db.query(*entities, **kwargs)
         for ent in entities:
             cls_name = getattr(ent, "__name__", None)

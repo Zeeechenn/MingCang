@@ -57,7 +57,13 @@ def ic_significance(ic: float, n: int) -> ICSignificance:
     """
     给定样本 IC 与样本数 N，返回标准误 + t 统计量 + 双尾 p。
 
-    在大样本下 (N>30) 用正态近似：t ≈ IC × √N。
+    在大样本下 (N>30) 用正态近似：t ≈ IC × √N，std_err = 1/√N。
+
+    【M18.1 局限性说明】
+    标准误公式 1/√N 假设每个 IC 观测独立同分布（IID）。
+    若 IC 基于滚动窗口收益（相邻期重叠），则样本存在序列相关，
+    实际有效样本数 < N，t-stat 会被高估。
+    严格场景请使用 Newey-West 修正标准误或 Hansen-Hodrick 调整。
     """
     if n < 2:
         return ICSignificance(ic=ic, n=n, std_err=float("inf"),

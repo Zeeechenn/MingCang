@@ -2,7 +2,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _now() -> datetime:
+    """Return current UTC time as a timezone-naive datetime (stored as naive UTC in SQLite)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 from uuid import uuid4
 
 from backend.data.database import DecisionRun, Price, ResearchState, Signal
@@ -149,47 +156,75 @@ def record_decision_run(
     This is intentionally called after Signal upsert so the main decision path
     remains unchanged if harness persistence fails in tests or scripts.
     """
+    # M17.2 幂等：同一 (run_type, symbol, as_of) 存在时原地更新，不重复插入
     trace = _build_decision_trace(result)
-    run = DecisionRun(
-        run_id=f"{run_type}:{symbol}:{as_of}:{uuid4().hex[:8]}",
-        run_type=run_type,
-        symbol=symbol,
-        as_of=as_of,
-        profile=(result.get("rule_version") or "").split(":")[-1] or None,
-        rule_version=result.get("rule_version"),
-        recommendation=result.get("recommendation"),
-        composite_score=result.get("composite_score"),
-        input_snapshot_json=_json(input_snapshot or {}),
-        agent_outputs_json=_json({
-            "breakdown": result.get("breakdown", {}),
-            "llm_arbitration": result.get("llm_arbitration"),
-            "director": result.get("director"),
-            "regime": result.get("regime"),
-            "research_constraints": result.get("research_constraints", []),
-            "research_conflicts": result.get("research_conflicts", []),
-            "trace": trace,
-        }),
-        risk_decision_json=_json({
-            "limit_status": result.get("limit_status"),
-            "risk_notes": result.get("risk_notes", []),
-            "veto_reason": result.get("veto_reason"),
-            "stop_loss_executable": result.get("stop_loss_executable", True),
-        }),
-        final_action_json=_json({
-            "stop_loss": result.get("stop_loss"),
-            "take_profit": result.get("take_profit"),
-            "position_pct": result.get("position_pct"),
-            "trader_position_pct": result.get("trader_position_pct"),
-            "risk_position_pct": result.get("risk_position_pct"),
-            "portfolio_decision": result.get("portfolio_decision"),
-            "allocation_rationale": result.get("allocation_rationale"),
-            "official_action": result.get("official_action"),
-            "confidence": result.get("confidence"),
-        }),
-        notes=notes,
-        created_at=datetime.utcnow(),
+    agent_outputs = _json({
+        "breakdown": result.get("breakdown", {}),
+        "llm_arbitration": result.get("llm_arbitration"),
+        "director": result.get("director"),
+        "regime": result.get("regime"),
+        "research_constraints": result.get("research_constraints", []),
+        "research_conflicts": result.get("research_conflicts", []),
+        "trace": trace,
+    })
+    risk_decision = _json({
+        "limit_status": result.get("limit_status"),
+        "risk_notes": result.get("risk_notes", []),
+        "veto_reason": result.get("veto_reason"),
+        "stop_loss_executable": result.get("stop_loss_executable", True),
+    })
+    final_action = _json({
+        "stop_loss": result.get("stop_loss"),
+        "take_profit": result.get("take_profit"),
+        "position_pct": result.get("position_pct"),
+        "trader_position_pct": result.get("trader_position_pct"),
+        "risk_position_pct": result.get("risk_position_pct"),
+        "portfolio_decision": result.get("portfolio_decision"),
+        "allocation_rationale": result.get("allocation_rationale"),
+        "official_action": result.get("official_action"),
+        "confidence": result.get("confidence"),
+    })
+
+    existing = (
+        db.query(DecisionRun)
+        .filter(
+            DecisionRun.run_type == run_type,
+            DecisionRun.symbol == symbol,
+            DecisionRun.as_of == as_of,
+        )
+        .order_by(DecisionRun.created_at.desc())
+        .first()
     )
-    db.add(run)
+    if existing is not None:
+        existing.recommendation = result.get("recommendation")
+        existing.composite_score = result.get("composite_score")
+        existing.profile = (result.get("rule_version") or "").split(":")[-1] or None
+        existing.rule_version = result.get("rule_version")
+        existing.input_snapshot_json = _json(input_snapshot or {})
+        existing.agent_outputs_json = agent_outputs
+        existing.risk_decision_json = risk_decision
+        existing.final_action_json = final_action
+        if notes is not None:
+            existing.notes = notes
+        run = existing
+    else:
+        run = DecisionRun(
+            run_id=f"{run_type}:{symbol}:{as_of}",
+            run_type=run_type,
+            symbol=symbol,
+            as_of=as_of,
+            profile=(result.get("rule_version") or "").split(":")[-1] or None,
+            rule_version=result.get("rule_version"),
+            recommendation=result.get("recommendation"),
+            composite_score=result.get("composite_score"),
+            input_snapshot_json=_json(input_snapshot or {}),
+            agent_outputs_json=agent_outputs,
+            risk_decision_json=risk_decision,
+            final_action_json=final_action,
+            notes=notes,
+            created_at=_now(),
+        )
+        db.add(run)
     _upsert_research_state_from_signal(db, symbol, result)
     db.commit()
     return run
@@ -198,7 +233,7 @@ def record_decision_run(
 def _upsert_research_state_from_signal(db, symbol: str, result: dict) -> ResearchState:
     """Update per-symbol research state with the latest signal summary."""
     state = db.query(ResearchState).filter(ResearchState.symbol == symbol).first()
-    now = datetime.utcnow()
+    now = _now()
     if state is None:
         state = ResearchState(
             symbol=symbol,
@@ -338,7 +373,7 @@ def review_latest_signal(db, symbol: str) -> dict | None:
     }
 
     state = db.query(ResearchState).filter(ResearchState.symbol == symbol).first()
-    now = datetime.utcnow()
+    now = _now()
     if state is None:
         state = ResearchState(symbol=symbol, risks_json="[]", open_questions_json="[]", created_at=now)
         db.add(state)

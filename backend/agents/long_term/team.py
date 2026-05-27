@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from backend.agents.long_term import (
     a_teacher_analyst,
@@ -161,8 +161,8 @@ class LongTermTeam:
         findings = _merge_findings(reports)
         quality, constraint_eligible, quality_notes = _assess_label_quality(reports)
 
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        expires = (datetime.utcnow() + timedelta(days=settings.long_term_label_ttl_days)) \
+        today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+        expires = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=settings.long_term_label_ttl_days)) \
             .strftime("%Y-%m-%d")
 
         logger.info(

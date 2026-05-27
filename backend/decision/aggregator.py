@@ -136,6 +136,12 @@ def _bull_bear_debate(
         max_tokens=400,
         model_tier="fast",
     )
+    try:
+        import json as _json
+        from backend.ops.llm_usage import log_llm_usage
+        log_llm_usage("debate", prompt, _json.dumps(data))
+    except Exception:
+        pass
     if data:
         data["bull_points"] = data.get("bull_points", [])[:3]
         data["bear_points"] = data.get("bear_points", [])[:3]
@@ -300,6 +306,7 @@ def aggregate_v2(
     debate_topic = director.debate_topic if director else ""
 
     llm_arb = None
+    multi_round_tried = False
     if has_divergence(reports):
         if settings.multi_round_debate_enabled:
             # M4.1 三轮辩论（接受 M4.2 Director 议题）
@@ -310,16 +317,21 @@ def aggregate_v2(
                 reflection_context=reflection_context,
                 debate_topic=debate_topic,
             )
-            if conclusion.used_llm:
-                llm_arb = conclusion_to_arbitration_dict(conclusion)
-        if llm_arb is None:
-            # 多轮未触发或失败 → 回退到单轮
+            multi_round_tried = True
+            # M17.2：无论多轮是否成功都采用其结论，不再回退到单轮 LLM
+            llm_arb = conclusion_to_arbitration_dict(conclusion)
+        if not multi_round_tried:
+            # 多轮未启用 → 单轮辩论（M17.2：compute real stop/take to avoid dummy 0s）
+            from backend.analysis.factors import calc_stop_take
+            _stop, _take = calc_stop_take(close, atr,
+                                          atr_mult=settings.atr_multiplier,
+                                          rr=settings.risk_reward_ratio)
             llm_arb = _bull_bear_debate(
                 composite_score=sum(r.score for r in reports) / len(reports),
                 quant_score=blended_quant_score,
                 tech_result=technical_result,
                 sentiment_result=sentiment_result,
-                close=close, stop_loss=0, take_profit=0,
+                close=close, stop_loss=_stop, take_profit=_take,
                 reflection_context=reflection_context,
             ) or None
 
@@ -333,6 +345,7 @@ def aggregate_v2(
         portfolio_drawdown_pct=portfolio_drawdown_pct,
         limit_status=technical_result.get("limit", {}),
         long_term_label=long_term_label,
+        _precomputed_reports=reports,  # M17.2 避免四路分析师重复计算
     )
 
     result = decision.to_signal_dict()

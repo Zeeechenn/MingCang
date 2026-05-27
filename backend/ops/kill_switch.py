@@ -22,7 +22,12 @@ import logging
 import os
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _now_utc_naive() -> datetime:
+    """M21.4: 替代 _now_utc_naive()，返回 UTC naive datetime。"""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -57,7 +62,7 @@ def _read_state() -> KillSwitchState | None:
         return KillSwitchState(
             active=True,
             reason="kill_switch 状态文件读取失败，保守视为已触发",
-            triggered_at=datetime.utcnow().isoformat(timespec="seconds"),
+            triggered_at=_now_utc_naive().isoformat(timespec="seconds"),
             metadata={"error": str(e), "path": str(STATE_PATH)},
         )
 
@@ -94,7 +99,7 @@ def trigger(reason: str, metadata: dict | None = None, push: bool = True) -> Kil
     state = KillSwitchState(
         active=True,
         reason=reason,
-        triggered_at=datetime.utcnow().isoformat(timespec="seconds"),
+        triggered_at=_now_utc_naive().isoformat(timespec="seconds"),
         metadata=metadata or {},
     )
     _write_state(state)
@@ -173,7 +178,7 @@ def check_data_staleness(
     if not latest_price_date:
         return trigger(reason="DB 中无价格数据",
                        metadata={"latest_price_date": None})
-    today = today or datetime.utcnow()
+    today = today or _now_utc_naive()
     try:
         last = datetime.strptime(latest_price_date, "%Y-%m-%d")
     except ValueError:

@@ -13,7 +13,7 @@ Retention: drop backup files older than `keep_days` (default 30) on each run.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -48,7 +48,7 @@ def dump_ai_memory(db, out_path: Path) -> int:
     """)).all()
     payload: dict[str, Any] = {
         "version": SCHEMA_VERSION,
-        "exported_at": datetime.utcnow().isoformat(timespec="seconds"),
+        "exported_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
         "rows": [
             {
                 "id": r.id,
@@ -75,7 +75,7 @@ def cleanup_old_backups(backup_dir: Path, keep_days: int = DEFAULT_KEEP_DAYS) ->
     """Delete `ai_memory_*.json` files older than `keep_days`. Returns count deleted."""
     if not backup_dir.exists():
         return 0
-    cutoff = datetime.utcnow() - timedelta(days=keep_days)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=keep_days)
     removed = 0
     for path in backup_dir.glob("ai_memory_*.json"):
         try:
@@ -103,7 +103,7 @@ def run_daily_backup(
     """
     from backend.memory.audit_log import audit_write
 
-    date_str = today or datetime.utcnow().strftime("%Y-%m-%d")
+    date_str = today or datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
     out_path = backup_dir / f"ai_memory_{date_str}.json"
     written = dump_ai_memory(db, out_path)
     removed = cleanup_old_backups(backup_dir, keep_days=keep_days)

@@ -58,9 +58,10 @@ def market_regime(
 
     diff = sector_diffusion(sector_price_dfs) if sector_price_dfs else None
 
-    market_bullish = rsrs_z is not None and rsrs_z > 0.7
+    # M20.2：rsrs_bullish_z / diffusion_strong_threshold 由 settings 控制，不再硬编码
+    market_bullish = rsrs_z is not None and rsrs_z > settings.rsrs_bullish_z
     market_bearish = rsrs_z is not None and rsrs_z < settings.rsrs_bearish_z
-    sector_strong = diff is not None and diff > 0.6
+    sector_strong = diff is not None and diff > settings.diffusion_strong_threshold
     sector_weak = diff is not None and diff < settings.diffusion_threshold
 
     dampen = market_bearish or sector_weak

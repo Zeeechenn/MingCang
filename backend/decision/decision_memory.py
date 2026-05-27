@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from backend.decision.signal_policy import is_entry_signal
@@ -36,7 +36,7 @@ def get_reflection_context(symbol: str, db, lookback_days: int = 30) -> str:
     """
     from backend.data.database import Price, Signal  # 延迟导入避免循环依赖
 
-    cutoff = (datetime.utcnow() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
     past_signals = (
         db.query(Signal)
         .filter(Signal.symbol == symbol, Signal.date >= cutoff)

@@ -98,20 +98,29 @@ def _norm_ppf(p: float) -> float:
 
 
 def _moments(returns: Sequence[float]) -> tuple[float, float, float, float]:
-    """返回 (mean, std, skew, kurt) — kurt 是非超额峰度（正态=3）"""
+    """
+    返回 (mean, std, skew, kurt) — kurt 是非超额峰度（正态=3）。
+
+    M18.2 修复：使用样本标准差（除以 n-1）而非总体标准差（除以 n），
+    与 DSR 论文假设一致（样本估计）。
+    """
     n = len(returns)
     if n < 2:
         return 0.0, 0.0, 0.0, 3.0
     mean = sum(returns) / n
     diffs = [r - mean for r in returns]
-    m2 = sum(d * d for d in diffs) / n
-    if m2 <= 0:
+    # 样本方差（无偏估计，除以 n-1）
+    m2_sample = sum(d * d for d in diffs) / (n - 1)
+    # 矩计算仍用总体公式（DSR 论文惯例）
+    m2_pop = sum(d * d for d in diffs) / n
+    if m2_pop <= 0:
         return mean, 0.0, 0.0, 3.0
     m3 = sum(d ** 3 for d in diffs) / n
     m4 = sum(d ** 4 for d in diffs) / n
-    std = math.sqrt(m2)
-    skew = m3 / (std ** 3)
-    kurt = m4 / (m2 * m2)
+    std = math.sqrt(m2_sample)   # 报告用样本 std
+    std_pop = math.sqrt(m2_pop)  # 高阶矩归一化用总体 std（惯例）
+    skew = m3 / (std_pop ** 3)
+    kurt = m4 / (m2_pop * m2_pop)
     return mean, std, skew, kurt
 
 
@@ -167,6 +176,13 @@ def deflated_sharpe(
             sharpe=sharpe_observed, sharpe_threshold=sr0, dsr=0.0, p_value=1.0,
             n_trials=n_t, n_samples=n_obs, skew=skew, kurt=kurt,
             note="样本量不足",
+        )
+    # M18.1：强制 ≥30 笔最小样本门槛，样本不足时 DSR 无统计意义
+    if n_obs < 30:
+        return DSRResult(
+            sharpe=sharpe_observed, sharpe_threshold=sr0, dsr=0.0, p_value=1.0,
+            n_trials=n_t, n_samples=n_obs, skew=skew, kurt=kurt,
+            note=f"样本量 {n_obs} < 30，DSR 不可靠，建议收集更多交易",
         )
 
     # 把 sr0（多试验下年化 Sharpe）转回 returns 同尺度做对比

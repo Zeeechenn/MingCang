@@ -4,8 +4,16 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
+
+# M19.4 时区常量：东财 API 返回 CST（UTC+8）naive 时间字符串
+_CST_OFFSET = timedelta(hours=8)
+
+
+def _cst_to_utc(dt: datetime) -> datetime:
+    """将东财 CST naive datetime 转为 UTC naive datetime（减 8 小时）。"""
+    return dt - _CST_OFFSET
 
 logger = logging.getLogger(__name__)
 
@@ -188,9 +196,10 @@ def fetch_stock_news_cn(symbol: str, limit: int = 20) -> list[RawNews]:
 
             pub_str = str(row.get("发布时间", "")).strip()
             try:
-                pub_dt = datetime.strptime(pub_str, "%Y-%m-%d %H:%M:%S")
+                # M19.4 时区修复：东财返回 CST naive 时间，统一转为 UTC naive 存储
+                pub_dt = _cst_to_utc(datetime.strptime(pub_str, "%Y-%m-%d %H:%M:%S"))
             except ValueError:
-                pub_dt = datetime.utcnow()
+                pub_dt = datetime.now(timezone.utc).replace(tzinfo=None)
 
             results.append(RawNews(
                 title=title,
@@ -228,7 +237,7 @@ def fetch_stock_news_us(symbol: str | None = None, limit: int = 20) -> list[RawN
                 pub = (
                     datetime(*entry.published_parsed[:6])
                     if getattr(entry, "published_parsed", None)
-                    else datetime.utcnow()
+                    else datetime.now(timezone.utc).replace(tzinfo=None)
                 )
                 results.append(RawNews(
                     title=entry.title,
@@ -259,17 +268,24 @@ def save_news_to_db(news_list: list[RawNews], db) -> int:
         r[0] for r in db.query(NewsItem.url).filter(NewsItem.url.in_(urls)).all()
     }
 
-    new_items = [
-        NewsItem(
+    # M19.4 跨源去重：同标题（不同来源/URL）只保留第一条，避免东财+Anspire重复计入
+    seen_title_hashes: set[str] = set()
+    new_items = []
+    for n in news_list:
+        if n.url in existing_urls:
+            continue
+        # 用标题 MD5 做批次内跨源去重
+        title_hash = hashlib.md5(n.title.lower().strip().encode()).hexdigest()[:12]
+        if title_hash in seen_title_hashes:
+            continue
+        seen_title_hashes.add(title_hash)
+        new_items.append(NewsItem(
             symbol=n.symbol,
             title=n.title,
             url=n.url,
             published_at=n.published_at,
             source=n.source,
-        )
-        for n in news_list
-        if n.url not in existing_urls
-    ]
+        ))
 
     if new_items:
         db.bulk_save_objects(new_items)
@@ -285,7 +301,8 @@ def get_recent_titles(symbol: str, db, hours: int = 24) -> list[str]:
     """
     from backend.data.database import NewsItem
 
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    # M19.4：DB 存储的是 UTC naive，用 UTC now 计算 cutoff
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
     rows = (
         db.query(NewsItem.title)
         .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
@@ -303,7 +320,7 @@ def get_recent_news_items(symbol: str, db, hours: int = 24) -> list[RawNews]:
     """
     from backend.data.database import NewsItem
 
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
     rows = (
         db.query(NewsItem)
         .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
@@ -343,7 +360,7 @@ def fetch_stock_news_anspire(
     if not settings.anspire_api_key:
         return []
 
-    current = now or datetime.utcnow()
+    current = now or datetime.now(timezone.utc).replace(tzinfo=None)
     days = days or settings.anspire_news_days
     max_results = max_results or settings.anspire_news_max_results
     limit = limit or settings.anspire_news_max_add
