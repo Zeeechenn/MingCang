@@ -94,7 +94,7 @@ def _anspire_is_event_title(title: str) -> bool:
 
 def _fetch_news_df(symbol: str):
     """
-    直连东财搜索 API（proxies=None 绕过系统代理），pageSize=50。
+    直连东财搜索 API（Session trust_env=False 绕过系统代理），pageSize=50。
     失败时 fallback 到 AkShare stock_news_em（pageSize=10）。
     """
     import json as _json
@@ -116,14 +116,15 @@ def _fetch_news_df(symbol: str):
         },
     }
     try:
-        resp = requests.get(
+        session = requests.Session()
+        session.trust_env = False
+        resp = session.get(
             "https://search-api-web.eastmoney.com/search/jsonp",
             params={"cb": _CB, "param": _json.dumps(inner, ensure_ascii=False), "_": "1"},
             headers={
                 "Referer": "https://so.eastmoney.com/",
                 "User-Agent": "Mozilla/5.0",
             },
-            proxies={"http": None, "https": None},  # type: ignore[dict-item]
             timeout=10,
         )
         resp.raise_for_status()

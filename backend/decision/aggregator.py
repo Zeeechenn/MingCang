@@ -94,8 +94,11 @@ def _bull_bear_debate(
     """
     三路信号分歧时进行多空辩论（标准差 < 20 视为一致，跳过以节省 API）。
     同时注入历史决策反思（reflection_context）帮助 LLM 修正系统性偏差。
+    multi_agent_enabled=False 时跳过，避免批量产信号时消耗 token。
     """
     if not has_runtime_llm_provider(settings):
+        return {}
+    if not settings.multi_agent_enabled:
         return {}
 
     scores = [

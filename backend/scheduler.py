@@ -276,7 +276,7 @@ def _postmarket_news_sentiment(stock, db) -> dict:
             news_audits = news_audits + anspire_audits
             logger.info("Anspire补充 %s: +%d条 (DB=%d条)",
                         stock.symbol, len(anspire_titles[:slots]), db_title_count)
-    if settings.tavily_api_key:
+    if settings.tavily_api_key and len(titles) < settings.tavily_supplement_threshold:
         tavily_titles = fetch_titles_tavily(stock.symbol, stock.name)
         if tavily_titles:
             titles = titles + tavily_titles
@@ -298,7 +298,7 @@ def _postmarket_news_sentiment(stock, db) -> dict:
     return sentiment_result
 
 
-def _analyze_postmarket_stock(stock, db, context: dict) -> dict | None:
+def _analyze_postmarket_stock(stock, db, context: dict, as_of_date: str | None = None) -> dict | None:
     from backend.analysis.qlib_engine import qlib_score
     from backend.analysis.technical import technical_score
     from backend.data.market import load_price_df
@@ -306,6 +306,8 @@ def _analyze_postmarket_stock(stock, db, context: dict) -> dict | None:
     from backend.memory.stock_memory import build_memory_context
 
     df = load_price_df(stock.symbol, db, days=200)
+    if as_of_date:
+        df = df[df.index <= as_of_date]
     if len(df) < 60:
         logger.warning("not enough data for %s (%d rows), skipping", stock.symbol, len(df))
         return None
