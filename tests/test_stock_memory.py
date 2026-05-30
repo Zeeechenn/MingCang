@@ -258,6 +258,38 @@ def test_deep_research_memory_writes_stock_research_pointer(test_db):
     assert list_stock_memories(test_db, symbol="300308", memory_type="event") == []
 
 
+def test_persisted_research_pointer_sections_build_research_context(test_db):
+    from backend.agents.pipeline import build_research_context
+    from backend.memory.research_memory import remember_deep_research
+    from backend.memory.stock_memory import list_stock_memories
+
+    remember_deep_research(
+        test_db,
+        topic="AI算力产业链",
+        summary="订单兑现是核心验证点，估值拥挤是主要风险",
+        symbols=["300308"],
+        report_path="/tmp/report.md",
+        sections=[{
+            "role": "research_writer",
+            "title": "IC memo",
+            "catalysts": ["海外订单兑现"],
+            "risks": ["估值拥挤风险"],
+            "evidence_snippets": ["订单排产证据", "估值分位证据"],
+            "stance": "中性偏多",
+            "confidence": 0.72,
+        }],
+    )
+
+    rows = list_stock_memories(test_db, symbol="300308", memory_type="research_pointer")
+    context = build_research_context(sentiment_result={"research_context": rows})
+
+    assert context["catalysts"] == ["海外订单兑现"]
+    assert context["risks"] == ["估值拥挤风险"]
+    assert context["evidence_snippets"] == ["订单排产证据", "估值分位证据"]
+    assert context["stance"] == "中性偏多"
+    assert context["confidence"] == 0.72
+
+
 def test_research_dossier_recalls_deep_research_pointer(test_db, sample_stocks):
     from backend.memory.research_memory import remember_deep_research
     from backend.research.dossier import build_research_dossier
@@ -278,6 +310,32 @@ def test_research_dossier_recalls_deep_research_pointer(test_db, sample_stocks):
     assert "AI算力产业链" in dossier["deep_research"][0]["evidence"]["topic"]
     assert "latest_signal" in dossier["missing"]
     assert "copilot" in dossier["missing"]
+
+
+def test_research_dossier_exposes_copilot_pending_questions(test_db, sample_stocks):
+    import json
+
+    from backend.data.database import ResearchState
+    from backend.research.dossier import build_research_dossier
+
+    test_db.add(ResearchState(
+        symbol="300308",
+        thesis="",
+        risks_json="[]",
+        open_questions_json="[]",
+        copilot_json=json.dumps({
+            "validation_questions": ["订单是否继续兑现？", "估值风险是否缓解？"],
+        }, ensure_ascii=False),
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    ))
+    test_db.commit()
+
+    dossier = build_research_dossier(test_db, "300308")
+
+    assert dossier["pending_questions"] == ["订单是否继续兑现？", "估值风险是否缓解？"]
+    assert "pending_questions" in dossier["missing"]
+    assert "copilot" not in dossier["missing"]
 
 
 def test_research_dossier_combines_signal_label_memory_and_action(test_db, sample_stocks):

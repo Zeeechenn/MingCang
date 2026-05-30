@@ -115,16 +115,70 @@ def get_trading_dates(prices: dict[str, pd.DataFrame],
 
 # ── 推理 ─────────────────────────────────────────────────────────────────────
 
-def build_predictor(model_name: str, context: int) -> Any:
-    Kronos, KronosTokenizer, KronosPredictor = _load_kronos_classes()
+def _resolve_finetuned_checkpoint(model_path: Path) -> Path:
+    model_path = model_path.expanduser()
+    if not model_path.exists():
+        raise RuntimeError(
+            f"Finetuned Kronos model path does not exist: {model_path}. "
+            "Run M27.4 fine-tuning first or pass --finetuned-model-path."
+        )
+    checkpoint = model_path / "checkpoints" / "best_model"
+    return checkpoint if checkpoint.exists() else model_path
+
+
+def resolve_model_spec(
+    model_name: str,
+    *,
+    finetuned_model_path: Path | None = None,
+    tokenizer_path: Path | str | None = None,
+) -> dict[str, Any]:
     hub_map = {
         "kronos-mini": ("NeoQuasar/Kronos-Tokenizer-2k", "NeoQuasar/Kronos-mini"),
         "kronos-small": ("NeoQuasar/Kronos-Tokenizer-base", "NeoQuasar/Kronos-small"),
         "kronos-base": ("NeoQuasar/Kronos-Tokenizer-base", "NeoQuasar/Kronos-base"),
     }
+    if model_name == "kronos-finetuned":
+        checkpoint = _resolve_finetuned_checkpoint(
+            finetuned_model_path or Path.home() / ".stock-sage" / "models" / "kronos_finetuned"
+        )
+        if tokenizer_path is not None:
+            tok_id: str | Path = tokenizer_path
+        elif (checkpoint / "tokenizer").exists():
+            tok_id = checkpoint / "tokenizer"
+        else:
+            tok_id = "NeoQuasar/Kronos-Tokenizer-base"
+        return {
+            "tokenizer_id": str(tok_id),
+            "model_id": str(checkpoint),
+            "model_source": "local_finetuned",
+            "model_path": str(checkpoint),
+        }
     if model_name not in hub_map:
-        raise ValueError(f"Unknown model: {model_name}. Choose from {list(hub_map)}")
+        raise ValueError(f"Unknown model: {model_name}. Choose from {[*hub_map, 'kronos-finetuned']}")
     tok_id, mdl_id = hub_map[model_name]
+    return {
+        "tokenizer_id": tok_id,
+        "model_id": mdl_id,
+        "model_source": "hub_or_cache",
+        "model_path": None,
+    }
+
+
+def build_predictor(
+    model_name: str,
+    context: int,
+    *,
+    finetuned_model_path: Path | None = None,
+    tokenizer_path: Path | str | None = None,
+) -> Any:
+    Kronos, KronosTokenizer, KronosPredictor = _load_kronos_classes()
+    spec = resolve_model_spec(
+        model_name,
+        finetuned_model_path=finetuned_model_path,
+        tokenizer_path=tokenizer_path,
+    )
+    tok_id = spec["tokenizer_id"]
+    mdl_id = spec["model_id"]
     logger.info("加载 tokenizer: %s", tok_id)
     tokenizer = KronosTokenizer.from_pretrained(tok_id)
     logger.info("加载模型: %s", mdl_id)
@@ -348,13 +402,16 @@ def make_decision(metrics: dict) -> dict:
 
 
 def build_report(metrics: dict, model_name: str, context_len: int,
-                 pred_len: int, n_symbols: int, n_dates: int) -> tuple[dict, str]:
+                 pred_len: int, n_symbols: int, n_dates: int,
+                 model_spec: dict[str, Any] | None = None) -> tuple[dict, str]:
     decision = make_decision(metrics)
     now = pd.Timestamp.utcnow().isoformat(timespec="seconds")
 
     report_json = {
         "generated_at": now,
         "model": model_name,
+        "model_source": (model_spec or {}).get("model_source"),
+        "model_path": (model_spec or {}).get("model_path"),
         "context_len": context_len,
         "pred_len": pred_len,
         "eval_window": f"{EVAL_START} ~ {EVAL_END}",
@@ -385,6 +442,8 @@ def build_report(metrics: dict, model_name: str, context_len: int,
 
 - generated_at: {now}
 - model: {model_name}
+- model_source: {(model_spec or {}).get("model_source") or "unknown"}
+- model_path: {(model_spec or {}).get("model_path") or "N/A"}
 - context_len: {context_len} bars | pred_len: {pred_len} bars
 - eval_window: {EVAL_START} ~ {EVAL_END} / every_{EVERY_N_DAYS}_days
 - symbols: {n_symbols} | eval_dates: {n_dates}
@@ -422,8 +481,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model", default="kronos-small",
-                        choices=["kronos-mini", "kronos-small", "kronos-base"],
+                        choices=["kronos-mini", "kronos-small", "kronos-base", "kronos-finetuned"],
                         help="Kronos 模型变体（默认 kronos-small）")
+    parser.add_argument("--finetuned-model-path", type=Path,
+                        default=Path.home() / ".stock-sage" / "models" / "kronos_finetuned",
+                        help="--model kronos-finetuned 时的本地模型目录")
+    parser.add_argument("--tokenizer-path", type=Path, default=None,
+                        help="可选本地 tokenizer 目录")
     parser.add_argument("--context", type=int, default=400,
                         help="输入上下文长度（bars，默认 400，≤512）")
     parser.add_argument("--pred-len", type=int, default=PRED_LEN,
@@ -454,7 +518,17 @@ def main():
                 eval_dates[-1].date() if eval_dates else "—")
 
     # 3. 加载模型
-    predictor = build_predictor(args.model, args.context)
+    model_spec = resolve_model_spec(
+        args.model,
+        finetuned_model_path=args.finetuned_model_path,
+        tokenizer_path=args.tokenizer_path,
+    )
+    predictor = build_predictor(
+        args.model,
+        args.context,
+        finetuned_model_path=args.finetuned_model_path,
+        tokenizer_path=args.tokenizer_path,
+    )
 
     # 4. 批量推理
     logger.info("开始逐期推理 …")
@@ -480,6 +554,7 @@ def main():
         metrics, args.model, args.context, args.pred_len,
         n_symbols=len(symbols),
         n_dates=len(eval_dates),
+        model_spec=model_spec,
     )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

@@ -67,6 +67,15 @@ def _deep_research(rows: list[dict]) -> list[dict]:
     return [row for row in rows if row.get("memory_type") == "research_pointer"]
 
 
+def _pending_questions(research_state: dict) -> list[str]:
+    """Return copilot validation questions that should seed follow-up research."""
+    copilot = research_state.get("copilot") or {}
+    questions = copilot.get("validation_questions") if isinstance(copilot, dict) else []
+    if not isinstance(questions, list):
+        return []
+    return [str(item).strip() for item in questions if str(item).strip()]
+
+
 def _latest_official_action(signal, evidence: list[dict]) -> dict:
     if evidence:
         final_action = evidence[0].get("final_action") or {}
@@ -127,6 +136,7 @@ def build_research_dossier(db: Session, symbol: str) -> dict:
     evidence = get_decision_evidence(db, symbol, limit=5)
     memory_rows = _memory_rows(db, symbol)
     label_dict = _label_to_dict(label)
+    pending_questions = _pending_questions(research_state)
     missing = []
     if signal is None:
         missing.append("latest_signal")
@@ -136,6 +146,8 @@ def build_research_dossier(db: Session, symbol: str) -> dict:
         missing.append("deep_research")
     if not research_state.get("copilot"):
         missing.append("copilot")
+    if pending_questions:
+        missing.append("pending_questions")
     return {
         "symbol": symbol,
         "stock": _stock_to_dict(stock),
@@ -145,6 +157,7 @@ def build_research_dossier(db: Session, symbol: str) -> dict:
         "evidence": evidence,
         "stock_memory": memory_rows,
         "deep_research": _deep_research(memory_rows),
+        "pending_questions": pending_questions,
         "conflicts": _conflicts(signal, label_dict, memory_rows, evidence),
         "official_action": _latest_official_action(signal, evidence),
         "missing": missing,

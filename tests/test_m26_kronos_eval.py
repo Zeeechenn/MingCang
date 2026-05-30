@@ -70,3 +70,25 @@ def test_kronos_predict_returns_aligns_input_and_label_horizon():
     )
 
     assert round(float(out.loc[pd.Timestamp("2026-01-03"), "300001"]), 6) == 0.1
+
+
+def test_kronos_finetuned_model_path_resolves_checkpoint(tmp_path):
+    from backend.tools.m26_kronos_eval import resolve_model_spec
+
+    checkpoint = tmp_path / "checkpoints" / "best_model"
+    checkpoint.mkdir(parents=True)
+
+    spec = resolve_model_spec("kronos-finetuned", finetuned_model_path=tmp_path)
+
+    assert spec["model_source"] == "local_finetuned"
+    assert spec["model_path"] == str(checkpoint)
+    assert spec["model_id"] == str(checkpoint)
+
+
+def test_kronos_finetuned_model_path_missing_is_clear(tmp_path):
+    import pytest
+
+    from backend.tools.m26_kronos_eval import resolve_model_spec
+
+    with pytest.raises(RuntimeError, match="Finetuned Kronos model path does not exist"):
+        resolve_model_spec("kronos-finetuned", finetuned_model_path=tmp_path / "missing")

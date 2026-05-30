@@ -23,7 +23,9 @@ from backend.backtest.costs import annualized_sharpe, net_return
 from backend.config import BASE_DIR, settings
 from backend.data.database import Price, SessionLocal
 
-DEFAULT_UNIVERSE_PATH = BASE_DIR / "paper_trading" / "test2_universe.json"
+DEFAULT_M26_UNIVERSE_PATH = BASE_DIR / "paper_trading" / "test2_universe.json"
+M27_TEST3_UNIVERSE_PATH = BASE_DIR / "paper_trading" / "test3_universe.json"
+DEFAULT_UNIVERSE_PATH = DEFAULT_M26_UNIVERSE_PATH
 DEFAULT_JSON_OUTPUT = Path.home() / ".stock-sage" / "m26_quant_baseline_report.json"
 DEFAULT_MARKDOWN_OUTPUT = Path.home() / ".stock-sage" / "m26_quant_baseline_report.md"
 M26_DIAGNOSTIC_IC_FLOOR = 0.02
@@ -71,31 +73,43 @@ def build_current_model_validation(db) -> dict[str, Any]:
     """Validate the current production model on the latest time split."""
     from backend.analysis.qlib_engine import (
         MODEL_PATH,
-        _load_model,
+        _feature_cols_for_model,
+        _load_model_unchecked,
         _time_split,
         _validation_predictions,
     )
     from backend.backtest.alphalens_qlib import build_validation_report
-    from backend.data.qlib_data import FEATURE_COLS, build_training_data
+    from backend.data.qlib_data import FEATURE_COLS, PRODUCTION_FEATURE_COLS, build_training_data
 
-    model = _load_model()
+    model, load_error = _load_model_unchecked()
     model_info = {
         "path": str(MODEL_PATH),
         "exists": MODEL_PATH.exists(),
         "mtime_utc": _model_mtime(MODEL_PATH),
-        "n_features_expected": len(FEATURE_COLS),
-        "n_features_model": getattr(model, "n_features_in_", getattr(model, "n_features_", None))
-        if model is not None
-        else None,
+        "n_features_current_candidate": len(FEATURE_COLS),
+        "n_features_production": len(PRODUCTION_FEATURE_COLS),
+        "n_features_model": None,
     }
     if model is None:
         return {
             "status": "model_unavailable",
+            "model": {**model_info, "load_error": load_error},
+            "recommendation": "keep_quant_disabled",
+        }
+    feature_cols, dim_info = _feature_cols_for_model(model)
+    model_info.update(dim_info)
+    if feature_cols is None:
+        return {
+            "status": "feature_dim_mismatch",
             "model": model_info,
             "recommendation": "keep_quant_disabled",
         }
 
-    panel = build_training_data(db, include_inactive=True)  # M26.1：扩盘后用全量验证
+    panel = build_training_data(
+        db,
+        include_inactive=True,
+        feature_cols=feature_cols,
+    )  # M26.1：扩盘后用全量验证
     if panel.empty:
         return {
             "status": "no_training_panel",
@@ -114,13 +128,14 @@ def build_current_model_validation(db) -> dict[str, Any]:
         }
 
     validation = build_validation_report(
-        _validation_predictions(model, val_df),
+        _validation_predictions(model, val_df, feature_cols=feature_cols),
         label="M26 current production lgbm_alpha.pkl",
         sample={
             "n_rows": len(panel),
             "train_rows": len(train_df),
             "validation_rows": len(val_df),
             "n_stocks": int(panel["symbol"].nunique()) if "symbol" in panel.columns else 1,
+            "n_features_validation": len(feature_cols),
             "panel_start": str(pd.to_datetime(panel["date"]).min().date()),
             "panel_end": str(pd.to_datetime(panel["date"]).max().date()),
             "validation_start": str(pd.to_datetime(val_df["date"]).min().date()),
@@ -442,6 +457,7 @@ def report_to_markdown(report: dict[str, Any]) -> str:
         "",
         f"- status: {val.get('status')}",
         f"- model: {val.get('model', {}).get('path')} / mtime={val.get('model', {}).get('mtime_utc')}",
+        f"- feature_dim: status={val.get('model', {}).get('model_dim_status')} / model={val.get('model', {}).get('n_features_model')} / validation={val.get('model', {}).get('n_features_validation')} / current_candidate={val.get('model', {}).get('n_features_current_candidate')}",
         f"- IC: {metrics.get('ic_mean')} / ICIR: {metrics.get('icir')} / IC>0占比: {metrics.get('ic_positive_rate')} / monotonic: {(val.get('gates') or {}).get('pass_monotonic')}",
         f"- production gate pass: {gate.get('pass')} (ic_floor={gate.get('ic_floor')}, icir_floor={gate.get('icir_floor')}, require_monotonic={gate.get('require_monotonic')})",
         f"- M26 diagnostic gate pass: {diagnostic_gate.get('pass')} (ic_floor={diagnostic_gate.get('ic_floor')}, icir_floor={diagnostic_gate.get('icir_floor')}, require_monotonic={diagnostic_gate.get('require_monotonic')})",
@@ -512,7 +528,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--end", default="2026-05-14")
     parser.add_argument("--every-n-days", type=int, default=5)
     parser.add_argument("--symbols", nargs="*", help="Defaults to paper_trading/test2_universe.json")
-    parser.add_argument("--universe-path", type=Path, default=DEFAULT_UNIVERSE_PATH)
+    parser.add_argument(
+        "--universe-path",
+        type=Path,
+        default=DEFAULT_UNIVERSE_PATH,
+        help=f"Defaults to M26 test2. Pass {M27_TEST3_UNIVERSE_PATH} explicitly for M27/test3 diagnostics.",
+    )
     parser.add_argument("--json-output", type=Path, default=DEFAULT_JSON_OUTPUT)
     parser.add_argument("--markdown-output", type=Path, default=DEFAULT_MARKDOWN_OUTPUT)
     parser.add_argument("--print", action="store_true", help="Print markdown report to stdout")

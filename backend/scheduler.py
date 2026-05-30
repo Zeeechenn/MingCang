@@ -1,8 +1,10 @@
 """定时任务：盘前更新数据，盘后生成信号"""
+import json
 import logging
 from copy import deepcopy
 from datetime import UTC, datetime
 from functools import wraps
+from pathlib import Path
 from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -303,7 +305,7 @@ def _analyze_postmarket_stock(stock, db, context: dict, as_of_date: str | None =
     from backend.analysis.technical import technical_score
     from backend.data.market import load_price_df
     from backend.decision.aggregator import aggregate, aggregate_v2
-    from backend.memory.stock_memory import build_memory_context
+    from backend.memory.stock_memory import build_memory_context, list_stock_memories
 
     df = load_price_df(stock.symbol, db, days=200)
     if as_of_date:
@@ -324,6 +326,18 @@ def _analyze_postmarket_stock(stock, db, context: dict, as_of_date: str | None =
         query=f"{stock.symbol} {stock.name}",
         task_type="postmarket_signal",
     )
+    try:
+        research_pointers = list_stock_memories(
+            db,
+            symbol=stock.symbol,
+            memory_type="research_pointer",
+            limit=5,
+        )
+    except Exception as exc:
+        logger.warning("research pointer context unavailable %s: %s", stock.symbol, exc)
+        research_pointers = []
+    if research_pointers:
+        sentiment_result["research_context"] = research_pointers
     reflection = memory_context.get("text", "")
     lt_label = context["long_term_labels"].get(stock.symbol)
 
@@ -484,14 +498,30 @@ def _apply_portfolio_decision(batch_items: list[tuple[Any, dict]], db) -> int:
     return len(by_symbol)
 
 
-def run_postmarket_batch(db) -> dict:
-    """Run post-market analysis for active stocks and return batch stats."""
+def load_universe_symbols(path: str | Path) -> list[str]:
+    """Load symbols from a paper-trading universe JSON file."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    rows = payload.get("stocks", payload) if isinstance(payload, dict) else payload
+    symbols: list[str] = []
+    for row in rows:
+        symbol = row.get("symbol") if isinstance(row, dict) else row
+        if symbol:
+            symbols.append(str(symbol).zfill(6))
+    return symbols
+
+
+def run_postmarket_batch(db, universe_symbols: list[str] | None = None) -> dict:
+    """Run post-market analysis for active stocks or an explicit universe."""
     from backend.data.database import Stock
 
-    stocks = db.query(Stock).filter(Stock.active).all()
+    if universe_symbols is None:
+        stocks = db.query(Stock).filter(Stock.active).all()
+    else:
+        stocks = db.query(Stock).filter(Stock.symbol.in_(universe_symbols)).all()
     context = _load_postmarket_context(db, stocks)
     stats = {
         "stocks": len(stocks),
+        "universe_filter": len(universe_symbols) if universe_symbols is not None else None,
         "processed": 0,
         "saved": 0,
         "skipped": 0,

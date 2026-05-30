@@ -6,9 +6,10 @@ path. It only runs when called explicitly from CLI or API.
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from backend.config import BASE_DIR
@@ -16,6 +17,8 @@ from backend.data.database import FinancialMetric, NewsItem, Price, Stock
 from backend.data.news import RawNews
 from backend.data.news_audit import NewsAudit, audit_news_items
 from backend.research.agents import ResearchSection, build_research_sections
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,7 @@ class DeepResearchReport:
     source_count: int
     risk_flags: list[str]
     retrieval_iterations: tuple[dict, ...] = ()  # evaluator/planner 闭环轨迹
+    sections: tuple[dict, ...] = ()
 
 
 def default_output_dir() -> Path:
@@ -107,6 +111,7 @@ def _collect_news(
     *,
     window_days: int = 14,
     limit: int = 80,
+    memory_items: list[RawNews] | None = None,
 ) -> tuple[list[RawNews], list[NewsAudit]]:
     """Collect recent stored news and audit the source trail."""
     cutoff = as_of_dt - timedelta(days=window_days)
@@ -127,6 +132,8 @@ def _collect_news(
         )
         for row in rows
     ]
+    if memory_items:
+        items.extend(item for item in memory_items if item.published_at >= cutoff)
     return items, audit_news_items(items, now=as_of_dt)
 
 
@@ -143,6 +150,9 @@ class EvidenceEvaluation:
 
 def _evaluate_evidence(
     *,
+    topic: str,
+    symbols: list[str],
+    names: dict[str, str],
     audits: list[NewsAudit],
     financials: list[dict],
     window_days: int,
@@ -192,8 +202,22 @@ def _evaluate_evidence(
         provider: str | None = None
         if "anspire" not in exhausted_providers and _settings.anspire_api_key:
             provider = "anspire"
-        elif "tavily" not in exhausted_providers and _settings.tavily_api_key:
-            provider = "tavily"
+        elif "tavily_web" not in exhausted_providers and _settings.tavily_api_key:
+            return EvidenceEvaluation(
+                quality="insufficient",
+                usable_count=usable_count,
+                weak_count=weak_count,
+                missing_financial_symbols=missing_financials,
+                next_plan={
+                    "action": "web_search",
+                    "provider": "tavily_web",
+                    "search_queries": _build_search_queries(topic, symbols, names),
+                    "reason": (
+                        f"本地窗口已扩到 {window_days} 天仍 {usable_count}/{min_usable}，"
+                        "调用 Tavily web_search 纯内存补证"
+                    ),
+                },
+            )
         if provider is not None:
             return EvidenceEvaluation(
                 quality="insufficient",
@@ -247,6 +271,8 @@ def _execute_plan(
     plan: dict,
     db,
     symbols: list[str],
+    *,
+    topic: str = "",
 ) -> dict:
     """执行 evaluator/planner 给出的下一步动作；返回执行摘要供 trace。"""
     action = plan.get("action")
@@ -254,9 +280,117 @@ def _execute_plan(
         return {"action": action, "window_days_next": int(plan["to_days"])}
     if action == "fetch_external_news":
         return _fetch_external_news(db, symbols, plan["provider"], days=int(plan["days"]))
+    if action == "web_search":
+        queries = plan.get("search_queries") or ([topic] if topic else symbols)
+        results = _tavily_web_search([str(q) for q in queries if str(q).strip()][:3])
+        return {
+            "action": "web_search",
+            "provider": "tavily_web",
+            "fetched": len(results),
+            "results": results,
+            "errors": [],
+        }
     if action == "backfill_financials":
         return _backfill_financials(db, plan["symbols"])
     return {"action": action, "skipped": True}
+
+
+def _build_search_queries(topic: str, symbols: list[str], names: dict[str, str]) -> list[str]:
+    """Build bounded Tavily search queries from topic + covered symbols."""
+    queries = [topic.strip()] if topic.strip() else []
+    for symbol in symbols[:2]:
+        label = f"{names.get(symbol, '')} {symbol}".strip()
+        if label:
+            queries.append(f"{topic} {label} 最新公告 订单 风险")
+    return queries[:3] or ["A股 最新公告 风险"]
+
+
+def _tavily_web_search(
+    queries: list[str],
+    *,
+    max_results_per_query: int = 5,
+    days: int = 30,
+) -> list[dict]:
+    """Call Tavily search as a pure in-memory evidence source."""
+    clean_queries = [q.strip() for q in queries if q and q.strip()]
+    if not clean_queries:
+        return []
+
+    from backend.config import settings
+    if not settings.tavily_api_key:
+        return []
+
+    import requests
+
+    session = requests.Session()
+    session.trust_env = False
+    output: list[dict] = []
+    seen: set[str] = set()
+    for query in clean_queries:
+        try:
+            resp = session.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": settings.tavily_api_key,
+                    "query": query,
+                    "search_depth": "basic",
+                    "max_results": max_results_per_query,
+                    "days": days,
+                    "include_answer": False,
+                },
+                timeout=12,
+            )
+            resp.raise_for_status()
+            results = resp.json().get("results", [])
+        except Exception as exc:  # pragma: no cover - 网络层异常兜底
+            logger.warning("Tavily web_search failed query=%s: %s", query, exc)
+            continue
+        for item in results:
+            title = str(item.get("title") or "").strip()
+            url = str(item.get("url") or "").strip()
+            key = url or title
+            if not title or key in seen:
+                continue
+            seen.add(key)
+            output.append({
+                "title": title,
+                "url": url,
+                "snippet": str(item.get("content") or item.get("snippet") or "").strip(),
+                "published_date": item.get("published_date") or "",
+                "source": "tavily_web",
+                "query": query,
+            })
+    return output
+
+
+def _parse_web_date(value: str | None, fallback: datetime) -> datetime:
+    """Parse Tavily date strings into naive datetimes."""
+    if not value:
+        return fallback
+    raw = str(value).strip().replace("T", " ")[:19]
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return fallback
+
+
+def _web_results_to_news(results: list[dict], *, fallback_dt: datetime) -> list[RawNews]:
+    """Convert Tavily result dicts to RawNews for the existing audit path."""
+    items: list[RawNews] = []
+    for result in results:
+        title = str(result.get("title") or "").strip()
+        if not title:
+            continue
+        items.append(RawNews(
+            title=title,
+            url=str(result.get("url") or ""),
+            published_at=_parse_web_date(result.get("published_date"), fallback_dt),
+            source="tavily_web",
+            symbol=None,
+        ))
+    return items
 
 
 def _fetch_external_news(
@@ -325,6 +459,37 @@ def _build_summary(topic: str, symbols: list[str], source_count: int, weak_count
     )
 
 
+def _section_to_dict(section: ResearchSection) -> dict:
+    """Serialize a ResearchSection for persistence and debate context."""
+    return {
+        "role": section.role,
+        "title": section.title,
+        "content": section.content,
+        "catalysts": list(section.catalysts),
+        "risks": list(section.risks),
+        "valuation_anchor": section.valuation_anchor,
+        "evidence_snippets": list(section.evidence_snippets),
+        "stance": section.stance,
+        "confidence": section.confidence,
+    }
+
+
+def _render_section_structured(section: ResearchSection) -> list[str]:
+    """Render non-empty IC memo fields for one section."""
+    rows: list[str] = []
+    if section.stance:
+        rows.append(f"- 立场：{section.stance}（confidence={section.confidence:.2f}）")
+    if section.catalysts:
+        rows.append("- 催化剂：" + "；".join(section.catalysts))
+    if section.risks:
+        rows.append("- 风险：" + "；".join(section.risks))
+    if section.valuation_anchor:
+        rows.append(f"- 估值锚：{section.valuation_anchor}")
+    if section.evidence_snippets:
+        rows.append("- 证据片段：" + "；".join(section.evidence_snippets[:4]))
+    return rows
+
+
 def _render_report(
     *,
     topic: str,
@@ -359,6 +524,9 @@ def _render_report(
     ]
     for section in sections:
         lines.extend([f"### {section.title}", section.content, ""])
+        structured = _render_section_structured(section)
+        if structured:
+            lines.extend(["结构化 IC Memo：", *structured, ""])
 
     lines.extend([
         "## 行业/主题观察",
@@ -403,7 +571,7 @@ def _render_report(
             lines.append(
                 f"- [{status} score={audit.score} flags={flags}] "
                 f"{audit.news.source}｜{audit.news.published_at:%Y-%m-%d}｜"
-                f"{audit.news.title}｜{audit.news.url}"
+                f"{_format_source_title(audit.news.title, audit.news.url, audit.news.source)}"
             )
     else:
         lines.append("- 本地数据库暂无近 14 日新闻；本报告只保留结构化研究框架。")
@@ -431,6 +599,12 @@ def _render_report(
                         f"回补财务 {plan.get('symbols')} → 同步 {synced} 行；"
                         f"{plan.get('reason')}"
                     )
+                elif action == "web_search":
+                    fetched = result.get("fetched", "?")
+                    plan_text = (
+                        f"Tavily web_search → 纯内存新增 {fetched} 条；"
+                        f"{plan.get('reason')}"
+                    )
                 else:
                     plan_text = f"{action}：{plan.get('reason', '')}"
             else:
@@ -455,6 +629,13 @@ def _render_report(
     return "\n".join(lines)
 
 
+def _format_source_title(title: str, url: str, source: str) -> str:
+    """Format source audit rows, linking pure web-search evidence."""
+    if source == "tavily_web" and url:
+        return f"[{title}]({url})｜{url}"
+    return f"{title}｜{url}"
+
+
 def run_deep_research(
     *,
     topic: str,
@@ -465,6 +646,7 @@ def run_deep_research(
     persist: bool = True,
     min_usable_sources: int = 3,
     max_iterations: int = 5,
+    seed_queries: list[str] | None = None,
 ) -> DeepResearchReport:
     """Run a deep research workflow with an evaluator/planner re-query loop.
 
@@ -476,7 +658,7 @@ def run_deep_research(
       4. execute the plan and re-evaluate
     """
     clean_symbols = [s.strip() for s in symbols if s.strip()]
-    day = as_of or datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+    day = as_of or datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
     as_of_dt = datetime.strptime(day, "%Y-%m-%d")
     names = _symbol_names(db, clean_symbols)
     prices = [_latest_price_context(db, symbol) for symbol in clean_symbols]
@@ -488,13 +670,32 @@ def run_deep_research(
     evaluation: EvidenceEvaluation | None = None
     exhausted_providers: set[str] = set()
     attempted_financials: set[str] = set()
+    memory_news: list[RawNews] = []
+    clean_seed_queries = [q.strip() for q in (seed_queries or []) if q and q.strip()]
+    if clean_seed_queries:
+        seed_result = _execute_plan(
+            {"action": "web_search", "search_queries": clean_seed_queries[:3]},
+            db,
+            clean_symbols,
+            topic=topic,
+        )
+        memory_news.extend(_web_results_to_news(
+            seed_result.get("results", []),
+            fallback_dt=as_of_dt,
+        ))
+        if seed_result.get("fetched", 0) > 0:
+            exhausted_providers.add("tavily_web")
     for _ in range(max_iterations):
         _, audits = _collect_news(
             db, clean_symbols, as_of_dt, window_days=window_days,
+            memory_items=memory_news,
         )
         # 财务可能在上一轮 backfill 被刷新；每轮重读以反映最新状态
         financials = [_latest_financial_context(db, symbol) for symbol in clean_symbols]
         evaluation = _evaluate_evidence(
+            topic=topic,
+            symbols=clean_symbols,
+            names=names,
             audits=audits,
             financials=financials,
             window_days=window_days,
@@ -504,13 +705,19 @@ def run_deep_research(
         )
         plan_result: dict | None = None
         if evaluation.next_plan is not None:
-            plan_result = _execute_plan(evaluation.next_plan, db, clean_symbols)
+            plan_result = _execute_plan(evaluation.next_plan, db, clean_symbols, topic=topic)
             action = evaluation.next_plan.get("action")
             if action == "expand_news_window":
                 window_days = int(plan_result.get("window_days_next", window_days))
             elif action == "fetch_external_news":
                 # 标记 provider 已尝试，避免下一轮重复打同一个外部源
                 exhausted_providers.add(evaluation.next_plan["provider"])
+            elif action == "web_search":
+                memory_news.extend(_web_results_to_news(
+                    plan_result.get("results", []),
+                    fallback_dt=as_of_dt,
+                ))
+                exhausted_providers.add("tavily_web")
             elif action == "backfill_financials":
                 attempted_financials.update(evaluation.next_plan["symbols"])
         iterations.append({
@@ -525,6 +732,22 @@ def run_deep_research(
             break
 
     assert evaluation is not None  # max_iterations >= 1 保证至少一轮
+    _, audits = _collect_news(
+        db, clean_symbols, as_of_dt, window_days=window_days,
+        memory_items=memory_news,
+    )
+    financials = [_latest_financial_context(db, symbol) for symbol in clean_symbols]
+    evaluation = _evaluate_evidence(
+        topic=topic,
+        symbols=clean_symbols,
+        names=names,
+        audits=audits,
+        financials=financials,
+        window_days=window_days,
+        min_usable=min_usable_sources,
+        exhausted_providers=exhausted_providers,
+        attempted_financials=attempted_financials,
+    )
     usable_count = evaluation.usable_count
     weak_count = evaluation.weak_count
     risk_flags = sorted({flag for audit in audits for flag in audit.risk_flags})
@@ -567,6 +790,7 @@ def run_deep_research(
         source_count=usable_count,
         risk_flags=risk_flags,
         retrieval_iterations=tuple(iterations),
+        sections=tuple(_section_to_dict(section) for section in sections),
     )
     if persist:
         _persist_report(db, report, audits)
@@ -606,6 +830,7 @@ def _persist_report(db, report: DeepResearchReport, audits: list[NewsAudit]) -> 
             }
             for audit in audits[:20]
         ],
+        "sections": list(report.sections),
     }
     for symbol in report.symbols or [""]:
         record_decision_run(
@@ -623,6 +848,7 @@ def _persist_report(db, report: DeepResearchReport, audits: list[NewsAudit]) -> 
         summary=report.summary,
         symbols=report.symbols,
         report_path=str(report.path) if report.path else "",
+        sections=list(report.sections),
     )
 
 
@@ -633,6 +859,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--symbols", default="", help="逗号分隔股票代码，例如：300308,300394")
     parser.add_argument("--as-of", default=None, help="研究日期 YYYY-MM-DD，默认今天")
     parser.add_argument("--output-dir", default=None, help="报告输出目录，默认 docs/research")
+    parser.add_argument("--seed-queries", default="", help="逗号分隔 Tavily seed queries，用于首轮纯内存补证")
     args = parser.parse_args(argv)
 
     from backend.data.database import SessionLocal
@@ -645,6 +872,7 @@ def main(argv: list[str] | None = None) -> int:
             db=db,
             output_dir=args.output_dir,
             as_of=args.as_of,
+            seed_queries=[q for q in args.seed_queries.split(",") if q.strip()],
             persist=True,
         )
         print(report.path)

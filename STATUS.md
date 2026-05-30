@@ -22,7 +22,8 @@
 | M11 | Agent-Ready 本地/远程双模式接口 | ✅ 初版完成，本地 agent 默认信任，远程模式显式启用 |
 | M14 | 股票长期记忆与跨入口召回 | ✅ 初版完成，SQLite 结构化召回 |
 | M26 | 量化层重估（扩盘+Kronos评估） | ✅ M26.0/M26.1/M26.2 完成；M26.3 暂停待 M27.1 |
-| M27 | Alpha 根治工程 | ⏳ 进行中——因子工程→交易池扩容→事件情感→Kronos微调 |
+| M27 | Alpha 根治工程 | ⏳ 工程接线完成；M27.1a 诊断指向 label/objective 重设计，继续保持 quant 关闭 |
+| M28 | 调研模块整合与实时搜索接入 | ✅ 完成，deep_research / copilot / debate 信息流打通 |
 
 ---
 
@@ -47,11 +48,18 @@
 - 生产：继续 `weight_quant=0.0`，`kronos_enabled=false`
 
 **M27 Alpha 根治工程（2026-05-30 启动）** ← 当前活跃里程碑
-- M27.1（P1）：经典因子工程——反转动量 / 换手率异常 / 量价背离 / 板块相对强弱，目标 IC ≥ 0.04
-- M27.2（P1）：交易池 25 → 100 支（test3_universe），提升截面统计功率
-- M27.3（P2）：情感信号事件化——极性 → 事件检测（8~12 类 A 股事件分类体系）
-- M27.4（P2）：Kronos 微调（Path A）——排序损失 fine-tune，目标超越 M27.1 LightGBM 基线
+- M27.1（P1）：经典因子工程已接入；regression candidate IC=0.020217 / ICIR=0.176699 / monotonic=False，ranker candidate IC=0.029978 / ICIR=0.163796 / monotonic=False，均未过 `IC≥0.04 / ICIR≥0.40 / monotonic=True`
+- M27.1a（P1）：alpha 诊断报告已写入 `~/.stock-sage/m27_alpha_diagnostic_report.{md,json}`；active 94 支、107270 行、2019-01-25~2026-05-22，5d 最强单因子 `roe` 仅 IC=0.015642 / ICIR=0.114032 / monotonic=False，M27 最强 `sector_rel_strength_20_z` 仅 IC=0.012131 / ICIR=0.076884；结论为先重设计 label/objective，再继续堆因子
+- M27.1b（P1）：label/objective 离线评估工具已改为真实 top 10% 训练/评估口径，并加入 FEATURE_COLS cache 失效保护；旧 20% 口径报告不再作为结论引用，需刷新 `~/.stock-sage/m27_label_objective_eval_report.{md,json}` 后再进入 M27.1c 离散入场过滤器验证；生产 quant 继续关闭
+- M27.2（P1）：`paper_trading/test3_universe.json` 已生成 100 支，candidate_count=708，sector_count=64；signal runner 与 M26 baseline 支持显式 universe 参数，M26 默认仍保留 test2 基线口径
+- M27.3（P2）：A 股事件分类与 `event_score` 已接入情感/信号合成；test3 IC A/B 仍待足量事件样本验证
+- M27.4（P2）：Kronos Path A 数据准备、ListMLE loss、dry-run training plan、`m26_kronos_eval --model kronos-finetuned` 入口完成；真实微调未长跑
 - 完整规划见 `docs/ROADMAP.md § M27`
+
+**M28 调研模块整合（2026-05-30 完成）**
+- `ResearchSection` 升级为 IC Memo schema，deep_research 报告持久化结构化 `sections`
+- `run_deep_research` 支持 Tavily 纯内存 `web_search` 与 `seed_queries`，末轮搜索结果会重新审计后进入报告，不写 DB，不进入日常信号
+- 多轮辩论可注入 research_context；盘后路径可从 `research_pointer.sections` 恢复 catalysts/risks/evidence；copilot `validation_questions` 进入 dossier `pending_questions`
 
 公开默认 LLM runtime 为 `AI_PROVIDER=local_cli`，通过本机 Claude / Codex CLI 调用；`anthropic` / `openai` 只有在配置真实 key 时才可用，空 key 和 `your_*` 占位值视为未配置。`GET /api/system/health` 与 `GET /api/system/status` 会返回非敏感 runtime readiness。
 
@@ -123,7 +131,12 @@
 - `PYTHONPATH=. python3 backend/backtest/alphalens_qlib.py --walk-forward --json-output /private/tmp/stocksage_qlib_offline_m25_5.json` → 通过；single split `IC=0.0372` / `ICIR=0.229` 且分层非单调，walk-forward `IC=-0.0058` / `ICIR=-0.025` 且分层非单调，继续保持 `weight_quant=0.0`。
 - `PYTHONPATH=. .venv/bin/python -m backend.tools.m26_quant_baseline --start 2025-11-01 --end 2026-05-14 --every-n-days 5` → 通过；输出本地 M26 报告到 `~/.stock-sage/`，结论继续保持 `weight_quant=0.0`。
 - `PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_m6_backtest_report.py tests/test_qlib_ranker.py tests/test_backfill_signals.py tests/test_m26_quant_baseline.py tests/test_stage_a_fixes.py tests/integration/test_long_term_pipeline.py tests/test_portfolio_eval.py tests/test_backtrader_eval.py` → **44 passed**（2026-05-30 M26 quant baseline / Kronos optional interface）。
-- `python3 -m pytest -q -p no:cacheprovider` → **454 passed**（2026-05-27 M25.4 StockDetail progressive loading）。
+- `PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. python3 -m pytest -q -p no:cacheprovider tests/test_m27_alpha_diagnostic.py tests/test_qlib_ranker.py` → **10 passed**（2026-05-30 M27.1a alpha diagnostic）。
+- `PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. python3 -m backend.tools.m27_alpha_diagnostic --active-only` → 通过；输出 `~/.stock-sage/m27_alpha_diagnostic_report.{md,json}`，建议 `redesign_label_objective_before_more_feature_work`。
+- `PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_deep_research.py tests/test_m26_quant_boundary.py tests/test_m26_quant_baseline.py tests/test_qlib_feature_engineering.py tests/test_m27_alpha_event_universe.py tests/test_m27_m28_integration.py tests/test_m26_kronos_eval.py tests/test_qlib_ranker.py tests/test_qlib_validation_panel.py tests/test_m6_backtest_report.py tests/test_m27_alpha_diagnostic.py tests/test_m27_label_objective_eval.py tests/test_multi_round_debate.py tests/test_stock_memory.py tests/test_m27_kronos_finetune_data.py tests/test_stocksage_kronos_losses.py` → **102 passed, 2 skipped**（2026-05-30 M26/M27/M28 pre-commit repair suite）。
+- `PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. python3 -m backend.tools.m27_label_objective_eval --active-only --horizon 20 --n-estimators 120` → **待刷新**；旧报告使用修复前 top-decile 口径，不再作为当前结论引用。
+- `PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. .venv/bin/python -m backend.analysis.qlib_engine --validate-production --json-output /private/tmp/stocksage_m26_prod_validation.json` → 通过；`status=ok`，legacy production feature cols 25 维验证，current candidate 29 维，production gate 未过，继续 `keep_quant_disabled`。
+- `PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. .venv/bin/python -m pytest -q -p no:cacheprovider` → **546 passed, 2 skipped**（2026-05-30 M26/M27/M28 repair full suite）。
 - `python3 -m compileall backend tests` → 通过
 - `cd frontend && node --test src/*.test.js src/components/*.test.js src/pages/*.test.js` → **19 passed**（2026-05-27 StockDetail progressive loading）
 - `cd frontend && npm run build` → 通过（62 modules，约 470 KB / gzip 146 KB）

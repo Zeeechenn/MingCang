@@ -8,7 +8,7 @@ event 需 LLM 结构化输出独立字段后再写，本模块不再生成 candi
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.memory.ai_memory import remember
 
@@ -25,17 +25,20 @@ def remember_deep_research(
     summary: str,
     symbols: list[str],
     report_path: str,
+    sections: list[dict] | None = None,
 ) -> None:
     """Store a structured pointer to a deep-research report."""
     from backend.memory.stock_memory import create_stock_memory
 
     clipped_summary = _summary_clip(summary)
+    sections = sections or []
     payload = {
         "topic": topic,
         "summary": clipped_summary,
         "symbols": symbols,
         "report_path": report_path,
-        "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "sections": sections,
+        "updated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
     }
     remember(
         db,
@@ -52,6 +55,7 @@ def remember_deep_research(
             "symbols": symbols,
             "report_path": report_path,
             "dossier_role": "deep_research",
+            "sections": sections,
         }
         create_stock_memory(
             db,

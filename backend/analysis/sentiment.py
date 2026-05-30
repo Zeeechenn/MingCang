@@ -2,8 +2,9 @@
 import hashlib
 import json
 from collections import OrderedDict
-from datetime import datetime, timezone, timezone
+from datetime import UTC, datetime
 
+from backend.analysis.event_taxonomy import apply_event_score
 from backend.config import settings
 from backend.llm import get_provider, has_runtime_llm_provider
 
@@ -38,12 +39,23 @@ _SENTIMENT_TOOL = {
     },
 }
 
-_FALLBACK = {"sentiment": 0.0, "summary": "无相关新闻", "impact": "short", "key_events": []}
+_FALLBACK = {
+    "sentiment": 0.0,
+    "summary": "无相关新闻",
+    "impact": "short",
+    "key_events": [],
+    "event_score": 0.0,
+    "event_score_mode": "sentiment_fallback",
+    "event_types": [],
+}
 _DISABLED_FALLBACK = {
     "sentiment": 0.0,
     "summary": "LLM已禁用",
     "impact": "short",
     "key_events": [],
+    "event_score": 0.0,
+    "event_score_mode": "sentiment_fallback",
+    "event_types": [],
 }
 
 
@@ -122,7 +134,7 @@ def _persistent_cache_set(key: str, titles_hash: str, symbol: str | None, value:
 
         db = SessionLocal()
         try:
-            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            now = datetime.now(UTC).replace(tzinfo=None)
             payload = json.dumps(value, ensure_ascii=False)
             row = db.query(SentimentCache).filter(SentimentCache.cache_key == key).first()
             if row:
@@ -151,18 +163,18 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
     相同股票+标题集合优先命中进程内和 SQLite 缓存，避免重复消耗 LLM 配额。
     """
     if not titles:
-        return _FALLBACK.copy()
+        return apply_event_score(_FALLBACK, [])
     if not has_runtime_llm_provider(settings):
-        return _DISABLED_FALLBACK.copy()
+        return apply_event_score(_DISABLED_FALLBACK, titles)
 
     cache_key, titles_hash = _cache_key(titles, symbol)
     cached = _cache_get(cache_key)
     if cached is not None:
-        return cached
+        return apply_event_score(cached, titles)
     cached = _persistent_cache_get(cache_key)
     if cached is not None:
         _cache_set(cache_key, cached)
-        return cached
+        return apply_event_score(cached, titles)
 
     context = f"股票代码：{symbol}\n" if symbol else ""
     prompt = context + "新闻标题：\n" + "\n".join(f"- {t}" for t in titles[:15])
@@ -176,16 +188,26 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
     )
     try:
         import json as _json
+
         from backend.ops.llm_usage import log_llm_usage
         log_llm_usage("sentiment", SYSTEM_PROMPT + prompt, _json.dumps(data))
     except Exception:
         pass
 
     if not data:
-        return {"sentiment": 0.0, "summary": "解析失败", "impact": "short", "key_events": []}
+        return apply_event_score({
+            "sentiment": 0.0,
+            "summary": "解析失败",
+            "impact": "short",
+            "key_events": [],
+            "event_score": 0.0,
+            "event_score_mode": "sentiment_fallback",
+            "event_types": [],
+        }, titles)
 
     data["sentiment"] = max(-1.0, min(1.0, float(data.get("sentiment", 0))))
     data["key_events"] = data.get("key_events", [])[:3]
+    data = apply_event_score(data, titles)
     _cache_set(cache_key, data)
     _persistent_cache_set(cache_key, titles_hash, symbol, data)
     return dict(data)

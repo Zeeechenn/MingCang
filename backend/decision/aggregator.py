@@ -60,6 +60,28 @@ def _blend_quant(qlib_score: float, kronos_result: dict | None) -> tuple[float, 
     }
 
 
+def _effective_sentiment_score(sentiment_score: float, sentiment_result: dict | None) -> float:
+    """Use event_score when event taxonomy found a real event; otherwise keep polarity."""
+    if not sentiment_result or sentiment_result.get("event_score_mode") != "event_override":
+        return sentiment_score
+    try:
+        score = float(sentiment_result.get("event_score"))
+    except (TypeError, ValueError):
+        return sentiment_score
+    return max(-1.0, min(1.0, score)) if math.isfinite(score) else sentiment_score
+
+
+def _sentiment_for_signal(sentiment_result: dict) -> dict:
+    """Copy sentiment payload with event-aware sentiment substituted for scoring paths."""
+    effective = _effective_sentiment_score(
+        float(sentiment_result.get("sentiment") or 0.0),
+        sentiment_result,
+    )
+    if effective == sentiment_result.get("sentiment"):
+        return sentiment_result
+    return {**sentiment_result, "raw_sentiment": sentiment_result.get("sentiment", 0.0), "sentiment": effective}
+
+
 _DEBATE_TOOL = {
     "name": "debate_result",
     "description": "多空辩论结论",
@@ -191,12 +213,13 @@ def aggregate(
     """
     tech_score = technical_result.get("score", 0)
     blended_quant, kronos_info = _blend_quant(quant_score, kronos_result)
+    effective_sentiment = _effective_sentiment_score(sentiment_score, sentiment_result)
 
     weights = active_signal_weights()
     composite = (
         blended_quant * weights.quant
         + tech_score * weights.technical
-        + sentiment_score * 100 * weights.sentiment
+        + effective_sentiment * 100 * weights.sentiment
     )
     if not math.isfinite(composite):
         composite = 0.0
@@ -227,7 +250,7 @@ def aggregate(
     breakdown = {
         "quant": round(blended_quant, 1),
         "technical": round(tech_score, 1),
-        "sentiment": round(sentiment_score * 100, 1),
+        "sentiment": round(effective_sentiment * 100, 1),
     }
 
     from backend.decision.research_constraints import apply_research_constraints
@@ -264,6 +287,12 @@ def aggregate(
         result["llm_arbitration"] = llm_arb
     if kronos_info:
         result["kronos"] = kronos_info
+    if sentiment_result and sentiment_result.get("event_score_mode") == "event_override":
+        result["event_signal"] = {
+            "event_score": sentiment_result.get("event_score"),
+            "raw_sentiment": round(sentiment_score * 100, 1),
+            "event_types": sentiment_result.get("event_types", []),
+        }
     return result
 
 
@@ -302,6 +331,8 @@ def aggregate_v2(
         multi_round_debate,
     )
 
+    sentiment_result = _sentiment_for_signal(sentiment_result)
+
     # 与旧版一致的 quant 层混合（Kronos 等可选模块仍可参与）
     blended_quant_score, kronos_info = _blend_quant(quant_result.get("score", 0), kronos_result)
     quant_result_merged = {**quant_result, "score": blended_quant_score}
@@ -316,6 +347,11 @@ def aggregate_v2(
     # M4.2 Director 评估（零 LLM）→ 取 debate_topic
     director = director_assess(reports) if settings.research_director_enabled else None
     debate_topic = director.debate_topic if director else ""
+    from backend.agents.pipeline import build_research_context
+    research_context = build_research_context(
+        sentiment_result=sentiment_result,
+        reflection_context=reflection_context,
+    )
 
     llm_arb = None
     multi_round_tried = False
@@ -328,6 +364,7 @@ def aggregate_v2(
                 composite_hint=avg_score,
                 reflection_context=reflection_context,
                 debate_topic=debate_topic,
+                research_context=research_context,
             )
             multi_round_tried = True
             # M17.2：无论多轮是否成功都采用其结论，不再回退到单轮 LLM
@@ -358,6 +395,7 @@ def aggregate_v2(
         limit_status=technical_result.get("limit", {}),
         long_term_label=long_term_label,
         _precomputed_reports=reports,  # M17.2 避免四路分析师重复计算
+        research_context=research_context,
     )
 
     result = decision.to_signal_dict()

@@ -149,6 +149,7 @@ def run_deep_research_endpoint(
         symbols=request.symbols,
         db=db,
         as_of=request.as_of,
+        seed_queries=request.seed_queries,
         persist=True,
     )
     readiness = runtime_readiness()

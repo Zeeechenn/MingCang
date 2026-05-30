@@ -211,12 +211,70 @@ def _validate_tool_output(data: dict | None, tool: dict) -> tuple[bool, str | No
     return True, None
 
 
+_NEGATIVE_HINTS = ("风险", "下滑", "减持", "处罚", "监管", "亏损", "回撤", "拥挤", "走弱")
+
+
+def _research_context_items(research_context: dict | None, key: str, limit: int = 4) -> list[str]:
+    """Read bounded string items from optional research context."""
+    if not isinstance(research_context, dict):
+        return []
+    value = research_context.get(key) or []
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list | tuple):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()][:limit]
+
+
+def _split_evidence_for_side(research_context: dict | None, *, side: str) -> list[str]:
+    """Partition snippets into bull/bear prompt evidence with simple keyword rules."""
+    snippets = _research_context_items(research_context, "evidence_snippets", limit=8)
+    if side == "bear":
+        return [s for s in snippets if any(hint in s for hint in _NEGATIVE_HINTS)][:4]
+    positives = [s for s in snippets if not any(hint in s for hint in _NEGATIVE_HINTS)]
+    return positives[:4]
+
+
+def _format_research_context(research_context: dict | None, *, side: str) -> str:
+    """Render optional IC memo context for a specific debate role."""
+    if not isinstance(research_context, dict):
+        return ""
+    if side == "bull":
+        primary_label = "可用催化剂"
+        primary = _research_context_items(research_context, "catalysts")
+    elif side == "bear":
+        primary_label = "可用风险"
+        primary = _research_context_items(research_context, "risks")
+    else:
+        primary_label = "催化剂与风险"
+        primary = (
+            _research_context_items(research_context, "catalysts", limit=3)
+            + _research_context_items(research_context, "risks", limit=3)
+        )
+    evidence = _split_evidence_for_side(research_context, side=side if side in {"bull", "bear"} else "bull")
+    if side == "adjudicator":
+        evidence += _split_evidence_for_side(research_context, side="bear")
+    lines = []
+    if primary:
+        lines.append(f"{primary_label}：" + "；".join(primary[:5]))
+    if evidence:
+        lines.append("证据片段：" + "；".join(evidence[:5]))
+    stance = research_context.get("stance")
+    confidence = research_context.get("confidence")
+    if stance:
+        lines.append(f"研究员综合立场：{stance}；confidence={confidence}")
+    if not lines:
+        return ""
+    return "结构化专题研究上下文（只能作为论据，不得直接改交易动作）：\n" + "\n".join(lines) + "\n"
+
+
 def multi_round_debate(
     reports: list[AnalystReport],
     *,
     composite_hint: float = 0.0,
     reflection_context: str = "",
     debate_topic: str = "",
+    research_context: dict | None = None,
 ) -> ResearcherConclusion:
     """
     M4.1 三轮辩论编排器：
@@ -247,12 +305,16 @@ def multi_round_debate(
     provider = get_provider()
     brief = _build_analyst_brief(reports)
     topic_line = f"辩论议题（Director 指定）：{debate_topic}\n" if debate_topic else ""
+    bull_context = _format_research_context(research_context, side="bull")
+    bear_context = _format_research_context(research_context, side="bear")
+    adjudicator_context = _format_research_context(research_context, side="adjudicator")
 
     rounds: list[DebateRound] = []
 
     # Round 1 — Bull 开场
     bull_prompt = (
         f"{reflection_context}{topic_line}"
+        f"{bull_context}"
         f"四路分析师报告：\n{brief}\n"
         f"综合分提示：{composite_hint:+.0f}/100。\n"
         f"你是看多研究员，请用最强的 3 条理由陈述看多观点。"
@@ -263,6 +325,7 @@ def multi_round_debate(
     )
     try:
         import json as _json
+
         from backend.ops.llm_usage import log_llm_usage
         log_llm_usage("deep_research", bull_prompt, _json.dumps(bull_data))
     except Exception:
@@ -283,6 +346,7 @@ def multi_round_debate(
     # Round 2 — Bear 反驳
     bear_prompt = (
         f"四路分析师报告：\n{brief}\n"
+        f"{bear_context}"
         f"看多方刚陈述：\n" + "\n".join(f"  {i+1}. {p}" for i, p in enumerate(bull_points)) + "\n"
         "你是看空研究员，请逐条反驳并补充独立看空理由。"
     )
@@ -335,6 +399,7 @@ def multi_round_debate(
 
     final_prompt = (
         f"四路分析师报告：\n{brief}\n"
+        f"{adjudicator_context}"
         f"Bull 开场：\n" + "\n".join(f"  {i+1}. {p}" for i, p in enumerate(bull_points)) + "\n"
         f"Bear 反驳：\n{bear_bullets}\n"
         f"请：(1) 让 Bull 最终回应 Bear 的反驳；(2) 客观裁定本轮谁更有说服力，"

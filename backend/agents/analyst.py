@@ -74,13 +74,16 @@ def quant_analyst(qlib_result: dict) -> AnalystReport:
 
 def sentiment_analyst(sentiment_result: dict) -> AnalystReport:
     """包装新闻情感"""
-    raw_sentiment = sentiment_result.get("sentiment", 0.0)  # -1 ~ +1
+    raw_sentiment = sentiment_result.get("event_score", sentiment_result.get("sentiment", 0.0))  # -1 ~ +1
     score = raw_sentiment * 100
     impact = sentiment_result.get("impact", "short")
     summary = sentiment_result.get("summary", "")
     findings = []
     if summary:
         findings.append(summary[:40])
+    mode = sentiment_result.get("event_score_mode")
+    if mode == "event_override":
+        findings.append("事件化情感: 已覆盖极性分")
     findings.append(f"影响周期: {impact}")
     confidence = min(1.0, abs(raw_sentiment) * 1.2)
     return AnalystReport(
@@ -130,7 +133,7 @@ def news_analyst(sentiment_result: dict) -> AnalystReport:
             raw={"events": []},
         )
 
-    overall_sent = sentiment_result.get("sentiment", 0.0) or 0.0
+    overall_sent = sentiment_result.get("event_score", sentiment_result.get("sentiment", 0.0)) or 0.0
     base = overall_sent * 80      # ±80 留 ±20 给关键词
 
     bonus = 0
@@ -150,6 +153,8 @@ def news_analyst(sentiment_result: dict) -> AnalystReport:
         key_findings=events[:3],
         raw={
             "events": events,
+            "event_types": sentiment_result.get("event_types", []),
+            "event_score_mode": sentiment_result.get("event_score_mode"),
             "base_from_sentiment": round(base, 1),
             "keyword_bonus": bonus,
         },

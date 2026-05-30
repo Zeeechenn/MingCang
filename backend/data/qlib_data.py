@@ -4,6 +4,12 @@ import logging
 import numpy as np
 import pandas as pd
 
+from backend.analysis.alpha_factors import (
+    M27_ALPHA_FEATURE_COLS,
+    add_cross_sectional_alpha_factors,
+    add_single_stock_alpha_factors,
+    rolling_zscore,
+)
 from backend.analysis.factors import add_all_factors
 from backend.data.database import FinancialMetric, Price, Stock
 from backend.data.market_features import MARKET_FEATURE_COLS, attach_market_features
@@ -16,7 +22,7 @@ logger = logging.getLogger(__name__)
 #   - log_float_market_cap：无独立流通市值历史源，与 log_market_cap 完全相关
 #   - north_net_buy：2024-08 后个股北向数据政策性下架
 #   - large_order_net_inflow：fflow daykline 端点在本机 Clash TUN 下空响应
-FEATURE_COLS = [
+PRODUCTION_FEATURE_COLS = [
     "mom_5", "mom_20", "mom_60",
     "rev_10", "rev_20",
     "vol_ratio_20",
@@ -41,6 +47,11 @@ FEATURE_COLS = [
     "margin_balance",
 ]
 
+FEATURE_COLS = [
+    *PRODUCTION_FEATURE_COLS,
+    *M27_ALPHA_FEATURE_COLS,
+]
+
 FUNDAMENTAL_COLS = [
     "roe",
     "revenue_yoy",
@@ -58,6 +69,7 @@ QLIB_MARKET_FEATURE_COLS = [
 def _build_features(df: pd.DataFrame) -> pd.DataFrame:
     """Compute all technical factors and return the enriched DataFrame with label."""
     df = add_all_factors(df.copy())
+    df = add_single_stock_alpha_factors(df)
     close = df["close"]
 
     df["mom_5"]  = close.pct_change(5)
@@ -140,7 +152,12 @@ def _attach_point_in_time_fundamentals(df: pd.DataFrame, symbol: str, db) -> pd.
     return out.drop(columns=["_price_date", "report_date", "known_date"])
 
 
-def build_training_data(db, min_rows: int = 120, include_inactive: bool = False) -> pd.DataFrame:
+def build_training_data(
+    db,
+    min_rows: int = 120,
+    include_inactive: bool = False,
+    feature_cols: list[str] | None = None,
+) -> pd.DataFrame:
     """
     读取历史价格 → 特征矩阵 + label。
     min_rows: 该股至少需要多少行价格才纳入训练集。
@@ -182,7 +199,9 @@ def build_training_data(db, min_rows: int = 120, include_inactive: bool = False)
         return pd.DataFrame()
 
     all_df = pd.concat(frames, ignore_index=True)
-    return all_df.dropna(subset=FEATURE_COLS + ["label"])
+    all_df = add_cross_sectional_alpha_factors(all_df)
+    required_feature_cols = feature_cols or FEATURE_COLS
+    return all_df.dropna(subset=required_feature_cols + ["label"])
 
 
 def neutralize_by_date_industry(
@@ -225,6 +244,85 @@ def build_inference_features(
         df = _attach_point_in_time_fundamentals(df, symbol, db)
         df = attach_market_features(df, symbol, db)
     df = _build_features(df)
+    if symbol and db is not None and "date" in df.columns:
+        df = _attach_sector_relative_strength_for_inference(df, symbol, db)
     if not had_date_column and "date" in df.columns:
         df = df.drop(columns=["date"])
     return df[FEATURE_COLS].iloc[-1]
+
+
+def _attach_sector_relative_strength_for_inference(
+    df: pd.DataFrame,
+    symbol: str,
+    db,
+) -> pd.DataFrame:
+    """Match training's sector-relative-strength z-score for single-symbol inference."""
+    if df.empty or "date" not in df.columns:
+        return df
+
+    try:
+        stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+        if stock is None or not stock.industry:
+            return df
+        peers = (
+            db.query(Stock.symbol)
+            .filter(Stock.industry == stock.industry, Stock.market == stock.market)
+            .all()
+        )
+        peer_symbols = [row[0] for row in peers]
+        if len(peer_symbols) < 2 or symbol not in peer_symbols:
+            return df
+
+        dates = pd.to_datetime(df["date"], errors="coerce")
+        latest_date = dates.max()
+        if pd.isna(latest_date):
+            return df
+
+        rows = (
+            db.query(Price.symbol, Price.date, Price.close)
+            .filter(Price.symbol.in_(peer_symbols), Price.date <= latest_date.strftime("%Y-%m-%d"))
+            .order_by(Price.symbol, Price.date)
+            .all()
+        )
+        if not rows:
+            return df
+
+        prices = pd.DataFrame(
+            [{"symbol": row[0], "date": row[1], "close": row[2]} for row in rows]
+        )
+        prices["date"] = pd.to_datetime(prices["date"], errors="coerce")
+        prices["close"] = pd.to_numeric(prices["close"], errors="coerce")
+        prices = prices.dropna(subset=["date", "close"]).sort_values(["symbol", "date"])
+        if prices.empty:
+            return df
+
+        prices["mom_20"] = prices.groupby("symbol", sort=False)["close"].pct_change(20)
+        peer_mean = prices.groupby("date", sort=False)["mom_20"].mean().rename("peer_mean_mom_20")
+        target = prices[prices["symbol"] == symbol][["date", "mom_20"]].rename(
+            columns={"mom_20": "target_mom_20"}
+        )
+        relative = target.merge(peer_mean, left_on="date", right_index=True, how="left")
+        relative["sector_rel_strength_20"] = relative["target_mom_20"] - relative["peer_mean_mom_20"]
+        relative["sector_rel_strength_20_z"] = rolling_zscore(
+            relative["sector_rel_strength_20"],
+            window=60,
+        )
+        relative = relative.set_index("date")
+
+        out = df.copy()
+        raw_existing = pd.to_numeric(
+            out.get("sector_rel_strength_20", pd.Series(0.0, index=out.index)),
+            errors="coerce",
+        ).fillna(0.0)
+        z_existing = pd.to_numeric(
+            out.get("sector_rel_strength_20_z", pd.Series(0.0, index=out.index)),
+            errors="coerce",
+        ).fillna(0.0)
+        raw = dates.map(relative["sector_rel_strength_20"])
+        z = dates.map(relative["sector_rel_strength_20_z"])
+        out["sector_rel_strength_20"] = raw.fillna(raw_existing)
+        out["sector_rel_strength_20_z"] = z.fillna(z_existing)
+        return out
+    except Exception as e:
+        logger.debug("sector relative inference feature fallback for %s: %s", symbol, e)
+        return df

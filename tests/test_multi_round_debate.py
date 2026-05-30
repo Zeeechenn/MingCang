@@ -113,6 +113,48 @@ def test_multi_round_debate_three_rounds_success(mock_get_provider):
 
 
 @patch("backend.agents.researcher.get_provider")
+def test_multi_round_debate_injects_research_context_by_side(mock_get_provider):
+    """Bull/Bear/Adjudicator prompts should receive the relevant IC memo fields."""
+    provider = _mock_provider([
+        {"points": ["订单兑现"], "key_signal": "research"},
+        {"rebuttals": [{"target": "订单兑现", "counter": "估值拥挤"}], "additional_bears": []},
+        {
+            "bull_response": ["订单仍需验证"],
+            "winning_side": "tie",
+            "action_bias": "中性",
+            "rationale": "催化与风险并存",
+        },
+    ])
+    mock_get_provider.return_value = provider
+    research_context = {
+        "catalysts": ["订单兑现加速"],
+        "risks": ["估值拥挤风险"],
+        "evidence_snippets": ["订单公告证据", "估值拥挤风险证据"],
+        "stance": "中性",
+        "confidence": 0.7,
+    }
+    with patch("backend.agents.researcher.settings") as mock_settings:
+        mock_settings.multi_round_debate_enabled = True
+        mock_settings.ai_provider = "anthropic"
+        mock_settings.anthropic_api_key = "fake"
+        mock_settings.openai_api_key = None
+        mock_settings.multi_round_debate_min_divergence = 20.0
+
+        conclusion = multi_round_debate(
+            _reports([60, -30, 20, -10]),
+            research_context=research_context,
+        )
+
+    prompts = [call.kwargs["prompt"] for call in provider.complete_structured.call_args_list]
+    assert conclusion.used_llm is True
+    assert "订单兑现加速" in prompts[0]
+    assert "估值拥挤风险" not in prompts[0]
+    assert "估值拥挤风险" in prompts[1]
+    assert "订单兑现加速" in prompts[2]
+    assert "估值拥挤风险" in prompts[2]
+
+
+@patch("backend.agents.researcher.get_provider")
 def test_multi_round_debate_round1_failure_falls_back(mock_get_provider):
     """Round 1 LLM 失败 → quick_consensus"""
     mock_get_provider.return_value = _mock_provider([None])
@@ -258,6 +300,32 @@ def test_conclusion_to_arbitration_dict_round_trip():
 
 
 # ── pipeline 透传 ────────────────────────────────────────────────────
+
+def test_pipeline_builds_research_context_from_sections_and_memory_text():
+    """pipeline helper should tolerate structured sections and memory text."""
+    from backend.agents.pipeline import build_research_context
+
+    context = build_research_context(
+        sentiment_result={
+            "deep_research": {
+                "sections": [{
+                    "role": "research_writer",
+                    "catalysts": ["订单催化"],
+                    "risks": ["估值风险"],
+                    "evidence_snippets": ["订单证据"],
+                    "stance": "中性",
+                    "confidence": 0.8,
+                }],
+            },
+        },
+        reflection_context="- [research_pointer|重要3|active] 订单增长但估值风险仍需复核",
+    )
+
+    assert context["catalysts"][0] == "订单催化"
+    assert context["risks"][0] == "估值风险"
+    assert "订单证据" in context["evidence_snippets"]
+    assert any("research_pointer" in item for item in context["evidence_snippets"])
+
 
 def test_pipeline_passes_rounds_through():
     """run_pipeline 应把 rounds 写入 to_signal_dict 的 llm_arbitration"""

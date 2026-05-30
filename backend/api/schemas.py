@@ -211,6 +211,7 @@ class ResearchDossierOut(BaseModel):
     evidence: list[DecisionRunOut] = []
     stock_memory: list[dict] = []
     deep_research: list[dict] = []
+    pending_questions: list[str] = []
     conflicts: list[dict] = []
     official_action: dict = {}
     missing: list[str] = []
@@ -238,6 +239,7 @@ class DeepResearchRequest(BaseModel):
     topic: str
     symbols: list[str] = []
     as_of: str | None = None
+    seed_queries: list[str] = []
 
 
 class DeepResearchResponse(BaseModel):

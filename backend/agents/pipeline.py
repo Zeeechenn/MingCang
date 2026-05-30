@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 
@@ -23,6 +24,118 @@ from backend.agents.risk_manager import RiskDecision, review
 from backend.agents.trader import TraderProposal, propose
 from backend.analysis.timing.regime import RegimeReport
 from backend.config import settings
+
+_NEGATIVE_HINTS = ("风险", "下滑", "减持", "处罚", "监管", "亏损", "回撤", "拥挤", "走弱")
+_POSITIVE_HINTS = ("催化", "订单", "增长", "景气", "突破", "改善", "增持", "中标")
+
+
+def _as_list(value) -> list:
+    """Return value as a flat list for context coercion."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
+
+
+def _append_unique(target: list[str], items, *, limit: int = 8) -> None:
+    """Append bounded unique string items."""
+    seen = set(target)
+    for item in _as_list(items):
+        text = str(item).strip()
+        if text and text not in seen:
+            target.append(text)
+            seen.add(text)
+        if len(target) >= limit:
+            break
+
+
+def _context_from_sections(sections) -> dict:
+    """Extract IC memo fields from deep_research section dicts."""
+    context = {
+        "catalysts": [],
+        "risks": [],
+        "evidence_snippets": [],
+        "stance": "",
+        "confidence": 0.0,
+    }
+    for section in _as_list(sections):
+        if not isinstance(section, dict):
+            continue
+        _append_unique(context["catalysts"], section.get("catalysts"), limit=8)
+        _append_unique(context["risks"], section.get("risks"), limit=8)
+        _append_unique(context["evidence_snippets"], section.get("evidence_snippets"), limit=10)
+        if section.get("role") == "research_writer":
+            context["stance"] = section.get("stance") or context["stance"]
+            context["confidence"] = section.get("confidence") or context["confidence"]
+    return context
+
+
+def _dict_from_json(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def build_research_context(
+    *,
+    sentiment_result: dict | None = None,
+    reflection_context: str = "",
+    research_context: dict | None = None,
+) -> dict | None:
+    """Best-effort extraction of deep-research context without making signals depend on it."""
+    merged = {
+        "catalysts": [],
+        "risks": [],
+        "evidence_snippets": [],
+        "stance": "",
+        "confidence": 0.0,
+    }
+    sources = []
+    if isinstance(research_context, dict):
+        sources.append(research_context)
+    if isinstance(sentiment_result, dict):
+        for key in ("research_context", "deep_research"):
+            value = sentiment_result.get(key)
+            if isinstance(value, dict):
+                sources.append(value)
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        sources.append(item)
+    for source in sources:
+        evidence = source.get("evidence") if isinstance(source.get("evidence"), dict) else {}
+        if not evidence:
+            evidence = _dict_from_json(source.get("evidence_json"))
+        section_context = _context_from_sections(source.get("sections") or evidence.get("sections"))
+        if not any(section_context.values()):
+            section_context = source
+        _append_unique(merged["catalysts"], section_context.get("catalysts"), limit=8)
+        _append_unique(merged["risks"], section_context.get("risks"), limit=8)
+        _append_unique(merged["evidence_snippets"], section_context.get("evidence_snippets"), limit=10)
+        merged["stance"] = section_context.get("stance") or merged["stance"]
+        merged["confidence"] = section_context.get("confidence") or merged["confidence"]
+
+    for raw_line in (reflection_context or "").splitlines():
+        line = raw_line.strip("- ").strip()
+        if not line or ("research_pointer" not in line and "[research]" not in line):
+            continue
+        _append_unique(merged["evidence_snippets"], [line], limit=10)
+        if any(hint in line for hint in _NEGATIVE_HINTS):
+            _append_unique(merged["risks"], [line], limit=8)
+        if any(hint in line for hint in _POSITIVE_HINTS):
+            _append_unique(merged["catalysts"], [line], limit=8)
+
+    if not (merged["catalysts"] or merged["risks"] or merged["evidence_snippets"]):
+        return None
+    merged["confidence"] = float(merged["confidence"] or 0.5)
+    return merged
 
 
 def _step_record(
@@ -114,6 +227,7 @@ def run_pipeline(
     limit_status: dict | None = None,
     long_term_label=None,                 # LongTermLabel | None
     _precomputed_reports: list[AnalystReport] | None = None,  # M17.2 避免重复计算
+    research_context: dict | None = None,
 ) -> AgentDecision:
     """
     主入口。调用方（aggregator）需准备：
@@ -161,6 +275,10 @@ def run_pipeline(
 
     # 3. Researcher
     t0 = time.perf_counter()
+    research_context = build_research_context(
+        sentiment_result=sentiment_result,
+        research_context=research_context,
+    )
     if has_divergence(report_list):
         researcher = debate(report_list, llm_arbitration)
     else:
@@ -171,7 +289,10 @@ def run_pipeline(
         used_llm=researcher.used_llm,
         structured_output_valid=researcher.structured_output_valid,
         fallback_reason=researcher.fallback_reason,
-        extra={"round_count": len(researcher.rounds or [])},
+        extra={
+            "round_count": len(researcher.rounds or []),
+            "research_context_used": bool(research_context),
+        },
     ))
 
     # 4. Trader
@@ -255,6 +376,7 @@ def run_pipeline(
                 }
                 for r in (researcher.rounds or [])
             ],
+            "research_context": research_context or {},
         },
         risk={
             "approved": risk.approved,

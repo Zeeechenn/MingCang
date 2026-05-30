@@ -16,7 +16,7 @@ import pandas as pd
 
 from backend.analysis.factors import add_all_factors
 from backend.config import settings
-from backend.data.qlib_data import FEATURE_COLS, build_inference_features
+from backend.data.qlib_data import FEATURE_COLS, PRODUCTION_FEATURE_COLS, build_inference_features
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,54 @@ def _time_split(df: pd.DataFrame, split_ratio: float = 0.8) -> tuple[pd.DataFram
     return train_df, val_df
 
 
-_MODEL_CACHE: dict = {"path_mtime": None, "model": None, "disabled_reason": None}
+_MODEL_CACHE: dict = {
+    "path_mtime": None,
+    "model": None,
+    "feature_cols": None,
+    "disabled_reason": None,
+}
+
+
+def _model_feature_count(model: Any) -> int | None:
+    return getattr(model, "n_features_in_", getattr(model, "n_features_", None))
+
+
+def _load_model_unchecked(path: Path = MODEL_PATH) -> tuple[Any | None, str | None]:
+    if not path.exists():
+        return None, None
+    try:
+        with open(path, "rb") as f:
+            return pickle.load(f), None
+    except Exception as e:
+        return None, f"load_error: {e}"
+
+
+def _feature_cols_for_model(model: Any) -> tuple[list[str] | None, dict[str, Any]]:
+    actual = _model_feature_count(model)
+    status = {
+        "n_features_model": actual,
+        "n_features_current_candidate": len(FEATURE_COLS),
+        "n_features_production": len(PRODUCTION_FEATURE_COLS),
+    }
+    if actual is None:
+        return list(FEATURE_COLS), {
+            **status,
+            "n_features_validation": len(FEATURE_COLS),
+            "model_dim_status": "unknown_assume_current_candidate_feature_cols",
+        }
+    if actual == len(FEATURE_COLS):
+        return list(FEATURE_COLS), {
+            **status,
+            "n_features_validation": len(FEATURE_COLS),
+            "model_dim_status": "current_candidate_feature_cols",
+        }
+    if actual == len(PRODUCTION_FEATURE_COLS):
+        return list(PRODUCTION_FEATURE_COLS), {
+            **status,
+            "n_features_validation": len(PRODUCTION_FEATURE_COLS),
+            "model_dim_status": "legacy_production_feature_cols",
+        }
+    return None, {**status, "model_dim_status": "feature_dim_mismatch"}
 
 
 def _load_model() -> Any | None:
@@ -80,27 +127,30 @@ def _load_model() -> Any | None:
 
     _MODEL_CACHE["path_mtime"] = mtime
     _MODEL_CACHE["model"] = None
+    _MODEL_CACHE["feature_cols"] = None
     _MODEL_CACHE["disabled_reason"] = None
 
-    try:
-        with open(MODEL_PATH, "rb") as f:
-            model = pickle.load(f)
-    except Exception as e:
-        _MODEL_CACHE["disabled_reason"] = f"load_error: {e}"
-        logger.warning("load model failed: %s — falling back to momentum", e)
+    model, load_error = _load_model_unchecked()
+    if load_error:
+        _MODEL_CACHE["disabled_reason"] = load_error
+        logger.warning("load model failed: %s — falling back to momentum", load_error)
         return None
 
-    expected = len(FEATURE_COLS)
-    actual = getattr(model, "n_features_in_", getattr(model, "n_features_", None))
-    if actual is not None and actual != expected:
-        _MODEL_CACHE["disabled_reason"] = f"dim_mismatch: model={actual} cols={expected}"
+    feature_cols, dim_info = _feature_cols_for_model(model)
+    if feature_cols is None:
+        actual = dim_info.get("n_features_model")
+        _MODEL_CACHE["disabled_reason"] = (
+            f"dim_mismatch: model={actual} "
+            f"current={len(FEATURE_COLS)} production={len(PRODUCTION_FEATURE_COLS)}"
+        )
         logger.warning(
-            "Qlib 模型特征维度不匹配 (model=%d, FEATURE_COLS=%d)，已禁用模型并使用动量 fallback；请重训模型",
-            actual, expected,
+            "Qlib 模型特征维度不匹配 (model=%s, current=%d, production=%d)，已禁用模型并使用动量 fallback；请重训模型",
+            actual, len(FEATURE_COLS), len(PRODUCTION_FEATURE_COLS),
         )
         return None
 
     _MODEL_CACHE["model"] = model
+    _MODEL_CACHE["feature_cols"] = feature_cols
     return model
 
 
@@ -119,12 +169,17 @@ def _momentum_fallback(df: pd.DataFrame) -> dict:
     }
 
 
-def _validation_predictions(model, val_df: pd.DataFrame) -> pd.DataFrame:
+def _validation_predictions(
+    model,
+    val_df: pd.DataFrame,
+    feature_cols: list[str] | None = None,
+) -> pd.DataFrame:
     """Build validation predictions in the format shared with Qlib validation reports."""
+    feature_cols = feature_cols or FEATURE_COLS
     return pd.DataFrame({
         "date": val_df["date"].values if "date" in val_df.columns else range(len(val_df)),
         "symbol": val_df["symbol"].values if "symbol" in val_df.columns else ["__SINGLE__"] * len(val_df),
-        "pred": model.predict(val_df[FEATURE_COLS]),
+        "pred": model.predict(val_df[feature_cols]),
         "label": val_df["label"].values,
     })
 
@@ -161,11 +216,13 @@ def qlib_score(df_raw: pd.DataFrame, symbol: str | None = None, db=None) -> dict
 
     try:
         feats = build_inference_features(df_raw, symbol=symbol, db=db)
+        feature_cols = _MODEL_CACHE.get("feature_cols") or FEATURE_COLS
+        feats = feats[feature_cols]
         if feats.isnull().any():
             logger.debug("inference features contain NaN, using fallback")
             return _momentum_fallback(df_raw)
 
-        X = pd.DataFrame([feats], columns=FEATURE_COLS)
+        X = pd.DataFrame([feats], columns=feature_cols)
         raw_pred = float(model.predict(X)[0])        # 预测 5 日前瞻收益
         # ±5% 映射为 ±100 分（超出截断）
         score = float(np.clip(raw_pred * 2000, -100, 100))
@@ -225,6 +282,7 @@ def train(
             objective="lambdarank",
             n_estimators=n_estimators,
             learning_rate=learning_rate,
+            label_gain=list(range(int(max(y_train.max(), y_val.max())) + 1)),
             num_leaves=63,
             min_child_samples=50,
             subsample=0.8,
@@ -308,7 +366,7 @@ def train(
         return False
 
     _save_model(model, MODEL_PATH)
-    _MODEL_CACHE.update({"path_mtime": None, "model": None, "disabled_reason": None})
+    _MODEL_CACHE.update({"path_mtime": None, "model": None, "feature_cols": None, "disabled_reason": None})
     logger.info("候选模型通过 promotion gate，已晋升为生产模型：%s", MODEL_PATH)
     return True
 

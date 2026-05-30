@@ -12,29 +12,40 @@
 
 **目标**：IC ≥ 0.04 / ICIR ≥ 0.40 / 分层单调
 
-- [ ] 新增因子（`backend/analysis/alpha_factors.py`）：反转动量（12-1）/ 换手率异常（z-score）/ 量价背离 / 板块相对强弱
-- [ ] rolling z-score 标准化，防量级差异淹没小因子
+- [x] 新增因子（`backend/analysis/alpha_factors.py`）：反转动量（12-1）/ 换手率异常（z-score）/ 量价背离 / 板块相对强弱
+- [x] rolling z-score 标准化，防量级差异淹没小因子
 - [ ] 重训 LightGBM，过 M20.2 promotion gate（`ic_floor=0.04` / `icir_floor=0.40` / `monotonic=True`）
-- [ ] 用 M26.0 同标尺重跑 `python3 -m backend.tools.m26_quant_baseline`，对比前后
+- [x] 用 M26.0 同标尺重跑 `python3 -m backend.tools.m26_quant_baseline`，对比前后
+- [x] M27.1a alpha 诊断：单因子 IC/ICIR、3/5/10/20d horizon、行业/波动 regime、ranker label 分布（`backend/tools/m27_alpha_diagnostic.py`）
+- [x] M27.1b label/objective 离线评估工具：行业/市值中性标签、20d horizon、真实 top-decile classification / LambdaRank（`backend/tools/m27_label_objective_eval.py`）
+- [ ] M27.1c top-decile classifier 离散入场过滤器验证：只作为候选股票过滤/加权，不作为连续 quant score；用 test3 universe 做 profile A/B 与交易级收益回测
+
+> 2026-05-30 结果：regression candidate IC=0.020217 / ICIR=0.176699 / monotonic=False；ranker candidate IC=0.029978 / ICIR=0.163796 / monotonic=False。两者均未过 M27.1 gate，生产模型不晋升，`weight_quant=0.0` 继续保持。
+>
+> 2026-05-30 M27.1a 诊断：active 94 支、107270 行、2019-01-25~2026-05-22；5d 最强单因子 `roe` 仅 IC=0.015642 / ICIR=0.114032 / monotonic=False，M27 新因子最强 `sector_rel_strength_20_z` 仅 IC=0.012131 / ICIR=0.076884。20d horizon 的 `log_market_cap` 达到 abs IC/ICIR（IC=-0.043831 / ICIR=-0.324008），但这是市值暴露，不应直接作为 alpha 推广。报告：`~/.stock-sage/m27_alpha_diagnostic_report.{md,json}`；下一步：先重设计 label/objective，再继续特征工程。
+>
+> 2026-05-30 M27.1b 修复：`raw_20d_top_decile_classifier` 已统一为真实 top 10% 训练/评估口径，并为本地 panel cache 增加 FEATURE_COLS metadata 失效保护；修复前 20% 口径报告不再作为当前结论引用。下一步先刷新 `~/.stock-sage/m27_label_objective_eval_report.{md,json}`，再决定是否进入 test3 离散入场过滤器 A/B。
 
 **验收**：新模型过 gate，baseline 报告 IC ≥ 0.04 且分位单调。
 
 ### M27.2 交易池扩容 25 → 100 支（P1，依赖 M27.1）
 
-- [ ] 从 707 支中筛出 ~100 支（历史 ≥ 500 bar / 近 60 日均换手率 ≥ 0.5% / 板块均匀）
-- [ ] 创建 `paper_trading/test3_universe.json`
-- [ ] 适配信号 runner（参数化 `--universe`，控制单日 LLM 调用量）
-- [ ] 更新 `m26_quant_baseline` 默认 universe 路径，重跑新基线
+- [x] 从 707 支中筛出 ~100 支（历史 ≥ 500 bar / 近 60 日均换手率 ≥ 0.5% / 板块均匀）
+- [x] 创建 `paper_trading/test3_universe.json`
+- [x] 适配信号 runner（参数化 `--universe`，控制单日 LLM 调用量）
+- [x] `m26_quant_baseline` 支持显式 universe 参数；M26 默认继续保留 test2 基线口径，M27/test3 诊断需显式传入 `--universe-path`
 
 **验收**：≥ 90 支，baseline 基于 100 支截面。
+
+> 2026-05-30 结果：`test3_universe.json` 已生成 100 支，candidate_count=708，sector_count=64。M26 baseline 默认仍指向 test2；test3 baseline 应使用显式 `--universe-path paper_trading/test3_universe.json` 和独立输出路径。生产旧 25 维模型验证已与 M27 29 维候选特征分离，结论仍为 `keep_quant_disabled`。
 
 ### M27.3 情感信号事件化（P2，依赖 M27.2，与 M27.4 并行）
 
 **目标**：事件标注后情感信号在 100 支 universe 上 IC ≥ 0.03
 
-- [ ] 定义 A 股事件分类体系 8~12 类（`backend/analysis/event_taxonomy.py`）：大合同/监管批文/管理层增持/股权激励/指数纳入/实控人减持/监管处罚/业绩预警
-- [ ] 升级情感 pipeline：在 Anspire/Tavily 新闻流上增加 LLM 事件抽取
-- [ ] 新增 `event_score` 字段进入信号合成，有事件覆盖极性分，无事件退回极性
+- [x] 定义 A 股事件分类体系 8~12 类（`backend/analysis/event_taxonomy.py`）：大合同/监管批文/管理层增持/股权激励/指数纳入/实控人减持/监管处罚/业绩预警
+- [x] 升级情感 pipeline：在 Anspire/Tavily 新闻流上增加 LLM 事件抽取
+- [x] 新增 `event_score` 字段进入信号合成，有事件覆盖极性分，无事件退回极性
 - [ ] A/B 验证：test3 universe 对比「纯极性」vs「极性+事件」IC
 
 **验收**：分类体系落地，pipeline 可跑，IC 对比有明确结论。
@@ -43,42 +54,46 @@
 
 **目标**：微调后 Kronos IC ≥ M27.1 LightGBM 新基线
 
-- [ ] 准备微调数据集（`backend/tools/m27_kronos_finetune_data.py`）：707 支 × 5 年 OHLCV，滑动窗口 `(context=400, pred_len=5)`；训练集 2020-01~2024-12，验证集 2025-01~2025-10
-- [ ] 修改训练目标（`vendor/kronos/finetune/`）：加入 ListMLE 排序损失，`λ_rank=0.7` / `λ_recon=0.3`
+- [x] 准备微调数据集（`backend/tools/m27_kronos_finetune_data.py`）：707 支 × 5 年 OHLCV，滑动窗口 `(context=400, pred_len=5)`；训练集 2020-01~2024-12，验证集 2025-01~2025-10
+- [x] 修改训练目标（`vendor/kronos/finetune/`）：加入 ListMLE 排序损失，`λ_rank=0.7` / `λ_recon=0.3`
 - [ ] 微调 Kronos-small（`.venv_kronos/`，MPS 加速，模型存 `~/.stock-sage/models/kronos_finetuned/`）
-- [ ] 用 M26.0 同标尺验证（`m26_kronos_eval.py --model kronos-finetuned`），与 LightGBM 同表对比
+- [x] 用 M26.0 同标尺验证（`m26_kronos_eval.py --model kronos-finetuned`），与 LightGBM 同表对比
 
 **决策门**：IC ≥ LightGBM 且分位单调 → 进 M26.3 重启；否则降级路径 B（特征融合）。
 
+> 2026-05-30 结果：数据准备、loss、dry-run training plan 和 `--model kronos-finetuned` 评估入口已完成；真实 Kronos-small 微调仍需单独长跑，未生成可验证 finetuned 模型。
+
 ---
 
-## M28 调研模块整合与实时搜索接入 🔲
+## M28 调研模块整合与实时搜索接入 ✅
 
 > 背景：deep_research / copilot / 多轮辩论 三模块存在信息孤岛，辩论缺乏真实信息差，
 > ResearchSection schema 为纯文本无结构。详细设计见 `docs/M28_RESEARCH_INTEGRATION_PLAN.md`。
 
 ### M28.1 ResearchSection IC Memo Schema 升级
 **文件：** `backend/research/agents.py`
-- [ ] 扩展 `ResearchSection` 增加结构化字段（全部有默认值）：`catalysts / risks / valuation_anchor / evidence_snippets / stance / confidence`
-- [ ] 更新五个 builder 函数填充新字段
-- [ ] 更新 `_render_report` 展示结构化字段
+- [x] 扩展 `ResearchSection` 增加结构化字段（全部有默认值）：`catalysts / risks / valuation_anchor / evidence_snippets / stance / confidence`
+- [x] 更新五个 builder 函数填充新字段
+- [x] 更新 `_render_report` 展示结构化字段
 
 ### M28.2 Tavily 实时 Web 搜索补全 evaluator/planner 循环
 **文件：** `backend/research/deep_research.py`
-- [ ] 新增 `_tavily_web_search(queries, ...)` — 纯内存路径，不写 DB，直调 Tavily REST API
-- [ ] 在 `_execute_plan` 补全 `next_action == "web_search"` 分支（当前已声明但未实现）
-- [ ] 报告中对 `source="tavily_web"` 条目展示来源 URL
+- [x] 新增 `_tavily_web_search(queries, ...)` — 纯内存路径，不写 DB，直调 Tavily REST API
+- [x] 在 `_execute_plan` 补全 `next_action == "web_search"` 分支（当前已声明但未实现）
+- [x] 报告中对 `source="tavily_web"` 条目展示来源 URL
+- [x] 修复末轮 web_search 结果未重新审计的问题；空 seed query 不会提前耗尽 Tavily 通用重试机会
 
 ### M28.3 辩论注入结构化信息差
 **文件：** `backend/agents/researcher.py` / `backend/agents/pipeline.py`
-- [ ] `multi_round_debate` 增加可选参数 `research_context: dict | None = None`（向后兼容）
-- [ ] bull 轮 prompt 注入 `catalysts + 正面 evidence_snippets`；bear 轮注入 `risks + 负面证据`
-- [ ] `pipeline.py`：若当日已有 deep_research 结果，自动提取并传入 `research_context`
+- [x] `multi_round_debate` 增加可选参数 `research_context: dict | None = None`（向后兼容）
+- [x] bull 轮 prompt 注入 `catalysts + 正面 evidence_snippets`；bear 轮注入 `risks + 负面证据`
+- [x] `pipeline.py`：若当日已有 deep_research 结果，自动提取并传入 `research_context`
+- [x] 盘后路径可从持久化 `research_pointer.evidence_json.sections` 恢复结构化 research_context
 
 ### M28.4 建立 copilot → deep_research 信息流
 **文件：** `backend/research/copilot.py` / `backend/research/deep_research.py` / `backend/research/dossier.py`
-- [ ] `run_deep_research` 增加可选 `seed_queries: list[str] | None = None`；CLI 支持 `--seed-queries`
-- [ ] `dossier.build_research_dossier` 新增 `pending_questions` 字段（从 copilot validation_questions 提取）
+- [x] `run_deep_research` 增加可选 `seed_queries: list[str] | None = None`；CLI 支持 `--seed-queries`
+- [x] `dossier.build_research_dossier` 新增 `pending_questions` 字段（从 copilot validation_questions 提取）
 
 ---
 
