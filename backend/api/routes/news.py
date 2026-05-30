@@ -1,7 +1,7 @@
 """News routes."""
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -15,7 +15,7 @@ router = APIRouter()
 @router.get("/news/{symbol}", response_model=list[NewsOut])
 def get_news(symbol: str, hours: int = 48, db: Session = Depends(get_db)):
     """Return recent news items for a symbol within the past hours."""
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
     rows = (
         db.query(NewsItem)
         .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)

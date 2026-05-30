@@ -60,7 +60,6 @@ def get_hs300_constituents(max_retries: int = 3, retry_delay: float = 2.0) -> li
         logger.error("akshare 未安装")
         return []
 
-    last_exc: Exception | None = None
     for attempt in range(max_retries):
         try:
             df = ak.index_stock_cons_csindex(symbol="000300")
@@ -73,7 +72,6 @@ def get_hs300_constituents(max_retries: int = 3, retry_delay: float = 2.0) -> li
                     candidates.append(UniverseCandidate(symbol=code, name=name))
             return candidates
         except Exception as e:
-            last_exc = e
             if attempt < max_retries - 1:
                 wait = retry_delay * (2 ** attempt)
                 logger.warning("get_hs300_constituents 失败（第%d次），%.1fs后重试: %s",

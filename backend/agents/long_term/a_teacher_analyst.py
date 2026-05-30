@@ -21,7 +21,7 @@ LLM 调用：
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from backend.agents.long_term.base import LongTermReport
@@ -178,7 +178,7 @@ def _fetch_supply_chain_evidence(industry: str, name: str) -> list[str]:
 def _build_prompt(symbol: str, name: str, industry: str | None,
                   moves: dict, evidence: list[str]) -> str:
     """Build the user prompt for A-teacher five-layer analysis."""
-    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
     move_txt = ""
     if moves:
         cur = moves.get("current_close")

@@ -64,8 +64,11 @@ def _effective_sentiment_score(sentiment_score: float, sentiment_result: dict | 
     """Use event_score when event taxonomy found a real event; otherwise keep polarity."""
     if not sentiment_result or sentiment_result.get("event_score_mode") != "event_override":
         return sentiment_score
+    raw_score = sentiment_result.get("event_score")
+    if raw_score is None:
+        return sentiment_score
     try:
-        score = float(sentiment_result.get("event_score"))
+        score = float(raw_score)
     except (TypeError, ValueError):
         return sentiment_score
     return max(-1.0, min(1.0, score)) if math.isfinite(score) else sentiment_score

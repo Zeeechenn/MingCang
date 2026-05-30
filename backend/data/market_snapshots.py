@@ -22,7 +22,7 @@ import json
 import logging
 import subprocess
 import time
-from datetime import datetime, timezone, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -157,7 +157,7 @@ def build_snapshots_for_symbol(
                 "margin_balance": _none_if_nan(row.get("margin_balance")),
                 "large_order_net_inflow": None,  # 见模块文档，不抓取
                 "source": "eastmoney_rzrq",
-                "fetched_at": datetime.now(timezone.utc).replace(tzinfo=None),
+                "fetched_at": datetime.now(UTC).replace(tzinfo=None),
             }
             conn.execute(text("""
                 INSERT INTO market_snapshots

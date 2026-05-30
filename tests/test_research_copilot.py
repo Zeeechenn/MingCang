@@ -146,6 +146,51 @@ def test_existing_official_position_uses_only_allowed_light_multipliers(test_db)
     assert card["shadow_position_pct"] == 0.11
 
 
+def test_copilot_ignores_deep_research_decision_for_official_context(test_db):
+    from backend.decision.harness import record_decision_run
+    from backend.research.copilot import generate_symbol_copilot
+
+    _signal(test_db, recommendation="可小仓试错", composite_score=42.0)
+    record_decision_run(
+        test_db,
+        run_type="postmarket",
+        symbol="600519",
+        as_of="2026-05-22",
+        result={
+            "rule_version": "aggregate_v1:new_framework",
+            "recommendation": "可小仓试错",
+            "confidence": "中",
+            "composite_score": 42.0,
+            "position_pct": 0.10,
+            "stop_loss": 10.0,
+            "take_profit": 14.0,
+        },
+    )
+    record_decision_run(
+        test_db,
+        run_type="deep_research",
+        symbol="600519",
+        as_of="2026-05-22",
+        result={
+            "rule_version": "deep_research_v1",
+            "recommendation": "深研偏多",
+            "confidence": "高",
+            "composite_score": 92.0,
+            "position_pct": 0.30,
+            "stop_loss": 8.0,
+            "take_profit": 18.0,
+        },
+    )
+
+    with patch("backend.research.copilot.has_runtime_llm_provider", return_value=True), \
+            patch("backend.research.copilot.get_provider", return_value=_provider(_llm_payload(stance="支持"))):
+        card = generate_symbol_copilot("600519", test_db)
+
+    assert card["official"]["rule_version"] == "aggregate_v1:new_framework"
+    assert card["official"]["position_pct"] == 0.10
+    assert card["shadow_position_pct"] == 0.11
+
+
 def test_risk_veto_can_have_nonzero_shadow_position_but_marks_conflict(test_db):
     from backend.decision.harness import record_decision_run
     from backend.research.copilot import generate_symbol_copilot

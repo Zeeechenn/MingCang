@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
@@ -166,7 +166,7 @@ def export_coverage_csv(db: Session = Depends(get_db)) -> Response:
 
     snapshot = build_data_coverage_snapshot(db)
     summary = snapshot.get("summary", {})
-    snapshot_at = snapshot.get("generated_at") or datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+    snapshot_at = snapshot.get("generated_at") or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
     rows = [
         {"metric": "snapshot_at", "value": snapshot_at},
         {"metric": "active_stocks", "value": summary.get("active_stocks", "")},

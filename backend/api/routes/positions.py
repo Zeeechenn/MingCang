@@ -1,7 +1,7 @@
 """Manual position management routes."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -94,8 +94,8 @@ def create_position(payload: PositionCreate, db: Session = Depends(get_db)):
         take_profit=payload.take_profit,
         note=payload.note,
         status="open",
-        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
-        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        created_at=datetime.now(UTC).replace(tzinfo=None),
+        updated_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(pos)
     db.commit()
@@ -151,7 +151,7 @@ def close_position(
     pos.close_price = float(final_price)
     pos.realized_pnl = realized
     pos.realized_pnl_pct = round(realized / cost_value * 100, 2) if cost_value else None
-    pos.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    pos.updated_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
     db.refresh(pos)
     return position_to_schema(pos, db)
@@ -189,7 +189,7 @@ def update_position(
         raise HTTPException(404, "position not found")
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(pos, key, value)
-    pos.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    pos.updated_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
     db.refresh(pos)
     return position_to_schema(pos, db)

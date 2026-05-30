@@ -1,13 +1,6 @@
 import os
-from datetime import datetime, timezone
-
-
-def _utcnow() -> datetime:
-    """Return current UTC time as timezone-naive datetime (SQLite compatible).
-
-    M21.4: 替代已弃用的 datetime.utcnow()，保持存储格式不变（naive UTC）。
-    """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from sqlalchemy import (
     Boolean,
@@ -24,6 +17,15 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from backend.config import BASE_DIR, settings
+
+
+def _utcnow() -> datetime:
+    """Return current UTC time as timezone-naive datetime (SQLite compatible).
+
+    M21.4: 替代已弃用的 datetime.utcnow()，保持存储格式不变（naive UTC）。
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
+
 
 engine = create_engine(settings.database_url, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
@@ -625,12 +627,13 @@ def _verify_schema_consistency() -> list[str]:
         from sqlalchemy import inspect as _inspect
         inspector = _inspect(engine)
         for mapper in Base.registry.mappers:
-            table_name = mapper.persist_selectable.name
+            table = cast(Any, mapper.local_table)
+            table_name = table.name
             try:
                 pragma_cols = {r["name"] for r in inspector.get_columns(table_name)}
             except Exception:
                 continue
-            orm_cols = {c.name for c in mapper.persist_selectable.columns}
+            orm_cols = {c.name for c in table.columns}
             extra_in_pragma = pragma_cols - orm_cols
             missing_in_pragma = orm_cols - pragma_cols
             if extra_in_pragma:

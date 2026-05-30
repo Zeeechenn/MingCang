@@ -4,7 +4,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 # M19.4 时区常量：东财 API 返回 CST（UTC+8）naive 时间字符串
@@ -199,7 +199,7 @@ def fetch_stock_news_cn(symbol: str, limit: int = 20) -> list[RawNews]:
                 # M19.4 时区修复：东财返回 CST naive 时间，统一转为 UTC naive 存储
                 pub_dt = _cst_to_utc(datetime.strptime(pub_str, "%Y-%m-%d %H:%M:%S"))
             except ValueError:
-                pub_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+                pub_dt = datetime.now(UTC).replace(tzinfo=None)
 
             results.append(RawNews(
                 title=title,
@@ -237,7 +237,7 @@ def fetch_stock_news_us(symbol: str | None = None, limit: int = 20) -> list[RawN
                 pub = (
                     datetime(*entry.published_parsed[:6])
                     if getattr(entry, "published_parsed", None)
-                    else datetime.now(timezone.utc).replace(tzinfo=None)
+                    else datetime.now(UTC).replace(tzinfo=None)
                 )
                 results.append(RawNews(
                     title=entry.title,
@@ -302,7 +302,7 @@ def get_recent_titles(symbol: str, db, hours: int = 24) -> list[str]:
     from backend.data.database import NewsItem
 
     # M19.4：DB 存储的是 UTC naive，用 UTC now 计算 cutoff
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
     rows = (
         db.query(NewsItem.title)
         .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
@@ -320,7 +320,7 @@ def get_recent_news_items(symbol: str, db, hours: int = 24) -> list[RawNews]:
     """
     from backend.data.database import NewsItem
 
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
     rows = (
         db.query(NewsItem)
         .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
@@ -360,7 +360,7 @@ def fetch_stock_news_anspire(
     if not settings.anspire_api_key:
         return []
 
-    current = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    current = now or datetime.now(UTC).replace(tzinfo=None)
     days = days or settings.anspire_news_days
     max_results = max_results or settings.anspire_news_max_results
     limit = limit or settings.anspire_news_max_add

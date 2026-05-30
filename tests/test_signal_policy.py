@@ -112,6 +112,58 @@ def test_postmarket_analysis_can_clip_to_as_of(monkeypatch):
     assert analysis["date"] == "2026-05-05"
 
 
+def test_postmarket_read_only_context_disables_memory_usage_recording(monkeypatch):
+    from backend import scheduler
+    from backend.config import settings
+
+    dates = pd.date_range("2026-03-01", periods=70, freq="D").strftime("%Y-%m-%d")
+    df = pd.DataFrame(
+        {"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 1000},
+        index=dates,
+    )
+    seen = {}
+
+    monkeypatch.setattr(settings, "paper_trading_profile", "new_framework")
+    monkeypatch.setattr(settings, "multi_agent_enabled", False)
+    monkeypatch.setattr("backend.data.market.load_price_df", lambda *args, **kwargs: df)
+    monkeypatch.setattr("backend.analysis.qlib_engine.qlib_score", lambda *args, **kwargs: {"score": 0.0})
+    monkeypatch.setattr(scheduler, "_postmarket_news_sentiment", lambda *args, **kwargs: {"sentiment": 0.0})
+
+    def fake_build_memory_context(*args, **kwargs):
+        seen["record_usage"] = kwargs.get("record_usage")
+        return {"text": "", "used_stock_memory_ids": [], "ai_memory_keys": []}
+
+    monkeypatch.setattr("backend.memory.stock_memory.build_memory_context", fake_build_memory_context)
+    monkeypatch.setattr(
+        "backend.analysis.technical.technical_score",
+        lambda clipped, **kwargs: {
+            "score": 0.0,
+            "latest": {"close": 1.5, "atr14": 0.1},
+            "latest_date": clipped.index[-1],
+        },
+    )
+    monkeypatch.setattr(
+        "backend.decision.aggregator.aggregate",
+        lambda **kwargs: {
+            "composite_score": 0.0,
+            "recommendation": "观望",
+            "confidence": "低",
+            "stop_loss": 1.0,
+            "take_profit": 2.0,
+            "breakdown": {"quant": 0.0, "technical": 0.0, "sentiment": 0.0},
+        },
+    )
+
+    stock = SimpleNamespace(symbol="000001", name="测试股", market="CN")
+    scheduler._analyze_postmarket_stock(
+        stock,
+        db=object(),
+        context={"long_term_labels": {}, "read_only": True},
+    )
+
+    assert seen["record_usage"] is False
+
+
 def test_bark_signal_alert_names_the_concrete_action(monkeypatch):
     from backend.notification import bark
 

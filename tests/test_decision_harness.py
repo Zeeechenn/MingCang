@@ -73,6 +73,34 @@ def test_record_decision_run_preserves_portfolio_decision(test_db):
     assert final_action["portfolio_decision"]["action"] == "reduce"
 
 
+def test_deep_research_run_does_not_update_last_signal_summary(test_db):
+    from backend.decision.harness import (
+        get_decision_evidence,
+        get_research_state,
+        record_decision_run,
+    )
+
+    record_decision_run(
+        test_db,
+        run_type="deep_research",
+        symbol="600519",
+        as_of="2026-05-21",
+        result={
+            "rule_version": "deep_research_v1",
+            "recommendation": "深研偏多",
+            "confidence": "中",
+            "composite_score": 88,
+            "position_pct": 0.30,
+        },
+    )
+
+    evidence = get_decision_evidence(test_db, "600519")
+    state = get_research_state(test_db, "600519")
+
+    assert evidence[0]["run_type"] == "deep_research"
+    assert state["last_signal_summary"] == ""
+
+
 def test_record_decision_run_builds_step_trace(test_db):
     from backend.decision.harness import get_decision_evidence, record_decision_run
 

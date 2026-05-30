@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 from backend.agents.analyst import (
     AnalystReport,
@@ -29,7 +30,7 @@ _NEGATIVE_HINTS = ("风险", "下滑", "减持", "处罚", "监管", "亏损", "
 _POSITIVE_HINTS = ("催化", "订单", "增长", "景气", "突破", "改善", "增持", "中标")
 
 
-def _as_list(value) -> list:
+def _as_list(value: Any) -> list[Any]:
     """Return value as a flat list for context coercion."""
     if value is None:
         return []
@@ -38,7 +39,7 @@ def _as_list(value) -> list:
     return [value]
 
 
-def _append_unique(target: list[str], items, *, limit: int = 8) -> None:
+def _append_unique(target: list[str], items: Any, *, limit: int = 8) -> None:
     """Append bounded unique string items."""
     seen = set(target)
     for item in _as_list(items):
@@ -50,9 +51,9 @@ def _append_unique(target: list[str], items, *, limit: int = 8) -> None:
             break
 
 
-def _context_from_sections(sections) -> dict:
+def _context_from_sections(sections: Any) -> dict[str, Any]:
     """Extract IC memo fields from deep_research section dicts."""
-    context = {
+    context: dict[str, Any] = {
         "catalysts": [],
         "risks": [],
         "evidence_snippets": [],
@@ -71,7 +72,7 @@ def _context_from_sections(sections) -> dict:
     return context
 
 
-def _dict_from_json(value) -> dict:
+def _dict_from_json(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     if not isinstance(value, str) or not value.strip():
@@ -90,7 +91,7 @@ def build_research_context(
     research_context: dict | None = None,
 ) -> dict | None:
     """Best-effort extraction of deep-research context without making signals depend on it."""
-    merged = {
+    merged: dict[str, Any] = {
         "catalysts": [],
         "risks": [],
         "evidence_snippets": [],

@@ -10,7 +10,11 @@ from sqlalchemy.orm import Session
 from backend.agents.long_term.storage import get_active_label
 from backend.api.routes._shared import latest_signal, signal_to_schema
 from backend.data.database import Stock
-from backend.decision.harness import get_decision_evidence, get_research_state
+from backend.decision.harness import (
+    get_decision_evidence,
+    get_official_decision_evidence,
+    get_research_state,
+)
 from backend.decision.signal_policy import is_entry_signal
 from backend.memory.stock_memory import list_stock_memories
 
@@ -134,6 +138,7 @@ def build_research_dossier(db: Session, symbol: str) -> dict:
     label = get_active_label(symbol, db)
     research_state = get_research_state(db, symbol)
     evidence = get_decision_evidence(db, symbol, limit=5)
+    official_evidence = get_official_decision_evidence(db, symbol, limit=5)
     memory_rows = _memory_rows(db, symbol)
     label_dict = _label_to_dict(label)
     pending_questions = _pending_questions(research_state)
@@ -158,7 +163,7 @@ def build_research_dossier(db: Session, symbol: str) -> dict:
         "stock_memory": memory_rows,
         "deep_research": _deep_research(memory_rows),
         "pending_questions": pending_questions,
-        "conflicts": _conflicts(signal, label_dict, memory_rows, evidence),
-        "official_action": _latest_official_action(signal, evidence),
+        "conflicts": _conflicts(signal, label_dict, memory_rows, official_evidence),
+        "official_action": _latest_official_action(signal, official_evidence),
         "missing": missing,
     }

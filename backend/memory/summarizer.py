@@ -109,6 +109,7 @@ def summarize_if_needed(
     ) or {}
     try:
         import json as _json
+
         from backend.ops.llm_usage import log_llm_usage
         log_llm_usage("chat", prompt, _json.dumps(data))
     except Exception:

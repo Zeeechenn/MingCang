@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -217,7 +217,7 @@ def system_health(db: Session = Depends(get_db)):
         latest_price_date = row[0] if row else None
         if latest_price_date:
             last = datetime.strptime(latest_price_date, "%Y-%m-%d")
-            data_age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - last).days
+            data_age_days = (datetime.now(UTC).replace(tzinfo=None) - last).days
     except Exception:
         db_ok = False
 
@@ -268,15 +268,13 @@ def system_health(db: Session = Depends(get_db)):
         )
         if llm_budget_alert.get("alert"):
             try:
-                from backend.notification.bark import send_bark
-                send_bark(
-                    settings.bark_key,
+                from backend.notification.bark import send_result
+                send_result(
                     title="StockSage LLM 日预算超限",
                     body=(
                         f"今日 LLM 成本 ¥{llm_budget_alert['today_cny']:.4f}"
                         f"，预算 ¥{llm_budget_alert['budget_cny']:.2f}"
                     ),
-                    server=settings.bark_server,
                 )
             except Exception:
                 pass

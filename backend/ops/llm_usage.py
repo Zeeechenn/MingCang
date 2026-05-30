@@ -17,9 +17,8 @@ Haiku 定价（2024Q4）：$0.25/$1.25 per 1M tokens in/out；CNY 汇率 7.2。
 """
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ def _persist(bucket, tokens_in, tokens_out, cny, db_provided) -> None:
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             cost_estimate_cny=cny,
-            created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db.add(row)
         db.commit()
@@ -124,14 +123,12 @@ def get_usage_summary(days: int = 7, db=None) -> dict:
     """
     from datetime import timedelta
 
-    from sqlalchemy import func
-
     from backend.data.database import LlmUsageLog, SessionLocal
 
     close_after = db is None
     db = db or SessionLocal()
     try:
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
         rows = (
             db.query(LlmUsageLog)
             .filter(LlmUsageLog.created_at >= cutoff)
@@ -186,7 +183,7 @@ def check_daily_budget_alert(
     Returns {"alert": bool, "today_cny": float, "budget_cny": float}.
     """
     summary = get_usage_summary(days=1, db=db)
-    today_str = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+    today_str = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
     today_data = next((d for d in summary["daily"] if d["date"] == today_str), None)
     today_cny = today_data["cost_estimate_cny"] if today_data else 0.0
     return {

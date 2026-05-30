@@ -119,7 +119,7 @@ class LocalCLIProvider(LLMProvider):
                 "可能是日配额耗尽，尝试 Codex 兜底后不再重试",
                 self._timeout, len(full_prompt),
             )
-            raise _FatalResult(self._complete_with_codex(full_prompt))
+            raise _FatalResult(self._complete_with_codex(full_prompt)) from None
         except FileNotFoundError:
             logger.warning("LocalCLIProvider: `claude` 命令未找到，尝试 Codex CLI")
             return self._complete_with_codex(full_prompt)

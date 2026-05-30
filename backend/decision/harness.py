@@ -2,18 +2,17 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+from backend.data.database import DecisionRun, Price, ResearchState, Signal
+from backend.decision.signal_policy import is_entry_signal
+
+OFFICIAL_SIGNAL_RUN_TYPES = frozenset({"postmarket"})
 
 
 def _now() -> datetime:
     """Return current UTC time as a timezone-naive datetime (stored as naive UTC in SQLite)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
-from uuid import uuid4
-
-from backend.data.database import DecisionRun, Price, ResearchState, Signal
-from backend.decision.signal_policy import is_entry_signal
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _json(data) -> str:
@@ -29,6 +28,11 @@ def _parse(raw: str | None, default):
         return json.loads(raw)
     except Exception:
         return default
+
+
+def is_official_signal_run_type(run_type: str | None) -> bool:
+    """Return whether a decision run is allowed to drive official signal state."""
+    return bool(run_type in OFFICIAL_SIGNAL_RUN_TYPES)
 
 
 def _signal_summary(result: dict) -> str:
@@ -225,7 +229,8 @@ def record_decision_run(
             created_at=_now(),
         )
         db.add(run)
-    _upsert_research_state_from_signal(db, symbol, result)
+    if is_official_signal_run_type(run_type):
+        _upsert_research_state_from_signal(db, symbol, result)
     db.commit()
     return run
 
@@ -248,37 +253,55 @@ def _upsert_research_state_from_signal(db, symbol: str, result: dict) -> Researc
     return state
 
 
-def get_decision_evidence(db, symbol: str, limit: int = 10) -> list[dict]:
-    """Return recent decision runs for frontend evidence-chain display."""
-    rows = (
+def _decision_run_to_evidence(r: DecisionRun) -> dict:
+    agent_outputs = _parse(r.agent_outputs_json, {})
+    return {
+        "run_id": r.run_id,
+        "run_type": r.run_type,
+        "symbol": r.symbol,
+        "as_of": r.as_of,
+        "profile": r.profile,
+        "rule_version": r.rule_version,
+        "recommendation": r.recommendation,
+        "composite_score": r.composite_score,
+        "input_snapshot": _parse(r.input_snapshot_json, {}),
+        "agent_outputs": agent_outputs,
+        "trace": agent_outputs.get("trace", []),
+        "risk_decision": _parse(r.risk_decision_json, {}),
+        "final_action": _parse(r.final_action_json, {}),
+        "eval_result": _parse(r.eval_result_json, None),
+        "notes": r.notes,
+        "created_at": r.created_at.isoformat(timespec="seconds") if r.created_at else None,
+    }
+
+
+def _decision_evidence_query(db, symbol: str):
+    return (
         db.query(DecisionRun)
         .filter(DecisionRun.symbol == symbol)
         .order_by(DecisionRun.as_of.desc(), DecisionRun.created_at.desc())
+    )
+
+
+def get_decision_evidence(db, symbol: str, limit: int = 10) -> list[dict]:
+    """Return recent decision runs for frontend evidence-chain display."""
+    rows = (
+        _decision_evidence_query(db, symbol)
         .limit(limit)
         .all()
     )
-    output = []
-    for r in rows:
-        agent_outputs = _parse(r.agent_outputs_json, {})
-        output.append({
-            "run_id": r.run_id,
-            "run_type": r.run_type,
-            "symbol": r.symbol,
-            "as_of": r.as_of,
-            "profile": r.profile,
-            "rule_version": r.rule_version,
-            "recommendation": r.recommendation,
-            "composite_score": r.composite_score,
-            "input_snapshot": _parse(r.input_snapshot_json, {}),
-            "agent_outputs": agent_outputs,
-            "trace": agent_outputs.get("trace", []),
-            "risk_decision": _parse(r.risk_decision_json, {}),
-            "final_action": _parse(r.final_action_json, {}),
-            "eval_result": _parse(r.eval_result_json, None),
-            "notes": r.notes,
-            "created_at": r.created_at.isoformat(timespec="seconds") if r.created_at else None,
-        })
-    return output
+    return [_decision_run_to_evidence(r) for r in rows]
+
+
+def get_official_decision_evidence(db, symbol: str, limit: int = 10) -> list[dict]:
+    """Return recent decision runs that can drive official action context."""
+    rows = (
+        _decision_evidence_query(db, symbol)
+        .filter(DecisionRun.run_type.in_(OFFICIAL_SIGNAL_RUN_TYPES))
+        .limit(limit)
+        .all()
+    )
+    return [_decision_run_to_evidence(r) for r in rows]
 
 
 def get_research_state(db, symbol: str) -> dict:

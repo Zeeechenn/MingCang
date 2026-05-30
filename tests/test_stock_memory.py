@@ -417,6 +417,78 @@ def test_research_dossier_combines_signal_label_memory_and_action(test_db, sampl
     assert any(row["memory_type"] == "risk" for row in dossier["stock_memory"])
 
 
+def test_research_dossier_keeps_deep_research_out_of_official_action(test_db, sample_stocks):
+    from backend.data.database import Signal
+    from backend.decision.harness import record_decision_run
+    from backend.memory.research_memory import remember_deep_research
+    from backend.research.dossier import build_research_dossier
+
+    test_db.add(Signal(
+        symbol="300308",
+        date="2026-05-25",
+        quant_score=0,
+        technical_score=80,
+        sentiment_score=80,
+        composite_score=60,
+        recommendation="可小仓试错",
+        confidence="高",
+        stop_loss=9,
+        take_profit=12,
+        limit_status="normal",
+        rule_version="aggregate_v1:new_framework",
+    ))
+    test_db.commit()
+    record_decision_run(
+        test_db,
+        run_type="postmarket",
+        symbol="300308",
+        as_of="2026-05-25",
+        result={
+            "rule_version": "aggregate_v1:new_framework",
+            "recommendation": "观望",
+            "confidence": "高",
+            "composite_score": 60,
+            "official_action": {
+                "recommendation": "观望",
+                "position_pct": 0.0,
+                "is_constrained": True,
+            },
+            "position_pct": 0.0,
+        },
+    )
+    record_decision_run(
+        test_db,
+        run_type="deep_research",
+        symbol="300308",
+        as_of="2026-05-25",
+        result={
+            "rule_version": "deep_research_v1",
+            "recommendation": "深研偏多",
+            "confidence": "高",
+            "composite_score": 95,
+            "official_action": {
+                "recommendation": "深研偏多",
+                "position_pct": 0.30,
+            },
+            "position_pct": 0.30,
+        },
+    )
+    remember_deep_research(
+        test_db,
+        topic="AI算力产业链",
+        summary="深研证据仍应作为指针展示",
+        symbols=["300308"],
+        report_path="/tmp/report.md",
+    )
+
+    dossier = build_research_dossier(test_db, "300308")
+
+    assert dossier["evidence"][0]["run_type"] == "deep_research"
+    assert dossier["official_action"]["recommendation"] == "观望"
+    assert dossier["official_action"]["position_pct"] == 0.0
+    assert len(dossier["deep_research"]) == 1
+
+
 def test_deep_research_memory_keeps_per_symbol_pointers(test_db):
     from backend.memory.research_memory import remember_deep_research
     from backend.memory.stock_memory import list_stock_memories

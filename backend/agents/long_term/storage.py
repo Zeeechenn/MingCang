@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -67,7 +67,7 @@ def _write_mirror(db) -> None:
     if mirror_path is None:
         return
     try:
-        today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
         rows = (db.query(LongTermLabelORM)
                   .filter(LongTermLabelORM.expires_at >= today)
                   .all())
@@ -92,7 +92,7 @@ def _write_mirror(db) -> None:
 
 def get_active_label(symbol: str, db) -> LongTermLabel | None:
     """取 TTL 未过期的最新一条（按 date 倒序），过期返回 None"""
-    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
     row = (db.query(LongTermLabelORM)
              .filter(LongTermLabelORM.symbol == symbol,
                      LongTermLabelORM.expires_at >= today)
@@ -116,7 +116,7 @@ def get_active_label(symbol: str, db) -> LongTermLabel | None:
 
 def bulk_get_labels(symbols: list[str], db) -> dict[str, LongTermLabel]:
     """批量取，盘后 job 一次性查 10+ 只股"""
-    today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
     rows = (db.query(LongTermLabelORM)
               .filter(LongTermLabelORM.symbol.in_(symbols),
                       LongTermLabelORM.expires_at >= today)

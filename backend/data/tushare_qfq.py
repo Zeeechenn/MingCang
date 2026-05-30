@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from datetime import date, timedelta
+from typing import Any, cast
 
 import pandas as pd
 import requests
@@ -58,7 +59,7 @@ def _call_tushare(
     try:
         session = requests.Session()
         session.trust_env = False
-        response = session.post(base_url, json=payload, timeout=timeout_seconds)
+        response = session.post(base_url, json=cast(Any, payload), timeout=timeout_seconds)
         response.raise_for_status()
         body = response.json()
     except requests.RequestException as exc:

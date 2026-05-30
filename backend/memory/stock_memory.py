@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone, timedelta
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import text
@@ -33,9 +35,24 @@ _TYPE_ORDER = {
     "research_pointer": 7,
 }
 
+_SUPPRESS_USAGE_RECORDING: ContextVar[bool] = ContextVar(
+    "stock_memory_suppress_usage_recording",
+    default=False,
+)
+
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+@contextmanager
+def suppress_memory_usage_recording():
+    """Temporarily make memory recall read-only for nested context builders."""
+    token = _SUPPRESS_USAGE_RECORDING.set(True)
+    try:
+        yield
+    finally:
+        _SUPPRESS_USAGE_RECORDING.reset(token)
 
 
 def _iso(value: Any) -> str | None:
@@ -399,6 +416,7 @@ def build_memory_context(
     record_usage: bool = True,
 ) -> dict:
     """Build a compact prompt-ready memory context across project entry points."""
+    record_usage = record_usage and not _SUPPRESS_USAGE_RECORDING.get()
     try:
         stock_rows = list_stock_memories(db, symbol=symbol, limit=max(limit * 3, 20))
     except OperationalError:

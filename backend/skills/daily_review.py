@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from backend.config import BASE_DIR
@@ -137,7 +137,7 @@ def build_daily_review(
     persist: bool = True,
 ) -> DailyReview:
     """Build and optionally persist a deterministic daily review report."""
-    day = as_of or datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
+    day = as_of or datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
     signals = (
         db.query(Signal)
         .filter(Signal.date == day)

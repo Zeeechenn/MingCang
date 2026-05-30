@@ -22,13 +22,13 @@ import logging
 import os
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
 
 
 def _now_utc_naive() -> datetime:
     """M21.4: 替代 _now_utc_naive()，返回 UTC naive datetime。"""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-from pathlib import Path
+    return datetime.now(UTC).replace(tzinfo=None)
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 """Layer 3 audit log helpers backed by SQLite FTS5."""
 from __future__ import annotations
 
-from datetime import datetime, timezone, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -29,7 +29,7 @@ def audit_write(
 ) -> None:
     """Append an event to the audit log FTS table."""
     _ensure_schema(db)
-    ts = timestamp or datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+    ts = timestamp or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
     db.execute(text("""
         INSERT INTO audit_log_fts(timestamp, event_type, content, related_symbol, related_scope)
         VALUES(:timestamp, :event_type, :content, :related_symbol, :related_scope)

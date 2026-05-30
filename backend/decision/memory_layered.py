@@ -15,7 +15,7 @@ FinMem 风格分层决策记忆（阶段C）
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from backend.config import settings
@@ -60,7 +60,7 @@ def save_short_term(symbol: str, signal: dict) -> None:
     """写入运行时短期记忆"""
     arr = _SHORT_TERM.setdefault(symbol, [])
     arr.append({
-        "ts": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        "ts": datetime.now(UTC).replace(tzinfo=None).isoformat(),
         "score": signal.get("composite_score"),
         "rec": signal.get("recommendation"),
         "stop": signal.get("stop_loss"),
@@ -275,7 +275,7 @@ def weekly_long_term_reflect(db) -> str | None:
     from backend.data.database import IndexPrice, Price, Signal
     from backend.llm import get_provider
 
-    cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=7)).strftime("%Y-%m-%d")
     sigs = (db.query(Signal)
             .filter(Signal.date >= cutoff)
             .filter(Signal.recommendation.in_(entry_recommendations(include_legacy=True)))
@@ -348,7 +348,7 @@ def weekly_long_term_reflect(db) -> str | None:
         return None
 
     _ensure_dir()
-    week_label = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-W%V")
+    week_label = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-W%V")
     section = f"\n## {week_label}\n\n失败信号:\n" + "\n".join(fail_lines) + f"\n\n反思:\n{text}\n"
     with LONG_TERM_PATH.open("a", encoding="utf-8") as f:
         f.write(section)

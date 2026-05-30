@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 from backend.config import settings
 from backend.data.database import DecisionRun, LongTermLabel, NewsItem, ResearchState, Signal
+from backend.decision.harness import OFFICIAL_SIGNAL_RUN_TYPES
 from backend.decision.signal_policy import EXIT_RECS
 from backend.llm import get_provider, has_runtime_llm_provider
 from backend.skills.vetter import vet_skill_output
@@ -98,7 +99,11 @@ def _latest_signal(symbol: str, db) -> Signal:
 def _latest_decision(symbol: str, as_of: str, db) -> DecisionRun | None:
     exact = (
         db.query(DecisionRun)
-        .filter(DecisionRun.symbol == symbol, DecisionRun.as_of == as_of)
+        .filter(
+            DecisionRun.symbol == symbol,
+            DecisionRun.as_of == as_of,
+            DecisionRun.run_type.in_(OFFICIAL_SIGNAL_RUN_TYPES),
+        )
         .order_by(DecisionRun.created_at.desc())
         .first()
     )
@@ -106,14 +111,17 @@ def _latest_decision(symbol: str, as_of: str, db) -> DecisionRun | None:
         return exact
     return (
         db.query(DecisionRun)
-        .filter(DecisionRun.symbol == symbol)
+        .filter(
+            DecisionRun.symbol == symbol,
+            DecisionRun.run_type.in_(OFFICIAL_SIGNAL_RUN_TYPES),
+        )
         .order_by(DecisionRun.as_of.desc(), DecisionRun.created_at.desc())
         .first()
     )
 
 
 def _latest_news(symbol: str, db, *, limit: int = 8) -> list[dict]:
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=14)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=14)
     rows = (
         db.query(NewsItem)
         .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
@@ -250,7 +258,7 @@ def _build_prompt(official: dict, news: list[dict], long_term: dict | None) -> s
 
 def _research_state(symbol: str, db) -> ResearchState:
     state = db.query(ResearchState).filter(ResearchState.symbol == symbol).first()
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     if state is None:
         state = ResearchState(
             symbol=symbol,
@@ -296,7 +304,7 @@ def generate_symbol_copilot(symbol: str, db) -> dict:
     card = {
         "symbol": symbol,
         "as_of": sig.date,
-        "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
         # Surface decision date so UI / callers can warn when it differs from signal date.
         "decision_date": official.get("decision_date"),
         "decision_date_mismatch": decision_date_mismatch,

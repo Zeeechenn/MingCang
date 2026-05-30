@@ -300,6 +300,14 @@ def _postmarket_news_sentiment(stock, db) -> dict:
     return sentiment_result
 
 
+def _should_record_memory_usage(context: dict) -> bool:
+    if context.get("read_only") or context.get("memory_read_only"):
+        return False
+    if context.get("record_memory_usage") is False:
+        return False
+    return True
+
+
 def _analyze_postmarket_stock(stock, db, context: dict, as_of_date: str | None = None) -> dict | None:
     from backend.analysis.qlib_engine import qlib_score
     from backend.analysis.technical import technical_score
@@ -325,6 +333,7 @@ def _analyze_postmarket_stock(stock, db, context: dict, as_of_date: str | None =
         symbol=stock.symbol,
         query=f"{stock.symbol} {stock.name}",
         task_type="postmarket_signal",
+        record_usage=_should_record_memory_usage(context),
     )
     try:
         research_pointers = list_stock_memories(
@@ -521,7 +530,7 @@ def run_postmarket_batch(db, universe_symbols: list[str] | None = None) -> dict:
     context = _load_postmarket_context(db, stocks)
     stats = {
         "stocks": len(stocks),
-        "universe_filter": len(universe_symbols) if universe_symbols is not None else None,
+        "universe_filter": len(universe_symbols) if universe_symbols is not None else 0,
         "processed": 0,
         "saved": 0,
         "skipped": 0,

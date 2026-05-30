@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -88,7 +88,7 @@ def _pending(action: str, payload: dict, user_message: str, db: Session) -> dict
         payload_json=_json(payload),
         status="pending",
         user_message=user_message,
-        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        created_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(row)
     db.commit()
@@ -372,8 +372,8 @@ def _ensure_session(db: Session, session_id: str | None, mode: str, title: str |
         id=uuid4().hex,
         title=title or "新对话",
         mode=mode,
-        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
-        updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        created_at=datetime.now(UTC).replace(tzinfo=None),
+        updated_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(row)
     db.commit()
@@ -392,9 +392,9 @@ def _save_message(
         role=role,
         content=content,
         payload_json=_json(payload or {}),
-        created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        created_at=datetime.now(UTC).replace(tzinfo=None),
     ))
-    session.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.updated_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
     try:
         from backend.memory.summarizer import summarize_if_needed
@@ -487,8 +487,8 @@ def archive_chat_session(session_id: str, db: Session = Depends(get_db)):
     row = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if row is None:
         raise HTTPException(404, "chat session not found")
-    row.archived_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    row.archived_at = datetime.now(UTC).replace(tzinfo=None)
+    row.updated_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
     return {"status": "archived", "id": session_id}
 
@@ -643,7 +643,7 @@ def confirm_action(
     result = _execute_action(row.action, payload, db)
     row.status = "executed"
     row.result_json = _json(result)
-    row.executed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    row.executed_at = datetime.now(UTC).replace(tzinfo=None)
     db.commit()
     return {"status": "executed", "result": result}
 
