@@ -184,6 +184,7 @@ def train(
     n_estimators: int = 300,
     learning_rate: float = 0.05,
     model_type: str = "regression",
+    include_inactive: bool = False,
 ) -> bool:
     """
     训练 LightGBM Alpha 模型并保存到磁盘。
@@ -191,7 +192,9 @@ def train(
       - 调度器（每周六 09:00）
       - 手动：python3 -m backend.analysis.qlib_engine --train
       - API：POST /api/model/train
+      - M26.1 扩盘重训：python3 -m backend.analysis.qlib_engine --train --include-inactive
 
+    include_inactive: True 时纳入 active=False 的扩盘股（M26.1 用，不影响生产自选股）。
     Returns True on success.
     """
     try:
@@ -202,8 +205,8 @@ def train(
 
     from backend.data.qlib_data import build_training_data
 
-    logger.info("构建训练数据…")
-    df = build_training_data(db)
+    logger.info("构建训练数据… include_inactive=%s", include_inactive)
+    df = build_training_data(db, include_inactive=include_inactive)
 
     if len(df) < 200:
         logger.warning(
@@ -311,18 +314,51 @@ def train(
 
 
 if __name__ == "__main__":
+    import argparse
+    import json
     import logging as _logging
     import sys
+
     _logging.basicConfig(level=_logging.INFO, format="%(levelname)s %(message)s")
 
-    if "--train" in sys.argv:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--train", action="store_true")
+    parser.add_argument("--ranker", action="store_true")
+    parser.add_argument("--include-inactive", action="store_true",
+                        help="纳入 active=False 的扩盘股训练（M26.1 用）")
+    parser.add_argument("--validate-production", action="store_true")
+    parser.add_argument("--json-output", default="")
+    args = parser.parse_args()
+
+    if args.train:
         from backend.data.database import SessionLocal
         db = SessionLocal()
         try:
-            ok = train(db, model_type="ranker" if "--ranker" in sys.argv else "regression")
+            ok = train(db,
+                       model_type="ranker" if args.ranker else "regression",
+                       include_inactive=args.include_inactive)
             sys.exit(0 if ok else 1)
         finally:
             db.close()
-    else:
-        print("用法: python3 -m backend.analysis.qlib_engine --train [--ranker]")
-        sys.exit(1)
+
+    if args.validate_production:
+        from backend.data.database import SessionLocal
+        from backend.tools.m26_quant_baseline import build_current_model_validation
+
+        db = SessionLocal()
+        try:
+            report = build_current_model_validation(db)
+        finally:
+            db.close()
+        payload = json.dumps(report, ensure_ascii=False, indent=2)
+        if args.json_output:
+            out = Path(args.json_output).expanduser()
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(payload, encoding="utf-8")
+            print(f"production validation report written: {out}")
+        else:
+            print(payload)
+        sys.exit(0 if report.get("status") == "ok" else 1)
+
+    parser.print_help()
+    sys.exit(1)

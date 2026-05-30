@@ -19,8 +19,8 @@ the linked documents.
 | 文件 | 内容 |
 |------|------|
 | [STATUS.md](STATUS.md) | 当前公开快照（默认权重 / 调度 / 验证 / 启动命令） |
-| [CHANGELOG.md](CHANGELOG.md) | 已完成里程碑详情（M0 / M1 / M3 / M7 / M8） |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 进行中与待做（M2 / M4 / M5 / M6 / M8） |
+| [CHANGELOG.md](CHANGELOG.md) | 已完成里程碑详情（M0–M26，按时间倒序） |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 进行中与待做（当前重点 M27 / M28，后置 M24.3 / M25.5 等） |
 | [README.md](README.md) | 项目门面（Quick Start / 架构图） |
 | [AGENTS.md](AGENTS.md) | Codex / Claude Code / MCP 本地 agent 使用说明 |
 
@@ -50,6 +50,19 @@ runtime databases and personal trading records stay outside Git tracking.
 | **M9** | 记忆系统接入与治理 | ✅ 大部分完成（M9.0–M9.4 + 横向备份/反偏差） |
 | **M10** | 运行可靠性与产品化优化 | ✅ M10.0-M10.4 完成 |
 | **M11** | Agent-Ready 本地/远程双模式接口 | ✅ 初版完成（AGENTS/CLAUDE 契约 + 本地 MCP 只读上下文工具） |
+| **M12** | 外部数据源扩展治理 | ⏳ 剩余项观察中 |
+| **M13** | pi Shell + Agent Kernel | ✅ 完成 |
+| **M14** | 股票长期记忆与跨入口召回 | ✅ 完成 |
+| **M15** | 记忆系统与影子副驾驶修复 | ✅ 完成 |
+| **M16** | 全项目分层评审 | ✅ 完成 |
+| **M17-M21** | 决策链 / 回测 / 数据 / 量化 / 基础设施评审修复 | ✅ 完成 |
+| **M22** | 持仓完整性与状态隔离 | ✅ 完成 |
+| **M23** | 信号证据链、回测口径与运行硬化 | ✅ 完成 |
+| **M24** | 长期标签隔离与约束观察 | ✅ M24.0-M24.2 完成；M24.3 观察中 |
+| **M25** | 综合改进路线图 | ✅ M25.0-M25.4 主体完成；M25.5/M25.6 后置 |
+| **M26** | 量化层重估 | ✅ M26.0-M26.2 完成；M26.3 暂停 |
+| **M27** | Alpha 根治工程 | ⏳ 当前最高优先 |
+| **M28** | 调研模块整合与实时搜索接入 | 🔲 规划完成，待实施 |
 
 ---
 

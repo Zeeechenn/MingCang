@@ -41,10 +41,19 @@ def _blend_quant(qlib_score: float, kronos_result: dict | None) -> tuple[float, 
     if kronos_result is None or not settings.kronos_enabled:
         return qlib_score, {}
 
-    w_k = settings.kronos_weight_in_quant
-    blended = qlib_score * (1 - w_k) + kronos_result["score"] * w_k
+    try:
+        kronos_score = float(kronos_result["score"])
+    except (KeyError, TypeError, ValueError):
+        return qlib_score, {"kronos_ignored": "missing_or_invalid_score"}
+
+    if not math.isfinite(kronos_score):
+        return qlib_score, {"kronos_ignored": "non_finite_score"}
+
+    kronos_score = max(-100.0, min(100.0, kronos_score))
+    w_k = max(0.0, min(1.0, float(settings.kronos_weight_in_quant)))
+    blended = qlib_score * (1 - w_k) + kronos_score * w_k
     return round(blended, 1), {
-        "kronos_score": kronos_result["score"],
+        "kronos_score": round(kronos_score, 1),
         "kronos_volatility_adj": kronos_result.get("volatility_adj", 1.0),
         "kronos_predicted_high": kronos_result.get("predicted_high"),
         "kronos_predicted_low": kronos_result.get("predicted_low"),
@@ -138,7 +147,9 @@ def _bull_bear_debate(
     )
     try:
         import json as _json
+
         from backend.ops.llm_usage import log_llm_usage
+
         log_llm_usage("debate", prompt, _json.dumps(data))
     except Exception:
         pass
@@ -266,6 +277,7 @@ def aggregate_v2(
     reflection_context: str = "",
     portfolio_drawdown_pct: float = 0.0,
     long_term_label=None,
+    kronos_result: dict | None = None,
 ) -> dict:
     """
     阶段C 新版聚合：调用 agents.pipeline 完整多 Agent 决策。
@@ -291,7 +303,7 @@ def aggregate_v2(
     )
 
     # 与旧版一致的 quant 层混合（Kronos 等可选模块仍可参与）
-    blended_quant_score, kronos_info = _blend_quant(quant_result.get("score", 0), None)
+    blended_quant_score, kronos_info = _blend_quant(quant_result.get("score", 0), kronos_result)
     quant_result_merged = {**quant_result, "score": blended_quant_score}
 
     # 分歧检测：如有则触发 LLM 辩论
@@ -350,6 +362,8 @@ def aggregate_v2(
 
     result = decision.to_signal_dict()
     result["rule_version"] = f"multi_agent_v2:{active_signal_weights().profile}"
+    if kronos_info:
+        result["kronos"] = kronos_info
 
     # 阶段A regime 过滤层：综合分二次衰减（在 risk_manager 之后，最后兜底）
     if regime is not None:

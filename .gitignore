@@ -18,6 +18,7 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+.venv_kronos/
 node_modules/
 dist/
 .superpowers/
@@ -37,6 +38,9 @@ docs/research/*.md
 # Internal planning drafts already summarized in ROADMAP / CHANGELOG
 docs/MEMORY_SYSTEM_PLAN.md
 docs/FINANCIAL_SKILLS_ADAPTATION_PLAN.md
+
+# Local Kronos experiments; upstream checkout/venv are not project artifacts
+vendor/kronos/
 
 # 本地纸上交易测试材料，不上传到 GitHub
 paper_trading/

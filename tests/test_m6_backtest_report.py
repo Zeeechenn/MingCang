@@ -21,6 +21,67 @@ def test_build_validation_report_has_decision_gate():
     assert report["equity_curve"]["points"]
     assert report["equity_curve"]["max_drawdown"] == 0.0
     assert report["gates"]["pass_ic"] is True
+    assert report["gates"]["ic_floor"] == 0.02
+    assert report["recommendation"] == "eligible_for_quant_review"
+
+
+def test_build_validation_report_accepts_configurable_gate_floor():
+    from backend.backtest.alphalens_qlib import build_validation_report
+
+    predictions = pd.DataFrame({
+        "date": sum(([f"2026-01-0{d}"] * 5 for d in range(1, 6)), []),
+        "symbol": [f"S{i}" for _ in range(5) for i in range(5)],
+        "pred": [1, 2, 3, 4, 5] * 5,
+        "label": [0.01, 0.02, 0.03, 0.04, 0.05] * 5,
+    })
+
+    report = build_validation_report(predictions, ic_floor=1.1)
+
+    assert report["gates"]["pass_ic"] is False
+    assert report["gates"]["ic_floor"] == 1.1
+    assert report["recommendation"] == "keep_quant_disabled"
+
+
+def test_build_validation_report_recommendation_ignores_numeric_gate_metadata():
+    from backend.backtest.alphalens_qlib import build_validation_report
+
+    predictions = pd.DataFrame({
+        "date": sum(([f"2026-01-0{d}"] * 5 for d in range(1, 6)), []),
+        "symbol": [f"S{i}" for _ in range(5) for i in range(5)],
+        "pred": [1, 2, 3, 4, 5] * 5,
+        "label": [0.01, 0.02, 0.03, 0.04, 0.05] * 5,
+    })
+
+    report = build_validation_report(
+        predictions,
+        ic_floor=0.0,
+        icir_floor=0.0,
+        require_monotonic=True,
+    )
+
+    assert report["gates"]["pass"] is True
+    assert report["recommendation"] == "eligible_for_quant_review"
+
+
+def test_build_validation_report_can_disable_monotonic_requirement():
+    from backend.backtest.alphalens_qlib import build_validation_report
+
+    predictions = pd.DataFrame({
+        "date": sum(([f"2026-01-0{d}"] * 5 for d in range(1, 6)), []),
+        "symbol": [f"S{i}" for _ in range(5) for i in range(5)],
+        "pred": [1, 2, 3, 4, 5] * 5,
+        "label": [0.01, 0.05, 0.03, 0.04, 0.02] * 5,
+    })
+
+    report = build_validation_report(
+        predictions,
+        ic_floor=0.0,
+        icir_floor=0.0,
+        require_monotonic=False,
+    )
+
+    assert report["gates"]["pass_monotonic"] is False
+    assert report["gates"]["pass"] is True
     assert report["recommendation"] == "eligible_for_quant_review"
 
 

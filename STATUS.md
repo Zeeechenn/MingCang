@@ -21,6 +21,8 @@
 | M10 | 运行可靠性与产品化优化 | ✅ M10.0-M10.4 完成，M10.5 后置 |
 | M11 | Agent-Ready 本地/远程双模式接口 | ✅ 初版完成，本地 agent 默认信任，远程模式显式启用 |
 | M14 | 股票长期记忆与跨入口召回 | ✅ 初版完成，SQLite 结构化召回 |
+| M26 | 量化层重估（扩盘+Kronos评估） | ✅ M26.0/M26.1/M26.2 完成；M26.3 暂停待 M27.1 |
+| M27 | Alpha 根治工程 | ⏳ 进行中——因子工程→交易池扩容→事件情感→Kronos微调 |
 
 ---
 
@@ -36,6 +38,20 @@
 日常/批量盘后信号默认不启用多 Agent，以控制 runtime LLM token 消耗；多 Agent 保留给显式单股研究、长期研究和实验复盘。
 
 > Qlib 量化层已加入 point-in-time 基本面因子与可选 LambdaRank 训练入口；最近验证未通过 alpha 门槛，因此生产默认 quant 权重继续保持 0。
+
+**M26 量化层重估（2026-05-30 完结）**
+- M26.1 扩盘：707 支（HS300+CSI500），LightGBM 重训 IC=0.0208 / ICIR=0.187；仅通过 M26 诊断阈值（IC≥0.02 / ICIR≥0.15 / 不强制单调），未通过生产 promotion gate（ICIR≥0.30 且分位单调）
+- M26.2 Kronos 零样本评估：IC=-0.0017，不及 LightGBM，不接生产；Kronos Path A 微调进入 M27.4 计划
+- M26.3 暂停：两路均未带来足够 IC 改善，等 M27.1 因子工程使 IC ≥ 0.04 后重启
+- 报告存档：`~/.stock-sage/m26_quant_baseline_report.{md,json}`、`~/.stock-sage/m26_kronos_report.{md,json}`
+- 生产：继续 `weight_quant=0.0`，`kronos_enabled=false`
+
+**M27 Alpha 根治工程（2026-05-30 启动）** ← 当前活跃里程碑
+- M27.1（P1）：经典因子工程——反转动量 / 换手率异常 / 量价背离 / 板块相对强弱，目标 IC ≥ 0.04
+- M27.2（P1）：交易池 25 → 100 支（test3_universe），提升截面统计功率
+- M27.3（P2）：情感信号事件化——极性 → 事件检测（8~12 类 A 股事件分类体系）
+- M27.4（P2）：Kronos 微调（Path A）——排序损失 fine-tune，目标超越 M27.1 LightGBM 基线
+- 完整规划见 `docs/ROADMAP.md § M27`
 
 公开默认 LLM runtime 为 `AI_PROVIDER=local_cli`，通过本机 Claude / Codex CLI 调用；`anthropic` / `openai` 只有在配置真实 key 时才可用，空 key 和 `your_*` 占位值视为未配置。`GET /api/system/health` 与 `GET /api/system/status` 会返回非敏感 runtime readiness。
 
@@ -105,6 +121,8 @@
 - `python3 -m pytest -q -p no:cacheprovider tests/test_qlib_ranker.py tests/test_m6_backtest_report.py tests/test_qlib_validation_panel.py` → **8 passed**（2026-05-27 Qlib promotion/offline gate）。
 - `python3 -m pytest -q -p no:cacheprovider tests/test_cross_entry_contracts.py tests/test_agent_cli.py tests/test_agent_context.py tests/test_m10_quality_scheduler.py tests/test_m6_api.py` → **24 passed**（2026-05-27 cross-entry contract regression）。
 - `PYTHONPATH=. python3 backend/backtest/alphalens_qlib.py --walk-forward --json-output /private/tmp/stocksage_qlib_offline_m25_5.json` → 通过；single split `IC=0.0372` / `ICIR=0.229` 且分层非单调，walk-forward `IC=-0.0058` / `ICIR=-0.025` 且分层非单调，继续保持 `weight_quant=0.0`。
+- `PYTHONPATH=. .venv/bin/python -m backend.tools.m26_quant_baseline --start 2025-11-01 --end 2026-05-14 --every-n-days 5` → 通过；输出本地 M26 报告到 `~/.stock-sage/`，结论继续保持 `weight_quant=0.0`。
+- `PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_m6_backtest_report.py tests/test_qlib_ranker.py tests/test_backfill_signals.py tests/test_m26_quant_baseline.py tests/test_stage_a_fixes.py tests/integration/test_long_term_pipeline.py tests/test_portfolio_eval.py tests/test_backtrader_eval.py` → **44 passed**（2026-05-30 M26 quant baseline / Kronos optional interface）。
 - `python3 -m pytest -q -p no:cacheprovider` → **454 passed**（2026-05-27 M25.4 StockDetail progressive loading）。
 - `python3 -m compileall backend tests` → 通过
 - `cd frontend && node --test src/*.test.js src/components/*.test.js src/pages/*.test.js` → **19 passed**（2026-05-27 StockDetail progressive loading）

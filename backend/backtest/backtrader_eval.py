@@ -44,7 +44,7 @@ PUBLIC_VALIDATION_SNAPSHOT = {
     "end": "2026-05-14",
     "settings": {
         "risk_reward_ratio": 2.0,
-        "max_hold_days": 10,
+        "max_hold_days": 5,
         "trailing_stop_enabled": False,
         "adx_filter_enabled": False,
     },
@@ -53,9 +53,9 @@ PUBLIC_VALIDATION_SNAPSHOT = {
         "slippage_per_trade": A_SHARE_SLIPPAGE_PERC,
     },
     "metrics": {
-        "avg_sharpe": 1.36,
-        "avg_max_drawdown_pct": 8.60,
-        "avg_profit_factor": 2.78,
+        "avg_sharpe": 2.50,
+        "avg_max_drawdown_pct": 15.69,
+        "avg_profit_factor": 3.13,
     },
     "command": (
         "PYTHONPATH=. python3 backend/backtest/backtrader_eval.py "
@@ -369,7 +369,6 @@ def run_suite(stocks, db, start, end, cfg, label, mock_labels: dict | None = Non
             from backend.backtest.statistics import (
                 expected_max_sharpe,
                 ic_significance,
-                pbo,
             )
             n = len(sharpes)
             # M18.1 n_trials 语义修复：这里的"试验"是面板中的股票数，

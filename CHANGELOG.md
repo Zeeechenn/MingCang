@@ -6,6 +6,30 @@
 
 ---
 
+## [M26] 量化层重估：扩盘、Kronos 零样本评估与生产边界（2026-05-30）
+
+### Added
+- 新增 `backend/tools/m26_quant_baseline.py`：本地生成 M26 量化基线报告，验证当前 LightGBM 模型，并对 `quant_off` / `quant_on` / 固定阈值单变量对照做诊断。
+- 新增 `backend/tools/m26_expand_universe.py`：HS300 + CSI500 扩盘回填工具，新股票默认 `active=False`，用于训练面扩容，不污染生产自选股。
+- 新增 `backend/tools/m26_kronos_eval.py`：Kronos 零样本 IC/ICIR 同标尺评估工具；Kronos 作为 optional local dependency，不进入默认安装与生产路径。
+- 新增 `backend/backtest/portfolio_eval.py`：单账户多标的技术回测，显式披露 survivor bias、technical-only 和非生产全栈回测边界。
+- `aggregate_v2` 增加可选 `kronos_result`，仅在 `kronos_enabled=true` 时进入 quant 层混合；默认生产仍不启用。
+
+### Changed
+- Qlib 训练入口支持 `--include-inactive`，用于 M26.1 扩盘训练；常规训练和生产自选股路径保持原语义。
+- LightGBM label 增加 ±30% 截断，降低复权跳点或异常价格对训练标签的污染。
+- M26 诊断结论明确区分“诊断阈值”和“生产 promotion gate”：M26.1 仅通过 IC≥0.02 / ICIR≥0.15 / 不强制单调的诊断阈值，未通过生产 gate。
+
+### Decision
+- M26.0/M26.1/M26.2 已完成；M26.3 小权重验证暂停。
+- 生产继续 `weight_quant=0.0`，`kronos_enabled=false`。
+- Kronos 零样本结果不替代 LightGBM；后续只在 M27.1 因子工程和 M27.2 交易池扩容后，进入 M27.4 微调路径。
+
+### Tests
+- 新增 M26 baseline、扩盘重训、Kronos 评估窗口、portfolio eval 与长期约束影响报告聚焦测试。
+
+---
+
 ## [M25.3/M25.4/M15.2] LLM 成本观测 + Chat SSE 阶段流 + Copilot 日期修复（2026-05-27）
 
 ### Fixed

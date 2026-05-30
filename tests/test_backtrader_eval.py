@@ -81,6 +81,10 @@ def test_public_validation_snapshot_discloses_reproducible_scope():
     assert PUBLIC_VALIDATION_SNAPSHOT["metric_scope"] == "single_stock_cross_section_average"
     assert PUBLIC_VALIDATION_SNAPSHOT["universe"] == ["300308", "688008"]
     assert PUBLIC_VALIDATION_SNAPSHOT["n_symbols"] == 2
+    assert PUBLIC_VALIDATION_SNAPSHOT["settings"]["max_hold_days"] == 5
     assert PUBLIC_VALIDATION_SNAPSHOT["costs"]["commission_round_trip"] == 0.002
     assert PUBLIC_VALIDATION_SNAPSHOT["costs"]["slippage_per_trade"] == 0.001
+    assert PUBLIC_VALIDATION_SNAPSHOT["metrics"]["avg_sharpe"] == 2.50
+    assert PUBLIC_VALIDATION_SNAPSHOT["metrics"]["avg_max_drawdown_pct"] == 15.69
+    assert PUBLIC_VALIDATION_SNAPSHOT["metrics"]["avg_profit_factor"] == 3.13
     assert PUBLIC_VALIDATION_SNAPSHOT["command"]

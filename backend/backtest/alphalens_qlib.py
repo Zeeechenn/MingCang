@@ -198,8 +198,14 @@ def build_validation_report(
     label: str = "",
     sample: dict | None = None,
     n_groups: int = 5,
+    ic_floor: float | None = None,
+    icir_floor: float | None = None,
+    require_monotonic: bool | None = None,
 ) -> dict:
     """Build a machine-readable validation report with decision gates."""
+    ic_floor = settings.qlib_train_ic_floor if ic_floor is None else ic_floor
+    icir_floor = settings.qlib_train_icir_floor if icir_floor is None else icir_floor
+    require_monotonic = settings.qlib_train_require_monotonic if require_monotonic is None else require_monotonic
     ic = cross_sectional_ic(predictions)
     if len(ic) < 5:
         return {
@@ -230,11 +236,17 @@ def build_validation_report(
     ic_std = float(ic.std())
     icir = ic_mean / ic_std if ic_std > 0 else 0.0
     monotonic = bool(by_bucket["mean"].is_monotonic_increasing) if len(by_bucket) >= 3 else False
+    pass_monotonic_gate = monotonic or not require_monotonic
     gates = {
-        "pass_ic": ic_mean > 0.03,
-        "pass_icir": icir > 0.3,
+        "pass_ic": ic_mean >= ic_floor,
+        "pass_icir": icir >= icir_floor,
         "pass_monotonic": monotonic,
+        "ic_floor": ic_floor,
+        "icir_floor": icir_floor,
+        "require_monotonic": require_monotonic,
+        "pass": False,
     }
+    gates["pass"] = bool(gates["pass_ic"] and gates["pass_icir"] and pass_monotonic_gate)
     return {
         "label": label,
         "sample": sample or {},
@@ -249,7 +261,7 @@ def build_validation_report(
         "quantiles": quantiles,
         "equity_curve": equity_curve_report(q),
         "gates": gates,
-        "recommendation": "eligible_for_quant_review" if all(gates.values()) else "keep_quant_disabled",
+        "recommendation": "eligible_for_quant_review" if gates["pass"] else "keep_quant_disabled",
     }
 
 
@@ -285,10 +297,16 @@ def report(predictions: pd.DataFrame, label: str = "") -> None:
     pass_ic = validation["gates"]["pass_ic"]
     pass_icir = validation["gates"]["pass_icir"]
     monotonic = validation["gates"]["pass_monotonic"]
-    print(f"    IC 均值 > 0.03?    {'✅' if pass_ic else '❌'}  (实际 {ic_mean:+.4f})")
-    print(f"    ICIR > 0.3?        {'✅' if pass_icir else '❌'}  (实际 {icir:+.3f})")
+    print(
+        f"    IC 均值 >= {validation['gates']['ic_floor']:.4f}? "
+        f"   {'✅' if pass_ic else '❌'}  (实际 {ic_mean:+.4f})"
+    )
+    print(
+        f"    ICIR >= {validation['gates']['icir_floor']:.3f}? "
+        f"      {'✅' if pass_icir else '❌'}  (实际 {icir:+.3f})"
+    )
     print(f"    分层单调递增?       {'✅' if monotonic else '❌'}")
-    verdict = "保留并升级（阶段E 接 RD-Agent）" if (pass_ic and pass_icir) else "→ 阶段B 把 Qlib 权重归零，技术60%+情感40%"
+    verdict = "保留并升级（阶段E 接 RD-Agent）" if validation["gates"]["pass"] else "→ 阶段B 把 Qlib 权重归零，技术60%+情感40%"
     print(f"\n    建议: {verdict}")
 
 

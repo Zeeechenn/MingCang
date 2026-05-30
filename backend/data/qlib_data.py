@@ -92,8 +92,8 @@ def _build_features(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = 0.0
 
-    # 5日前瞻收益（训练标签）
-    df["label"] = close.shift(-5) / close - 1
+    # 5日前瞻收益（训练标签），±30% 截断去除数据异常/复权跳点
+    df["label"] = (close.shift(-5) / close - 1).clip(-0.30, 0.30)
 
     return df
 
@@ -140,12 +140,16 @@ def _attach_point_in_time_fundamentals(df: pd.DataFrame, symbol: str, db) -> pd.
     return out.drop(columns=["_price_date", "report_date", "known_date"])
 
 
-def build_training_data(db, min_rows: int = 120) -> pd.DataFrame:
+def build_training_data(db, min_rows: int = 120, include_inactive: bool = False) -> pd.DataFrame:
     """
-    读取所有自选股历史价格 → 特征矩阵 + label。
+    读取历史价格 → 特征矩阵 + label。
     min_rows: 该股至少需要多少行价格才纳入训练集。
+    include_inactive: True 时同时纳入 active=False 的扩盘股（M26.1 训练用）。
     """
-    stocks = db.query(Stock).filter(Stock.active).all()
+    if include_inactive:
+        stocks = db.query(Stock).all()
+    else:
+        stocks = db.query(Stock).filter(Stock.active).all()
     symbols = [s.symbol for s in stocks]
     industries = {s.symbol: s.industry for s in stocks}
     frames = []
