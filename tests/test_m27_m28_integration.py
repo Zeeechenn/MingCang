@@ -1,6 +1,3 @@
-import importlib.util
-from pathlib import Path
-
 import pandas as pd
 import pytest
 
@@ -99,17 +96,13 @@ def test_m27_kronos_windows_respect_split_and_horizon():
 
 def test_kronos_path_a_listmle_prefers_correct_order():
     torch = pytest.importorskip("torch")
-    path = Path("vendor/kronos/finetune/stocksage_losses.py").resolve()
-    spec = importlib.util.spec_from_file_location("stocksage_losses", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
+    from backend.analysis.kronos_losses import listmle_loss
 
     target = torch.tensor([[0.3, 0.1, -0.2]])
     good = torch.tensor([[3.0, 1.0, -1.0]])
     bad = torch.tensor([[-1.0, 1.0, 3.0]])
 
-    assert module.listmle_loss(good, target) < module.listmle_loss(bad, target)
+    assert listmle_loss(good, target) < listmle_loss(bad, target)
 
 
 def test_m28_seed_queries_use_pure_memory_web_results(monkeypatch):

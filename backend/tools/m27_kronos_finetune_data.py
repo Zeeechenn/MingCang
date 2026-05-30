@@ -11,6 +11,7 @@ StockSage SQLite price table. It intentionally does not materialize every
 Usage:
     PYTHONPATH=. python3 -m backend.tools.m27_kronos_finetune_data
     PYTHONPATH=. python3 -m backend.tools.m27_kronos_finetune_data --output-dir ~/.stock-sage/kronos_m27
+    PYTHONPATH=. python3 -m backend.tools.m27_kronos_finetune_data --write-complete-universe /private/tmp/reviewed_complete_symbols.json
 """
 from __future__ import annotations
 
@@ -51,6 +52,10 @@ class SplitWindow:
     anchor_idx: int
     label_end_idx: int
     forward_return: float
+
+
+def _shell_join(parts: list[str]) -> str:
+    return " ".join(parts)
 
 
 def _connect_readonly(db_path: Path) -> sqlite3.Connection:
@@ -255,6 +260,7 @@ def build_coverage_report(
         for s, info in per_symbol.items()
         if s not in complete_symbols
     ]
+    incomplete_symbol_codes = [str(row["symbol"]) for row in incomplete_symbols]
 
     train_windows = int((windows["split"] == "train").sum()) if not windows.empty else 0
     valid_windows = int((windows["split"] == "valid").sum()) if not windows.empty else 0
@@ -271,6 +277,33 @@ def build_coverage_report(
         hard_failures.append(f"{len(incomplete_symbols)} symbols lack train or validation windows")
 
     passed = not hard_failures or allow_partial
+    fixed_universe_command = _shell_join(
+        [
+            "PYTHONPATH=.",
+            "python3",
+            "-m",
+            "backend.tools.m27_kronos_finetune_data",
+            "--universe-path",
+            "<reviewed_complete_symbols.json>",
+            "--min-symbols",
+            str(len(complete_symbols)),
+            "--output-dir",
+            "<new_kronos_data_dir>",
+        ]
+    )
+    allow_partial_command = _shell_join(
+        [
+            "PYTHONPATH=.",
+            "python3",
+            "-m",
+            "backend.tools.m27_kronos_finetune_data",
+            "--min-symbols",
+            str(min_symbols),
+            "--allow-partial",
+            "--output-dir",
+            "<exploratory_kronos_data_dir>",
+        ]
+    )
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "context": context,
@@ -286,6 +319,41 @@ def build_coverage_report(
         "allow_partial": allow_partial,
         "passed": passed,
         "hard_failures": hard_failures,
+        "symbol_summary": {
+            "complete_symbols": len(complete_symbols),
+            "incomplete_symbols": len(incomplete_symbols),
+            "missing_symbols": len(missing_symbols),
+            "complete_symbol_sample": complete_symbols[:20],
+            "incomplete_symbol_sample": incomplete_symbol_codes[:20],
+        },
+        "symbol_lists": {
+            "complete": complete_symbols,
+            "incomplete": incomplete_symbol_codes,
+            "missing": missing_symbols,
+        },
+        "recommended_next_steps": {
+            "preferred": (
+                "proceed"
+                if not hard_failures
+                else ("fixed_universe" if complete_symbols else "repair_data")
+            ),
+            "fixed_universe": {
+                "symbol_count": len(complete_symbols),
+                "command": fixed_universe_command,
+                "note": (
+                    "Write symbol_lists.complete to a reviewed universe JSON before training; "
+                    "this keeps train/valid coverage explicit and reproducible."
+                ),
+            },
+            "allow_partial": {
+                "symbol_count": len(complete_symbols),
+                "command": allow_partial_command,
+                "note": (
+                    "Use only for exploratory data generation; do not treat partial coverage "
+                    "as final fine-tuning evidence without an explicit review decision."
+                ),
+            },
+        },
         "missing_symbols": missing_symbols[:50],
         "missing_symbols_truncated": len(missing_symbols) > 50,
         "incomplete_symbols": incomplete_symbols[:50],
@@ -328,6 +396,59 @@ def write_outputs(
     )
 
 
+def build_complete_universe(
+    report: dict[str, Any],
+    *,
+    coverage_report_path: Path | None = None,
+) -> dict[str, Any]:
+    complete_symbols = [str(symbol).zfill(6) for symbol in report["symbol_lists"]["complete"]]
+    incomplete_symbols = [str(symbol).zfill(6) for symbol in report["symbol_lists"]["incomplete"]]
+    missing_symbols = [str(symbol).zfill(6) for symbol in report["symbol_lists"]["missing"]]
+    excluded_count = len(incomplete_symbols) + len(missing_symbols)
+
+    return {
+        "metadata": {
+            "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "purpose": "M27.4 reviewed complete universe for Kronos Path A data generation",
+            "source": "backend.tools.m27_kronos_finetune_data coverage_report.symbol_lists.complete",
+            "coverage_report_path": str(coverage_report_path.expanduser()) if coverage_report_path else None,
+            "context": report["context"],
+            "pred_len": report["pred_len"],
+            "splits": report["splits"],
+            "requested_symbols": report["requested_symbols"],
+            "symbol_count": len(complete_symbols),
+            "excluded_symbol_count": excluded_count,
+            "coverage_passed": report["passed"],
+            "hard_failures": report["hard_failures"],
+        },
+        "stocks": [{"symbol": symbol} for symbol in complete_symbols],
+        "excluded": {
+            "summary": {
+                "incomplete_symbols": len(incomplete_symbols),
+                "missing_symbols": len(missing_symbols),
+                "total": excluded_count,
+            },
+            "incomplete_symbols": incomplete_symbols,
+            "missing_symbols": missing_symbols,
+            "incomplete_detail_sample": report["incomplete_symbols"],
+            "incomplete_detail_truncated": report["incomplete_symbols_truncated"],
+        },
+    }
+
+
+def write_complete_universe(
+    path: Path,
+    report: dict[str, Any],
+    *,
+    coverage_report_path: Path | None = None,
+) -> dict[str, Any]:
+    universe = build_complete_universe(report, coverage_report_path=coverage_report_path)
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(universe, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return universe
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     symbols = load_symbols(args.db_path, args.universe_path, args.symbols)
     start_for_load = min(args.train_start, args.valid_start)
@@ -357,6 +478,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         allow_partial=args.allow_partial,
     )
     write_outputs(args.output_dir, panels, windows, report)
+    if args.write_complete_universe:
+        write_complete_universe(
+            args.write_complete_universe,
+            report,
+            coverage_report_path=args.output_dir / "coverage_report.json",
+        )
     return report
 
 
@@ -366,6 +493,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--universe-path", type=Path, default=None)
     parser.add_argument("--symbols", nargs="*", default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--write-complete-universe",
+        type=Path,
+        default=None,
+        help="Write a reviewed universe JSON from coverage_report.symbol_lists.complete for later --universe-path use.",
+    )
     parser.add_argument("--context", type=int, default=DEFAULT_CONTEXT)
     parser.add_argument("--pred-len", type=int, default=DEFAULT_PRED_LEN)
     parser.add_argument("--train-start", default=DEFAULT_TRAIN_START)
@@ -381,6 +514,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     report = run(args)
     print(f"wrote {args.output_dir / 'coverage_report.json'}")
+    if args.write_complete_universe:
+        print(f"wrote reviewed complete universe {args.write_complete_universe}")
     print(
         "coverage: "
         f"requested={report['requested_symbols']} "

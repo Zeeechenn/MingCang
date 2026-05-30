@@ -18,7 +18,9 @@ import numpy as np
 import pandas as pd
 
 from backend.analysis.alpha_factors import M27_ALPHA_FEATURE_COLS
+from backend.analysis.event_taxonomy import event_score
 from backend.analysis.qlib_engine import daily_rank_groups, make_rank_labels
+from backend.analysis.sentiment import _cache_key
 from backend.config import settings
 from backend.data.database import SessionLocal
 from backend.data.qlib_data import (
@@ -33,6 +35,52 @@ DEFAULT_MARKDOWN_OUTPUT = Path.home() / ".stock-sage" / "m27_alpha_diagnostic_re
 DEFAULT_HORIZONS = [3, 5, 10, 20]
 MIN_DAILY_NAMES = 5
 N_GROUPS = 5
+DEFAULT_EVENT_LOOKBACK_DAYS = 3
+PERSISTED_POLARITY_SOURCE = "persisted_news_sentiment_score"
+SENTIMENT_CACHE_POLARITY_SOURCE = "sentiment_cache_exact_match"
+TITLE_FALLBACK_POLARITY_SOURCE = "offline_title_lexicon_fallback"
+POSITIVE_POLARITY_TERMS = (
+    "中标",
+    "签约",
+    "大单",
+    "订单",
+    "合同",
+    "获批",
+    "批文",
+    "许可",
+    "通过审评",
+    "增持",
+    "回购",
+    "员工持股",
+    "股权激励",
+    "纳入",
+    "调入",
+    "预增",
+    "增长",
+    "超预期",
+    "扭亏",
+    "盈利",
+)
+NEGATIVE_POLARITY_TERMS = (
+    "减持",
+    "套现",
+    "被动减持",
+    "处罚",
+    "立案",
+    "问询函",
+    "警示函",
+    "调查",
+    "预亏",
+    "亏损",
+    "下滑",
+    "不及预期",
+    "计提",
+    "违约",
+    "债务",
+    "冻结",
+    "质押",
+    "流动性",
+)
 
 warnings.filterwarnings(
     "ignore",
@@ -114,6 +162,126 @@ def summarize_ic(ic: pd.Series) -> dict[str, Any]:
         "ic_std": _round(std),
         "icir": _round(mean / std if std > 0 else 0.0),
         "ic_positive_rate": _round(float((ic > 0).mean())),
+    }
+
+
+def _normalize_sentiment(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(score):
+        return None
+    if abs(score) > 1.0:
+        score = score / 100.0
+    return max(-1.0, min(1.0, score))
+
+
+def _title_polarity_fallback(title: str) -> float | None:
+    positive_hits = sum(1 for term in POSITIVE_POLARITY_TERMS if term in title)
+    negative_hits = sum(1 for term in NEGATIVE_POLARITY_TERMS if term in title)
+    net = positive_hits - negative_hits
+    if net == 0:
+        return None
+    return max(-1.0, min(1.0, 0.25 * net))
+
+
+def _sentiment_cache_result(db: Any, titles: list[str], symbol: str) -> dict[str, Any] | None:
+    if db is None or not titles:
+        return None
+    try:
+        from backend.data.database import SentimentCache
+
+        cache_key, _titles_hash = _cache_key(titles, symbol)
+        row = db.query(SentimentCache).filter(SentimentCache.cache_key == cache_key).first()
+        if not row:
+            return None
+        payload = json.loads(row.result_json)
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
+def _sentiment_cache_payload(
+    titles: list[str],
+    symbol: str,
+    *,
+    db: Any = None,
+    sentiment_cache_lookup: Any = None,
+) -> tuple[dict[str, Any] | None, str, str]:
+    cache_key, titles_hash = _cache_key(titles, symbol)
+    if sentiment_cache_lookup:
+        return sentiment_cache_lookup(titles, symbol), cache_key, titles_hash
+    return _sentiment_cache_result(db, titles, symbol), cache_key, titles_hash
+
+
+def _resolve_window_sentiment(
+    items: list[dict[str, Any]],
+    *,
+    symbol: str,
+    db: Any = None,
+    sentiment_cache_lookup: Any = None,
+) -> dict[str, Any]:
+    persisted_scores = [
+        score
+        for score in (_normalize_sentiment(item.get("sentiment_score")) for item in items)
+        if score is not None
+    ]
+    titles = [str(item["title"]) for item in items]
+    if persisted_scores:
+        cache_key, titles_hash = _cache_key(titles, symbol)
+        return {
+            "polarity_score": float(np.mean(persisted_scores)),
+            "polarity_source": PERSISTED_POLARITY_SOURCE,
+            "cache_key": cache_key,
+            "titles_hash": titles_hash,
+            "cache_hit": None,
+            "cache_miss": False,
+            "fallback_source": None,
+        }
+
+    cached, cache_key, titles_hash = _sentiment_cache_payload(
+        titles,
+        symbol,
+        db=db,
+        sentiment_cache_lookup=sentiment_cache_lookup,
+    )
+    if cached is not None:
+        score = _normalize_sentiment(cached.get("sentiment"))
+        if score is not None:
+            return {
+                "polarity_score": score,
+                "polarity_source": SENTIMENT_CACHE_POLARITY_SOURCE,
+                "cache_key": cache_key,
+                "titles_hash": titles_hash,
+                "cache_hit": True,
+                "cache_miss": False,
+                "fallback_source": None,
+            }
+
+    fallback_scores = [
+        score for score in (_title_polarity_fallback(title) for title in titles) if score is not None
+    ]
+    if fallback_scores:
+        return {
+            "polarity_score": float(np.mean(fallback_scores)),
+            "polarity_source": TITLE_FALLBACK_POLARITY_SOURCE,
+            "cache_key": cache_key,
+            "titles_hash": titles_hash,
+            "cache_hit": cached is not None,
+            "cache_miss": cached is None,
+            "fallback_source": TITLE_FALLBACK_POLARITY_SOURCE,
+        }
+    return {
+        "polarity_score": None,
+        "polarity_source": None,
+        "cache_key": cache_key,
+        "titles_hash": titles_hash,
+        "cache_hit": cached is not None,
+        "cache_miss": cached is None,
+        "fallback_source": None,
     }
 
 
@@ -208,7 +376,7 @@ def single_factor_diagnostics(
         summary = summarize_ic(ic)
         ic_mean = summary["ic_mean"]
         orientation = 1 if (ic_mean is None or float(ic_mean) >= 0) else -1
-        q = {"quantiles": [], "top_bottom": None, "monotonic": False}
+        q: dict[str, Any] = {"quantiles": [], "top_bottom": None, "monotonic": False}
         if include_quantiles:
             q = quantile_report(data, feature, label_col, orientation=orientation)
         pass_ic = bool(ic_mean is not None and abs(float(ic_mean)) >= settings.qlib_train_ic_floor)
@@ -351,6 +519,262 @@ def ranker_label_distribution(panel: pd.DataFrame, label_col: str) -> dict[str, 
     }
 
 
+def _event_ab_row_frame(
+    panel: pd.DataFrame,
+    news_rows: list[dict[str, Any]],
+    *,
+    universe_symbols: set[str],
+    label_col: str,
+    lookback_days: int = DEFAULT_EVENT_LOOKBACK_DAYS,
+    db: Any = None,
+    sentiment_cache_lookup: Any = None,
+) -> pd.DataFrame:
+    columns = [
+        "date",
+        "symbol",
+        label_col,
+        "news_count",
+        "titles",
+        "cache_key",
+        "titles_hash",
+        "cache_hit",
+        "cache_miss",
+        "fallback_source",
+        "polarity_score",
+        "polarity_available",
+        "polarity_source",
+        "event_score",
+        "event_score_mode",
+        "event_type_count",
+    ]
+    if panel.empty or not news_rows:
+        return pd.DataFrame(columns=columns)
+
+    data = panel[["date", "symbol", label_col]].copy()
+    data["date"] = pd.to_datetime(data["date"]).dt.normalize()
+    data = data[data["symbol"].isin(universe_symbols)].dropna(subset=[label_col])
+    if data.empty:
+        return pd.DataFrame(columns=columns)
+
+    by_symbol: dict[str, list[dict[str, Any]]] = {}
+    for item in news_rows:
+        symbol = str(item.get("symbol") or "")
+        if symbol not in universe_symbols:
+            continue
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+        published_at = pd.to_datetime(item.get("published_at"), errors="coerce")
+        if pd.isna(published_at):
+            continue
+        by_symbol.setdefault(symbol, []).append({
+            "title": title,
+            "published_at": published_at.normalize(),
+            "sentiment_score": item.get("sentiment_score"),
+        })
+    for rows in by_symbol.values():
+        rows.sort(key=lambda row: row["published_at"])
+
+    ab_rows: list[dict[str, Any]] = []
+    for row in data.itertuples(index=False):
+        symbol = str(row.symbol)
+        date = pd.Timestamp(row.date).normalize()
+        start = date - pd.Timedelta(days=lookback_days)
+        items = [
+            item for item in by_symbol.get(symbol, [])
+            if start <= item["published_at"] <= date
+        ][-15:]
+        if not items:
+            continue
+
+        titles = [item["title"] for item in items]
+        sentiment = _resolve_window_sentiment(
+            items,
+            symbol=symbol,
+            db=db,
+            sentiment_cache_lookup=sentiment_cache_lookup,
+        )
+        polarity_score = sentiment["polarity_score"]
+        polarity_source = sentiment["polarity_source"]
+        polarity_available = polarity_score is not None
+        adjusted = event_score(polarity_score or 0.0, titles)
+        event_available = polarity_available or adjusted["event_score_mode"] == "event_override"
+
+        ab_rows.append({
+            "date": date,
+            "symbol": symbol,
+            label_col: getattr(row, label_col),
+            "news_count": len(items),
+            "titles": titles,
+            "cache_key": sentiment["cache_key"],
+            "titles_hash": sentiment["titles_hash"],
+            "cache_hit": sentiment["cache_hit"],
+            "cache_miss": sentiment["cache_miss"],
+            "fallback_source": sentiment["fallback_source"],
+            "polarity_score": polarity_score,
+            "polarity_available": polarity_available,
+            "polarity_source": polarity_source,
+            "event_score": adjusted["event_score"] if event_available else None,
+            "event_score_mode": adjusted["event_score_mode"],
+            "event_type_count": len(adjusted["event_types"]),
+        })
+    return pd.DataFrame(ab_rows, columns=columns)
+
+
+def _cache_miss_windows(rows: pd.DataFrame) -> list[dict[str, Any]]:
+    if rows.empty or "cache_miss" not in rows.columns:
+        return []
+    missing = rows[rows["cache_miss"].fillna(False).astype(bool)].copy()
+    if missing.empty:
+        return []
+    missing = missing.sort_values(["symbol", "date"])
+    windows: list[dict[str, Any]] = []
+    for row in missing.itertuples(index=False):
+        fallback_source = None if pd.isna(row.fallback_source) else row.fallback_source
+        polarity_source = None if pd.isna(row.polarity_source) else row.polarity_source
+        windows.append({
+            "symbol": str(row.symbol),
+            "date": pd.Timestamp(row.date).date().isoformat(),
+            "titles": list(row.titles),
+            "cache_key": str(row.cache_key),
+            "titles_hash": str(row.titles_hash),
+            "news_count": int(row.news_count),
+            "fallback_source": fallback_source,
+            "polarity_source": polarity_source,
+            "event_score_mode": row.event_score_mode,
+        })
+    return windows
+
+
+def _write_cache_miss_windows(path: Path, rows: pd.DataFrame) -> int:
+    windows = _cache_miss_windows(rows)
+    payload = {
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "cache_miss_windows": len(windows),
+        "windows": windows,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return len(windows)
+
+
+def event_ab_diagnostics(
+    panel: pd.DataFrame,
+    news_rows: list[dict[str, Any]],
+    *,
+    universe_symbols: set[str],
+    label_col: str,
+    lookback_days: int = DEFAULT_EVENT_LOOKBACK_DAYS,
+    min_names: int = MIN_DAILY_NAMES,
+    db: Any = None,
+    sentiment_cache_lookup: Any = None,
+    cache_missing_output: Path | None = None,
+) -> dict[str, Any]:
+    """Compare pure polarity vs event-aware sentiment IC without calling external APIs."""
+    rows = _event_ab_row_frame(
+        panel,
+        news_rows,
+        universe_symbols=universe_symbols,
+        label_col=label_col,
+        lookback_days=lookback_days,
+        db=db,
+        sentiment_cache_lookup=sentiment_cache_lookup,
+    )
+    coverage = {
+        "universe_symbols": int(len(universe_symbols)),
+        "news_items": int(len(news_rows)),
+        "rows_with_news": int(len(rows)),
+        "rows_with_polarity": int(rows["polarity_available"].sum()) if not rows.empty else 0,
+        "rows_with_persisted_polarity": int(
+            rows["polarity_source"].fillna("").str.contains(PERSISTED_POLARITY_SOURCE, regex=False).sum()
+        ) if not rows.empty else 0,
+        "rows_with_cache_polarity": int(
+            rows["polarity_source"].fillna("").str.contains(SENTIMENT_CACHE_POLARITY_SOURCE, regex=False).sum()
+        ) if not rows.empty else 0,
+        "rows_with_fallback_polarity": int(
+            rows["polarity_source"].fillna("").str.contains(TITLE_FALLBACK_POLARITY_SOURCE, regex=False).sum()
+        ) if not rows.empty else 0,
+        "cache_miss_windows": int(rows["cache_miss"].fillna(False).astype(bool).sum()) if not rows.empty else 0,
+        "polarity_sources": rows["polarity_source"].dropna().value_counts().sort_index().to_dict()
+        if not rows.empty
+        else {},
+        "rows_with_event_override": int((rows["event_score_mode"] == "event_override").sum()) if not rows.empty else 0,
+        "event_type_hits": int(rows["event_type_count"].sum()) if not rows.empty else 0,
+        "lookback_days": int(lookback_days),
+        "min_daily_names": int(min_names),
+    }
+
+    polarity_rows = rows[rows["polarity_available"]] if not rows.empty else rows
+    event_rows = rows[rows["event_score"].notna()] if not rows.empty else rows
+    polarity_summary = summarize_ic(cross_sectional_ic(polarity_rows, "polarity_score", label_col, min_names=min_names))
+    event_summary = summarize_ic(cross_sectional_ic(event_rows, "event_score", label_col, min_names=min_names))
+
+    delta_ic = None
+    if polarity_summary["ic_mean"] is not None and event_summary["ic_mean"] is not None:
+        delta_ic = _round(float(event_summary["ic_mean"]) - float(polarity_summary["ic_mean"]))
+
+    blockers: list[str] = []
+    if coverage["rows_with_news"] == 0:
+        blockers.append("no_test3_news_rows")
+    if coverage["rows_with_polarity"] == 0:
+        blockers.append("no_cached_or_persisted_polarity_scores")
+    if polarity_summary["ic_days"] == 0:
+        blockers.append("insufficient_daily_polarity_cross_section")
+    if event_summary["ic_days"] == 0:
+        blockers.append("insufficient_daily_event_cross_section")
+
+    cache_miss_output = None
+    if cache_missing_output is not None:
+        written_count = _write_cache_miss_windows(cache_missing_output, rows)
+        cache_miss_output = {
+            "path": str(cache_missing_output),
+            "windows": written_count,
+        }
+
+    status = "ok" if not blockers else "blocked"
+    report = {
+        "status": status,
+        "coverage": coverage,
+        "polarity": polarity_summary,
+        "polarity_event": event_summary,
+        "delta_ic": delta_ic,
+        "blockers": blockers,
+    }
+    if cache_miss_output is not None:
+        report["cache_miss_output"] = cache_miss_output
+    return report
+
+
+def _load_universe_symbols(path: Path) -> set[str]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows = payload.get("stocks", payload) if isinstance(payload, dict) else payload
+    return {
+        str(row.get("symbol") if isinstance(row, dict) else row)
+        for row in rows
+        if (row.get("symbol") if isinstance(row, dict) else row)
+    }
+
+
+def _load_news_rows_for_symbols(db: Any, symbols: set[str]) -> list[dict[str, Any]]:
+    from backend.data.database import NewsItem
+
+    rows = (
+        db.query(NewsItem)
+        .filter(NewsItem.symbol.in_(symbols))
+        .order_by(NewsItem.symbol.asc(), NewsItem.published_at.asc())
+        .all()
+    )
+    return [
+        {
+            "symbol": row.symbol,
+            "title": row.title,
+            "published_at": row.published_at,
+            "sentiment_score": row.sentiment_score,
+        }
+        for row in rows
+    ]
+
+
 def build_diagnosis(report: dict[str, Any]) -> dict[str, Any]:
     table = report.get("single_factor_5d") or []
     horizons = report.get("horizon_comparison") or {}
@@ -401,6 +825,7 @@ def build_report(
     *,
     horizons: list[int] | None = None,
     top_n: int = 20,
+    event_ab: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     horizons = horizons or DEFAULT_HORIZONS
     panel = add_horizon_labels(panel, horizons)
@@ -450,6 +875,8 @@ def build_report(
         else [],
         "m27_industry_segments": segment_diagnostics(panel, top_m27, label_col, "industry")[:20] if top_m27 else [],
     }
+    if event_ab is not None:
+        report["event_ab_5d"] = event_ab
     report["diagnosis"] = build_diagnosis(report)
     return report
 
@@ -519,6 +946,35 @@ def report_to_markdown(report: dict[str, Any]) -> str:
     ]
     for row in report["volatility_segments"]:
         lines.append(f"| {row['segment']} | {row['n_rows']} | {row['spearman']} | {row['mean_label']} |")
+    if "event_ab_5d" in report:
+        event_ab = report["event_ab_5d"]
+        coverage = event_ab["coverage"]
+        polarity = event_ab["polarity"]
+        polarity_event = event_ab["polarity_event"]
+        lines += [
+            "",
+            "## M27.3 Event Sentiment A/B",
+            "",
+            f"- status: {event_ab['status']}",
+            f"- coverage: news_rows={coverage['news_items']}, rows_with_news={coverage['rows_with_news']}, "
+            f"rows_with_polarity={coverage['rows_with_polarity']}, "
+            f"rows_with_persisted_polarity={coverage.get('rows_with_persisted_polarity', 0)}, "
+            f"rows_with_cache_polarity={coverage.get('rows_with_cache_polarity', 0)}, "
+            f"rows_with_fallback_polarity={coverage.get('rows_with_fallback_polarity', 0)}, "
+            f"cache_miss_windows={coverage.get('cache_miss_windows', 0)}, "
+            f"rows_with_event_override={coverage['rows_with_event_override']}",
+            f"- polarity_sources: {coverage.get('polarity_sources') or {}}",
+            f"- cache_miss_output: {event_ab.get('cache_miss_output') or 'not_requested'}",
+            f"- blockers: {', '.join(event_ab['blockers']) if event_ab['blockers'] else 'none'}",
+            "",
+            "| variant | IC days | IC | ICIR | positive_rate |",
+            "| --- | ---: | ---: | ---: | ---: |",
+            f"| pure_polarity | {polarity['ic_days']} | {polarity['ic_mean']} | "
+            f"{polarity['icir']} | {polarity['ic_positive_rate']} |",
+            f"| polarity_plus_event | {polarity_event['ic_days']} | {polarity_event['ic_mean']} | "
+            f"{polarity_event['icir']} | {polarity_event['ic_positive_rate']} |",
+            f"| delta |  | {event_ab['delta_ic']} |  |  |",
+        ]
     lines += [
         "",
         "## Industry Segments For Top Factor",
@@ -538,6 +994,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-rows", type=int, default=120)
     parser.add_argument("--active-only", action="store_true")
     parser.add_argument("--top-n", type=int, default=20)
+    parser.add_argument("--event-ab", action="store_true", help="Run M27.3 test3 event sentiment IC A/B")
+    parser.add_argument("--universe-path", type=Path, help="Universe JSON for --event-ab, e.g. paper_trading/test3_universe.json")
+    parser.add_argument("--event-lookback-days", type=int, default=DEFAULT_EVENT_LOOKBACK_DAYS)
+    parser.add_argument(
+        "--event-ab-cache-missing-output",
+        type=Path,
+        help="Write exact sentiment_cache miss title windows for --event-ab to this JSON path",
+    )
     parser.add_argument("--json-output", type=Path, default=DEFAULT_JSON_OUTPUT)
     parser.add_argument("--markdown-output", type=Path, default=DEFAULT_MARKDOWN_OUTPUT)
     parser.add_argument("--print", action="store_true", help="Print markdown report to stdout")
@@ -549,7 +1013,25 @@ def main() -> None:
     db = SessionLocal()
     try:
         panel = build_training_data(db, min_rows=args.min_rows, include_inactive=not args.active_only)
-        report = build_report(panel, horizons=args.horizons, top_n=args.top_n)
+        event_ab = None
+        if args.event_ab:
+            if not args.universe_path:
+                raise SystemExit("--event-ab requires --universe-path")
+            universe_symbols = _load_universe_symbols(args.universe_path)
+            panel = panel[panel["symbol"].isin(universe_symbols)].copy()
+            panel = add_horizon_labels(panel, args.horizons)
+            label_col = "label_5d" if "label_5d" in panel.columns else f"label_{args.horizons[0]}d"
+            news_rows = _load_news_rows_for_symbols(db, universe_symbols)
+            event_ab = event_ab_diagnostics(
+                panel,
+                news_rows,
+                universe_symbols=universe_symbols,
+                label_col=label_col,
+                lookback_days=args.event_lookback_days,
+                db=db,
+                cache_missing_output=args.event_ab_cache_missing_output,
+            )
+        report = build_report(panel, horizons=args.horizons, top_n=args.top_n, event_ab=event_ab)
         args.json_output.parent.mkdir(parents=True, exist_ok=True)
         args.markdown_output.parent.mkdir(parents=True, exist_ok=True)
         args.json_output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

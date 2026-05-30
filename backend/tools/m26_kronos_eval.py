@@ -498,6 +498,12 @@ def main():
     logger.info("模型: %s | 上下文: %d bars | 预测: %d bars",
                 args.model, args.context, args.pred_len)
 
+    model_spec = resolve_model_spec(
+        args.model,
+        finetuned_model_path=args.finetuned_model_path,
+        tokenizer_path=args.tokenizer_path,
+    )
+
     # 1. 加载 universe + 价格
     symbols = load_universe()
     logger.info("Universe: %d 支 (%s … %s)", len(symbols), symbols[0], symbols[-1])
@@ -518,11 +524,6 @@ def main():
                 eval_dates[-1].date() if eval_dates else "—")
 
     # 3. 加载模型
-    model_spec = resolve_model_spec(
-        args.model,
-        finetuned_model_path=args.finetuned_model_path,
-        tokenizer_path=args.tokenizer_path,
-    )
     predictor = build_predictor(
         args.model,
         args.context,

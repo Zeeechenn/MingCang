@@ -1,17 +1,10 @@
-import sys
-from pathlib import Path
-
 import pytest
 
 torch = pytest.importorskip("torch")
 
-FINETUNE_DIR = Path(__file__).resolve().parents[1] / "vendor" / "kronos" / "finetune"
-if str(FINETUNE_DIR) not in sys.path:
-    sys.path.insert(0, str(FINETUNE_DIR))
-
 
 def test_listmle_prefers_correct_cross_section_order_and_is_shift_invariant():
-    from stocksage_losses import listmle_loss
+    from backend.analysis.kronos_losses import listmle_loss
 
     target_returns = torch.tensor([[0.30, 0.20, 0.10]])
     good_scores = torch.tensor([[3.0, 2.0, 1.0]])
@@ -26,7 +19,7 @@ def test_listmle_prefers_correct_cross_section_order_and_is_shift_invariant():
 
 
 def test_path_a_loss_combines_rank_and_reconstruction_weights():
-    from stocksage_losses import path_a_loss
+    from backend.analysis.kronos_losses import path_a_loss
 
     scores = torch.tensor([[2.0, 1.0]])
     returns = torch.tensor([[0.2, 0.1]])

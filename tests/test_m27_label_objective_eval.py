@@ -93,6 +93,113 @@ def test_top_decile_metrics_report_lift():
     assert metrics["lift_vs_base_rate"] == 10.0
 
 
+def test_segment_breakdown_reports_raw_validation_by_industry():
+    from backend.tools.m27_label_objective_eval import segment_breakdown
+
+    rows = []
+    for day in range(8):
+        for idx in range(8):
+            industry = "tech" if idx < 4 else "finance"
+            label = float(idx) if industry == "tech" else float(8 - idx)
+            rows.append({
+                "date": pd.Timestamp("2026-01-01") + pd.Timedelta(days=day),
+                "symbol": f"{industry}-{idx}",
+                "industry": industry,
+                "pred": float(idx),
+                "label": label,
+            })
+    predictions = pd.DataFrame(rows)
+
+    breakdown = segment_breakdown(predictions, segment_col="industry", min_rows=10, min_dates=5)
+
+    assert [row["segment"] for row in breakdown] == ["tech", "finance"]
+    assert breakdown[0]["n_rows"] == 32
+    assert breakdown[0]["n_symbols"] == 4
+    assert breakdown[0]["ic_mean"] == 1.0
+    assert breakdown[1]["ic_mean"] == -1.0
+
+
+def test_segment_specific_candidates_are_non_promoting_and_sample_gated(monkeypatch):
+    from backend.data.qlib_data import FEATURE_COLS
+    from backend.tools import m27_label_objective_eval as tool
+
+    industries = {
+        "Communications Equipment": ["CE1", "CE2", "CE3"],
+        "Semiconductors": ["SC1", "SC2", "SC3"],
+        "Tiny Segment": ["TS1", "TS2"],
+    }
+    rows = []
+    for day in range(80):
+        date = pd.Timestamp("2026-01-01") + pd.Timedelta(days=day)
+        for industry, symbols in industries.items():
+            for idx, symbol in enumerate(symbols):
+                row = {
+                    "date": date,
+                    "symbol": symbol,
+                    "industry": industry,
+                    "label_20d": float(day + idx),
+                }
+                for feature_idx, feature in enumerate(FEATURE_COLS):
+                    row[feature] = float(day / 100 + idx + feature_idx / 1000)
+                rows.append(row)
+    panel = pd.DataFrame(rows)
+
+    seen_segments = []
+
+    def fake_fit_predict(train_df, val_df, *, objective, target_label_col, n_estimators):
+        assert objective == "regression"
+        assert train_df["industry"].nunique() == 1
+        assert val_df["industry"].nunique() == 1
+        assert n_estimators == 7
+        seen_segments.append(train_df["industry"].iloc[0])
+        return np.asarray(val_df[target_label_col]), {"status": "ok", "best_iteration": 1}
+
+    def fake_validation_report(predictions, label, sample):
+        if "Semiconductors" in label:
+            icir = 1.2
+        elif "Communications Equipment" in label:
+            icir = 0.8
+        else:
+            icir = -0.1
+        return {
+            "label": label,
+            "sample": sample,
+            "metrics": {"ic_mean": icir / 10, "icir": icir},
+            "gates": {"pass": icir > 1.0},
+        }
+
+    monkeypatch.setattr(tool, "_fit_predict", fake_fit_predict)
+    monkeypatch.setattr(tool, "build_validation_report", fake_validation_report)
+
+    result = tool.evaluate_segment_specific_candidates(
+        panel,
+        horizon=20,
+        n_estimators=7,
+        min_rows=100,
+        min_symbols=3,
+        min_validation_rows=10,
+    )
+
+    assert result["non_promoting"] is True
+    assert result["promotable"] is False
+    assert result["run_mode"] == "exploratory_sample_limited"
+    assert result["sample_limited"] is True
+    assert "cannot promote" in result["note"]
+    assert "expand sample" in result["promotion_blocker"]
+    assert [candidate["segment"] for candidate in result["candidates"]] == [
+        "Semiconductors",
+        "Communications Equipment",
+    ]
+    assert all(candidate["promotable"] is False for candidate in result["candidates"])
+    assert all(candidate["sample_limited"] is True for candidate in result["candidates"])
+    assert {candidate["segment"] for candidate in result["candidates"]} == set(seen_segments)
+    assert result["candidates"][0]["sample"]["n_rows"] == 240
+    assert result["candidates"][0]["sample"]["n_symbols"] == 3
+    assert result["best_by_segment_col"]["industry"]["segment"] == "Semiconductors"
+    assert result["skipped"][0]["segment"] == "Tiny Segment"
+    assert result["skipped"][0]["status"] == "insufficient_segment_sample"
+
+
 def test_top_decile_labels_use_ceil_count_per_date():
     from backend.tools.m27_label_objective_eval import TOP_DECILE_PCT, _top_decile_labels
 
@@ -116,7 +223,7 @@ def test_top_decile_labels_use_ceil_count_per_date():
 def test_evaluate_candidate_passes_shared_top_decile_pct_to_metrics(monkeypatch):
     from backend.tools import m27_label_objective_eval as tool
 
-    panel = tool.add_objective_labels(_panel(rows_per_symbol=70), 20)
+    panel = tool.add_objective_labels(_panel(rows_per_symbol=110), 20)
     spec = next(
         candidate for candidate in tool.candidate_specs(20)
         if candidate["name"] == "raw_20d_top_decile_classifier"
@@ -151,6 +258,8 @@ def test_evaluate_candidate_passes_shared_top_decile_pct_to_metrics(monkeypatch)
     assert result["status"] == "ok"
     assert captured["top_pct"] == tool.TOP_DECILE_PCT
     assert result["top_decile_metrics"]["top_pct"] == tool.TOP_DECILE_PCT
+    assert "industry" in result["segment_breakdown"]
+    assert {row["segment"] for row in result["segment_breakdown"]["industry"]} == {"finance", "tech"}
 
 
 def test_panel_cache_rebuilds_when_feature_metadata_changes(monkeypatch, tmp_path):
@@ -212,4 +321,101 @@ def test_build_report_uses_non_promoting_fit_path(monkeypatch):
     assert all(candidate["status"] == "ok" for candidate in report["candidates"])
     assert "raw_return_stride_validation" in report["candidates"][0]
     assert "top_decile_metrics" in report["candidates"][0]
+    assert "segment_breakdown" in report["candidates"][0]
+    assert report["sector_industry_specific_candidates"]["non_promoting"] is True
+    assert report["sector_industry_specific_candidates"]["promotable"] is False
+    assert report["sector_industry_specific_candidates"]["min_validation_rows"] == 50
     assert "M27.1b Label/Objective Evaluation" in markdown
+    assert "Sector/Industry-Specific Offline Candidates" in markdown
+    assert "non_promoting: True" in markdown
+    assert "promotable: False" in markdown
+    assert "sample_limited: False" in markdown
+    assert "Best Raw Candidate Segment Breakdown" in markdown
+
+
+def test_build_report_propagates_segment_validation_floor(monkeypatch):
+    from backend.tools import m27_label_objective_eval as tool
+
+    panel = _panel(rows_per_symbol=70)
+    captured = {}
+
+    monkeypatch.setattr(
+        tool,
+        "evaluate_candidate",
+        lambda panel, spec, *, n_estimators: {
+            **spec,
+            "status": "ok",
+            "raw_return_validation": {"metrics": {"icir": 0.0}, "gates": {"pass": False}},
+            "target_validation": {"gates": {"pass": False}},
+            "top_decile_metrics": {},
+        },
+    )
+
+    def fake_segment_candidates(panel, *, horizon, n_estimators, min_rows, min_symbols, min_validation_rows):
+        captured.update({
+            "horizon": horizon,
+            "n_estimators": n_estimators,
+            "min_rows": min_rows,
+            "min_symbols": min_symbols,
+            "min_validation_rows": min_validation_rows,
+        })
+        return {
+            "non_promoting": True,
+            "promotable": False,
+            "run_mode": "exploratory_sample_limited",
+            "sample_limited": True,
+            "promotion_blocker": "exploratory/sample-limited segment run; expand sample before promotion",
+            "note": "exploratory/sample-limited offline validation only; cannot promote",
+            "min_rows": min_rows,
+            "min_symbols": min_symbols,
+            "min_validation_rows": min_validation_rows,
+            "candidates": [],
+        }
+
+    monkeypatch.setattr(tool, "evaluate_segment_specific_candidates", fake_segment_candidates)
+
+    report = tool.build_report(
+        panel,
+        panel_meta={"n_rows": len(panel), "n_symbols": 6},
+        horizon=20,
+        n_estimators=9,
+        segment_min_rows=80,
+        segment_min_symbols=3,
+        segment_min_validation_rows=12,
+    )
+    markdown = tool.report_to_markdown(report)
+
+    assert captured == {
+        "horizon": 20,
+        "n_estimators": 9,
+        "min_rows": 80,
+        "min_symbols": 3,
+        "min_validation_rows": 12,
+    }
+    assert report["sector_industry_specific_candidates"]["min_validation_rows"] == 12
+    assert "12 validation rows" in markdown
+    assert "run_mode: exploratory_sample_limited" in markdown
+    assert "cannot promote" in markdown
+
+
+def test_parse_args_exposes_segment_sample_floors(monkeypatch):
+    from backend.tools import m27_label_objective_eval as tool
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "m27_label_objective_eval",
+            "--segment-min-symbols",
+            "3",
+            "--segment-min-rows",
+            "120",
+            "--segment-min-validation-rows",
+            "15",
+        ],
+    )
+
+    args = tool.parse_args()
+
+    assert args.segment_min_symbols == 3
+    assert args.segment_min_rows == 120
+    assert args.segment_min_validation_rows == 15

@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 
 
@@ -73,3 +75,204 @@ def test_markdown_report_contains_diagnosis_sections():
     assert "M27.1 Alpha Diagnostic Report" in markdown
     assert "Top 5d Single Factors" in markdown
     assert "Ranker Label Distribution" in markdown
+
+
+def test_event_ab_uses_offline_title_polarity_fallback():
+    from backend.tools.m27_alpha_diagnostic import add_horizon_labels, event_ab_diagnostics
+
+    panel = add_horizon_labels(_sample_panel(), [3])
+    news_rows = []
+    for day in range(5):
+        date = pd.Timestamp("2026-01-01") + pd.Timedelta(days=day)
+        for idx, symbol in enumerate(["A", "B", "C", "D", "E", "F"]):
+            title = "公司公告获得重大合同并中标算力项目" if idx < 3 else "公司公告监管处罚并收到警示函"
+            news_rows.append({
+                "symbol": symbol,
+                "title": title,
+                "published_at": date,
+                "sentiment_score": None,
+            })
+
+    report = event_ab_diagnostics(
+        panel,
+        news_rows,
+        universe_symbols={"A", "B", "C", "D", "E", "F"},
+        label_col="label_3d",
+    )
+
+    assert report["status"] == "ok"
+    assert report["blockers"] == []
+    assert report["coverage"]["rows_with_news"] > 0
+    assert report["coverage"]["rows_with_polarity"] > 0
+    assert report["coverage"]["rows_with_fallback_polarity"] > 0
+    assert report["coverage"]["rows_with_persisted_polarity"] == 0
+    assert report["coverage"]["rows_with_cache_polarity"] == 0
+    assert report["coverage"]["cache_miss_windows"] == report["coverage"]["rows_with_news"]
+    assert report["coverage"]["polarity_sources"] == {"offline_title_lexicon_fallback": report["coverage"]["rows_with_polarity"]}
+    assert report["coverage"]["rows_with_event_override"] > 0
+    assert report["polarity"]["ic_days"] > 0
+    assert report["polarity_event"]["ic_days"] > 0
+    assert report["delta_ic"] is not None
+
+
+def test_event_ab_prefers_persisted_news_sentiment_score():
+    from backend.tools.m27_alpha_diagnostic import add_horizon_labels, event_ab_diagnostics
+
+    panel = add_horizon_labels(_sample_panel(), [3])
+    news_rows = []
+    for day in range(5):
+        date = pd.Timestamp("2026-01-01") + pd.Timedelta(days=day)
+        for idx, symbol in enumerate(["A", "B", "C", "D", "E", "F"]):
+            news_rows.append({
+                "symbol": symbol,
+                "title": "公司普通经营动态",
+                "published_at": date,
+                "sentiment_score": 40 if idx < 3 else -40,
+            })
+
+    report = event_ab_diagnostics(
+        panel,
+        news_rows,
+        universe_symbols={"A", "B", "C", "D", "E", "F"},
+        label_col="label_3d",
+    )
+
+    assert report["status"] == "ok"
+    assert report["coverage"]["rows_with_persisted_polarity"] == report["coverage"]["rows_with_polarity"]
+    assert report["coverage"]["rows_with_cache_polarity"] == 0
+    assert report["coverage"]["rows_with_fallback_polarity"] == 0
+    assert report["coverage"]["cache_miss_windows"] == 0
+    assert report["coverage"]["polarity_sources"] == {"persisted_news_sentiment_score": report["coverage"]["rows_with_polarity"]}
+    assert report["polarity"]["ic_days"] > 0
+
+
+def test_event_ab_uses_sentiment_cache_before_title_fallback():
+    from backend.tools.m27_alpha_diagnostic import add_horizon_labels, event_ab_diagnostics
+
+    panel = add_horizon_labels(_sample_panel(), [3])
+    news_rows = []
+    for day in range(5):
+        date = pd.Timestamp("2026-01-01") + pd.Timedelta(days=day)
+        for idx, symbol in enumerate(["A", "B", "C", "D", "E", "F"]):
+            title = "公司公告获得重大合同并中标算力项目" if idx < 3 else "公司公告监管处罚并收到警示函"
+            news_rows.append({
+                "symbol": symbol,
+                "title": title,
+                "published_at": date,
+                "sentiment_score": None,
+            })
+
+    report = event_ab_diagnostics(
+        panel,
+        news_rows,
+        universe_symbols={"A", "B", "C", "D", "E", "F"},
+        label_col="label_3d",
+        sentiment_cache_lookup=lambda titles, symbol: {"sentiment": 0.7 if symbol in {"A", "B", "C"} else -0.7},
+    )
+
+    assert report["status"] == "ok"
+    assert report["coverage"]["rows_with_cache_polarity"] == report["coverage"]["rows_with_polarity"]
+    assert report["coverage"]["rows_with_fallback_polarity"] == 0
+    assert report["coverage"]["cache_miss_windows"] == 0
+    assert report["coverage"]["polarity_sources"] == {"sentiment_cache_exact_match": report["coverage"]["rows_with_polarity"]}
+    assert report["polarity"]["ic_days"] > 0
+
+
+def test_event_ab_writes_exact_cache_miss_title_windows(tmp_path):
+    from backend.analysis.sentiment import _cache_key
+    from backend.tools.m27_alpha_diagnostic import add_horizon_labels, event_ab_diagnostics
+
+    panel = add_horizon_labels(_sample_panel(), [3])
+    output_path = tmp_path / "cache_missing.json"
+    news_rows = [
+        {
+            "symbol": "A",
+            "title": "公司公告获得重大合同并中标算力项目",
+            "published_at": pd.Timestamp("2026-01-01"),
+            "sentiment_score": None,
+        },
+        {
+            "symbol": "A",
+            "title": "公司公告员工持股计划",
+            "published_at": pd.Timestamp("2026-01-02"),
+            "sentiment_score": None,
+        },
+    ]
+
+    report = event_ab_diagnostics(
+        panel,
+        news_rows,
+        universe_symbols={"A"},
+        label_col="label_3d",
+        min_names=1,
+        cache_missing_output=output_path,
+    )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    first_window_titles = ["公司公告获得重大合同并中标算力项目"]
+    cache_key, titles_hash = _cache_key(first_window_titles, "A")
+
+    assert report["coverage"]["cache_miss_windows"] == payload["cache_miss_windows"]
+    assert report["cache_miss_output"] == {"path": str(output_path), "windows": payload["cache_miss_windows"]}
+    assert payload["cache_miss_windows"] > 0
+    assert payload["windows"][0] == {
+        "symbol": "A",
+        "date": "2026-01-01",
+        "titles": first_window_titles,
+        "cache_key": cache_key,
+        "titles_hash": titles_hash,
+        "news_count": 1,
+        "fallback_source": "offline_title_lexicon_fallback",
+        "polarity_source": "offline_title_lexicon_fallback",
+        "event_score_mode": "event_override",
+    }
+
+
+def test_event_ab_prefers_persisted_news_score_over_sentiment_cache():
+    from backend.tools.m27_alpha_diagnostic import add_horizon_labels, event_ab_diagnostics
+
+    panel = add_horizon_labels(_sample_panel(), [3])
+    news_rows = []
+    for day in range(5):
+        date = pd.Timestamp("2026-01-01") + pd.Timedelta(days=day)
+        for idx, symbol in enumerate(["A", "B", "C", "D", "E", "F"]):
+            news_rows.append({
+                "symbol": symbol,
+                "title": "公司公告获得重大合同并中标算力项目",
+                "published_at": date,
+                "sentiment_score": 40 if idx < 3 else -40,
+            })
+
+    report = event_ab_diagnostics(
+        panel,
+        news_rows,
+        universe_symbols={"A", "B", "C", "D", "E", "F"},
+        label_col="label_3d",
+        sentiment_cache_lookup=lambda titles, symbol: {"sentiment": -0.9},
+    )
+
+    assert report["status"] == "ok"
+    assert report["coverage"]["rows_with_persisted_polarity"] == report["coverage"]["rows_with_polarity"]
+    assert report["coverage"]["rows_with_cache_polarity"] == 0
+    assert report["coverage"]["rows_with_fallback_polarity"] == 0
+    assert report["coverage"]["cache_miss_windows"] == 0
+    assert report["coverage"]["polarity_sources"] == {"persisted_news_sentiment_score": report["coverage"]["rows_with_polarity"]}
+
+
+def test_event_ab_handles_missing_news_rows():
+    from backend.tools.m27_alpha_diagnostic import add_horizon_labels, event_ab_diagnostics
+
+    panel = add_horizon_labels(_sample_panel(), [3])
+    report = event_ab_diagnostics(
+        panel,
+        [],
+        universe_symbols={"A", "B", "C", "D", "E", "F"},
+        label_col="label_3d",
+    )
+
+    assert report["status"] == "blocked"
+    assert report["coverage"]["rows_with_news"] == 0
+    assert report["coverage"]["cache_miss_windows"] == 0
+    assert "no_test3_news_rows" in report["blockers"]
+    assert report["polarity"]["ic_days"] == 0
+    assert report["polarity_event"]["ic_days"] == 0

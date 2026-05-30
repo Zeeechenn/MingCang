@@ -29,6 +29,9 @@ DEFAULT_MARKDOWN_OUTPUT = Path.home() / ".stock-sage" / "m27_label_objective_eva
 DEFAULT_CACHE_DIR = Path.home() / ".stock-sage" / "cache"
 DEFAULT_HORIZON = 20
 TOP_DECILE_PCT = 0.10
+DEFAULT_SEGMENT_MIN_ROWS = 250
+DEFAULT_SEGMENT_MIN_SYMBOLS = 4
+DEFAULT_SEGMENT_MIN_VALIDATION_ROWS = 50
 
 warnings.filterwarnings(
     "ignore",
@@ -171,13 +174,23 @@ def _top_decile_labels(df: pd.DataFrame, label_col: str, top_pct: float = TOP_DE
     return labels
 
 
-def _validation_frame(val_df: pd.DataFrame, pred: np.ndarray, label_col: str) -> pd.DataFrame:
-    return pd.DataFrame({
+def _validation_frame(
+    val_df: pd.DataFrame,
+    pred: np.ndarray,
+    label_col: str,
+    *,
+    segment_cols: list[str] | None = None,
+) -> pd.DataFrame:
+    frame = pd.DataFrame({
         "date": val_df["date"].values,
         "symbol": val_df["symbol"].values,
         "pred": pred,
         "label": val_df[label_col].values,
     })
+    for col in segment_cols or []:
+        if col in val_df.columns:
+            frame[col] = val_df[col].values
+    return frame
 
 
 def stride_predictions(predictions: pd.DataFrame, *, stride: int) -> pd.DataFrame:
@@ -222,6 +235,231 @@ def top_decile_metrics(predictions: pd.DataFrame, *, top_pct: float = TOP_DECILE
             float((frame["mean_forward_return"] - frame["universe_mean_forward_return"]).mean())
         ),
     }
+
+
+def segment_breakdown(
+    predictions: pd.DataFrame,
+    *,
+    segment_col: str,
+    min_rows: int = 50,
+    min_dates: int = 5,
+    min_symbols: int = 3,
+) -> list[dict[str, Any]]:
+    """Report raw validation quality by segment without changing the objective."""
+    if predictions.empty or segment_col not in predictions.columns:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for segment, group in predictions.groupby(segment_col, dropna=False, sort=True):
+        clean = group.dropna(subset=["pred", "label"])
+        n_dates = int(pd.to_datetime(clean["date"]).nunique()) if not clean.empty else 0
+        n_symbols = int(clean["symbol"].nunique()) if not clean.empty else 0
+        if len(clean) < min_rows or n_dates < min_dates or n_symbols < min_symbols:
+            continue
+        report = build_validation_report(
+            clean[["date", "symbol", "pred", "label"]],
+            label=f"{segment_col}:{segment}",
+            sample={
+                "segment_col": segment_col,
+                "segment": None if pd.isna(segment) else str(segment),
+                "n_rows": int(len(clean)),
+                "n_symbols": n_symbols,
+                "n_dates": n_dates,
+            },
+        )
+        metrics = report.get("metrics") or {}
+        gates = report.get("gates") or {}
+        rows.append({
+            "segment_col": segment_col,
+            "segment": None if pd.isna(segment) else str(segment),
+            "n_rows": int(len(clean)),
+            "n_symbols": n_symbols,
+            "n_dates": n_dates,
+            "ic_mean": metrics.get("ic_mean"),
+            "icir": metrics.get("icir"),
+            "ic_positive_rate": metrics.get("ic_positive_rate"),
+            "top_bottom": metrics.get("top_bottom"),
+            "gate_pass": gates.get("pass"),
+        })
+
+    return sorted(
+        rows,
+        key=lambda row: (
+            float(row.get("icir") or 0.0),
+            float(row.get("ic_mean") or 0.0),
+            int(row.get("n_rows") or 0),
+        ),
+        reverse=True,
+    )
+
+
+def _segment_candidate_specs(horizon: int) -> list[dict[str, str]]:
+    raw = f"label_{horizon}d"
+    return [
+        {
+            "name": f"raw_{horizon}d_regression_segment_specific",
+            "objective": "regression",
+            "horizon": str(horizon),
+            "target_label": raw,
+        }
+    ]
+
+
+def evaluate_segment_specific_candidates(
+    panel: pd.DataFrame,
+    *,
+    horizon: int,
+    n_estimators: int,
+    min_rows: int = DEFAULT_SEGMENT_MIN_ROWS,
+    min_symbols: int = DEFAULT_SEGMENT_MIN_SYMBOLS,
+    min_validation_rows: int = DEFAULT_SEGMENT_MIN_VALIDATION_ROWS,
+) -> dict[str, Any]:
+    """Train validation-only candidates inside sufficiently large sectors/industries."""
+    segment_cols = [col for col in ("industry", "sector") if col in panel.columns]
+    sample_limited = (
+        min_rows < DEFAULT_SEGMENT_MIN_ROWS
+        or min_symbols < DEFAULT_SEGMENT_MIN_SYMBOLS
+        or min_validation_rows < DEFAULT_SEGMENT_MIN_VALIDATION_ROWS
+    )
+    result: dict[str, Any] = {
+        "scope": "sector_industry_specific_offline_candidate",
+        "non_promoting": True,
+        "promotable": False,
+        "run_mode": "exploratory_sample_limited" if sample_limited else "conservative_offline_validation",
+        "sample_limited": sample_limited,
+        "promotion_blocker": (
+            "exploratory/sample-limited segment run; expand sample before any train-candidate promotion"
+            if sample_limited
+            else "offline validation only; sector/industry candidates require separate promotion review"
+        ),
+        "note": (
+            "exploratory/sample-limited offline validation only; cannot promote and does not alter production "
+            "model, promotion, or signal logic"
+            if sample_limited
+            else "offline validation only; does not alter production model, promotion, or signal logic"
+        ),
+        "min_rows": min_rows,
+        "min_symbols": min_symbols,
+        "min_validation_rows": min_validation_rows,
+        "segment_cols": segment_cols,
+        "candidates": [],
+        "skipped": [],
+        "best_by_segment_col": {},
+    }
+    if not segment_cols:
+        return result
+
+    for spec in _segment_candidate_specs(horizon):
+        target_label = spec["target_label"]
+        raw_label = f"label_{spec['horizon']}d"
+        cols = list(dict.fromkeys(["date", "symbol", *segment_cols, target_label, raw_label, *FEATURE_COLS]))
+        data = panel[cols].replace([np.inf, -np.inf], np.nan).dropna(subset=[target_label, raw_label, *FEATURE_COLS])
+        for segment_col in segment_cols:
+            for segment, segment_df in data.groupby(segment_col, dropna=False, sort=True):
+                segment_name = None if pd.isna(segment) else str(segment)
+                n_symbols = int(segment_df["symbol"].nunique())
+                train_df, val_df = _time_split(segment_df)
+                sample = {
+                    "segment_col": segment_col,
+                    "segment": segment_name,
+                    "n_rows": int(len(segment_df)),
+                    "n_symbols": n_symbols,
+                    "n_dates": int(pd.to_datetime(segment_df["date"]).nunique()),
+                    "train_rows": int(len(train_df)),
+                    "validation_rows": int(len(val_df)),
+                }
+                if (
+                    len(segment_df) < min_rows
+                    or n_symbols < min_symbols
+                    or len(val_df) < min_validation_rows
+                ):
+                    result["skipped"].append({
+                        **spec,
+                        "segment_col": segment_col,
+                        "segment": segment_name,
+                        "status": "insufficient_segment_sample",
+                        "sample": sample,
+                    })
+                    continue
+
+                pred, fit_info = _fit_predict(
+                    train_df,
+                    val_df,
+                    objective=spec["objective"],
+                    target_label_col=target_label,
+                    n_estimators=n_estimators,
+                )
+                if pred is None:
+                    result["skipped"].append({
+                        **spec,
+                        "segment_col": segment_col,
+                        "segment": segment_name,
+                        "status": fit_info.get("status", "fit_failed"),
+                        "sample": sample,
+                    })
+                    continue
+
+                raw_predictions = _validation_frame(val_df, pred, raw_label, segment_cols=[segment_col])
+                target_predictions = _validation_frame(val_df, pred, target_label, segment_cols=[segment_col])
+                raw_report = build_validation_report(
+                    raw_predictions,
+                    label=f"{spec['name']}:{segment_col}:{segment_name}:raw_return",
+                    sample=sample,
+                )
+                target_report = build_validation_report(
+                    target_predictions,
+                    label=f"{spec['name']}:{segment_col}:{segment_name}:target",
+                    sample=sample,
+                )
+                stride_sample = {**sample, "stride": int(spec["horizon"])}
+                raw_stride = build_validation_report(
+                    stride_predictions(raw_predictions, stride=int(spec["horizon"])),
+                    label=f"{spec['name']}:{segment_col}:{segment_name}:raw_return_stride_{spec['horizon']}",
+                    sample=stride_sample,
+                )
+                result["candidates"].append({
+                    **spec,
+                    "candidate_type": "sector_industry_specific",
+                    "non_promoting": True,
+                    "promotable": False,
+                    "run_mode": result["run_mode"],
+                    "sample_limited": result["sample_limited"],
+                    "promotion_blocker": result["promotion_blocker"],
+                    "segment_col": segment_col,
+                    "segment": segment_name,
+                    "status": "ok",
+                    "fit": fit_info,
+                    "sample": sample,
+                    "target_validation": target_report,
+                    "raw_return_validation": raw_report,
+                    "raw_return_stride_validation": raw_stride,
+                    "top_decile_metrics": top_decile_metrics(raw_predictions, top_pct=TOP_DECILE_PCT),
+                })
+
+    result["candidates"] = sorted(
+        result["candidates"],
+        key=lambda candidate: (
+            float((((candidate.get("raw_return_validation") or {}).get("metrics") or {}).get("icir")) or 0.0),
+            float((((candidate.get("raw_return_validation") or {}).get("metrics") or {}).get("ic_mean")) or 0.0),
+            int(((candidate.get("sample") or {}).get("validation_rows")) or 0),
+        ),
+        reverse=True,
+    )
+    for segment_col in segment_cols:
+        best = next(
+            (candidate for candidate in result["candidates"] if candidate.get("segment_col") == segment_col),
+            None,
+        )
+        if best:
+            result["best_by_segment_col"][segment_col] = {
+                "segment": best.get("segment"),
+                "candidate": best.get("name"),
+                "raw_ic": ((best.get("raw_return_validation") or {}).get("metrics") or {}).get("ic_mean"),
+                "raw_icir": ((best.get("raw_return_validation") or {}).get("metrics") or {}).get("icir"),
+                "raw_gate_pass": ((best.get("raw_return_validation") or {}).get("gates") or {}).get("pass"),
+                "sample": best.get("sample"),
+            }
+    return result
 
 
 def _fit_predict(
@@ -374,7 +612,8 @@ def candidate_specs(horizon: int) -> list[dict[str, str]]:
 def evaluate_candidate(panel: pd.DataFrame, spec: dict[str, str], *, n_estimators: int) -> dict[str, Any]:
     target_label = spec["target_label"]
     raw_label = f"label_{spec['horizon']}d"
-    cols = list(dict.fromkeys(["date", "symbol", target_label, raw_label, *FEATURE_COLS]))
+    segment_cols = [col for col in ("industry", "sector") if col in panel.columns]
+    cols = list(dict.fromkeys(["date", "symbol", *segment_cols, target_label, raw_label, *FEATURE_COLS]))
     data = panel[cols].replace([np.inf, -np.inf], np.nan).dropna(subset=[target_label, raw_label, *FEATURE_COLS])
     train_df, val_df = _time_split(data)
     if len(train_df) < 200 or len(val_df) < 50:
@@ -406,8 +645,8 @@ def evaluate_candidate(panel: pd.DataFrame, spec: dict[str, str], *, n_estimator
         "validation_start": str(pd.to_datetime(val_df["date"]).min().date()),
         "validation_end": str(pd.to_datetime(val_df["date"]).max().date()),
     }
-    target_predictions = _validation_frame(val_df, pred, target_label)
-    raw_predictions = _validation_frame(val_df, pred, raw_label)
+    target_predictions = _validation_frame(val_df, pred, target_label, segment_cols=segment_cols)
+    raw_predictions = _validation_frame(val_df, pred, raw_label, segment_cols=segment_cols)
     horizon = int(spec["horizon"])
     target_report = build_validation_report(
         target_predictions,
@@ -434,6 +673,10 @@ def evaluate_candidate(panel: pd.DataFrame, spec: dict[str, str], *, n_estimator
         "raw_return_validation": raw_report,
         "raw_return_stride_validation": raw_stride,
         "top_decile_metrics": top_decile_metrics(raw_predictions, top_pct=TOP_DECILE_PCT),
+        "segment_breakdown": {
+            col: segment_breakdown(raw_predictions, segment_col=col)
+            for col in segment_cols
+        },
     }
 
 
@@ -491,11 +734,22 @@ def build_report(
     panel_meta: dict[str, Any],
     horizon: int = DEFAULT_HORIZON,
     n_estimators: int = 180,
+    segment_min_rows: int = DEFAULT_SEGMENT_MIN_ROWS,
+    segment_min_symbols: int = DEFAULT_SEGMENT_MIN_SYMBOLS,
+    segment_min_validation_rows: int = DEFAULT_SEGMENT_MIN_VALIDATION_ROWS,
 ) -> dict[str, Any]:
     panel = add_objective_labels(panel, 5 if horizon != 5 else horizon)
     if horizon != 5:
         panel = add_objective_labels(panel, horizon)
     candidates = [evaluate_candidate(panel, spec, n_estimators=n_estimators) for spec in candidate_specs(horizon)]
+    segment_candidates = evaluate_segment_specific_candidates(
+        panel,
+        horizon=horizon,
+        n_estimators=n_estimators,
+        min_rows=segment_min_rows,
+        min_symbols=segment_min_symbols,
+        min_validation_rows=segment_min_validation_rows,
+    )
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "purpose": "M27.1b label/objective candidate evaluation; no model promotion",
@@ -508,6 +762,7 @@ def build_report(
         "horizon": horizon,
         "n_estimators": n_estimators,
         "candidates": candidates,
+        "sector_industry_specific_candidates": segment_candidates,
         "decision": build_decision(candidates),
     }
 
@@ -544,6 +799,61 @@ def report_to_markdown(report: dict[str, Any]) -> str:
             f"{raw_gates.get('pass_monotonic')} | {raw_gates.get('pass')} |"
         )
     lines.append("")
+    segment_candidates = report.get("sector_industry_specific_candidates") or {}
+    if segment_candidates:
+        lines.extend([
+            "## Sector/Industry-Specific Offline Candidates",
+            "",
+            f"- non_promoting: {segment_candidates.get('non_promoting')}",
+            f"- promotable: {segment_candidates.get('promotable')}",
+            f"- run_mode: {segment_candidates.get('run_mode')}",
+            f"- sample_limited: {segment_candidates.get('sample_limited')}",
+            f"- promotion_blocker: {segment_candidates.get('promotion_blocker')}",
+            f"- note: {segment_candidates.get('note')}",
+            f"- minimum sample: {segment_candidates.get('min_rows')} rows / "
+            f"{segment_candidates.get('min_symbols')} symbols / "
+            f"{segment_candidates.get('min_validation_rows')} validation rows",
+            "",
+            "| segment_col | segment | rows | symbols | val rows | raw IC | raw ICIR | stride ICIR | gate |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        ])
+        for candidate in (segment_candidates.get("candidates") or [])[:12]:
+            raw_metrics = ((candidate.get("raw_return_validation") or {}).get("metrics") or {})
+            raw_gates = ((candidate.get("raw_return_validation") or {}).get("gates") or {})
+            stride_metrics = ((candidate.get("raw_return_stride_validation") or {}).get("metrics") or {})
+            sample = candidate.get("sample") or {}
+            lines.append(
+                f"| {candidate.get('segment_col')} | {candidate.get('segment')} | "
+                f"{sample.get('n_rows')} | {sample.get('n_symbols')} | {sample.get('validation_rows')} | "
+                f"{raw_metrics.get('ic_mean')} | {raw_metrics.get('icir')} | "
+                f"{stride_metrics.get('icir')} | {raw_gates.get('pass')} |"
+            )
+        if not segment_candidates.get("candidates"):
+            lines.append("| n/a | no segment met sample gates |  |  |  |  |  |  |  |")
+        lines.append("")
+    decision_best = decision.get("best_raw_candidate")
+    best_candidate = next(
+        (candidate for candidate in report["candidates"] if candidate.get("name") == decision_best),
+        None,
+    )
+    if best_candidate and (best_candidate.get("segment_breakdown") or {}):
+        lines.extend(["## Best Raw Candidate Segment Breakdown", ""])
+        for col, rows in (best_candidate.get("segment_breakdown") or {}).items():
+            if not rows:
+                continue
+            lines.extend([
+                f"### {col}",
+                "",
+                "| segment | rows | symbols | dates | raw IC | raw ICIR | IC>0 | top-bottom | gate |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            ])
+            for row in rows[:8]:
+                lines.append(
+                    f"| {row.get('segment')} | {row.get('n_rows')} | {row.get('n_symbols')} | "
+                    f"{row.get('n_dates')} | {row.get('ic_mean')} | {row.get('icir')} | "
+                    f"{row.get('ic_positive_rate')} | {row.get('top_bottom')} | {row.get('gate_pass')} |"
+                )
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -552,6 +862,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--horizon", type=int, default=DEFAULT_HORIZON)
     parser.add_argument("--n-estimators", type=int, default=180)
     parser.add_argument("--min-rows", type=int, default=120)
+    parser.add_argument("--segment-min-rows", type=int, default=DEFAULT_SEGMENT_MIN_ROWS)
+    parser.add_argument("--segment-min-symbols", type=int, default=DEFAULT_SEGMENT_MIN_SYMBOLS)
+    parser.add_argument("--segment-min-validation-rows", type=int, default=DEFAULT_SEGMENT_MIN_VALIDATION_ROWS)
     parser.add_argument("--active-only", action="store_true", default=True)
     parser.add_argument("--include-inactive", action="store_true", help="Use full expanded universe instead of active-only")
     parser.add_argument("--refresh-panel-cache", action="store_true")
@@ -575,7 +888,15 @@ def main() -> None:
     finally:
         db.close()
 
-    report = build_report(panel, panel_meta=meta, horizon=args.horizon, n_estimators=args.n_estimators)
+    report = build_report(
+        panel,
+        panel_meta=meta,
+        horizon=args.horizon,
+        n_estimators=args.n_estimators,
+        segment_min_rows=args.segment_min_rows,
+        segment_min_symbols=args.segment_min_symbols,
+        segment_min_validation_rows=args.segment_min_validation_rows,
+    )
     args.json_output.parent.mkdir(parents=True, exist_ok=True)
     args.markdown_output.parent.mkdir(parents=True, exist_ok=True)
     args.json_output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
