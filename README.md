@@ -176,7 +176,7 @@ StockSage 已经把研究、记忆、复盘、健康检查全部 agent 化。重
 | `ANSPIRE_API_KEY` | 盘后情感链路的严格事件型新闻补缺，过滤行情页、资料页与噪音。 | 可选 | [Anspire AI Search](https://aisearch.anspire.cn) 创建 key |
 | `BARK_KEY` / `BARK_SERVER` | iOS Bark 推送盘后信号、止损预警、熔断提醒。 | 可选；未配置则静默跳过 | Bark App 复制设备 key；默认 `https://api.day.app`，自建服务时改 `BARK_SERVER` |
 | `STOCKSAGE_AGENT_API_KEY` | `STOCKSAGE_AGENT_MODE=remote` 时用于远程 agent / MCP / HTTP 写鉴权。 | 本地不需要；远程暴露时必需 | 自己生成高强度随机串；按需开启 `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED` 和 action allowlist |
-| `TUSHARE_TOKEN` | A 股日线调试源；当前只调 `daily` 未复权接口，不进入 CN 生产 fallback。 | 可选 | [Tushare](https://tushare.pro/) 获取 token |
+| `TUSHARE_TOKEN` / `TUSHARE_QFQ_ENABLED` | Tushare A 股日线源；默认关闭。设 `TUSHARE_QFQ_ENABLED=true` 后用 `daily + adj_factor` 生成 qfq OHLCV，作为 CN late fallback；旧 `daily` 未复权 fetcher 仍不进 fallback。 | 可选 | [Tushare](https://tushare.pro/) 获取 token |
 | `TICKFLOW_ENABLED` / `TICKFLOW_API_KEY` / `TICKFLOW_BASE_URL` | TickFlow A 股日线源；默认关闭，启用后用 `forward_additive` 前复权口径作为 CN 优先 provider。 | 可选；需显式设 `TICKFLOW_ENABLED=true` | [TickFlow](https://tickflow.org/) 控制台获取 key；默认 `https://api.tickflow.org` |
 
 **典型的本地配置**：
@@ -184,6 +184,7 @@ StockSage 已经把研究、记忆、复盘、健康检查全部 agent 化。重
 ```env
 AI_PROVIDER=local_cli
 TUSHARE_TOKEN=your_tushare_token_here
+TUSHARE_QFQ_ENABLED=false
 TICKFLOW_ENABLED=false
 TICKFLOW_API_KEY=your_tickflow_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
@@ -263,11 +264,11 @@ STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS=
 
 ### 📊 数据与额度
 
-- **数据来源对应**：A 股日线行情默认走 efinance / Eastmoney / AkShare fallback；显式设置 `TICKFLOW_ENABLED=true` 且配置 `TICKFLOW_API_KEY` 后，TickFlow 以 `forward_additive` 口径成为 CN 优先 provider，后续仍保留原 fallback；Tushare `daily` 当前仅保留为未复权调试源，不进入生产信号；财务、QFII、基础新闻走 AkShare / Eastmoney（不需要 key）；实时新闻补充用 `TAVILY_API_KEY`；严格事件型新闻补缺用 `ANSPIRE_API_KEY`；iOS 推送用 `BARK_KEY`；远程 agent 鉴权用 `STOCKSAGE_AGENT_API_KEY`。
+- **数据来源对应**：A 股日线行情默认走 efinance / Eastmoney / AkShare fallback；显式设置 `TICKFLOW_ENABLED=true` 且配置 `TICKFLOW_API_KEY` 后，TickFlow 以 `forward_additive` 口径成为 CN 优先 provider，后续仍保留原 fallback；显式设置 `TUSHARE_QFQ_ENABLED=true` 且配置 `TUSHARE_TOKEN` 后，Tushare 通过 `daily + adj_factor` 生成 qfq OHLCV 并作为 CN late fallback；旧 Tushare `daily` 未复权 fetcher 仅保留为手动调试源，不进入生产信号；财务、QFII、基础新闻走 AkShare / Eastmoney（不需要 key）；实时新闻补充用 `TAVILY_API_KEY`；严格事件型新闻补缺用 `ANSPIRE_API_KEY`；iOS 推送用 `BARK_KEY`；远程 agent 鉴权用 `STOCKSAGE_AGENT_API_KEY`。
 - **免费 / 试用额度**（2026-05-23 公开信息）：
   - **Tavily** Researcher 免费档 1,000 credits / 月；StockSage 当前用 basic search，每次约 1 credit；development key 100 RPM，production key 1,000 RPM（需付费或 PAYGO）。见 [Tavily Credits](https://docs.tavily.com/documentation/api-credits) · [Rate Limits](https://docs.tavily.com/documentation/rate-limits)。
   - **Anspire** 控制台可查看资源包总额度与使用情况，未给出固定免费额度；以 [Anspire 控制台](https://aisearch.anspire.cn) 资源包页为准。见 [使用教程](https://open.anspire.cn/document/docs/openPlatform/)。
-  - **Tushare** 当前只作为 A 股日线调试源，调 `daily` 未复权接口，不进入 CN 生产 fallback；日线 `daily` 需 120 积分起，基础积分每分钟 500 次、每次最多 6,000 条。见 [日线行情](https://www.tushare.pro/document/2?doc_id=27) · [权限说明](https://www.tushare.pro/document/2?doc_id=108)。
+  - **Tushare** 默认关闭；启用 `TUSHARE_QFQ_ENABLED=true` 后会调用 `daily` 与 `adj_factor`，用最新 `adj_factor` 折算 qfq OHLCV，并缓存/限流 `adj_factor` 调用。旧 `daily` 未复权 fetcher 不进入 CN fallback。日线 `daily` 需 120 积分起，基础积分每分钟 500 次、每次最多 6,000 条；`adj_factor` 权限和频率以账号实际权限为准。见 [日线行情](https://www.tushare.pro/document/2?doc_id=27) · [权限说明](https://www.tushare.pro/document/2?doc_id=108)。
   - **TickFlow** 可选作为 A 股日线优先源；当前使用 `forward_additive`，官方文档说明该口径与东方财富/同花顺价格对齐。实时行情、分钟 K 和更高频率访问取决于套餐。见 [开始之前](https://docs.tickflow.org/zh-Hans/quickstart) · [API 概述](https://docs.tickflow.org/zh-Hans/api-reference/introduction)。
   - **Bark** `api.day.app` 是推送入口，key 来自 App 测试 URL / 设备 key；公开教程未承诺免费额度或 SLA，高频推送建议自建。见 [Bark tutorial](https://github.com/Finb/Bark/blob/master/docs/en-us/tutorial.md)。
 

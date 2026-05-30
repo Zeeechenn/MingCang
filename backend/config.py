@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     schedule_premarket: str = "08:30"
     schedule_postmarket: str = "16:00"
     tushare_token: str = ""
+    tushare_qfq_enabled: bool = False
+    tushare_http_base_url: str = "http://api.tushare.pro"
+    tushare_timeout_seconds: float = 15.0
+    tushare_adj_factor_min_interval_seconds: float = 65.0
     tickflow_enabled: bool = False
     tickflow_api_key: str = ""
     tickflow_base_url: str = "https://api.tickflow.org"

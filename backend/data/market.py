@@ -244,6 +244,17 @@ def fetch_cn_daily_tickflow(symbol: str, days: int = 365) -> pd.DataFrame:
 
 
 @_retry(max_attempts=3, delay=1.0)
+def fetch_cn_daily_tushare_qfq(symbol: str, days: int = 365) -> pd.DataFrame:
+    """A-share qfq daily data via Tushare Pro daily + adj_factor."""
+    if not settings.tushare_qfq_enabled:
+        raise ValueError("TUSHARE_QFQ_ENABLED is false")
+
+    from backend.data.tushare_qfq import fetch_tushare_qfq_daily
+
+    return fetch_tushare_qfq_daily(symbol, days=days)
+
+
+@_retry(max_attempts=3, delay=1.0)
 def fetch_cn_daily_yfinance(symbol: str, days: int = 365) -> pd.DataFrame:
     """Yahoo Finance A-share daily data。
 
@@ -279,6 +290,8 @@ def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
         register_daily_provider("tickflow_cn", {"CN"}, fetch_cn_daily_tickflow, priority=-10, cooldown_seconds=30)
     register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=30, cooldown_seconds=30)
     register_daily_provider("akshare_tx_cn", {"CN"}, fetch_cn_daily_akshare_tx, priority=40, cooldown_seconds=30)
+    if settings.tushare_qfq_enabled and settings.tushare_token:
+        register_daily_provider("tushare_qfq_cn", {"CN"}, fetch_cn_daily_tushare_qfq, priority=50, cooldown_seconds=120)
     # M19.2: yfinance 对 A 股是后复权含分红再投，与其余源 qfq 口径冲突，不进入 CN fallback。
     register_daily_provider("yfinance_us", {"US"}, fetch_us_daily, priority=90, cooldown_seconds=120)
     df, provider = fetch_daily_with_fallback(symbol, market, days)
