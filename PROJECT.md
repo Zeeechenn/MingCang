@@ -58,13 +58,15 @@ runtime databases and personal trading records stay outside Git tracking.
 ```
 backend/config.py                            配置入口（环境变量、路径、调度时间、Bark、双 profile）
 backend/data/database.py                     数据库模型 + 轻量幂等迁移
-backend/data/market.py                       行情数据拉取（AkShare A 股为主，含重试）
+backend/data/market.py                       行情数据拉取（TickFlow 可选优先，免费源 fallback，Tushare qfq 可选后置）
 backend/data/providers.py                    行情 Provider registry + fallback
 backend/data/universe.py                     股票池候选 / 去重 / 市值流动性过滤 / 批量回填
 backend/data/qlib_data.py                    Qlib 特征构建（技术 + PIT 基本面）
 backend/data/quality.py                      数据覆盖报表 + provider 可靠性摘要（M6.1）
 backend/data/market_features.py              市值/股本/资金流 PIT 特征 join（M6.1）
 backend/data/external_sources.py             外部数据源候选目录 + 显式可达性探针（默认不进生产信号）
+backend/data/ifind_mcp.py                    同花顺 iFinD MCP observe-only 客户端 + Markdown/JSON 解析
+backend/data/tushare_qfq.py                  Tushare daily + adj_factor 前复权 OHLCV fallback（默认关闭）
 backend/data/news.py                         新闻抓取（stock_news_em，含重试）
 backend/data/fundamentals.py                 财务指标（M1.3）
 backend/data/qfii_holdings.py                QFII 前十大流通股东（M1.3）

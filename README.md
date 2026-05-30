@@ -178,6 +178,7 @@ StockSage 已经把研究、记忆、复盘、健康检查全部 agent 化。重
 | `STOCKSAGE_AGENT_API_KEY` | `STOCKSAGE_AGENT_MODE=remote` 时用于远程 agent / MCP / HTTP 写鉴权。 | 本地不需要；远程暴露时必需 | 自己生成高强度随机串；按需开启 `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED` 和 action allowlist |
 | `TUSHARE_TOKEN` / `TUSHARE_QFQ_ENABLED` | Tushare A 股日线源；默认关闭。设 `TUSHARE_QFQ_ENABLED=true` 后用 `daily + adj_factor` 生成 qfq OHLCV，作为 CN late fallback；旧 `daily` 未复权 fetcher 仍不进 fallback。 | 可选 | [Tushare](https://tushare.pro/) 获取 token |
 | `TICKFLOW_ENABLED` / `TICKFLOW_API_KEY` / `TICKFLOW_BASE_URL` | TickFlow A 股日线源；默认关闭，启用后用 `forward_additive` 前复权口径作为 CN 优先 provider。 | 可选；需显式设 `TICKFLOW_ENABLED=true` | [TickFlow](https://tickflow.org/) 控制台获取 key；默认 `https://api.tickflow.org` |
+| `IFIND_MCP_ENABLED` / `IFIND_MCP_TOKEN` / `IFIND_MCP_BASE_URL` | iFinD MCP observe-only adapter；默认关闭，只支持显式 probe、tools/list、tools/call 和 Markdown/JSON 文本解析，不接入行情写库。 | 可选；需显式设 `IFIND_MCP_ENABLED=true` 和 `IFIND_MCP_BASE_URL` | 同花顺 iFinD MCP 服务配置；按需设置 token、`IFIND_MCP_TIMEOUT_SECONDS`、`IFIND_MCP_QPS_LIMIT` |
 
 **典型的本地配置**：
 
@@ -187,6 +188,9 @@ TUSHARE_TOKEN=your_tushare_token_here
 TUSHARE_QFQ_ENABLED=false
 TICKFLOW_ENABLED=false
 TICKFLOW_API_KEY=your_tickflow_api_key_here
+IFIND_MCP_ENABLED=false
+IFIND_MCP_BASE_URL=https://api-mcp.51ifind.com:8643/ds-mcp-servers
+IFIND_MCP_TOKEN=
 TAVILY_API_KEY=your_tavily_api_key_here
 ANSPIRE_API_KEY=your_anspire_api_key_here
 BARK_KEY=your_bark_device_key_here
@@ -264,7 +268,7 @@ STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS=
 
 ### 📊 数据与额度
 
-- **数据来源对应**：A 股日线行情默认走 efinance / Eastmoney / AkShare fallback；显式设置 `TICKFLOW_ENABLED=true` 且配置 `TICKFLOW_API_KEY` 后，TickFlow 以 `forward_additive` 口径成为 CN 优先 provider，后续仍保留原 fallback；显式设置 `TUSHARE_QFQ_ENABLED=true` 且配置 `TUSHARE_TOKEN` 后，Tushare 通过 `daily + adj_factor` 生成 qfq OHLCV 并作为 CN late fallback；旧 Tushare `daily` 未复权 fetcher 仅保留为手动调试源，不进入生产信号；财务、QFII、基础新闻走 AkShare / Eastmoney（不需要 key）；实时新闻补充用 `TAVILY_API_KEY`；严格事件型新闻补缺用 `ANSPIRE_API_KEY`；iOS 推送用 `BARK_KEY`；远程 agent 鉴权用 `STOCKSAGE_AGENT_API_KEY`。
+- **数据来源对应**：A 股日线行情默认走 efinance / Eastmoney / AkShare fallback；显式设置 `TICKFLOW_ENABLED=true` 且配置 `TICKFLOW_API_KEY` 后，TickFlow 以 `forward_additive` 口径成为 CN 优先 provider，后续仍保留原 fallback；iFinD MCP 目前仅是 `IFIND_MCP_ENABLED=false` 的 observe-only adapter，不进入行情写库；显式设置 `TUSHARE_QFQ_ENABLED=true` 且配置 `TUSHARE_TOKEN` 后，Tushare 通过 `daily + adj_factor` 生成 qfq OHLCV 并作为 CN late fallback；旧 Tushare `daily` 未复权 fetcher 仅保留为手动调试源，不进入生产信号；财务、QFII、基础新闻走 AkShare / Eastmoney（不需要 key）；实时新闻补充用 `TAVILY_API_KEY`；严格事件型新闻补缺用 `ANSPIRE_API_KEY`；iOS 推送用 `BARK_KEY`；远程 agent 鉴权用 `STOCKSAGE_AGENT_API_KEY`。
 - **免费 / 试用额度**（2026-05-23 公开信息）：
   - **Tavily** Researcher 免费档 1,000 credits / 月；StockSage 当前用 basic search，每次约 1 credit；development key 100 RPM，production key 1,000 RPM（需付费或 PAYGO）。见 [Tavily Credits](https://docs.tavily.com/documentation/api-credits) · [Rate Limits](https://docs.tavily.com/documentation/rate-limits)。
   - **Anspire** 控制台可查看资源包总额度与使用情况，未给出固定免费额度；以 [Anspire 控制台](https://aisearch.anspire.cn) 资源包页为准。见 [使用教程](https://open.anspire.cn/document/docs/openPlatform/)。

@@ -134,6 +134,64 @@ def _sources() -> list[ExternalSource]:
                 "Realtime, minute bars, WebSocket and market depth can consume paid quota.",
             ],
         ),
+        ExternalSource(
+            id="tushare_qfq",
+            name="Tushare qfq",
+            repository_url="https://tushare.pro/",
+            recommended_stage="provider_probe",
+            high_value_datasets=[
+                "daily_kline",
+                "adjustment_factor",
+                "daily_basic",
+                "financial_disclosure_calendar",
+            ],
+            useful_for=[
+                "source_availability_monitoring",
+                "cn_daily_fallback_after_qfq_normalization",
+                "financial_quality_cross_check",
+            ],
+            integration_notes=[
+                "Do not register raw pro.daily output as a production provider.",
+                "Use daily plus adj_factor to emit qfq-compatible OHLCV bars.",
+                "Respect adj_factor rate limits and prefer cached factors.",
+            ],
+            risk_level="medium",
+            risk_notes=[
+                "adj_factor frequency can be lower than daily-bar frequency on basic plans.",
+                "Quota and point requirements depend on the Tushare account.",
+            ],
+        ),
+        ExternalSource(
+            id="ifind_mcp",
+            name="iFinD MCP",
+            repository_url="https://mcp.51ifind.com/",
+            recommended_stage="evidence_probe",
+            high_value_datasets=[
+                "stock_financials",
+                "stock_events",
+                "stock_shareholders",
+                "search_news",
+                "search_notice",
+                "index_data",
+                "sector_data",
+            ],
+            useful_for=[
+                "deep_research_evidence",
+                "long_term_analyst_context",
+                "news_and_notice_gap_fill",
+                "single_day_quote_cross_check",
+            ],
+            integration_notes=[
+                "Keep observe-only until field normalization and provider health are measured.",
+                "Do not use natural-language OHLCV responses for bulk historical backfills.",
+                "Store tokens only in local environment variables or MCP client config.",
+            ],
+            risk_level="medium",
+            risk_notes=[
+                "MCP responses can be Markdown or JSON text rather than stable OHLCV schemas.",
+                "Paid plans increase quota but do not change the need for parser validation.",
+            ],
+        ),
     ]
 
 
@@ -150,7 +208,11 @@ def build_external_source_catalog() -> dict:
         },
         "summary": {
             "source_count": len(sources),
-            "recommended_first": ["a_stock_data.margin_trading", "ftshare"],
+            "recommended_first": [
+                "ifind_mcp.search_news",
+                "ifind_mcp.search_notice",
+                "tushare_qfq.daily_kline",
+            ],
             "next_safe_step": "probe_and_measure_before_ingestion",
         },
         "sources": sources,
@@ -237,9 +299,13 @@ def probe_ftshare_stock_list(symbol: str = "600519", timeout_seconds: float = 5.
 
 def probe_external_sources(symbol: str = "600519") -> dict:
     """Run explicit, side-effect-free probes for candidate external sources."""
+    from backend.data.ifind_mcp import probe_ifind_mcp
     from backend.data.tickflow import probe_tickflow_daily
+    from backend.data.tushare_qfq import probe_tushare_qfq_daily
 
     return {
         "ftshare": probe_ftshare_stock_list(symbol=symbol),
         "tickflow": probe_tickflow_daily(symbol=symbol, market="CN"),
+        "tushare_qfq": probe_tushare_qfq_daily(symbol=symbol),
+        "ifind_mcp": probe_ifind_mcp(),
     }

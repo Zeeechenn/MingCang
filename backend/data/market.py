@@ -283,16 +283,16 @@ def fetch_us_daily(symbol: str, days: int = 365) -> pd.DataFrame:
 
 def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
     """Dispatch to the appropriate market data fetcher based on market."""
-    register_daily_provider("efinance_cn", {"CN"}, fetch_cn_daily_efinance, priority=0, cooldown_seconds=60)
-    register_daily_provider("eastmoney_cn", {"CN"}, fetch_cn_daily, priority=10, cooldown_seconds=60)
-    register_daily_provider("akshare_em_cn", {"CN"}, fetch_cn_daily_akshare_em, priority=20, cooldown_seconds=60)
     if settings.tickflow_enabled and settings.tickflow_api_key:
         register_daily_provider("tickflow_cn", {"CN"}, fetch_cn_daily_tickflow, priority=-10, cooldown_seconds=30)
-    register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=30, cooldown_seconds=30)
-    register_daily_provider("akshare_tx_cn", {"CN"}, fetch_cn_daily_akshare_tx, priority=40, cooldown_seconds=30)
+    register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=0, cooldown_seconds=30)
+    register_daily_provider("efinance_cn", {"CN"}, fetch_cn_daily_efinance, priority=10, cooldown_seconds=60)
+    register_daily_provider("eastmoney_cn", {"CN"}, fetch_cn_daily, priority=20, cooldown_seconds=60)
+    register_daily_provider("akshare_em_cn", {"CN"}, fetch_cn_daily_akshare_em, priority=30, cooldown_seconds=60)
     if settings.tushare_qfq_enabled and settings.tushare_token:
         register_daily_provider("tushare_qfq_cn", {"CN"}, fetch_cn_daily_tushare_qfq, priority=50, cooldown_seconds=120)
     # M19.2: yfinance 对 A 股是后复权含分红再投，与其余源 qfq 口径冲突，不进入 CN fallback。
+    # akshare_tx 当前返回结构缺 volume，暂不进入 CN 生产 fallback；保留函数供手动调试。
     register_daily_provider("yfinance_us", {"US"}, fetch_us_daily, priority=90, cooldown_seconds=120)
     df, provider = fetch_daily_with_fallback(symbol, market, days)
     logger.debug("fetch_daily provider=%s symbol=%s market=%s rows=%d",

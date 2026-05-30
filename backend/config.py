@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     tickflow_api_key: str = ""
     tickflow_base_url: str = "https://api.tickflow.org"
     tickflow_timeout_seconds: float = 10.0
+    ifind_mcp_enabled: bool = False
+    ifind_mcp_token: str = ""
+    ifind_mcp_base_url: str = "https://api-mcp.51ifind.com:8643/ds-mcp-servers"
+    ifind_mcp_timeout_seconds: float = 12.0
+    ifind_mcp_qps_limit: float = 1.0
     log_level: str = "INFO"
 
     # Signal weights (must sum to 1.0)

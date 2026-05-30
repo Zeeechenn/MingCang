@@ -6,7 +6,11 @@ def test_external_source_catalog_prioritizes_evidence_before_signal_inputs():
     assert catalog["policy"]["production_signal_impact"] == "none"
     assert catalog["policy"]["first_stage_rule"] == "observe_only"
     assert catalog["summary"]["source_count"] >= 2
-    assert catalog["summary"]["recommended_first"] == ["a_stock_data.margin_trading", "ftshare"]
+    assert catalog["summary"]["recommended_first"] == [
+        "ifind_mcp.search_news",
+        "ifind_mcp.search_notice",
+        "tushare_qfq.daily_kline",
+    ]
 
     a_stock = catalog["sources"]["a_stock_data"]
     assert a_stock["recommended_stage"] == "evidence_trial"
@@ -21,6 +25,12 @@ def test_external_source_catalog_prioritizes_evidence_before_signal_inputs():
     ftshare = catalog["sources"]["ftshare"]
     assert ftshare["recommended_stage"] == "provider_probe"
     assert "stock_list" in ftshare["high_value_datasets"]
+    ifind = catalog["sources"]["ifind_mcp"]
+    assert ifind["recommended_stage"] == "evidence_probe"
+    assert "search_news" in ifind["high_value_datasets"]
+    tushare_qfq = catalog["sources"]["tushare_qfq"]
+    assert tushare_qfq["recommended_stage"] == "provider_probe"
+    assert "adjustment_factor" in tushare_qfq["high_value_datasets"]
 
 
 def test_external_data_sources_api_is_offline_by_default(monkeypatch):
@@ -48,7 +58,9 @@ def test_external_data_sources_api_attaches_probe_when_requested(monkeypatch):
                 "latency_ms": 12,
                 "sample_size": 1,
                 "error": None,
-            }
+            },
+            "ifind_mcp": {"ok": False, "enabled": False},
+            "tushare_qfq": {"ok": False, "enabled": False},
         }
 
     monkeypatch.setattr(system, "probe_external_sources", fake_probe)

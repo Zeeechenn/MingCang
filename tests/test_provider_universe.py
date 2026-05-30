@@ -78,11 +78,10 @@ def test_fetch_daily_registers_cn_multi_source_chain(monkeypatch):
 
     assert not df.empty
     assert list_daily_providers("CN") == [
+        "akshare_sina_cn",
         "efinance_cn",
         "eastmoney_cn",
         "akshare_em_cn",
-        "akshare_sina_cn",
-        "akshare_tx_cn",
     ]
 
 
@@ -103,6 +102,28 @@ def test_fetch_daily_does_not_register_unadjusted_tushare_when_token_configured(
 
     assert not df.empty
     assert "tushare_cn" not in list_daily_providers("CN")
+
+
+def test_fetch_daily_registers_tushare_qfq_only_when_enabled(monkeypatch):
+    from backend.config import settings
+    from backend.data import market
+    from backend.data.providers import list_daily_providers, reset_provider_registry
+
+    reset_provider_registry()
+    monkeypatch.setattr(settings, "tushare_token", "unit-token")
+    monkeypatch.setattr(settings, "tushare_qfq_enabled", True)
+
+    def fake_fetch(symbol, market_name, days):
+        return pd.DataFrame([{"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]), "akshare_sina_cn"
+
+    monkeypatch.setattr(market, "fetch_daily_with_fallback", fake_fetch)
+
+    df = market.fetch_daily("600519", "CN", days=30)
+
+    assert not df.empty
+    providers = list_daily_providers("CN")
+    assert "tushare_cn" not in providers
+    assert "tushare_qfq_cn" in providers
 
 
 def test_fetch_cn_daily_tushare_normalizes_daily_bars(monkeypatch):
