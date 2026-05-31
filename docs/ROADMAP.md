@@ -16,21 +16,29 @@
 
 ### M29.1 Forward Evidence Ledger（P0）
 
-- [ ] 新增 read-only evidence ledger：汇总已有 M27 artifact 与未来 forward shadow，输出统一 JSON/Markdown artifact。
-- [ ] Ledger 字段必须包含：candidate/variant、window、sample size、IC/ICIR、stride/non-overlap 指标、quantile monotonic、top-bottom、data-quality blockers、multiple-comparison warning、production_unchanged。
-- [ ] 首批纳入 M27 证据：top-decile forward shadow、pure polarity v2 gate、polarity+event v2 gate、short-cycle/regime candidates、Kronos failed checkpoints。
-- [ ] 所有 M29.1 工具默认只读：不写 DB、不调 LLM/API、不保存模型、不改配置；产物优先写 `/private/tmp` 或 `~/.stock-sage`，不新增通用 planning 文件。
+- [x] 新增 read-only evidence ledger：汇总已有 M27 artifact 与未来 forward shadow，输出统一 JSON/Markdown artifact。
+- [x] Ledger 字段必须包含：candidate/variant、window、sample size、IC/ICIR、stride/non-overlap 指标、quantile monotonic、top-bottom、data-quality blockers、multiple-comparison warning、production_unchanged。
+- [x] 首批纳入 M27 证据：top-decile forward shadow、pure polarity v2 gate、polarity+event v2 gate、short-cycle/regime candidates、Kronos failed checkpoints。
+- [x] 所有 M29.1 工具默认只读：不写 DB、不调 LLM/API、不保存模型、不改配置；产物优先写 `/private/tmp` 或 `~/.stock-sage`，不新增通用 planning 文件。
 
 **验收**：新 AI 只读 ledger 即可判断每条 M27/M29 alpha 线索为何未晋升、下一次 forward 更新该跑什么命令、何时必须停下找用户确认。
 
+> 2026-05-31 M29.1 首版完成：新增 `backend.tools.m29_evidence_ledger`，默认聚合 `~/.stock-sage/m27_top_decile_forward_shadow_{1,3,5}d.json`、`/private/tmp/m27_forward_shadow_rolling_20260401_20260529_{1,3,5}d.json`、M27.3 event/polarity v2 gate、M27 label/objective gate 与 `~/.stock-sage/m26_kronos_report.json`。首轮只读验证输出 `/private/tmp/m29_evidence_ledger_test.{json,md}`，artifacts_parsed=11、entries=12、gate_pass_count=0、promotable_count=0、non_promoting_count=12，promotion contract 仍为 IC≥0.04 / ICIR≥0.40 / monotonic=True / fresh forward / no data-quality blockers / human confirmation；缺失 source side-effect 字段会标记为 `unknown_boundary_flags` blocker，event/polarity entry 显式记录 cache/fallback 覆盖，label/objective entry 显式记录 short-cycle / multi-exit / segment 子证据摘要；新增最小 provenance contract，逐条记录 artifact sha256/mtime、panel/window/cutoff 可得字段，并把缺失的 `data_source`、`fetched_at`、`adjustment`、`universe_hash`、`train_label_realized_end` 标为 `missing_provenance_*` blocker；ledger 同时输出下一次 M29.3 forward shadow 命令模板；不写 DB、不调 LLM/API、不保存模型、不改生产配置。
+>
+> 2026-05-31 M29.1 shadow validation 接入：`backend.tools.m29_evidence_ledger` 已支持读取 `backend.tools.m29_shadow_validation` 产物；最新只读 smoke `/private/tmp/m29_evidence_ledger_with_shadow_validation.{json,md}` 纳入 `top_decile_entry_timing_v1` 后 artifacts_parsed=12、entries=13、gate_pass_count=0、skipped_artifacts=0，仍全部 non-promoting，生产配置不变。
+
 ### M29.2 新 Alpha 假设预注册（P0）
 
-- [ ] 建立候选假设清单，优先从 M27 暴露出的结构性线索出发：regime-conditioned alpha、行业内相对强弱、流动性/换手状态、事件后 drift 路径、top-decile filter 的入场时机。
-- [ ] 每条假设必须先写清：动机、样本范围、训练/验证/OOS 切分、目标 horizon、候选特征、预期失败条件、最小样本门、production gate。
-- [ ] 明确多重比较规则：同一轮候选数量、Bonferroni/FDR 或至少 explicit warning；没有该字段的报告不能作为晋升证据。
-- [ ] 禁止直接把 M27 的 `raw_20d_top_decile_classifier`、pure polarity、event overlay 或 Kronos checkpoint 作为 production candidate；它们只能作为 shadow/research candidate。
+- [x] 建立候选假设清单，优先从 M27 暴露出的结构性线索出发：regime-conditioned alpha、行业内相对强弱、流动性/换手状态、事件后 drift 路径、top-decile filter 的入场时机。
+- [x] 每条假设必须先写清：动机、样本范围、训练/验证/OOS 切分、目标 horizon、候选特征、预期失败条件、最小样本门、production gate。
+- [x] 明确多重比较规则：同一轮候选数量、Bonferroni/FDR 或至少 explicit warning；没有该字段的报告不能作为晋升证据。
+- [x] 禁止直接把 M27 的 `raw_20d_top_decile_classifier`、pure polarity、event overlay 或 Kronos checkpoint 作为 production candidate；它们只能作为 shadow/research candidate。
 
 **验收**：每个新实验在运行前已有可审计 hypothesis spec；实验失败后能沉淀为 ledger，而不是继续口头追线索。
+
+> 2026-05-31 M29.2 首版完成：新增 `backend.tools.m29_hypothesis_registry`，默认生成 5 条预注册 shadow research candidate：`regime_low_vol_alpha_v1`、`intra_industry_relative_strength_v1`、`liquidity_turnover_state_v1`、`post_event_drift_pure_polarity_v1`、`top_decile_entry_timing_v1`。每条均包含 M27 source clues、sample gates、fresh OOS/forward split、non-overlapping stride 要求、multiple-comparison policy、stop conditions 与 forbidden actions；首轮只读验证输出 `/private/tmp/m29_hypothesis_registry_test.{json,md}`，validation_passed=true，生产继续 `weight_quant=0.0` / `kronos_enabled=false` / signal profile 不变。
+>
+> 2026-05-31 M29.2/M29.3 首条 shadow validation：新增 `backend.tools.m29_shadow_validation`，先支持 `top_decile_entry_timing_v1`，读取既有 1d rolling forward shadow `/private/tmp/m27_forward_shadow_rolling_20260401_20260529_1d.json` 并按 registry 样本门输出 `/private/tmp/m29_shadow_validation_top_decile_entry_timing_v1.{json,md}`。当前 filtered_trades=99、positive_rolling_windows=7，样本门通过；但因仍是 M29 预注册前旧 artifact，且缺 `data_source` / `fetched_at` / `adjustment` / `universe_hash` / `train_label_realized_end` provenance，报告保留 `post_registration_fresh_forward_missing`、`not_continuous_quant_score`、`shadow_validation_non_promoting` blockers，`gate_pass=false`、`promotable=false`、生产不变。
 
 ### M29.3 Forward Shadow 自动延长（P1）
 
@@ -39,6 +47,12 @@
 - [ ] 样本门继续保守：filtered trades < 50 不引用 Sharpe，IC days 不足不引用 ICIR 稳定性，分位不单调不能晋升。
 
 **验收**：forward 样本持续更新，但每次更新都保持 non-promoting / production_unchanged。
+
+> 2026-05-31 M29.3 接手约束：当前 rolling forward shadow 已延至本地最新 2026-05-29；2026-05-31 为周日，尚无更新交易日可安全延长。下一次新增行情后，先用 `backend.tools.m29_evidence_ledger` 查看 `next_forward_commands`，再分别跑 1d/3d/5d rolling；新 artifact 必须进入 ledger，并优先补齐 data source / fetched_at / adjustment / universe hash / label realized cutoff provenance。若需要刷新行情、写 DB、真实写 `sentiment_cache` 或调用 LLM/API，先停下汇报。
+
+> 2026-05-31 M29.3 provenance producer 补强：`backend.tools.m27_top_decile_forward_shadow` 后续新产物会写出 `universe_hash` 与 `train_label_realized_end`，rolling 报告会汇总 `train_label_realized_end_range`；既有历史 artifact 未回写，ledger 会继续把旧产物的 provenance 缺口标为 blocker。`backend.data.qlib_data.build_training_data` 已把 price row 的 `_price_source` / `_price_fetched_at` / `_price_adjustment` 带入训练面板，`backend.tools.m27_label_objective_eval` 已把 panel cache 升到 version 2 并在 panel meta 输出 `price_provenance` 覆盖率；`backend.tools.m29_evidence_ledger` 会读取 `panel.price_provenance`，若未来新 artifact 仍有缺口则标记 `panel_price_provenance_incomplete`。旧 DB 行的来源仍不猜测回填。
+
+> 2026-05-31 M29.3 provenance audit 首版：新增 `backend.tools.m29_provenance_audit`，只读检查 daily price / index price schema 与 M29 ledger artifact provenance；`backend.data.database.Price` / `IndexPrice` 已新增 nullable `source` / `fetched_at` / `adjustment`，`backend.data.market.fetch_daily` / `fetch_cn_index` 会把 provider provenance 写入 DataFrame attrs，`backfill_if_needed` / `sync_index_to_db` 会写入未来新增行情。已对本地 SQLite 执行轻量 runtime schema patch（只加 nullable 列，不回填旧数据、不刷新行情）。最新 smoke 输出 `/private/tmp/m29_provenance_audit_with_shadow_validation.{json,md}`：`prices` / `index_prices` / `market_snapshots` schema blocker 已清零；当前 13 条 ledger entries 仍有历史 artifact provenance 缺口（artifact hash 与 generated_at 可证明，旧 daily source/fetched_at/adjustment 与旧 universe_hash 不可证明）。结论：M29 可以继续收集 forward evidence，但旧 artifact provenance blocker 清零前不得进入 promotion review；未来新增行情应自然带 provider provenance。
 
 ### M29.4 Promotion Contract（P1）
 

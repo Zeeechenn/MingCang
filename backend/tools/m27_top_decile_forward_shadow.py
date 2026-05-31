@@ -10,6 +10,7 @@ tools, it may read or refresh the local training-panel cache under
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,6 +48,31 @@ DEFAULT_END = "2026-05-22"
 MIN_TRADES_FOR_SHARPE = 50
 DEFAULT_ROLLING_WINDOW_DAYS = 7
 DEFAULT_ROLLING_STRIDE_DAYS = 7
+
+
+def _hash_jsonable(value: Any) -> str:
+    payload = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _universe_hash(universe_symbols: set[str]) -> str:
+    return _hash_jsonable(sorted(universe_symbols))
+
+
+def _provenance_fields(
+    *,
+    panel_meta: dict[str, Any],
+    universe_symbols: set[str],
+    classifier_sample: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    sample = classifier_sample or {}
+    return {
+        "data_source": panel_meta.get("data_source"),
+        "fetched_at": panel_meta.get("fetched_at"),
+        "adjustment": panel_meta.get("adjustment"),
+        "universe_hash": _universe_hash(universe_symbols),
+        "train_label_realized_end": sample.get("train_label_realized_end"),
+    }
 
 
 def _date_str(value: Any) -> str:
@@ -185,6 +211,7 @@ def build_report(
     )
     filtered_trades = int(profile_ab["filtered_arm"]["metrics"]["trades"])
     baseline_trades = int(profile_ab["baseline_arm"]["metrics"]["trades"])
+    classifier_sample = (classifier.get("sample") or {}) if isinstance(classifier, dict) else {}
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "milestone": "M27.1c",
@@ -197,6 +224,11 @@ def build_report(
         "saves_model": False,
         "model_promotion": "disabled",
         "signal_profile_unchanged": True,
+        **_provenance_fields(
+            panel_meta=panel_meta,
+            universe_symbols=universe_symbols,
+            classifier_sample=classifier_sample,
+        ),
         "universe_symbols": len(universe_symbols),
         "start": start,
         "end": end,
@@ -288,6 +320,17 @@ def build_rolling_report(
 ) -> dict[str, Any]:
     baseline_trades = sum(_trades(report, "baseline_arm") for report in window_reports)
     filtered_trades = sum(_trades(report, "filtered_arm") for report in window_reports)
+    label_cutoffs = [
+        cutoff
+        for report in window_reports
+        for cutoff in [
+            (((report.get("filter") or {}).get("classifier") or {}).get("sample") or {}).get(
+                "train_label_realized_end"
+            )
+            or report.get("train_label_realized_end")
+        ]
+        if cutoff
+    ]
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "milestone": "M27.1c",
@@ -300,6 +343,12 @@ def build_rolling_report(
         "saves_model": False,
         "model_promotion": "disabled",
         "signal_profile_unchanged": True,
+        **_provenance_fields(panel_meta=panel_meta, universe_symbols=universe_symbols),
+        "train_label_realized_end": max(label_cutoffs) if label_cutoffs else None,
+        "train_label_realized_end_range": {
+            "min": min(label_cutoffs) if label_cutoffs else None,
+            "max": max(label_cutoffs) if label_cutoffs else None,
+        },
         "universe_symbols": len(universe_symbols),
         "start": start,
         "end": end,

@@ -35,6 +35,7 @@ DEFAULT_SEGMENT_MIN_VALIDATION_ROWS = 50
 MULTIPLE_COMPARISON_ALPHA = 0.05
 DEFAULT_SHORT_HORIZONS = [1, 3, 5]
 DEFAULT_EVALUATION_HORIZONS = [1, 3, 5, 10, 20]
+PANEL_CACHE_VERSION = 2
 
 warnings.filterwarnings(
     "ignore",
@@ -70,15 +71,77 @@ def _feature_cols_meta() -> dict[str, Any]:
 def _cache_matches_current_features(meta: dict[str, Any]) -> bool:
     current = _feature_cols_meta()
     return (
-        meta.get("feature_count") == current["feature_count"]
+        meta.get("panel_cache_version") == PANEL_CACHE_VERSION
+        and meta.get("feature_count") == current["feature_count"]
         and meta.get("feature_cols_hash") == current["feature_cols_hash"]
         and meta.get("feature_cols") == current["feature_cols"]
     )
 
 
+def _nonempty_count(series: pd.Series) -> int:
+    clean = series.dropna()
+    if clean.empty:
+        return 0
+    return int(clean.astype(str).str.strip().ne("").sum())
+
+
+def _string_value_counts(series: pd.Series) -> dict[str, int]:
+    clean = series.dropna().astype(str).str.strip().replace("", np.nan).dropna()
+    return {str(key): int(value) for key, value in clean.value_counts().sort_index().items()}
+
+
+def _price_provenance_coverage(panel: pd.DataFrame) -> dict[str, Any]:
+    total = int(len(panel))
+    coverage = {
+        "price_rows_total": total,
+        "price_rows_with_source": 0,
+        "price_rows_with_fetched_at": 0,
+        "price_rows_with_adjustment": 0,
+        "missing_price_provenance_rows": total,
+        "source_counts": {},
+        "adjustment_counts": {},
+        "fetched_at_min": None,
+        "fetched_at_max": None,
+    }
+    if panel.empty:
+        return coverage
+
+    source = panel.get("_price_source")
+    fetched_at = panel.get("_price_fetched_at")
+    adjustment = panel.get("_price_adjustment")
+    if source is not None:
+        coverage["price_rows_with_source"] = _nonempty_count(source)
+        coverage["source_counts"] = _string_value_counts(source)
+    if fetched_at is not None:
+        coverage["price_rows_with_fetched_at"] = _nonempty_count(fetched_at)
+        parsed = pd.to_datetime(fetched_at, errors="coerce").dropna()
+        if not parsed.empty:
+            coverage["fetched_at_min"] = parsed.min().isoformat()
+            coverage["fetched_at_max"] = parsed.max().isoformat()
+    if adjustment is not None:
+        coverage["price_rows_with_adjustment"] = _nonempty_count(adjustment)
+        coverage["adjustment_counts"] = _string_value_counts(adjustment)
+
+    complete_rows = pd.Series(True, index=panel.index)
+    for col in ("_price_source", "_price_fetched_at", "_price_adjustment"):
+        if col not in panel.columns:
+            complete_rows &= False
+            continue
+        complete_rows &= panel[col].notna() & panel[col].astype(str).str.strip().ne("")
+    coverage["missing_price_provenance_rows"] = int(total - complete_rows.sum())
+    return coverage
+
+
 def _panel_summary(panel: pd.DataFrame) -> dict[str, Any]:
     if panel.empty:
-        return {"n_rows": 0, "n_symbols": 0, "n_dates": 0, "start": None, "end": None}
+        return {
+            "n_rows": 0,
+            "n_symbols": 0,
+            "n_dates": 0,
+            "start": None,
+            "end": None,
+            "price_provenance": _price_provenance_coverage(panel),
+        }
     dates = pd.to_datetime(panel["date"])
     return {
         "n_rows": int(len(panel)),
@@ -86,6 +149,7 @@ def _panel_summary(panel: pd.DataFrame) -> dict[str, Any]:
         "n_dates": int(dates.nunique()),
         "start": str(dates.min().date()),
         "end": str(dates.max().date()),
+        "price_provenance": _price_provenance_coverage(panel),
     }
 
 
@@ -110,6 +174,7 @@ def load_or_build_panel(
     panel.to_pickle(cache_path)
     meta = {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "panel_cache_version": PANEL_CACHE_VERSION,
         "cache_hit": False,
         "active_only": active_only,
         "min_rows": min_rows,

@@ -186,6 +186,9 @@ def build_training_data(
             "date": r.date, "open": r.open, "high": r.high,
             "low": r.low, "close": r.close,
             "volume": r.volume or 0.0,
+            "_price_source": r.source,
+            "_price_fetched_at": r.fetched_at.isoformat() if r.fetched_at else None,
+            "_price_adjustment": r.adjustment,
         } for r in rows])
 
         df = _attach_point_in_time_fundamentals(df, sym, db)

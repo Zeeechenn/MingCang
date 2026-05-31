@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pandas as pd
 
 
@@ -42,6 +44,7 @@ def test_build_training_data_does_not_auto_neutralize(test_db):
     from backend.data.database import Price, Stock
 
     qlib_data = importlib.reload(qlib_data)
+    fetched_at = datetime(2026, 5, 31, 12, 0, 0)
 
     for symbol, industry, base in [("600519", "食品饮料", 10), ("300308", "电子", 20)]:
         test_db.add(Stock(symbol=symbol, name=symbol, market="CN", industry=industry, active=True))
@@ -55,6 +58,9 @@ def test_build_training_data_does_not_auto_neutralize(test_db):
                 low=price - 1,
                 close=price,
                 volume=1000 + i,
+                source="unit_provider",
+                fetched_at=fetched_at,
+                adjustment="qfq",
             ))
     test_db.commit()
 
@@ -62,6 +68,9 @@ def test_build_training_data_does_not_auto_neutralize(test_db):
 
     assert not df.empty
     assert df["mom_5"].abs().sum() > 0
+    assert set(["_price_source", "_price_fetched_at", "_price_adjustment"]).issubset(df.columns)
+    assert df["_price_source"].eq("unit_provider").all()
+    assert df["_price_adjustment"].eq("qfq").all()
 
 
 def test_build_training_data_adds_point_in_time_fundamental_features(test_db):

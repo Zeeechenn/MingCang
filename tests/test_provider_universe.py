@@ -77,6 +77,9 @@ def test_fetch_daily_registers_cn_multi_source_chain(monkeypatch):
     df = market.fetch_daily("600519", "CN", days=30)
 
     assert not df.empty
+    assert df.attrs["source"] == "efinance_cn"
+    assert df.attrs["adjustment"] == "qfq"
+    assert df.attrs["fetched_at"] is not None
     assert list_daily_providers("CN") == [
         "akshare_sina_cn",
         "efinance_cn",
@@ -187,7 +190,62 @@ def test_fetch_cn_index_uses_index_provider_fallback(monkeypatch):
     df = market.fetch_cn_index("sh000300", days=30)
 
     assert calls == ["broken", "ok"]
+    assert df.attrs["source"] == "eastmoney_index_cn"
+    assert df.attrs["adjustment"] == "index_unadjusted"
+    assert df.attrs["fetched_at"] is not None
     assert float(df.loc["2026-05-18", "close"]) == 4000.0
+
+
+def test_backfill_if_needed_writes_price_provenance(test_db, monkeypatch):
+    from backend.analysis import factors
+    from backend.data import market
+    from backend.data.database import Price
+
+    df = pd.DataFrame(
+        [
+            {"open": 1, "high": 2, "low": 1, "close": 1.5, "volume": 100},
+            {"open": 2, "high": 3, "low": 2, "close": 2.5, "volume": 200},
+        ],
+        index=["2026-05-18", "2026-05-19"],
+    )
+    fetched_at = market._utcnow_naive()
+    df.attrs["source"] = "unit_provider"
+    df.attrs["fetched_at"] = fetched_at
+    df.attrs["adjustment"] = "qfq"
+
+    monkeypatch.setattr(market, "fetch_daily", lambda *args, **kwargs: df)
+    monkeypatch.setattr(factors, "add_all_factors", lambda frame: frame.assign(atr14=0.1))
+
+    inserted = market.backfill_if_needed("600519", "CN", test_db, years=1)
+    row = test_db.query(Price).filter(Price.symbol == "600519", Price.date == "2026-05-18").one()
+
+    assert inserted == 2
+    assert row.source == "unit_provider"
+    assert row.fetched_at == fetched_at
+    assert row.adjustment == "qfq"
+
+
+def test_sync_index_to_db_writes_index_provenance(test_db, monkeypatch):
+    from backend.data import market
+    from backend.data.database import IndexPrice
+
+    df = pd.DataFrame(
+        [{"date": "2026-05-18", "close": 4000.0, "change_pct": 1.2}]
+    ).set_index("date")
+    fetched_at = market._utcnow_naive()
+    df.attrs["source"] = "unit_index_provider"
+    df.attrs["fetched_at"] = fetched_at
+    df.attrs["adjustment"] = "index_unadjusted"
+
+    monkeypatch.setattr(market, "fetch_cn_index", lambda *args, **kwargs: df)
+
+    inserted = market.sync_index_to_db(test_db, "sh000300", days=30)
+    row = test_db.query(IndexPrice).filter(IndexPrice.symbol == "sh000300").one()
+
+    assert inserted == 1
+    assert row.source == "unit_index_provider"
+    assert row.fetched_at == fetched_at
+    assert row.adjustment == "index_unadjusted"
 
 
 def test_universe_upsert_deduplicates(test_db):

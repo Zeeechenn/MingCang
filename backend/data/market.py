@@ -4,7 +4,7 @@ import json
 import logging
 import subprocess
 import time
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import akshare as ak
 import pandas as pd
@@ -43,6 +43,32 @@ def _retry(max_attempts: int = 3, delay: float = 1.0):
 
 BACKFILL_YEARS = 5          # 首次初始化回填年数
 BACKFILL_THRESHOLD_DAYS = 1   # 最新数据距今超过此天数才触发回填（日常运营=1）
+DAILY_PROVIDER_ADJUSTMENTS = {
+    "tickflow_cn": "forward_additive",
+    "akshare_sina_cn": "qfq",
+    "efinance_cn": "qfq",
+    "eastmoney_cn": "qfq",
+    "akshare_em_cn": "qfq",
+    "tushare_qfq_cn": "qfq",
+    "yfinance_us": "auto_adjust",
+}
+INDEX_PROVIDER_ADJUSTMENTS = {
+    "akshare_index_cn": "index_unadjusted",
+    "eastmoney_index_cn": "index_unadjusted",
+    "efinance_index_cn": "index_unadjusted",
+    "yfinance_index_cn": "auto_adjust",
+}
+
+
+def _utcnow_naive() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _attach_provenance_attrs(df: pd.DataFrame, *, provider: str, adjustment: str | None) -> pd.DataFrame:
+    df.attrs["source"] = provider
+    df.attrs["fetched_at"] = _utcnow_naive()
+    df.attrs["adjustment"] = adjustment
+    return df
 
 
 def _cn_market_prefix(symbol: str) -> str:
@@ -295,6 +321,11 @@ def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
     # akshare_tx 当前返回结构缺 volume，暂不进入 CN 生产 fallback；保留函数供手动调试。
     register_daily_provider("yfinance_us", {"US"}, fetch_us_daily, priority=90, cooldown_seconds=120)
     df, provider = fetch_daily_with_fallback(symbol, market, days)
+    _attach_provenance_attrs(
+        df,
+        provider=provider,
+        adjustment=DAILY_PROVIDER_ADJUSTMENTS.get(provider),
+    )
     logger.debug("fetch_daily provider=%s symbol=%s market=%s rows=%d",
                  provider, symbol, market, len(df))
     return df
@@ -388,6 +419,11 @@ def fetch_cn_index(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFr
     register_index_provider("efinance_index_cn", fetch_cn_index_efinance, priority=20, cooldown_seconds=60)
     register_index_provider("yfinance_index_cn", fetch_cn_index_yfinance, priority=90, cooldown_seconds=120)
     df, provider = fetch_index_with_fallback(index_symbol, days)
+    _attach_provenance_attrs(
+        df,
+        provider=provider,
+        adjustment=INDEX_PROVIDER_ADJUSTMENTS.get(provider),
+    )
     logger.debug("fetch_cn_index provider=%s index=%s rows=%d", provider, index_symbol, len(df))
     return df
 
@@ -426,6 +462,9 @@ def sync_index_to_db(db, index_symbol: str = "sh000300", days: int = 365) -> int
     from backend.data.database import IndexPrice
 
     df = fetch_cn_index(index_symbol, days=days)
+    source = df.attrs.get("source")
+    fetched_at = df.attrs.get("fetched_at")
+    adjustment = df.attrs.get("adjustment")
     existing = {
         r[0] for r in db.query(IndexPrice.date)
         .filter(IndexPrice.symbol == index_symbol).all()
@@ -436,6 +475,9 @@ def sync_index_to_db(db, index_symbol: str = "sh000300", days: int = 365) -> int
             date=d,
             close=float(row["close"]),
             change_pct=float(row["change_pct"]) if pd.notna(row.get("change_pct")) else None,
+            source=source,
+            fetched_at=fetched_at,
+            adjustment=adjustment,
         )
         for d, row in df.iterrows()
         if d not in existing
@@ -475,6 +517,9 @@ def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
         fetch_days = (years or BACKFILL_YEARS) * 365 + 10
 
     df = fetch_daily(symbol, market, days=fetch_days)
+    source = df.attrs.get("source")
+    fetched_at = df.attrs.get("fetched_at")
+    adjustment = df.attrs.get("adjustment")
 
     if df.empty:
         return 0
@@ -509,6 +554,9 @@ def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
             close=float(row["close"]),
             volume=float(row["volume"]),
             atr14=float(atr) if atr is not None and not pd.isna(atr) else None,
+            source=source,
+            fetched_at=fetched_at,
+            adjustment=adjustment,
         ))
 
     db.bulk_save_objects(records)

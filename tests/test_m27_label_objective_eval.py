@@ -103,6 +103,31 @@ def test_top_decile_metrics_report_lift():
     assert metrics["lift_vs_base_rate"] == 10.0
 
 
+def test_panel_summary_reports_price_provenance_coverage():
+    from backend.tools import m27_label_objective_eval as tool
+
+    panel = pd.DataFrame({
+        "date": ["2026-01-01", "2026-01-02", "2026-01-03"],
+        "symbol": ["A", "A", "B"],
+        "_price_source": ["provider_a", "provider_a", None],
+        "_price_fetched_at": ["2026-05-31T12:00:00", "", "2026-05-31T12:05:00"],
+        "_price_adjustment": ["qfq", "qfq", "qfq"],
+    })
+
+    summary = tool._panel_summary(panel)
+    coverage = summary["price_provenance"]
+
+    assert coverage["price_rows_total"] == 3
+    assert coverage["price_rows_with_source"] == 2
+    assert coverage["price_rows_with_fetched_at"] == 2
+    assert coverage["price_rows_with_adjustment"] == 3
+    assert coverage["missing_price_provenance_rows"] == 2
+    assert coverage["source_counts"] == {"provider_a": 2}
+    assert coverage["adjustment_counts"] == {"qfq": 3}
+    assert coverage["fetched_at_min"] == "2026-05-31T12:00:00"
+    assert coverage["fetched_at_max"] == "2026-05-31T12:05:00"
+
+
 def _decision_candidate(name, *, raw_pass, stride_icir, raw_icir=0.5, lift=3.0):
     return {
         "name": name,
@@ -372,6 +397,7 @@ def test_panel_cache_rebuilds_when_feature_metadata_changes(monkeypatch, tmp_pat
 
     assert calls["count"] == 1
     assert meta["cache_hit"] is False
+    assert meta["panel_cache_version"] == tool.PANEL_CACHE_VERSION
     assert meta["feature_cols"] == list(tool.FEATURE_COLS)
     assert cached_meta["cache_hit"] is True
     pd.testing.assert_frame_equal(panel, fresh_panel)

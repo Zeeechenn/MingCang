@@ -90,6 +90,9 @@ class Price(Base):
     close: Mapped[float] = mapped_column(Float)
     volume: Mapped[float] = mapped_column(Float)
     atr14: Mapped[float | None] = mapped_column(Float, nullable=True)        # 预计算 ATR(14)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)         # M29 provenance: provider id
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    adjustment: Mapped[str | None] = mapped_column(String, nullable=True)     # qfq / forward_additive / auto_adjust
 
 
 class NewsItem(Base):
@@ -114,6 +117,9 @@ class IndexPrice(Base):
     date: Mapped[str] = mapped_column(String, index=True)      # "2024-01-15"
     close: Mapped[float] = mapped_column(Float)
     change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    adjustment: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Signal(Base):
@@ -372,6 +378,26 @@ def get_latest_price_date(symbol: str, db) -> str | None:
 def _ensure_runtime_schema() -> None:
     """SQLite create_all 不会补既有表字段，这里做轻量幂等迁移。"""
     with engine.begin() as conn:
+        price_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(prices)")).fetchall()]
+        for col, ddl in {
+            "source": "ALTER TABLE prices ADD COLUMN source TEXT",
+            "fetched_at": "ALTER TABLE prices ADD COLUMN fetched_at DATETIME",
+            "adjustment": "ALTER TABLE prices ADD COLUMN adjustment TEXT",
+        }.items():
+            if price_cols and col not in price_cols:
+                conn.execute(text(ddl))
+
+        index_price_cols = [
+            r[1] for r in conn.execute(text("PRAGMA table_info(index_prices)")).fetchall()
+        ]
+        for col, ddl in {
+            "source": "ALTER TABLE index_prices ADD COLUMN source TEXT",
+            "fetched_at": "ALTER TABLE index_prices ADD COLUMN fetched_at DATETIME",
+            "adjustment": "ALTER TABLE index_prices ADD COLUMN adjustment TEXT",
+        }.items():
+            if index_price_cols and col not in index_price_cols:
+                conn.execute(text(ddl))
+
         signal_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(signals)")).fetchall()]
         if "rule_version" not in signal_cols:
             conn.execute(text("ALTER TABLE signals ADD COLUMN rule_version TEXT"))

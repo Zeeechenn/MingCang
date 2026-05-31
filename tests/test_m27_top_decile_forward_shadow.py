@@ -155,7 +155,13 @@ def test_build_report_is_read_only_and_uses_target_filter(monkeypatch):
                 "symbol": ["A", "B"],
                 "pred": [0.9, 0.1],
             }),
-            {"status": "ok", "sample": {"target_rows": 2}},
+            {
+                "status": "ok",
+                "sample": {
+                    "target_rows": 2,
+                    "train_label_realized_end": "2026-05-14",
+                },
+            },
         ),
     )
     monkeypatch.setattr(
@@ -200,6 +206,10 @@ def test_build_report_is_read_only_and_uses_target_filter(monkeypatch):
     assert report["calls_llm_or_api"] is False
     assert report["saves_model"] is False
     assert report["signal_profile_unchanged"] is True
+    assert report["universe_hash"] == tool._universe_hash({"A", "B"})
+    assert report["train_label_realized_end"] == "2026-05-14"
+    assert "data_source" in report
+    assert report["data_source"] is None
     assert report["sample_adequacy"]["filtered_trades"] == 1
     assert report["sample_adequacy"]["baseline_trades"] == 2
     assert report["sample_adequacy"]["min_trades_for_sharpe"] == 50
@@ -208,3 +218,38 @@ def test_build_report_is_read_only_and_uses_target_filter(monkeypatch):
     assert report["profile_ab"]["filtered_arm"]["metrics"]["trades"] == 1
     assert "M27.1c Top-Decile Forward Shadow" in markdown
     assert "insufficient_for_sharpe: True" in markdown
+
+
+def test_build_rolling_report_summarizes_forward_provenance():
+    from backend.tools import m27_top_decile_forward_shadow as tool
+
+    first = _window_report("2026-04-01", "2026-04-07", baseline_trades=10, filtered_trades=4)
+    first["filter"] = {
+        "status": "ok",
+        "classifier": {"sample": {"train_label_realized_end": "2026-03-31"}},
+    }
+    second = _window_report("2026-04-08", "2026-04-14", baseline_trades=8, filtered_trades=3)
+    second["filter"] = {
+        "status": "ok",
+        "classifier": {"sample": {"train_label_realized_end": "2026-04-07"}},
+    }
+
+    report = tool.build_rolling_report(
+        [first, second],
+        start="2026-04-01",
+        end="2026-04-14",
+        horizon=20,
+        exit_days=5,
+        top_pct=0.10,
+        window_days=7,
+        stride_days=7,
+        panel_meta={"n_rows": 100, "n_symbols": 5},
+        universe_symbols={"A", "B"},
+    )
+
+    assert report["universe_hash"] == tool._universe_hash({"A", "B"})
+    assert report["train_label_realized_end"] == "2026-04-07"
+    assert report["train_label_realized_end_range"] == {
+        "min": "2026-03-31",
+        "max": "2026-04-07",
+    }
