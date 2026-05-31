@@ -22,7 +22,7 @@ from backend.backtest.alphalens_qlib import build_validation_report
 from backend.config import settings
 from backend.data.database import SessionLocal
 from backend.data.qlib_data import FEATURE_COLS, build_training_data
-from backend.tools.m27_alpha_diagnostic import add_horizon_labels
+from backend.tools.m27_alpha_diagnostic import add_horizon_labels, add_volatility_regime
 
 DEFAULT_JSON_OUTPUT = Path.home() / ".stock-sage" / "m27_label_objective_eval_report.json"
 DEFAULT_MARKDOWN_OUTPUT = Path.home() / ".stock-sage" / "m27_label_objective_eval_report.md"
@@ -32,6 +32,9 @@ TOP_DECILE_PCT = 0.10
 DEFAULT_SEGMENT_MIN_ROWS = 250
 DEFAULT_SEGMENT_MIN_SYMBOLS = 4
 DEFAULT_SEGMENT_MIN_VALIDATION_ROWS = 50
+MULTIPLE_COMPARISON_ALPHA = 0.05
+DEFAULT_SHORT_HORIZONS = [1, 3, 5]
+DEFAULT_EVALUATION_HORIZONS = [1, 3, 5, 10, 20]
 
 warnings.filterwarnings(
     "ignore",
@@ -159,6 +162,14 @@ def add_objective_labels(panel: pd.DataFrame, horizon: int) -> pd.DataFrame:
     return out
 
 
+def add_objective_label_set(panel: pd.DataFrame, horizons: list[int]) -> pd.DataFrame:
+    """Add raw and neutralized labels for each unique horizon."""
+    out = panel.copy()
+    for horizon in sorted({int(h) for h in horizons if int(h) > 0}):
+        out = add_objective_labels(out, horizon)
+    return out
+
+
 def _top_indices(values: pd.Series, *, top_pct: float) -> pd.Index:
     clean = pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
     if clean.empty:
@@ -191,6 +202,10 @@ def _validation_frame(
         if col in val_df.columns:
             frame[col] = val_df[col].values
     return frame
+
+
+def _candidate_segment_cols(panel: pd.DataFrame) -> list[str]:
+    return [col for col in ("industry", "sector", "volatility_regime") if col in panel.columns]
 
 
 def stride_predictions(predictions: pd.DataFrame, *, stride: int) -> pd.DataFrame:
@@ -305,6 +320,34 @@ def _segment_candidate_specs(horizon: int) -> list[dict[str, str]]:
     ]
 
 
+def short_horizon_candidate_specs(horizons: list[int]) -> list[dict[str, str]]:
+    """Return M27.1d short-cycle objective candidates for offline search only."""
+    specs: list[dict[str, str]] = []
+    for horizon in sorted({int(h) for h in horizons if int(h) > 0}):
+        raw = f"label_{horizon}d"
+        specs.extend([
+            {
+                "name": f"raw_{horizon}d_regression_short_cycle",
+                "objective": "regression",
+                "horizon": str(horizon),
+                "target_label": raw,
+            },
+            {
+                "name": f"raw_{horizon}d_top_decile_classifier_short_cycle",
+                "objective": "top_decile_classifier",
+                "horizon": str(horizon),
+                "target_label": raw,
+            },
+            {
+                "name": f"raw_{horizon}d_ranker_lambdarank_short_cycle",
+                "objective": "ranker_lambdarank",
+                "horizon": str(horizon),
+                "target_label": raw,
+            },
+        ])
+    return specs
+
+
 def evaluate_segment_specific_candidates(
     panel: pd.DataFrame,
     *,
@@ -314,15 +357,15 @@ def evaluate_segment_specific_candidates(
     min_symbols: int = DEFAULT_SEGMENT_MIN_SYMBOLS,
     min_validation_rows: int = DEFAULT_SEGMENT_MIN_VALIDATION_ROWS,
 ) -> dict[str, Any]:
-    """Train validation-only candidates inside sufficiently large sectors/industries."""
-    segment_cols = [col for col in ("industry", "sector") if col in panel.columns]
+    """Train validation-only candidates inside sufficiently large segments."""
+    segment_cols = [col for col in ("industry", "sector", "volatility_regime") if col in panel.columns]
     sample_limited = (
         min_rows < DEFAULT_SEGMENT_MIN_ROWS
         or min_symbols < DEFAULT_SEGMENT_MIN_SYMBOLS
         or min_validation_rows < DEFAULT_SEGMENT_MIN_VALIDATION_ROWS
     )
     result: dict[str, Any] = {
-        "scope": "sector_industry_specific_offline_candidate",
+        "scope": "segment_specific_offline_candidate",
         "non_promoting": True,
         "promotable": False,
         "run_mode": "exploratory_sample_limited" if sample_limited else "conservative_offline_validation",
@@ -330,7 +373,7 @@ def evaluate_segment_specific_candidates(
         "promotion_blocker": (
             "exploratory/sample-limited segment run; expand sample before any train-candidate promotion"
             if sample_limited
-            else "offline validation only; sector/industry candidates require separate promotion review"
+            else "offline validation only; segment candidates require separate promotion review"
         ),
         "note": (
             "exploratory/sample-limited offline validation only; cannot promote and does not alter production "
@@ -609,11 +652,69 @@ def candidate_specs(horizon: int) -> list[dict[str, str]]:
     ]
 
 
-def evaluate_candidate(panel: pd.DataFrame, spec: dict[str, str], *, n_estimators: int) -> dict[str, Any]:
+def _multi_exit_raw_return_validations(
+    val_df: pd.DataFrame,
+    pred: np.ndarray,
+    *,
+    candidate_name: str,
+    evaluation_horizons: list[int],
+    segment_cols: list[str],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for eval_horizon in sorted({int(h) for h in evaluation_horizons if int(h) > 0}):
+        label_col = f"label_{eval_horizon}d"
+        if label_col not in val_df.columns:
+            continue
+        predictions = _validation_frame(val_df, pred, label_col, segment_cols=segment_cols)
+        sample = {
+            "eval_horizon": eval_horizon,
+            "stride": eval_horizon,
+            "validation_rows": int(len(val_df)),
+        }
+        raw_report = build_validation_report(
+            predictions,
+            label=f"{candidate_name}:multi_exit_raw_{eval_horizon}d",
+            sample=sample,
+        )
+        stride_report = build_validation_report(
+            stride_predictions(predictions, stride=eval_horizon),
+            label=f"{candidate_name}:multi_exit_raw_stride_{eval_horizon}d",
+            sample=sample,
+        )
+        rows.append({
+            "eval_horizon": eval_horizon,
+            "label_col": label_col,
+            "raw_return_validation": raw_report,
+            "raw_return_stride_validation": stride_report,
+            "top_decile_metrics": top_decile_metrics(predictions, top_pct=TOP_DECILE_PCT),
+        })
+    return rows
+
+
+def evaluate_candidate(
+    panel: pd.DataFrame,
+    spec: dict[str, str],
+    *,
+    n_estimators: int,
+    evaluation_horizons: list[int] | None = None,
+) -> dict[str, Any]:
     target_label = spec["target_label"]
     raw_label = f"label_{spec['horizon']}d"
-    segment_cols = [col for col in ("industry", "sector") if col in panel.columns]
-    cols = list(dict.fromkeys(["date", "symbol", *segment_cols, target_label, raw_label, *FEATURE_COLS]))
+    segment_cols = _candidate_segment_cols(panel)
+    evaluation_labels = [
+        f"label_{horizon}d"
+        for horizon in (evaluation_horizons or [])
+        if f"label_{horizon}d" in panel.columns
+    ]
+    cols = list(dict.fromkeys([
+        "date",
+        "symbol",
+        *segment_cols,
+        target_label,
+        raw_label,
+        *evaluation_labels,
+        *FEATURE_COLS,
+    ]))
     data = panel[cols].replace([np.inf, -np.inf], np.nan).dropna(subset=[target_label, raw_label, *FEATURE_COLS])
     train_df, val_df = _time_split(data)
     if len(train_df) < 200 or len(val_df) < 50:
@@ -672,6 +773,13 @@ def evaluate_candidate(panel: pd.DataFrame, spec: dict[str, str], *, n_estimator
         "target_validation": target_report,
         "raw_return_validation": raw_report,
         "raw_return_stride_validation": raw_stride,
+        "multi_exit_raw_return_validation": _multi_exit_raw_return_validations(
+            val_df,
+            pred,
+            candidate_name=spec["name"],
+            evaluation_horizons=evaluation_horizons or [],
+            segment_cols=segment_cols,
+        ),
         "top_decile_metrics": top_decile_metrics(raw_predictions, top_pct=TOP_DECILE_PCT),
         "segment_breakdown": {
             col: segment_breakdown(raw_predictions, segment_col=col)
@@ -684,47 +792,191 @@ def _gate_pass(report: dict[str, Any]) -> bool:
     return bool((report.get("gates") or {}).get("pass"))
 
 
+def _stride_icir(candidate: dict[str, Any]) -> float | None:
+    value = ((candidate.get("raw_return_stride_validation") or {}).get("metrics") or {}).get("icir")
+    if value is None:
+        return None
+    return float(value)
+
+
+def _stride_icir_gate_pass(candidate: dict[str, Any]) -> bool:
+    stride_icir = _stride_icir(candidate)
+    return stride_icir is not None and stride_icir >= settings.qlib_train_icir_floor
+
+
+def _multiple_comparison_metadata(n_candidates_tested: int) -> dict[str, Any]:
+    adjusted_alpha = MULTIPLE_COMPARISON_ALPHA / n_candidates_tested if n_candidates_tested else None
+    adjusted_icir_floor = (
+        settings.qlib_train_icir_floor * float(np.sqrt(n_candidates_tested))
+        if n_candidates_tested
+        else None
+    )
+    warning = None
+    if n_candidates_tested > 1:
+        warning = (
+            f"{n_candidates_tested} candidates share the same validation gate; treat any pass "
+            "as exploratory until non-overlapping and full retrain validation confirms it."
+        )
+    return {
+        "n_candidates_tested": n_candidates_tested,
+        "multiple_comparison_bonferroni_adjusted_alpha": _round(adjusted_alpha),
+        "multiple_comparison_bonferroni_adjusted_icir_floor": _round(adjusted_icir_floor),
+        "multiple_comparison_warning": warning,
+    }
+
+
 def build_decision(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     ok = [c for c in candidates if c.get("status") == "ok"]
+    metadata = _multiple_comparison_metadata(len(ok))
     if not ok:
-        return {"decision": "no_valid_candidate", "recommended_next_action": "inspect_fit_failures"}
+        return {
+            **metadata,
+            "decision": "no_valid_candidate",
+            "recommended_next_action": "inspect_fit_failures",
+        }
     raw_pass = [c for c in ok if _gate_pass(c.get("raw_return_validation") or {})]
+    raw_stride_pass = [c for c in raw_pass if _stride_icir_gate_pass(c)]
     target_pass = [c for c in ok if _gate_pass(c.get("target_validation") or {})]
     best_raw = max(
         ok,
         key=lambda c: float(((c.get("raw_return_validation") or {}).get("metrics") or {}).get("icir") or 0.0),
     )
-    if raw_pass:
+    if raw_stride_pass:
+        best_ready = raw_stride_pass[0]
         return {
+            **metadata,
             "decision": "candidate_ready_for_full_retrain_validation",
             "recommended_next_action": "wire_best_candidate_into_non_promoting_train_candidate",
-            "best_raw_candidate": raw_pass[0]["name"],
+            "best_raw_candidate": best_ready["name"],
+            "best_raw_stride_icir": _stride_icir(best_ready),
+            "best_raw_stride_icir_gate_passed": True,
             "target_gate_pass_count": len(target_pass),
             "raw_gate_pass_count": len(raw_pass),
+            "raw_stride_gate_pass_count": len(raw_stride_pass),
+            "stride_icir_floor": settings.qlib_train_icir_floor,
         }
     best_raw_metrics = (best_raw.get("raw_return_validation") or {}).get("metrics") or {}
     best_raw_gates = (best_raw.get("raw_return_validation") or {}).get("gates") or {}
     best_top = best_raw.get("top_decile_metrics") or {}
+    best_raw_stride_gate_passed = _stride_icir_gate_pass(best_raw)
     if (
         bool(best_raw_gates.get("pass_ic"))
         and bool(best_raw_gates.get("pass_icir"))
+        and not best_raw_stride_gate_passed
+    ):
+        next_action = "expand_non_overlapping_validation_before_any_retrain"
+    elif (
+        bool(best_raw_gates.get("pass_ic"))
+        and bool(best_raw_gates.get("pass_icir"))
+        and best_raw_stride_gate_passed
         and float(best_top.get("lift_vs_base_rate") or 0.0) >= 2.0
     ):
         next_action = "evaluate_top_decile_classifier_as_discrete_entry_filter"
     else:
         next_action = "try_event_conditioned_or_sector_specific_objective"
     return {
+        **metadata,
         "decision": "keep_quant_disabled",
         "recommended_next_action": next_action,
         "best_raw_candidate": best_raw["name"],
         "best_raw_ic": best_raw_metrics.get("ic_mean"),
         "best_raw_icir": best_raw_metrics.get("icir"),
         "best_raw_stride_ic": ((best_raw.get("raw_return_stride_validation") or {}).get("metrics") or {}).get("ic_mean"),
-        "best_raw_stride_icir": ((best_raw.get("raw_return_stride_validation") or {}).get("metrics") or {}).get("icir"),
+        "best_raw_stride_icir": _stride_icir(best_raw),
+        "best_raw_stride_icir_gate_passed": best_raw_stride_gate_passed,
         "best_raw_top_decile_precision": best_top.get("precision"),
         "best_raw_top_decile_lift": best_top.get("lift_vs_base_rate"),
         "target_gate_pass_count": len(target_pass),
-        "raw_gate_pass_count": 0,
+        "raw_gate_pass_count": len(raw_pass),
+        "raw_stride_gate_pass_count": len(raw_stride_pass),
+        "stride_icir_floor": settings.qlib_train_icir_floor,
+    }
+
+
+def _non_promoting_short_cycle_decision(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    decision = build_decision(candidates)
+    out = {
+        **decision,
+        "non_promoting": True,
+        "production_unchanged": True,
+        "promotion_blocker": (
+            "M27.1d short-cycle objective search is offline evidence only; any pass requires "
+            "separate non-promoting full-retrain validation before production review."
+        ),
+    }
+    if decision.get("decision") == "candidate_ready_for_full_retrain_validation":
+        out["decision"] = "short_cycle_candidate_ready_for_non_promoting_validation"
+        out["recommended_next_action"] = "run_non_promoting_full_retrain_validation_for_short_cycle_candidate"
+    return out
+
+
+def _multi_exit_summary(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for candidate in candidates:
+        for item in candidate.get("multi_exit_raw_return_validation") or []:
+            raw_metrics = ((item.get("raw_return_validation") or {}).get("metrics") or {})
+            raw_gates = ((item.get("raw_return_validation") or {}).get("gates") or {})
+            stride_metrics = ((item.get("raw_return_stride_validation") or {}).get("metrics") or {})
+            top = item.get("top_decile_metrics") or {}
+            stride_icir = stride_metrics.get("icir")
+            rows.append({
+                "candidate": candidate.get("name"),
+                "target_horizon": int(candidate.get("horizon") or 0),
+                "eval_horizon": item.get("eval_horizon"),
+                "objective": candidate.get("objective"),
+                "raw_ic": raw_metrics.get("ic_mean"),
+                "raw_icir": raw_metrics.get("icir"),
+                "raw_gate_pass": raw_gates.get("pass"),
+                "stride_icir": stride_icir,
+                "stride_gate_pass": (
+                    stride_icir is not None and float(stride_icir) >= settings.qlib_train_icir_floor
+                ),
+                "top_decile_lift": top.get("lift_vs_base_rate"),
+                "top_decile_precision": top.get("precision"),
+            })
+    return sorted(
+        rows,
+        key=lambda row: (
+            float(row.get("stride_icir") or 0.0),
+            float(row.get("raw_icir") or 0.0),
+            float(row.get("top_decile_lift") or 0.0),
+        ),
+        reverse=True,
+    )
+
+
+def evaluate_short_horizon_candidates(
+    panel: pd.DataFrame,
+    *,
+    short_horizons: list[int],
+    evaluation_horizons: list[int],
+    n_estimators: int,
+) -> dict[str, Any]:
+    """Evaluate short-cycle label/objective candidates without promotion authority."""
+    candidates = [
+        {
+            **evaluate_candidate(
+                panel,
+                spec,
+                n_estimators=n_estimators,
+                evaluation_horizons=evaluation_horizons,
+            ),
+            "candidate_type": "m27_1d_short_cycle_objective",
+            "non_promoting": True,
+            "promotable": False,
+        }
+        for spec in short_horizon_candidate_specs(short_horizons)
+    ]
+    return {
+        "scope": "m27_1d_short_cycle_objective_search",
+        "non_promoting": True,
+        "promotable": False,
+        "production_unchanged": True,
+        "short_horizons": sorted({int(h) for h in short_horizons if int(h) > 0}),
+        "evaluation_horizons": sorted({int(h) for h in evaluation_horizons if int(h) > 0}),
+        "candidates": candidates,
+        "multi_exit_summary": _multi_exit_summary(candidates),
+        "decision": _non_promoting_short_cycle_decision(candidates),
     }
 
 
@@ -737,11 +989,22 @@ def build_report(
     segment_min_rows: int = DEFAULT_SEGMENT_MIN_ROWS,
     segment_min_symbols: int = DEFAULT_SEGMENT_MIN_SYMBOLS,
     segment_min_validation_rows: int = DEFAULT_SEGMENT_MIN_VALIDATION_ROWS,
+    short_horizons: list[int] | None = None,
+    evaluation_horizons: list[int] | None = None,
 ) -> dict[str, Any]:
-    panel = add_objective_labels(panel, 5 if horizon != 5 else horizon)
-    if horizon != 5:
-        panel = add_objective_labels(panel, horizon)
-    candidates = [evaluate_candidate(panel, spec, n_estimators=n_estimators) for spec in candidate_specs(horizon)]
+    short_horizons = list(DEFAULT_SHORT_HORIZONS if short_horizons is None else short_horizons)
+    evaluation_horizons = list(DEFAULT_EVALUATION_HORIZONS if evaluation_horizons is None else evaluation_horizons)
+    label_horizons = [5, horizon, *short_horizons, *evaluation_horizons]
+    panel = add_volatility_regime(add_objective_label_set(panel, label_horizons))
+    candidates = [
+        evaluate_candidate(
+            panel,
+            spec,
+            n_estimators=n_estimators,
+            evaluation_horizons=evaluation_horizons,
+        )
+        for spec in candidate_specs(horizon)
+    ]
     segment_candidates = evaluate_segment_specific_candidates(
         panel,
         horizon=horizon,
@@ -750,9 +1013,15 @@ def build_report(
         min_symbols=segment_min_symbols,
         min_validation_rows=segment_min_validation_rows,
     )
+    short_candidates = evaluate_short_horizon_candidates(
+        panel,
+        short_horizons=short_horizons,
+        evaluation_horizons=evaluation_horizons,
+        n_estimators=n_estimators,
+    )
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "purpose": "M27.1b label/objective candidate evaluation; no model promotion",
+        "purpose": "M27.1b/1d label/objective candidate evaluation; no model promotion",
         "gate": {
             "ic_floor": settings.qlib_train_ic_floor,
             "icir_floor": settings.qlib_train_icir_floor,
@@ -761,7 +1030,11 @@ def build_report(
         "panel": panel_meta,
         "horizon": horizon,
         "n_estimators": n_estimators,
+        "short_horizons": short_horizons,
+        "evaluation_horizons": evaluation_horizons,
         "candidates": candidates,
+        "multi_exit_summary": _multi_exit_summary(candidates),
+        "short_horizon_candidates": short_candidates,
         "sector_industry_specific_candidates": segment_candidates,
         "decision": build_decision(candidates),
     }
@@ -779,11 +1052,15 @@ def report_to_markdown(report: dict[str, Any]) -> str:
         f"- horizon: {report['horizon']}d",
         f"- decision: {decision.get('decision')}",
         f"- recommended_next_action: {decision.get('recommended_next_action')}",
+        f"- n_candidates_tested: {decision.get('n_candidates_tested')}",
+        f"- raw_gate_pass_count: {decision.get('raw_gate_pass_count')}",
+        f"- raw_stride_gate_pass_count: {decision.get('raw_stride_gate_pass_count')}",
+        f"- multiple_comparison_warning: {decision.get('multiple_comparison_warning')}",
         "",
         "## Candidates",
         "",
-        "| candidate | objective | target IC | target ICIR | raw IC | raw ICIR | stride ICIR | top precision | lift | raw mono | raw gate |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        "| candidate | objective | target IC | target ICIR | raw IC | raw ICIR | stride ICIR | top precision | lift | raw mono | raw gate | stride gate |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |",
     ]
     for candidate in report["candidates"]:
         target_metrics = ((candidate.get("target_validation") or {}).get("metrics") or {})
@@ -791,18 +1068,65 @@ def report_to_markdown(report: dict[str, Any]) -> str:
         raw_gates = ((candidate.get("raw_return_validation") or {}).get("gates") or {})
         stride_metrics = ((candidate.get("raw_return_stride_validation") or {}).get("metrics") or {})
         decile = candidate.get("top_decile_metrics") or {}
+        stride_gate = _stride_icir_gate_pass(candidate)
         lines.append(
             f"| {candidate.get('name')} | {candidate.get('objective')} | "
             f"{target_metrics.get('ic_mean')} | {target_metrics.get('icir')} | "
             f"{raw_metrics.get('ic_mean')} | {raw_metrics.get('icir')} | "
             f"{stride_metrics.get('icir')} | {decile.get('precision')} | {decile.get('lift_vs_base_rate')} | "
-            f"{raw_gates.get('pass_monotonic')} | {raw_gates.get('pass')} |"
+            f"{raw_gates.get('pass_monotonic')} | {raw_gates.get('pass')} | {stride_gate} |"
         )
     lines.append("")
+    multi_exit_rows = report.get("multi_exit_summary") or []
+    if multi_exit_rows:
+        lines.extend([
+            "## Multi-Exit Raw Return Matrix",
+            "",
+            f"- evaluation_horizons: {report.get('evaluation_horizons')}",
+            "- note: cross-exit diagnostics are non-promoting and do not alter the main M27 gate decision.",
+            "",
+            "| candidate | target h | eval h | raw IC | raw ICIR | raw gate | stride ICIR | stride gate | lift |",
+            "| --- | ---: | ---: | ---: | ---: | --- | ---: | --- | ---: |",
+        ])
+        for row in multi_exit_rows[:20]:
+            lines.append(
+                f"| {row.get('candidate')} | {row.get('target_horizon')} | {row.get('eval_horizon')} | "
+                f"{row.get('raw_ic')} | {row.get('raw_icir')} | {row.get('raw_gate_pass')} | "
+                f"{row.get('stride_icir')} | {row.get('stride_gate_pass')} | {row.get('top_decile_lift')} |"
+            )
+        lines.append("")
+    short_candidates = report.get("short_horizon_candidates") or {}
+    if short_candidates:
+        short_decision = short_candidates.get("decision") or {}
+        lines.extend([
+            "## M27.1d Short-Cycle Objective Search",
+            "",
+            f"- non_promoting: {short_candidates.get('non_promoting')}",
+            f"- promotable: {short_candidates.get('promotable')}",
+            f"- production_unchanged: {short_candidates.get('production_unchanged')}",
+            f"- short_horizons: {short_candidates.get('short_horizons')}",
+            f"- decision: {short_decision.get('decision')}",
+            f"- recommended_next_action: {short_decision.get('recommended_next_action')}",
+            f"- promotion_blocker: {short_decision.get('promotion_blocker')}",
+            "",
+            "| candidate | target h | raw IC | raw ICIR | stride ICIR | raw gate | stride gate | lift |",
+            "| --- | ---: | ---: | ---: | ---: | --- | --- | ---: |",
+        ])
+        for candidate in (short_candidates.get("candidates") or [])[:18]:
+            raw_metrics = ((candidate.get("raw_return_validation") or {}).get("metrics") or {})
+            raw_gates = ((candidate.get("raw_return_validation") or {}).get("gates") or {})
+            stride_metrics = ((candidate.get("raw_return_stride_validation") or {}).get("metrics") or {})
+            top = candidate.get("top_decile_metrics") or {}
+            lines.append(
+                f"| {candidate.get('name')} | {candidate.get('horizon')} | "
+                f"{raw_metrics.get('ic_mean')} | {raw_metrics.get('icir')} | {stride_metrics.get('icir')} | "
+                f"{raw_gates.get('pass')} | {_stride_icir_gate_pass(candidate)} | {top.get('lift_vs_base_rate')} |"
+            )
+        lines.append("")
     segment_candidates = report.get("sector_industry_specific_candidates") or {}
     if segment_candidates:
         lines.extend([
-            "## Sector/Industry-Specific Offline Candidates",
+            "## Segment-Specific Offline Candidates",
             "",
             f"- non_promoting: {segment_candidates.get('non_promoting')}",
             f"- promotable: {segment_candidates.get('promotable')}",
@@ -865,6 +1189,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--segment-min-rows", type=int, default=DEFAULT_SEGMENT_MIN_ROWS)
     parser.add_argument("--segment-min-symbols", type=int, default=DEFAULT_SEGMENT_MIN_SYMBOLS)
     parser.add_argument("--segment-min-validation-rows", type=int, default=DEFAULT_SEGMENT_MIN_VALIDATION_ROWS)
+    parser.add_argument("--short-horizons", type=int, nargs="+", default=DEFAULT_SHORT_HORIZONS)
+    parser.add_argument("--evaluation-horizons", type=int, nargs="+", default=DEFAULT_EVALUATION_HORIZONS)
     parser.add_argument("--active-only", action="store_true", default=True)
     parser.add_argument("--include-inactive", action="store_true", help="Use full expanded universe instead of active-only")
     parser.add_argument("--refresh-panel-cache", action="store_true")
@@ -896,6 +1222,8 @@ def main() -> None:
         segment_min_rows=args.segment_min_rows,
         segment_min_symbols=args.segment_min_symbols,
         segment_min_validation_rows=args.segment_min_validation_rows,
+        short_horizons=args.short_horizons,
+        evaluation_horizons=args.evaluation_horizons,
     )
     args.json_output.parent.mkdir(parents=True, exist_ok=True)
     args.markdown_output.parent.mkdir(parents=True, exist_ok=True)

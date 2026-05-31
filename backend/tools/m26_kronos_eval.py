@@ -68,6 +68,8 @@ LGBM_IC = 0.020811
 LGBM_ICIR = 0.186647
 LGBM_IC_POS_RATIO = 0.540845
 LGBM_MONOTONIC = False
+M27_IC_FLOOR = 0.04
+M27_ICIR_FLOOR = 0.40
 
 
 # ── 数据加载 ──────────────────────────────────────────────────────────────────
@@ -123,7 +125,19 @@ def _resolve_finetuned_checkpoint(model_path: Path) -> Path:
             "Run M27.4 fine-tuning first or pass --finetuned-model-path."
         )
     checkpoint = model_path / "checkpoints" / "best_model"
-    return checkpoint if checkpoint.exists() else model_path
+    resolved = checkpoint if checkpoint.exists() else model_path
+    manifest = resolved / "manifest.json"
+    if manifest.exists():
+        try:
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Finetuned Kronos checkpoint manifest is invalid: {manifest}") from exc
+        if payload.get("checkpoint_kind") == "stocksage_path_a_smoke_model":
+            raise RuntimeError(
+                f"Finetuned Kronos checkpoint is only a StockSage Path A smoke artifact: {resolved}. "
+                "Run real M27.4 Kronos-small fine-tuning before m26_kronos_eval."
+            )
+    return resolved
 
 
 def resolve_model_spec(
@@ -382,6 +396,13 @@ def make_decision(metrics: dict) -> dict:
                   and not math.isnan(icir) and icir >= LGBM_ICIR)
     gate_pass = (not math.isnan(ic) and ic >= 0.02
                  and not math.isnan(icir) and icir >= 0.15)
+    m27_gate_pass = (
+        not math.isnan(ic)
+        and ic >= M27_IC_FLOOR
+        and not math.isnan(icir)
+        and icir >= M27_ICIR_FLOOR
+        and bool(monotonic)
+    )
 
     if beats_lgbm and monotonic:
         verdict = "replace_lgbm"
@@ -398,6 +419,12 @@ def make_decision(metrics: dict) -> dict:
         "action": action,
         "beats_lgbm_ic": beats_lgbm,
         "gate_pass": gate_pass,
+        "m27_gate_pass": m27_gate_pass,
+        "m27_gate": {
+            "ic_floor": M27_IC_FLOOR,
+            "icir_floor": M27_ICIR_FLOOR,
+            "monotonic_required": True,
+        },
     }
 
 
@@ -469,6 +496,7 @@ def build_report(metrics: dict, model_name: str, context_len: int,
 - verdict: **{decision["verdict"]}**
 - action: {decision["action"]}
 - gate_pass (IC≥0.02 & ICIR≥0.15): {"✅" if decision["gate_pass"] else "❌"}
+- m27_gate_pass (IC≥0.04 & ICIR≥0.40 & monotonic): {"✅" if decision["m27_gate_pass"] else "❌"}
 - beats_lgbm (IC & ICIR 均≥ LightGBM): {"✅" if decision["beats_lgbm_ic"] else "❌"}
 """
 

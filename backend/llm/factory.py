@@ -85,7 +85,7 @@ def get_provider() -> LLMProvider:
     if provider == "local_cli":
         from backend.llm.local_cli_provider import LocalCLIProvider
         _instance = LocalCLIProvider(timeout=settings.local_cli_timeout_seconds)
-        logger.info("LLM provider: LocalCLI (claude -p subprocess, no API key needed)")
+        logger.info("LLM provider: LocalCLI (Codex/Claude CLI subprocess, no API key needed)")
     elif provider == "openai":
         from backend.llm.openai_provider import OpenAIProvider
         _instance = OpenAIProvider(

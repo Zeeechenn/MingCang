@@ -1,7 +1,7 @@
 """本地 CLI LLM Provider（本地开发替代 API key）
 
-优先通过 `claude -p` 子进程调用当前 CLI 会话；若 Claude CLI 未登录，
-回退到 `codex exec`。
+默认优先通过 `codex exec` 调用当前 CLI 会话；当 `LOCAL_CLI_PREFER_CODEX=false`
+时才先尝试 `claude -p`，并在 Claude 不可用时回退到 Codex。
 生产环境切换回 openai/anthropic provider 即可。
 """
 import functools
@@ -58,7 +58,7 @@ def _cli_retry(max_attempts: int = 3, delay: float = 2.0):
 
 class LocalCLIProvider(LLMProvider):
     """
-    通过本地 Claude Code / Codex CLI 调用 LLM，无需项目 API key。
+    通过本地 Codex / Claude Code CLI 调用 LLM，无需项目 API key。
 
     使用方式：在 .env 中设置 AI_PROVIDER=local_cli。
     生产时改回 AI_PROVIDER=openai 或 AI_PROVIDER=anthropic。

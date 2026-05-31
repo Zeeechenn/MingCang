@@ -36,6 +36,7 @@ DEFAULT_HORIZONS = [3, 5, 10, 20]
 MIN_DAILY_NAMES = 5
 N_GROUPS = 5
 DEFAULT_EVENT_LOOKBACK_DAYS = 3
+EVENT_AB_MIN_IC_DAYS = 20
 PERSISTED_POLARITY_SOURCE = "persisted_news_sentiment_score"
 SENTIMENT_CACHE_POLARITY_SOURCE = "sentiment_cache_exact_match"
 TITLE_FALLBACK_POLARITY_SOURCE = "offline_title_lexicon_fallback"
@@ -658,6 +659,88 @@ def _write_cache_miss_windows(path: Path, rows: pd.DataFrame) -> int:
     return len(windows)
 
 
+def _event_variant_validation(
+    rows: pd.DataFrame,
+    *,
+    score_col: str,
+    label_col: str,
+    summary: dict[str, Any],
+    data_quality_blockers: list[str],
+) -> dict[str, Any]:
+    data = rows[rows[score_col].notna()] if not rows.empty else rows
+    quantiles = quantile_report(data, score_col, label_col, orientation=1)
+    ic_mean = summary.get("ic_mean")
+    icir = summary.get("icir")
+    ic_days = int(summary.get("ic_days") or 0)
+    passes_ic = bool(ic_mean is not None and float(ic_mean) >= settings.qlib_train_ic_floor)
+    passes_icir = bool(icir is not None and float(icir) >= settings.qlib_train_icir_floor)
+    passes_min_days = bool(ic_days >= EVENT_AB_MIN_IC_DAYS)
+    passes_quantile_sample = bool(len(quantiles["quantiles"]) >= N_GROUPS)
+    passes_sample = bool(passes_min_days and passes_quantile_sample)
+    passes_monotonic = bool(quantiles["monotonic"])
+    monotonic_ok = bool((not settings.qlib_train_require_monotonic) or passes_monotonic)
+
+    failure_reasons: list[str] = []
+    if not passes_ic:
+        failure_reasons.append("ic_below_floor")
+    if not passes_icir:
+        failure_reasons.append("icir_below_floor")
+    if not monotonic_ok:
+        failure_reasons.append("not_monotonic")
+    if not passes_min_days:
+        failure_reasons.append("insufficient_ic_days")
+    if not passes_quantile_sample:
+        failure_reasons.append("insufficient_quantile_cross_section")
+    failure_reasons.extend(data_quality_blockers)
+
+    return {
+        "orientation": "positive",
+        "quantiles": quantiles["quantiles"],
+        "top_bottom_oriented": quantiles["top_bottom"],
+        "monotonic_oriented": passes_monotonic,
+        "min_ic_days": EVENT_AB_MIN_IC_DAYS,
+        "passes_min_ic_days": passes_min_days,
+        "passes_quantile_sample": passes_quantile_sample,
+        "passes_sample_gate": passes_sample,
+        "passes_ic_floor": passes_ic,
+        "passes_icir_floor": passes_icir,
+        "passes_quantile_monotonic_gate": monotonic_ok,
+        "data_quality_blockers": data_quality_blockers,
+        "passes_event_ab_gate": not failure_reasons,
+        "gate_blockers": failure_reasons,
+    }
+
+
+def _event_variant_comparison(
+    polarity_summary: dict[str, Any],
+    event_summary: dict[str, Any],
+    polarity_validation: dict[str, Any],
+    event_validation: dict[str, Any],
+) -> dict[str, Any]:
+    polarity_ic = polarity_summary.get("ic_mean")
+    event_ic = event_summary.get("ic_mean")
+    polarity_icir = polarity_summary.get("icir")
+    event_icir = event_summary.get("icir")
+    event_beats_pure_ic = bool(
+        polarity_ic is not None and event_ic is not None and float(event_ic) > float(polarity_ic)
+    )
+    event_beats_pure_icir = bool(
+        polarity_icir is not None and event_icir is not None and float(event_icir) > float(polarity_icir)
+    )
+    if event_validation["passes_event_ab_gate"] and event_beats_pure_ic and event_beats_pure_icir:
+        recommended_variant = "polarity_plus_event"
+    elif polarity_validation["passes_event_ab_gate"]:
+        recommended_variant = "pure_polarity_shadow_candidate"
+    else:
+        recommended_variant = "none"
+    return {
+        "event_beats_pure_ic": event_beats_pure_ic,
+        "event_beats_pure_icir": event_beats_pure_icir,
+        "recommended_variant": recommended_variant,
+        "production_unchanged": True,
+    }
+
+
 def event_ab_diagnostics(
     panel: pd.DataFrame,
     news_rows: list[dict[str, Any]],
@@ -713,6 +796,32 @@ def event_ab_diagnostics(
     if polarity_summary["ic_mean"] is not None and event_summary["ic_mean"] is not None:
         delta_ic = _round(float(event_summary["ic_mean"]) - float(polarity_summary["ic_mean"]))
 
+    data_quality_blockers: list[str] = []
+    if coverage["cache_miss_windows"] > 0:
+        data_quality_blockers.append("cache_miss_windows_open")
+    if coverage["rows_with_fallback_polarity"] > 0:
+        data_quality_blockers.append("fallback_polarity_used")
+    polarity_validation = _event_variant_validation(
+        polarity_rows,
+        score_col="polarity_score",
+        label_col=label_col,
+        summary=polarity_summary,
+        data_quality_blockers=data_quality_blockers,
+    )
+    event_validation = _event_variant_validation(
+        event_rows,
+        score_col="event_score",
+        label_col=label_col,
+        summary=event_summary,
+        data_quality_blockers=data_quality_blockers,
+    )
+    variant_comparison = _event_variant_comparison(
+        polarity_summary,
+        event_summary,
+        polarity_validation,
+        event_validation,
+    )
+
     blockers: list[str] = []
     if coverage["rows_with_news"] == 0:
         blockers.append("no_test3_news_rows")
@@ -734,9 +843,28 @@ def event_ab_diagnostics(
     status = "ok" if not blockers else "blocked"
     report = {
         "status": status,
+        "event_ab_gate": {
+            "ic_floor": settings.qlib_train_ic_floor,
+            "icir_floor": settings.qlib_train_icir_floor,
+            "require_monotonic": settings.qlib_train_require_monotonic,
+            "min_daily_names": int(min_names),
+            "min_ic_days": EVENT_AB_MIN_IC_DAYS,
+            "min_quantile_buckets": N_GROUPS,
+            "requires_no_cache_miss": True,
+            "requires_no_fallback": True,
+            "orientation": "positive",
+            "n_variants_tested": 2,
+            "multiple_comparison_warning": (
+                "event lookback and pure/event variants are exploratory; require fresh OOS/forward "
+                "confirmation before any production promotion"
+            ),
+        },
         "coverage": coverage,
         "polarity": polarity_summary,
         "polarity_event": event_summary,
+        "pure_polarity_validation": polarity_validation,
+        "polarity_event_validation": event_validation,
+        "variant_comparison": variant_comparison,
         "delta_ic": delta_ic,
         "blockers": blockers,
     }
@@ -948,14 +1076,26 @@ def report_to_markdown(report: dict[str, Any]) -> str:
         lines.append(f"| {row['segment']} | {row['n_rows']} | {row['spearman']} | {row['mean_label']} |")
     if "event_ab_5d" in report:
         event_ab = report["event_ab_5d"]
+        event_gate = event_ab.get("event_ab_gate") or {}
         coverage = event_ab["coverage"]
         polarity = event_ab["polarity"]
         polarity_event = event_ab["polarity_event"]
+        polarity_validation = event_ab.get("pure_polarity_validation") or {}
+        event_validation = event_ab.get("polarity_event_validation") or {}
+        comparison = event_ab.get("variant_comparison") or {}
         lines += [
             "",
             "## M27.3 Event Sentiment A/B",
             "",
             f"- status: {event_ab['status']}",
+            f"- event_ab_gate: IC>={event_gate.get('ic_floor')}, ICIR>={event_gate.get('icir_floor')}, "
+            f"monotonic_required={event_gate.get('require_monotonic')}, "
+            f"min_ic_days={event_gate.get('min_ic_days')}, "
+            f"min_quantile_buckets={event_gate.get('min_quantile_buckets')}, "
+            f"requires_no_cache_miss={event_gate.get('requires_no_cache_miss')}, "
+            f"requires_no_fallback={event_gate.get('requires_no_fallback')}, "
+            f"n_variants_tested={event_gate.get('n_variants_tested')}",
+            f"- multiple_comparison_warning: {event_gate.get('multiple_comparison_warning')}",
             f"- coverage: news_rows={coverage['news_items']}, rows_with_news={coverage['rows_with_news']}, "
             f"rows_with_polarity={coverage['rows_with_polarity']}, "
             f"rows_with_persisted_polarity={coverage.get('rows_with_persisted_polarity', 0)}, "
@@ -966,14 +1106,25 @@ def report_to_markdown(report: dict[str, Any]) -> str:
             f"- polarity_sources: {coverage.get('polarity_sources') or {}}",
             f"- cache_miss_output: {event_ab.get('cache_miss_output') or 'not_requested'}",
             f"- blockers: {', '.join(event_ab['blockers']) if event_ab['blockers'] else 'none'}",
+            f"- recommended_variant: {comparison.get('recommended_variant')}",
             "",
-            "| variant | IC days | IC | ICIR | positive_rate |",
-            "| --- | ---: | ---: | ---: | ---: |",
+            "| variant | IC days | IC | ICIR | positive_rate | top-bottom | monotonic | sample_gate | gate | gate_blockers |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
             f"| pure_polarity | {polarity['ic_days']} | {polarity['ic_mean']} | "
-            f"{polarity['icir']} | {polarity['ic_positive_rate']} |",
+            f"{polarity['icir']} | {polarity['ic_positive_rate']} | "
+            f"{polarity_validation.get('top_bottom_oriented')} | "
+            f"{polarity_validation.get('monotonic_oriented')} | "
+            f"{polarity_validation.get('passes_sample_gate')} | "
+            f"{polarity_validation.get('passes_event_ab_gate')} | "
+            f"{polarity_validation.get('gate_blockers') or []} |",
             f"| polarity_plus_event | {polarity_event['ic_days']} | {polarity_event['ic_mean']} | "
-            f"{polarity_event['icir']} | {polarity_event['ic_positive_rate']} |",
-            f"| delta |  | {event_ab['delta_ic']} |  |  |",
+            f"{polarity_event['icir']} | {polarity_event['ic_positive_rate']} | "
+            f"{event_validation.get('top_bottom_oriented')} | "
+            f"{event_validation.get('monotonic_oriented')} | "
+            f"{event_validation.get('passes_sample_gate')} | "
+            f"{event_validation.get('passes_event_ab_gate')} | "
+            f"{event_validation.get('gate_blockers') or []} |",
+            f"| delta |  | {event_ab['delta_ic']} |  |  |  |  |  |  |  |",
         ]
     lines += [
         "",

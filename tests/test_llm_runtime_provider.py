@@ -102,6 +102,7 @@ def test_local_cli_provider_passes_model_for_tier(mock_run, monkeypatch):
     from backend.llm.local_cli_provider import LocalCLIProvider
 
     mock_run.return_value = MagicMock(returncode=0, stdout='{"ok": true}', stderr="")
+    monkeypatch.setattr("backend.config.settings.local_cli_prefer_codex", False)
     monkeypatch.setattr("backend.config.settings.local_cli_model_fast", "claude-haiku")
 
     result = LocalCLIProvider(timeout=1).complete_structured(
@@ -116,9 +117,10 @@ def test_local_cli_provider_passes_model_for_tier(mock_run, monkeypatch):
 
 
 @patch("backend.llm.local_cli_provider.subprocess.run")
-def test_local_cli_provider_falls_back_to_codex_when_claude_returns_no_json(mock_run):
+def test_local_cli_provider_falls_back_to_codex_when_claude_returns_no_json(mock_run, monkeypatch):
     from backend.llm.local_cli_provider import LocalCLIProvider
 
+    monkeypatch.setattr("backend.config.settings.local_cli_prefer_codex", False)
     mock_run.side_effect = [
         MagicMock(returncode=1, stdout="Not logged in · Please run /login", stderr=""),
         MagicMock(returncode=0, stdout='codex\n{"ok": true}', stderr=""),
@@ -134,9 +136,10 @@ def test_local_cli_provider_falls_back_to_codex_when_claude_returns_no_json(mock
 
 
 @patch("backend.llm.local_cli_provider.subprocess.run")
-def test_local_cli_provider_falls_back_to_codex_when_claude_times_out(mock_run):
+def test_local_cli_provider_falls_back_to_codex_when_claude_times_out(mock_run, monkeypatch):
     from backend.llm.local_cli_provider import LocalCLIProvider
 
+    monkeypatch.setattr("backend.config.settings.local_cli_prefer_codex", False)
     mock_run.side_effect = [
         subprocess.TimeoutExpired(cmd=["claude"], timeout=1),
         MagicMock(returncode=0, stdout='codex\n{"ok": true}', stderr=""),

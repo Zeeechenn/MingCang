@@ -112,6 +112,8 @@ def test_event_ab_uses_offline_title_polarity_fallback():
     assert report["coverage"]["rows_with_event_override"] > 0
     assert report["polarity"]["ic_days"] > 0
     assert report["polarity_event"]["ic_days"] > 0
+    assert "cache_miss_windows_open" in report["pure_polarity_validation"]["gate_blockers"]
+    assert "fallback_polarity_used" in report["pure_polarity_validation"]["gate_blockers"]
     assert report["delta_ic"] is not None
 
 
@@ -176,6 +178,13 @@ def test_event_ab_uses_sentiment_cache_before_title_fallback():
     assert report["coverage"]["cache_miss_windows"] == 0
     assert report["coverage"]["polarity_sources"] == {"sentiment_cache_exact_match": report["coverage"]["rows_with_polarity"]}
     assert report["polarity"]["ic_days"] > 0
+    validation = report["pure_polarity_validation"]
+    assert validation["orientation"] == "positive"
+    assert validation["data_quality_blockers"] == []
+    assert validation["passes_event_ab_gate"] is False
+    assert "insufficient_ic_days" in validation["gate_blockers"]
+    assert "variant_comparison" in report
+    assert report["variant_comparison"]["production_unchanged"] is True
 
 
 def test_event_ab_writes_exact_cache_miss_title_windows(tmp_path):
@@ -276,3 +285,46 @@ def test_event_ab_handles_missing_news_rows():
     assert "no_test3_news_rows" in report["blockers"]
     assert report["polarity"]["ic_days"] == 0
     assert report["polarity_event"]["ic_days"] == 0
+
+
+def test_event_ab_variant_gate_is_rendered_in_markdown():
+    from backend.tools.m27_alpha_diagnostic import (
+        add_horizon_labels,
+        build_report,
+        event_ab_diagnostics,
+        report_to_markdown,
+    )
+
+    panel = add_horizon_labels(_sample_panel(), [3])
+    scores = {"A": 0.9, "B": 0.6, "C": 0.3, "D": -0.3, "E": -0.6, "F": -0.9}
+    news_rows = []
+    for day in range(5):
+        date = pd.Timestamp("2026-01-01") + pd.Timedelta(days=day)
+        for symbol in ["A", "B", "C", "D", "E", "F"]:
+            news_rows.append({
+                "symbol": symbol,
+                "title": "公司普通经营动态",
+                "published_at": date,
+                "sentiment_score": None,
+            })
+
+    event_ab = event_ab_diagnostics(
+        panel,
+        news_rows,
+        universe_symbols=set(scores),
+        label_col="label_3d",
+        sentiment_cache_lookup=lambda titles, symbol: {"sentiment": scores[symbol]},
+    )
+    report = build_report(panel, horizons=[3], top_n=3, event_ab=event_ab)
+    markdown = report_to_markdown(report)
+
+    assert event_ab["event_ab_gate"]["min_quantile_buckets"] == 5
+    assert event_ab["event_ab_gate"]["n_variants_tested"] == 2
+    assert "multiple_comparison_warning" in event_ab["event_ab_gate"]
+    assert event_ab["pure_polarity_validation"]["passes_quantile_sample"] is True
+    assert "top-bottom" in markdown
+    assert "monotonic" in markdown
+    assert "multiple_comparison_warning" in markdown
+    assert "pure_polarity" in markdown
+    assert "polarity_plus_event" in markdown
+    assert "gate_blockers" in markdown

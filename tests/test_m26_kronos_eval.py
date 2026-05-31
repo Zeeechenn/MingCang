@@ -92,3 +92,21 @@ def test_kronos_finetuned_model_path_missing_is_clear(tmp_path):
 
     with pytest.raises(RuntimeError, match="Finetuned Kronos model path does not exist"):
         resolve_model_spec("kronos-finetuned", finetuned_model_path=tmp_path / "missing")
+
+
+def test_kronos_finetuned_model_path_rejects_smoke_checkpoint(tmp_path):
+    import json
+
+    import pytest
+
+    from backend.tools.m26_kronos_eval import resolve_model_spec
+
+    checkpoint = tmp_path / "checkpoints" / "best_model"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "manifest.json").write_text(
+        json.dumps({"checkpoint_kind": "stocksage_path_a_smoke_model"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="smoke artifact"):
+        resolve_model_spec("kronos-finetuned", finetuned_model_path=tmp_path)

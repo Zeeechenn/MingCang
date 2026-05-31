@@ -60,6 +60,16 @@ def test_candidate_specs_cover_m27_1b_objectives():
     assert "industry_size_neutral_20d_ranker_lambdarank" in names
 
 
+def test_short_horizon_candidate_specs_cover_m27_1d_objectives():
+    from backend.tools.m27_label_objective_eval import short_horizon_candidate_specs
+
+    names = {spec["name"] for spec in short_horizon_candidate_specs([1, 3, 5])}
+
+    assert "raw_1d_top_decile_classifier_short_cycle" in names
+    assert "raw_3d_top_decile_classifier_short_cycle" in names
+    assert "raw_5d_ranker_lambdarank_short_cycle" in names
+
+
 def test_stride_predictions_keep_non_overlapping_dates():
     from backend.tools.m27_label_objective_eval import stride_predictions
 
@@ -91,6 +101,78 @@ def test_top_decile_metrics_report_lift():
     assert metrics["precision"] == 1.0
     assert metrics["base_rate"] == 0.1
     assert metrics["lift_vs_base_rate"] == 10.0
+
+
+def _decision_candidate(name, *, raw_pass, stride_icir, raw_icir=0.5, lift=3.0):
+    return {
+        "name": name,
+        "status": "ok",
+        "raw_return_validation": {
+            "metrics": {"ic_mean": 0.05, "icir": raw_icir},
+            "gates": {"pass": raw_pass, "pass_ic": True, "pass_icir": True},
+        },
+        "raw_return_stride_validation": {
+            "metrics": {"ic_mean": 0.03, "icir": stride_icir},
+        },
+        "target_validation": {"gates": {"pass": False}},
+        "top_decile_metrics": {"precision": 0.4, "lift_vs_base_rate": lift},
+    }
+
+
+def test_build_decision_rejects_raw_pass_when_stride_icir_fails():
+    from backend.tools import m27_label_objective_eval as tool
+
+    decision = tool.build_decision([
+        _decision_candidate("overlap_only", raw_pass=True, stride_icir=0.30),
+    ])
+
+    assert decision["decision"] == "keep_quant_disabled"
+    assert decision["recommended_next_action"] == "expand_non_overlapping_validation_before_any_retrain"
+    assert decision["raw_gate_pass_count"] == 1
+    assert decision["raw_stride_gate_pass_count"] == 0
+    assert decision["best_raw_stride_icir"] == 0.30
+    assert decision["best_raw_stride_icir_gate_passed"] is False
+
+
+def test_build_decision_allows_candidate_only_when_raw_and_stride_gates_pass():
+    from backend.tools import m27_label_objective_eval as tool
+
+    decision = tool.build_decision([
+        _decision_candidate("confirmed", raw_pass=True, stride_icir=0.41),
+    ])
+
+    assert decision["decision"] == "candidate_ready_for_full_retrain_validation"
+    assert decision["best_raw_candidate"] == "confirmed"
+    assert decision["raw_gate_pass_count"] == 1
+    assert decision["raw_stride_gate_pass_count"] == 1
+    assert decision["best_raw_stride_icir_gate_passed"] is True
+
+
+def test_build_decision_reports_multiple_comparison_metadata():
+    from backend.tools import m27_label_objective_eval as tool
+
+    decision = tool.build_decision([
+        _decision_candidate("one", raw_pass=False, stride_icir=0.1),
+        _decision_candidate("two", raw_pass=False, stride_icir=0.2),
+    ])
+
+    assert decision["n_candidates_tested"] == 2
+    assert decision["multiple_comparison_bonferroni_adjusted_alpha"] == 0.025
+    assert decision["multiple_comparison_bonferroni_adjusted_icir_floor"] is not None
+    assert "2 candidates" in decision["multiple_comparison_warning"]
+
+
+def test_short_cycle_decision_does_not_promote_directly():
+    from backend.tools import m27_label_objective_eval as tool
+
+    decision = tool._non_promoting_short_cycle_decision([
+        _decision_candidate("short_cycle", raw_pass=True, stride_icir=0.5),
+    ])
+
+    assert decision["decision"] == "short_cycle_candidate_ready_for_non_promoting_validation"
+    assert decision["non_promoting"] is True
+    assert decision["production_unchanged"] is True
+    assert "separate non-promoting" in decision["promotion_blocker"]
 
 
 def test_segment_breakdown_reports_raw_validation_by_industry():
@@ -148,8 +230,6 @@ def test_segment_specific_candidates_are_non_promoting_and_sample_gated(monkeypa
 
     def fake_fit_predict(train_df, val_df, *, objective, target_label_col, n_estimators):
         assert objective == "regression"
-        assert train_df["industry"].nunique() == 1
-        assert val_df["industry"].nunique() == 1
         assert n_estimators == 7
         seen_segments.append(train_df["industry"].iloc[0])
         return np.asarray(val_df[target_label_col]), {"status": "ok", "best_iteration": 1}
@@ -223,7 +303,7 @@ def test_top_decile_labels_use_ceil_count_per_date():
 def test_evaluate_candidate_passes_shared_top_decile_pct_to_metrics(monkeypatch):
     from backend.tools import m27_label_objective_eval as tool
 
-    panel = tool.add_objective_labels(_panel(rows_per_symbol=110), 20)
+    panel = tool.add_volatility_regime(tool.add_objective_label_set(_panel(rows_per_symbol=110), [1, 3, 20]))
     spec = next(
         candidate for candidate in tool.candidate_specs(20)
         if candidate["name"] == "raw_20d_top_decile_classifier"
@@ -242,7 +322,7 @@ def test_evaluate_candidate_passes_shared_top_decile_pct_to_metrics(monkeypatch)
         return np.arange(len(val_df)), {"status": "ok", "best_iteration": 1}
 
     def fake_top_decile_metrics(predictions, *, top_pct):
-        captured["top_pct"] = top_pct
+        captured.setdefault("top_pct", []).append(top_pct)
         return {"top_pct": top_pct}
 
     monkeypatch.setattr(tool, "_fit_predict", fake_fit_predict)
@@ -253,12 +333,14 @@ def test_evaluate_candidate_passes_shared_top_decile_pct_to_metrics(monkeypatch)
         lambda predictions, label, sample: {"label": label, "metrics": {}, "gates": {}},
     )
 
-    result = tool.evaluate_candidate(panel, spec, n_estimators=5)
+    result = tool.evaluate_candidate(panel, spec, n_estimators=5, evaluation_horizons=[1, 3, 20])
 
     assert result["status"] == "ok"
-    assert captured["top_pct"] == tool.TOP_DECILE_PCT
+    assert captured["top_pct"] == [tool.TOP_DECILE_PCT] * 4
     assert result["top_decile_metrics"]["top_pct"] == tool.TOP_DECILE_PCT
+    assert [item["eval_horizon"] for item in result["multi_exit_raw_return_validation"]] == [1, 3, 20]
     assert "industry" in result["segment_breakdown"]
+    assert "volatility_regime" in result["segment_breakdown"]
     assert {row["segment"] for row in result["segment_breakdown"]["industry"]} == {"finance", "tech"}
 
 
@@ -320,13 +402,24 @@ def test_build_report_uses_non_promoting_fit_path(monkeypatch):
     assert len(report["candidates"]) == 9
     assert all(candidate["status"] == "ok" for candidate in report["candidates"])
     assert "raw_return_stride_validation" in report["candidates"][0]
+    assert "multi_exit_raw_return_validation" in report["candidates"][0]
     assert "top_decile_metrics" in report["candidates"][0]
     assert "segment_breakdown" in report["candidates"][0]
+    assert report["multi_exit_summary"]
+    assert report["short_horizon_candidates"]["non_promoting"] is True
+    assert report["short_horizon_candidates"]["promotable"] is False
+    assert report["short_horizon_candidates"]["decision"]["production_unchanged"] is True
     assert report["sector_industry_specific_candidates"]["non_promoting"] is True
     assert report["sector_industry_specific_candidates"]["promotable"] is False
     assert report["sector_industry_specific_candidates"]["min_validation_rows"] == 50
+    assert report["decision"]["n_candidates_tested"] == 9
+    assert report["decision"]["multiple_comparison_warning"]
+    assert report["decision"]["raw_stride_gate_pass_count"] == 0
     assert "M27.1b Label/Objective Evaluation" in markdown
-    assert "Sector/Industry-Specific Offline Candidates" in markdown
+    assert "multiple_comparison_warning" in markdown
+    assert "Multi-Exit Raw Return Matrix" in markdown
+    assert "M27.1d Short-Cycle Objective Search" in markdown
+    assert "Segment-Specific Offline Candidates" in markdown
     assert "non_promoting: True" in markdown
     assert "promotable: False" in markdown
     assert "sample_limited: False" in markdown
@@ -342,11 +435,13 @@ def test_build_report_propagates_segment_validation_floor(monkeypatch):
     monkeypatch.setattr(
         tool,
         "evaluate_candidate",
-        lambda panel, spec, *, n_estimators: {
+        lambda panel, spec, *, n_estimators, evaluation_horizons=None: {
             **spec,
             "status": "ok",
             "raw_return_validation": {"metrics": {"icir": 0.0}, "gates": {"pass": False}},
             "target_validation": {"gates": {"pass": False}},
+            "raw_return_stride_validation": {"metrics": {"icir": 0.0}, "gates": {"pass": False}},
+            "multi_exit_raw_return_validation": [],
             "top_decile_metrics": {},
         },
     )
@@ -411,6 +506,13 @@ def test_parse_args_exposes_segment_sample_floors(monkeypatch):
             "120",
             "--segment-min-validation-rows",
             "15",
+            "--short-horizons",
+            "1",
+            "3",
+            "--evaluation-horizons",
+            "1",
+            "5",
+            "20",
         ],
     )
 
@@ -419,3 +521,5 @@ def test_parse_args_exposes_segment_sample_floors(monkeypatch):
     assert args.segment_min_symbols == 3
     assert args.segment_min_rows == 120
     assert args.segment_min_validation_rows == 15
+    assert args.short_horizons == [1, 3]
+    assert args.evaluation_horizons == [1, 5, 20]

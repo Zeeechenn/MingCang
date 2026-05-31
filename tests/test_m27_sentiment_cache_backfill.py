@@ -146,6 +146,43 @@ def test_backfill_execute_inserts_and_writes_rollback_manifest(tmp_path):
     assert json.loads(rows[0][1])["sentiment"] == 0.8
 
 
+def test_backfill_execute_aborts_empty_sentiment_without_write(tmp_path):
+    import pytest
+
+    from backend.tools.m27_sentiment_cache_backfill import run_backfill
+
+    plan_path = tmp_path / "plan.json"
+    export_path = tmp_path / "missing.json"
+    _write_plan(plan_path, export_path)
+    db_path = tmp_path / "stocksage.sqlite"
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            "CREATE TABLE sentiment_cache ("
+            "cache_key TEXT PRIMARY KEY, symbol TEXT, titles_hash TEXT, "
+            "result_json TEXT, created_at DATETIME, updated_at DATETIME)"
+        )
+
+    def empty_runner(_titles, _symbol):
+        return {}
+
+    with pytest.raises(RuntimeError, match="empty sentiment result"):
+        run_backfill(
+            plan_path,
+            db_url=f"sqlite:///{db_path}",
+            execute=True,
+            max_keys=1,
+            max_llm_calls=1,
+            batch_size=1,
+            audit_output=None,
+            rollback_output=None,
+            sentiment_runner=empty_runner,
+        )
+
+    with sqlite3.connect(db_path) as con:
+        count = con.execute("SELECT COUNT(*) FROM sentiment_cache").fetchone()[0]
+    assert count == 0
+
+
 def test_backfill_execute_skips_existing_without_overwrite(tmp_path):
     from backend.tools.m27_sentiment_cache_backfill import run_backfill
 

@@ -16,7 +16,7 @@
 
 ### Changed
 - Tavily 搜索结果不写 DB、不创建 `Signal`、不进入日常信号，仅在显式 deep research / dossier / debate 场景作为研究上下文使用。
-- M28 完成后，当前活跃路线图重心回到 M27 Alpha 根治工程。
+- M28 完成后，路线图重心曾回到 M27 Alpha 根治工程；2026-05-31 M27 证据闭环未晋升后，当前活跃重点已转入 M29。
 
 ### Tests
 - M28 集成覆盖进入 2026-05-30 M26/M27/M28 聚焦套件与 full suite；当前通过状态以 `STATUS.md` 为准。

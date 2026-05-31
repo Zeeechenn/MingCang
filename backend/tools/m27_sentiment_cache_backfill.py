@@ -314,6 +314,11 @@ def run_backfill(
                 batch = selected[batch_start : batch_start + batch_size]
                 for item in batch:
                     result = runner(list(item["titles"]), str(item["symbol"]))
+                    if not result:
+                        raise RuntimeError(
+                            f"empty sentiment result for cache_key={item['cache_key']}; "
+                            "aborting batch without writing fallback cache"
+                        )
                     payload = json.dumps(result, ensure_ascii=False)
                     cur = con.execute(
                         """

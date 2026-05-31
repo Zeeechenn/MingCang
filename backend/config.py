@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     local_cli_model_fast: str = "claude-haiku-4-5-20251001"
     local_cli_model_capable: str = "claude-sonnet-4-6"
     local_cli_timeout_seconds: int = 90
-    local_cli_prefer_codex: bool = False
+    local_cli_prefer_codex: bool = True
     qlib_train_ic_floor: float = 0.04
     qlib_train_icir_floor: float = 0.4
     qlib_train_require_monotonic: bool = True
