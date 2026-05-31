@@ -191,6 +191,7 @@ def test_analyze_news_uses_persistent_cache_before_provider(mock_get_provider, m
     from backend.analysis import sentiment
 
     sentiment._cache.clear()
+    monkeypatch.setattr(sentiment, "has_runtime_llm_provider", lambda _settings: True)
     monkeypatch.setattr(
         sentiment,
         "_persistent_cache_get",
