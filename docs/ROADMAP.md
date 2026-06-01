@@ -45,6 +45,7 @@
 - [x] 自动/半自动延长 forward shadow 的执行闭环已补齐：ledger 可发现最新 `/private/tmp/m29_forward_shadow_rolling_*_{1,3,5}d.json`，并可用 `--forward-end YYYY-MM-DD` 渲染下一轮 1d/3d/5d rolling 命令。
 - [x] 新 forward artifact 的 provenance producer / audit 路径已补齐：后续新产物应写出 `universe_hash`、`train_label_realized_end` 与 price provenance；旧 artifact 不猜测回填，缺口继续作为 blocker。
 - [x] 新增 read-only forward readiness guard：`backend.tools.m29_forward_readiness` 只判断完整交易日与 future-return 覆盖是否足以运行下一轮 1d/3d/5d bundle，不写 DB、不调 LLM/API、不训练、不运行 forward shadow。
+- [x] 新增 close-confirmed price/provenance refresh：`backend.tools.m29_price_coverage_refresh` 默认 dry-run，必须 `--execute` 才写 `prices`，且默认拒绝写入今日 partial bar。
 - [ ] 新增完整 forward evidence 尚未追加：当前 rolling 只延至本地最新 2026-05-29，本轮不把 2026-06-01 partial local data 当作新 forward evidence；等完整新增交易日与 future-return 覆盖后再跑 1d/3d/5d rolling。
 - [ ] pure polarity / event overlay 只在 cache/fallback 清零、无新增真实写入需求时做只读复核；需要真实 `sentiment_cache` 写入或 LLM 调用时先汇报。
 - [ ] 样本门继续保守：filtered trades < 50 不引用 Sharpe，IC days 不足不引用 ICIR 稳定性，分位不单调不能晋升。
@@ -58,6 +59,8 @@
 > 2026-06-01 M29.3 readiness guard：新增 `backend.tools.m29_forward_readiness`，默认只读检查 latest forward artifact end、test3 universe 覆盖、完整交易日数量与 1d/3d/5d future-return 安全 end；只有三条 exit horizon 都具备完整新增覆盖时才输出下一轮 `next_forward_commands`，否则输出 blockers 且不运行 forward shadow。CLI smoke `/private/tmp/m29_forward_readiness_finish_smoke.{json,md}` 确认当前默认无 DB 参数时 `ready_to_run_forward_shadow=false`、commands=[]、生产不变。
 
 > 2026-06-01 M29.3 live readiness check：使用真实 SQLite 只读跑 `backend.tools.m29_forward_readiness --db-url sqlite:////Users/zeeechenn/stock-sage/stock-sage.db`，输出 `/private/tmp/m29_forward_readiness_live.{json,md}`。结果仍为 `ready_to_run_forward_shadow=false`、commands=[]；latest_price_date=2026-06-01，但 test3 universe 当日仅 10/100 支有价格，2026-05-27~2026-05-29 为 94/100 支且仅 25 支具备完整 price provenance；blockers=`no_new_complete_1d_forward_coverage`、`no_new_complete_3d_forward_coverage`、`no_new_complete_5d_forward_coverage`、`partial_latest_trading_day_after_last_artifact`。本轮不运行 forward shadow；若要刷新行情或补齐 DB，需要先按 M29 stop condition 汇报/确认。
+
+> 2026-06-01 M29.3 close-confirmed refresh：新增 `backend.tools.m29_price_coverage_refresh`，默认 dry-run，`--execute` 仅刷新显式日期窗口的 `prices` 行，并默认拒绝写入今日 partial bar。获准后执行 2026-05-27~2026-05-29 close-confirmed refresh，输出 `/private/tmp/m29_price_coverage_refresh_execute_20260527_20260529.{json,md}`：100 symbols attempted、0 errors、300 rows written，三天均达到 100/100 price provenance complete；复跑 readiness 到 `/private/tmp/m29_forward_readiness_after_price_refresh.{json,md}` 后仍 `ready_to_run_forward_shadow=false`、commands=[]，因为 2026-06-01 仍为 10/100 partial 且 1d/3d/5d future-return 覆盖尚未形成。本轮不运行 forward shadow、不追加 fresh evidence。
 
 > 2026-05-31 M29.3 provenance producer 补强：`backend.tools.m27_top_decile_forward_shadow` 后续新产物会写出 `universe_hash` 与 `train_label_realized_end`，rolling 报告会汇总 `train_label_realized_end_range`；既有历史 artifact 未回写，ledger 会继续把旧产物的 provenance 缺口标为 blocker。`backend.data.qlib_data.build_training_data` 已把 price row 的 `_price_source` / `_price_fetched_at` / `_price_adjustment` 带入训练面板，`backend.tools.m27_label_objective_eval` 已把 panel cache 升到 version 2 并在 panel meta 输出 `price_provenance` 覆盖率；`backend.tools.m29_evidence_ledger` 会读取 `panel.price_provenance`，若未来新 artifact 仍有缺口则标记 `panel_price_provenance_incomplete`。旧 DB 行的来源仍不猜测回填。
 

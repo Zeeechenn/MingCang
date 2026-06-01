@@ -117,6 +117,7 @@ backend/tools/m29_hypothesis_registry.py     M29.2 新 alpha 假设预注册清�
 backend/tools/m29_shadow_validation.py       M29.2/M29.3 只读预注册 shadow validation 包装器
 backend/tools/m29_provenance_audit.py        M29.3 只读 price/artifact provenance audit
 backend/tools/m29_forward_readiness.py       M29.3 只读 forward shadow readiness guard
+backend/tools/m29_price_coverage_refresh.py  M29.3 close-confirmed price/provenance refresh（默认 dry-run，--execute 写 prices）
 backend/portfolio/combo_weights.py           组合候选权重分配
 backend/portfolio/single_position.py         单信号仓位映射
 backend/portfolio/trailing_stop.py           Trailing stop 持仓追踪（M1.7）
