@@ -30,6 +30,7 @@ DEFAULT_ARTIFACTS = [
     Path("/private/tmp/m27_label_objective_eval_include_inactive_m27_1d_multi_exit.json"),
     Path.home() / ".stock-sage" / "m26_kronos_report.json",
     Path("/private/tmp/m29_shadow_validation_top_decile_entry_timing_v1.json"),
+    Path("/private/tmp/m29_shadow_validation_post_event_drift_pure_polarity_v1.json"),
 ]
 DEFAULT_JSON_OUTPUT = Path.home() / ".stock-sage" / "m29_evidence_ledger.json"
 DEFAULT_MARKDOWN_OUTPUT = Path.home() / ".stock-sage" / "m29_evidence_ledger.md"
