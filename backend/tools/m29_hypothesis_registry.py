@@ -245,12 +245,18 @@ def validate_registry(report: dict[str, Any], *, strict: bool = True) -> list[st
         if not hypothesis.get("multiple_comparison"):
             errors.append(f"{hid} must define multiple_comparison")
         gate = hypothesis.get("promotion_gate") or {}
-        if gate.get("ic_min") != settings.qlib_train_ic_floor:
-            errors.append(f"{hid} promotion_gate.ic_min must match settings")
-        if gate.get("icir_min") != settings.qlib_train_icir_floor:
-            errors.append(f"{hid} promotion_gate.icir_min must match settings")
-        if gate.get("require_monotonic") is not settings.qlib_train_require_monotonic:
-            errors.append(f"{hid} promotion_gate.require_monotonic must match settings")
+        expected_gate = {
+            "ic_min": settings.qlib_train_ic_floor,
+            "icir_min": settings.qlib_train_icir_floor,
+            "require_monotonic": settings.qlib_train_require_monotonic,
+            "stride_icir_min": settings.qlib_train_icir_floor,
+            "requires_fresh_oos_forward": True,
+            "requires_no_data_quality_blockers": True,
+            "requires_human_confirmation": True,
+        }
+        for key, expected in expected_gate.items():
+            if gate.get(key) != expected:
+                errors.append(f"{hid} promotion_gate.{key} must be {expected!r}")
         source_text = " ".join(hypothesis.get("source_m27_clues") or [])
         if any(source in source_text for source in FORBIDDEN_PRODUCTION_SOURCES):
             if hypothesis.get("candidate_type") != "shadow_research_candidate":

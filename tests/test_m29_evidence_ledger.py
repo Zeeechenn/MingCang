@@ -7,6 +7,32 @@ def _write_json(path, payload):
     return path
 
 
+def _rolling_artifact_payload(*, start="2026-04-01", end="2026-06-05", exit_days=1):
+    return {
+        "generated_at": "2026-06-05T00:00:00Z",
+        "run_mode": "offline_read_only_forward_shadow_rolling",
+        "production_unchanged": True,
+        "writes_db": False,
+        "calls_llm_or_api": False,
+        "saves_model": False,
+        "start": start,
+        "end": end,
+        "exit_days": exit_days,
+        "sample_adequacy": {
+            "baseline_trades": 100,
+            "filtered_trades": 60,
+            "min_trades_for_sharpe": 50,
+            "insufficient_for_sharpe": False,
+        },
+        "aggregate_profile_summary": {
+            "positive_avg_net_return_delta_windows": 3,
+            "trade_weighted_avg_net_return_delta": 0.02,
+        },
+        "rolling": {"window_count": 3},
+        "filter": {"status": "ok"},
+    }
+
+
 def test_build_ledger_normalizes_m27_artifacts_and_stays_read_only(tmp_path):
     from backend.tools import m29_evidence_ledger as tool
 
@@ -166,9 +192,65 @@ def test_build_ledger_normalizes_m27_artifacts_and_stays_read_only(tmp_path):
     assert label_entry["sub_evidence_summary"]["short_horizon_candidate_count"] == 1
     assert label_entry["sub_evidence_summary"]["sector_segment_candidate_count"] == 1
     assert "M29 Evidence Ledger" in markdown
+    assert "Promotion Contract" in markdown
     assert "entries_with_missing_provenance" in markdown
+    assert "requires_human_confirmation: True" in markdown
+    assert "requires_no_data_quality_blockers: True" in markdown
     assert "Next Forward Commands" in markdown
     assert "do not restore weight_quant" in markdown
+
+
+def test_default_artifacts_discovers_latest_m29_forward_artifacts(tmp_path):
+    from backend.tools import m29_evidence_ledger as tool
+
+    _write_json(
+        tmp_path / "m29_forward_shadow_rolling_20260401_20260601_1d.json",
+        _rolling_artifact_payload(end="2026-06-01", exit_days=1),
+    )
+    latest_1d = _write_json(
+        tmp_path / "m29_forward_shadow_rolling_20260401_20260605_1d.json",
+        _rolling_artifact_payload(end="2026-06-05", exit_days=1),
+    )
+    latest_3d = _write_json(
+        tmp_path / "m29_forward_shadow_rolling_20260401_20260604_3d.json",
+        _rolling_artifact_payload(end="2026-06-04", exit_days=3),
+    )
+    _write_json(
+        tmp_path / "m29_forward_shadow_rolling_20260401_latest_5d.json",
+        _rolling_artifact_payload(end="2026-06-05", exit_days=5),
+    )
+
+    paths = tool.default_artifacts(static_artifacts=[], artifact_dir=tmp_path)
+    report = tool.build_ledger(paths)
+
+    assert paths == [latest_1d, latest_3d]
+    assert report["summary"]["entries"] == 2
+    assert {entry["variant"] for entry in report["entries"]} == {"rolling_1d", "rolling_3d"}
+
+
+def test_discovered_malformed_m29_forward_artifact_is_skipped(tmp_path):
+    from backend.tools import m29_evidence_ledger as tool
+
+    bad = tmp_path / "m29_forward_shadow_rolling_20260401_20260605_5d.json"
+    bad.write_text("{bad json", encoding="utf-8")
+
+    report = tool.build_ledger(tool.default_artifacts(static_artifacts=[], artifact_dir=tmp_path))
+
+    assert report["summary"]["entries"] == 0
+    assert report["summary"]["skipped_artifacts"] == 1
+    assert report["skipped_artifacts"][0]["path"] == str(bad)
+    assert report["skipped_artifacts"][0]["reason"].startswith("load_or_parse_error")
+
+
+def test_next_forward_commands_can_render_concrete_forward_end():
+    from backend.tools import m29_evidence_ledger as tool
+
+    commands = tool.next_forward_commands(forward_end="2026-06-05")
+
+    assert len(commands) == 3
+    assert all("<LATEST_TRADING_DAY_AFTER_2026-05-29>" not in command for command in commands)
+    assert all("--end 2026-06-05" in command for command in commands)
+    assert "/private/tmp/m29_forward_shadow_rolling_20260401_20260605_1d.json" in commands[0]
 
 
 def test_build_ledger_flags_source_side_effects(tmp_path):

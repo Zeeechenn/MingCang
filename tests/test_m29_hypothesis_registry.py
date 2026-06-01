@@ -64,6 +64,22 @@ def test_validation_rejects_missing_multiple_comparison():
     assert any("missing required fields: multiple_comparison" in error for error in errors)
 
 
+def test_validation_rejects_incomplete_promotion_contract():
+    from backend.tools import m29_hypothesis_registry as tool
+
+    report = tool.build_registry()
+    gate = report["hypotheses"][0]["promotion_gate"]
+    gate["stride_icir_min"] = 0.1
+    gate["requires_no_data_quality_blockers"] = False
+    gate.pop("requires_human_confirmation")
+
+    errors = tool.validate_registry(report)
+
+    assert "regime_low_vol_alpha_v1 promotion_gate.stride_icir_min must be 0.4" in errors
+    assert "regime_low_vol_alpha_v1 promotion_gate.requires_no_data_quality_blockers must be True" in errors
+    assert "regime_low_vol_alpha_v1 promotion_gate.requires_human_confirmation must be True" in errors
+
+
 def test_validation_rejects_side_effect_flags_and_missing_stop_conditions():
     from backend.tools import m29_hypothesis_registry as tool
 

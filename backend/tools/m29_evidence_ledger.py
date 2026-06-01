@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,10 @@ DEFAULT_ARTIFACTS = [
 ]
 DEFAULT_JSON_OUTPUT = Path.home() / ".stock-sage" / "m29_evidence_ledger.json"
 DEFAULT_MARKDOWN_OUTPUT = Path.home() / ".stock-sage" / "m29_evidence_ledger.md"
+DEFAULT_DYNAMIC_ARTIFACT_DIR = Path("/private/tmp")
+M29_FORWARD_ARTIFACT_RE = re.compile(
+    r"^m29_forward_shadow_rolling_(?P<start>\d{8})_(?P<end>\d{8})_(?P<exit_days>[135])d\.json$"
+)
 PROVENANCE_REQUIRED_FIELDS = [
     "artifact_sha256",
     "source_generated_at",
@@ -49,18 +54,61 @@ def next_forward_commands(
     *,
     start: str = DEFAULT_FORWARD_START,
     end_placeholder: str = "<LATEST_TRADING_DAY_AFTER_2026-05-29>",
+    forward_end: str | None = None,
 ) -> list[str]:
+    end_value = forward_end or end_placeholder
+    start_token = start.replace("-", "")
+    end_token = forward_end.replace("-", "") if forward_end else end_placeholder
     return [
         "PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. MULTI_AGENT_ENABLED=false "
         ".venv/bin/python -m backend.tools.m27_top_decile_forward_shadow "
         "--universe-path paper_trading/test3_universe.json --rolling "
-        f"--start {start} --end {end_placeholder} --rolling-window-days 7 --rolling-stride-days 7 "
+        f"--start {start} --end {end_value} --rolling-window-days 7 --rolling-stride-days 7 "
         f"--exit-days {exit_days} --json-output /private/tmp/m29_forward_shadow_rolling_"
-        f"{start.replace('-', '')}_{end_placeholder}_{exit_days}d.json "
-        f"--markdown-output /private/tmp/m29_forward_shadow_rolling_{start.replace('-', '')}_"
-        f"{end_placeholder}_{exit_days}d.md"
+        f"{start_token}_{end_token}_{exit_days}d.json "
+        f"--markdown-output /private/tmp/m29_forward_shadow_rolling_{start_token}_"
+        f"{end_token}_{exit_days}d.md"
         for exit_days in (1, 3, 5)
     ]
+
+
+def _forward_artifact_sort_key(path: Path) -> tuple[int, str, str]:
+    match = M29_FORWARD_ARTIFACT_RE.match(path.name)
+    if not match:
+        return (0, "", "")
+    return (
+        int(match.group("exit_days")),
+        match.group("end"),
+        match.group("start"),
+    )
+
+
+def discover_m29_forward_artifacts(artifact_dir: Path = DEFAULT_DYNAMIC_ARTIFACT_DIR) -> list[Path]:
+    latest_by_exit: dict[int, Path] = {}
+    for path in artifact_dir.expanduser().glob("m29_forward_shadow_rolling_*d.json"):
+        match = M29_FORWARD_ARTIFACT_RE.match(path.name)
+        if not match:
+            continue
+        exit_days = int(match.group("exit_days"))
+        current = latest_by_exit.get(exit_days)
+        if current is None or _forward_artifact_sort_key(path) > _forward_artifact_sort_key(current):
+            latest_by_exit[exit_days] = path
+    return [latest_by_exit[exit_days] for exit_days in sorted(latest_by_exit)]
+
+
+def default_artifacts(
+    *,
+    static_artifacts: list[Path] | None = None,
+    artifact_dir: Path = DEFAULT_DYNAMIC_ARTIFACT_DIR,
+) -> list[Path]:
+    paths = list(DEFAULT_ARTIFACTS if static_artifacts is None else static_artifacts)
+    seen = {str(path.expanduser()) for path in paths}
+    for path in discover_m29_forward_artifacts(artifact_dir):
+        expanded = str(path.expanduser())
+        if expanded not in seen:
+            paths.append(path)
+            seen.add(expanded)
+    return paths
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -520,7 +568,7 @@ def entry_from_artifact(path: Path, payload: dict[str, Any]) -> list[dict[str, A
     return []
 
 
-def build_ledger(paths: list[Path]) -> dict[str, Any]:
+def build_ledger(paths: list[Path], *, forward_end: str | None = None) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for raw_path in paths:
@@ -569,7 +617,7 @@ def build_ledger(paths: list[Path]) -> dict[str, Any]:
                 "adjustment, universe_hash, and train_label_realized_end before promotion review"
             ),
         },
-        "next_forward_commands": next_forward_commands(),
+        "next_forward_commands": next_forward_commands(forward_end=forward_end),
         "promotion_contract": {
             "ic_floor": settings.qlib_train_ic_floor,
             "icir_floor": settings.qlib_train_icir_floor,
@@ -601,6 +649,15 @@ def report_to_markdown(report: dict[str, Any]) -> str:
         f"- entries_with_missing_provenance: {summary['entries_with_missing_provenance']}",
         f"- skipped_artifacts: {summary['skipped_artifacts']}",
         f"- production_unchanged: {report['production_unchanged']}",
+        "",
+        "## Promotion Contract",
+        "",
+        f"- ic_floor: {report['promotion_contract']['ic_floor']}",
+        f"- icir_floor: {report['promotion_contract']['icir_floor']}",
+        f"- monotonic_required: {report['promotion_contract']['monotonic_required']}",
+        f"- requires_fresh_forward: {report['promotion_contract']['requires_fresh_forward']}",
+        f"- requires_no_data_quality_blockers: {report['promotion_contract']['requires_no_data_quality_blockers']}",
+        f"- requires_human_confirmation: {report['promotion_contract']['requires_human_confirmation']}",
         "",
         "## Entries",
         "",
@@ -634,6 +691,7 @@ def report_to_markdown(report: dict[str, Any]) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact", action="append", type=Path, help="JSON artifact to include; repeatable")
+    parser.add_argument("--forward-end", help="Render next forward commands with a concrete YYYY-MM-DD end date")
     parser.add_argument("--json-output", type=Path, default=DEFAULT_JSON_OUTPUT)
     parser.add_argument("--markdown-output", type=Path, default=DEFAULT_MARKDOWN_OUTPUT)
     parser.add_argument("--print", action="store_true")
@@ -642,8 +700,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    paths = args.artifact if args.artifact else DEFAULT_ARTIFACTS
-    report = build_ledger(paths)
+    paths = args.artifact if args.artifact else default_artifacts()
+    report = build_ledger(paths, forward_end=args.forward_end)
     args.json_output.expanduser().parent.mkdir(parents=True, exist_ok=True)
     args.markdown_output.expanduser().parent.mkdir(parents=True, exist_ok=True)
     args.json_output.expanduser().write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
