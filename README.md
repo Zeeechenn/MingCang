@@ -97,7 +97,7 @@ python3 -m backend.agent.cli health --pretty
 
 | 方式 | 适合场景 | 入口 |
 |---|---|---|
-| **A. 交给 Codex / Claude Code** | 把仓库丢给 agent，让它自己读 README、跑健康检查、配 `.env` | 任意 agent 客户端 |
+| **A. 交给 Codex / Claude Code** | 把仓库交给 agent，让它读 `AGENTS.md`、跑健康检查、按任务加载文档 | 任意 agent 客户端 |
 | **A2. 原生 Pi 终端 Agent** | 想要自带研究/复盘对话界面 | `stocksage` 或 `make agent-setup && make agent` |
 | **B. Web 控制台**（开发中） | 想要图形化的研究看板 | <http://localhost:5173>（API: <http://localhost:8000/docs>） |
 | **C. Docker / compose** | 想要一键部署整套前后端 | `cp .env.example .env && make docker-up` |
@@ -107,11 +107,10 @@ python3 -m backend.agent.cli health --pretty
 <summary><b>方式 A — 把项目交给 Codex / Claude Code</b></summary>
 
 1. 把 GitHub 主页或仓库地址发给 Codex / Claude Code。
-2. 让 agent 阅读 `README.md` 和 [AGENTS.md](AGENTS.md)，确认运行边界。
-3. 让 agent 先跑 `python3 -m backend.agent.cli health --pretty`，确认数据库、记忆、自选、持仓状态。
-4. 按提示配置 `.env`（例如 `AI_PROVIDER=local_cli`，或填入 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`）。
-5. 让 agent 安装依赖、初始化数据库、启动服务或 MCP，需要权限时由你确认。
-6. 直接用自然语言发送研究、复盘、记忆或项目体检任务。
+2. 让 agent 先读 [AGENTS.md](AGENTS.md)，再按任务读取 `STATUS.md`、`PROJECT.md`、`docs/ROADMAP.md` 或 `CHANGELOG.md`。
+3. 先跑 `python3 -m backend.agent.cli health --pretty`，确认数据库、记忆、自选、持仓状态。
+4. 按提示配置 `.env`，安装依赖、初始化数据库、启动服务或 MCP。
+5. 直接用自然语言发送研究、复盘、记忆或项目体检任务；写操作会先 dry-run。
 
 </details>
 
@@ -143,20 +142,21 @@ make agent-mcp-config
 
 ## 🤖 Agent 使用指南
 
-StockSage 已经把研究、记忆、复盘、健康检查全部 agent 化。重点不是"它怎么跑"，而是**可以把哪些任务交给它**。
+StockSage 已经把研究、记忆、复盘和健康检查 agent 化。新 agent
+默认只需要先读 [AGENTS.md](AGENTS.md)，再按任务加载对应文档：
+`STATUS.md` 看当前状态，`PROJECT.md` 看代码地图，`docs/ROADMAP.md`
+看下一步，`CHANGELOG.md` 看历史版本。
 
 ### 可以委派的任务
 
-| 你想做的事 | 交给 Agent 的任务 | 典型输出 |
-|---|---|---|
-| **个股研究** | 读取单股信号、新闻、持仓、长期标签、历史复盘和项目记忆。 | 研究摘要、证据链、风险点、可继续观察的问题。 |
-| **单股准备** | 添加/激活标的，尽力回填行情和财务，再返回 dossier 与缺失项。 | 可研究状态、缺失数据清单、下一步入口。 |
-| **专题研究** | 围绕行业、主题、产业链或一组股票做结构化研究。 | 主题结论、涉及标的、来源审计、待验证问题。 |
-| **长期研究** | 调用长期分析师团，检查赛道、财务质量、景气度、QFII 流向。 | 长期标签、评分、关键发现、规避或持有理由。 |
-| **深度调研** | 组织行业研究员、公司研究员、风险复核员、来源审计员、写作员生成报告。 | Markdown 报告、核心结论、风险复核、引用来源。 |
-| **记忆管理** | 读写长期规则、风险偏好、研究索引、聊天摘要和分层决策记忆。 | 记忆摘要、召回结果、待确认的写入操作。 |
-| **复盘与验证** | 统计信号表现、归因、胜率、回撤、exit reason 和风险规则执行。 | 复盘摘要、表现归因、规则校准建议。 |
-| **项目体检** | 检查数据覆盖、scheduler、API、配置、测试、文档状态。 | 健康报告、异常项、维护建议。 |
+| 任务 | 典型输出 |
+|---|---|
+| 个股研究 / 单股准备 | dossier、证据链、风险点、缺失数据和下一步入口 |
+| 专题研究 / 深度调研 | 主题结论、涉及标的、来源审计、待验证问题、Markdown 报告 |
+| 长期研究 | 长期标签、评分、关键发现、规避或持有理由 |
+| 记忆管理 | 记忆摘要、召回结果、待确认的写入操作 |
+| 复盘与验证 | 表现归因、胜率、回撤、exit reason、规则校准建议 |
+| 项目体检 | 健康报告、数据覆盖、scheduler/API/配置/测试异常项 |
 
 ### 常用提示词
 

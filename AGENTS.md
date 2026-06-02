@@ -72,16 +72,27 @@ internal LLM workflows run through local Claude Code CLI instead, set
 `AI_PROVIDER=anthropic` or `AI_PROVIDER=openai` requires and consumes the
 matching cloud API key.
 
-## Project Memory First
+## Fresh Session Routing
 
-Before making StockSage trading, testing, review, or research decisions, prefer
-project-owned memory over assistant-only chat memory:
+Keep fresh-session context light. This file is the only default always-read
+project instruction surface; load other project documents only when the task
+needs them:
 
-1. `PROJECT.md` and `STATUS.md`
-2. current SQLite state: positions, watchlist, signals, labels, reviews
-3. `ai_memory` rows for rules, preferences, research indexes, and risk notes
-4. `decision_memory_layered` and `~/.stock-sage/memory/*.md`
-5. recent `audit_log_fts` entries
+| Task | Read |
+|---|---|
+| current status, next step, testing, trading, milestone work | `STATUS.md` |
+| architecture, repository navigation, ownership boundaries | `PROJECT.md` |
+| onboarding, install, public copy, GitHub-facing docs | `README.md` |
+| planning, continuation, milestone sequencing, "what next" | `docs/ROADMAP.md` |
+| release notes, version history, historical verification | `CHANGELOG.md` |
+
+For StockSage trading, testing, review, or research decisions, prefer
+project-owned runtime truth over assistant-only chat memory:
+
+1. current SQLite state: positions, watchlist, signals, labels, reviews
+2. `ai_memory` rows for rules, preferences, research indexes, and risk notes
+3. `decision_memory_layered` and `~/.stock-sage/memory/*.md`
+4. recent `audit_log_fts` entries
 
 ## Single-Stock Research Output
 
@@ -108,85 +119,24 @@ If no copilot record exists, say that the stock currently has no copilot shadow
 opinion. Do not invent a shadow conclusion from the main signal, and do not let
 the copilot modify official signals, stop loss, take profit, or real positions.
 
-## First-Run Checklist For External Agents
+## Agent Runtime Checklist
 
-When Codex, Claude Code, pi, Cursor or another local agent opens this repository
-for the first time:
+For local agent work, start with the smallest command that matches the task:
 
-1. Read `README.md`, this `AGENTS.md`, `STATUS.md` and `PROJECT.md`.
-2. Run `python3 -m backend.agent.cli health --pretty`.
-3. If the database is not initialized, run `python3 backend/data/database.py`.
-4. For one-stock work, run
-   `python3 -m backend.agent.cli project-context --symbol <symbol> --pretty`
-   and `python3 -m backend.agent.cli stock-context <symbol> --pretty`.
-5. For memory-sensitive work, run
-   `python3 -m backend.agent.cli memory-snapshot --pretty`.
-6. Use dry-run action metadata before mutating local state:
-   `python3 -m backend.agent.cli action <name> --payload-json '<json>' --pretty`.
-7. Execute mutations only after explicit user confirmation by adding
-   `--confirm`.
+- health / setup check: `python3 -m backend.agent.cli health --pretty`
+- database bootstrap: `python3 backend/data/database.py`
+- project context for one-stock work:
+  `python3 -m backend.agent.cli project-context --symbol <symbol> --pretty`
+- one-stock context:
+  `python3 -m backend.agent.cli stock-context <symbol> --pretty`
+- memory-sensitive work:
+  `python3 -m backend.agent.cli memory-snapshot --pretty`
+- local mutation preview:
+  `python3 -m backend.agent.cli action <name> --payload-json '<json>' --pretty`
+- confirmed local mutation: add `--confirm` only after explicit user approval
 
-The native Pi terminal entrypoint is:
-
-```bash
-make agent-setup
-make agent
-```
-
-`INSTALL_PI=1 make agent-setup` may install the official native Pi CLI with npm
-when `pi` is missing. `make agent-dev` starts the same native Pi shell with
-developer intent; use it for code changes rather than trading research.
-
-The installer/launcher path is:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Zeeechenn/stock-sage/main/scripts/install.sh | sh
-stocksage
-```
-
-The native Pi shell loads project-local `.pi/skills`, `.pi/prompts` and
-`.pi/extensions`. The launch script does not bulk-export project `.env` secrets
-into the Pi process; StockSage Python commands read `.env` from the project root.
-
-The local MCP entrypoint is:
-
-```bash
-PYTHONPATH=. python3 -m backend.agent.mcp_server
-# or:
-make agent-mcp
-```
-
-Install the optional MCP dependency with:
-
-```bash
-pip install -e ".[agent]"
-```
-
-Useful agent tools are:
-
-- `stock_sage_project_context`
-- `stock_sage_memory_snapshot`
-- `stock_sage_stock_context`
-- `stock_sage_health`
-
-Native Pi extension tools are:
-
-- `stocksage_health`
-- `stocksage_project_context`
-- `stocksage_stock_context`
-- `stocksage_memory_snapshot`
-- `stocksage_action_dry_run`
-- `stocksage_action_confirm`
-
-To generate a local MCP client config snippet:
-
-```bash
-make agent-mcp-config
-```
-
-On a fresh clone, run `python3 backend/data/database.py` before expecting live
-positions, watchlist, signals or memory. The MCP health tool returns empty
-counts instead of failing when the database schema has not been initialized.
+Native Pi, installer, and MCP setup details live in `README.md`. Keep this file
+focused on agent rules and task routing.
 
 ## Trading And Risk Constraints
 

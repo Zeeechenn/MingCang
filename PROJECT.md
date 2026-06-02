@@ -18,11 +18,11 @@ the linked documents.
 
 | 文件 | 内容 |
 |------|------|
-| [STATUS.md](STATUS.md) | 当前公开快照（默认权重 / 调度 / 验证 / 启动命令） |
-| [CHANGELOG.md](CHANGELOG.md) | 已完成里程碑详情（M0–M28，按时间倒序） |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 进行中与待做（当前重点 M29，后置 M24.3 / M25.5 等） |
-| [README.md](README.md) | 项目门面（Quick Start / 架构图） |
-| [AGENTS.md](AGENTS.md) | Codex / Claude Code / MCP 本地 agent 使用说明 |
+| [AGENTS.md](AGENTS.md) | 默认 agent 规则、任务路由和安全边界 |
+| [STATUS.md](STATUS.md) | 当前状态、生产权重、验证快照和下一步入口 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 进行中与待做，使用 M-numbered 结构 |
+| [CHANGELOG.md](CHANGELOG.md) | 已完成里程碑和版本历史 |
+| [README.md](README.md) | GitHub 门面、安装、配置和公开说明 |
 
 ---
 
@@ -36,36 +36,17 @@ runtime databases and personal trading records stay outside Git tracking.
 
 ## 里程碑总览
 
-| 里程碑 | 名称 | 状态 |
-|---|---|---|
-| **M0** | 系统骨架 | ✅ 完成 |
-| **M1** | 严肃化与质量门槛 | ✅ 完成 |
-| **M2** | 本地验证材料 | 🏠 本地维护，不进入 GitHub |
-| **M3** | 可信度审计层（DSR/PBO/WF/PIT/KillSwitch） | ✅ 完成 |
-| **M4** | 多 Agent 决策深化 | 🟡 大部分（M4.1/4.2/4.3/4.6 已落地，M4.4/4.5 暂缓） |
-| **M5** | 自动化执行 | 🔲 后置 |
-| **M6** | 持续迭代与扩展 | ✅ M6.1 / M6.3 当前范围完成，持续迭代 |
-| **M7** | 工程化与开源就绪 | ✅ 完成 |
-| **M8** | 深度研究与来源审计层 | ✅ 完成（新闻审计 + 手动专题研究 + 研究记忆） |
-| **M9** | 记忆系统接入与治理 | ✅ 大部分完成（M9.0–M9.4 + 横向备份/反偏差） |
-| **M10** | 运行可靠性与产品化优化 | ✅ M10.0-M10.4 完成 |
-| **M11** | Agent-Ready 本地/远程双模式接口 | ✅ 初版完成（AGENTS/CLAUDE 契约 + 本地 MCP 只读上下文工具） |
-| **M12** | 外部数据源扩展治理 | ⏳ 剩余项观察中 |
-| **M13** | pi Shell + Agent Kernel | ✅ 完成 |
-| **M14** | 股票长期记忆与跨入口召回 | ✅ 完成 |
-| **M15** | 记忆系统与影子副驾驶修复 | ✅ 完成 |
-| **M16** | 全项目分层评审 | ✅ 完成 |
-| **M17-M21** | 决策链 / 回测 / 数据 / 量化 / 基础设施评审修复 | ✅ 完成 |
-| **M22** | 持仓完整性与状态隔离 | ✅ 完成 |
-| **M23** | 信号证据链、回测口径与运行硬化 | ✅ 完成 |
-| **M24** | 长期标签隔离与约束观察 | ✅ M24.0-M24.2 完成；M24.3 观察中 |
-| **M25** | 综合改进路线图 | ✅ M25.0-M25.4 主体完成；M25.5/M25.6 后置 |
-| **M26** | 量化层重估 | ✅ M26.0-M26.2 完成；M26.3 暂停 |
-| **M27** | Alpha 根治工程 | ✅ 证据闭环完成但未晋升；生产 quant 继续关闭 |
-| **M28** | 调研模块整合与实时搜索接入 | ✅ 完成（deep_research / copilot / debate 信息流打通） |
-| **M29** | Alpha Reset / Forward Evidence Engine | ⏳ 当前重点：readiness guard + M29.5 residual attribution，等待完整 fresh forward 覆盖 |
-| **M31** | 工程化与产品化借鉴（StockInsight 对标） | 🧰 P2/P3：三级缓存+延迟基准 / 有序容灾链 / 交易节奏命令 / 一键多端报告 |
-| **M32** | Forward 预测层 / 复盘→假设桥 | 🧭 设计立场已定（拒绝价格预测+Strong Buy；做可证伪赛道论点），启动待复盘数据变厚 |
+This index intentionally stays short:
+
+- M0-M28: completed or historically closed; details are in `CHANGELOG.md`.
+- M29: active alpha-reset / forward-evidence work; current execution order is
+  in `docs/ROADMAP.md`.
+- M30: completed engineering-quality convergence.
+- M31-M32: planned product/engineering and forward-hypothesis follow-ups.
+
+Current production conclusion: quant remains disabled
+(`WEIGHT_QUANT=0.0`), Kronos remains off, and M29 evidence is still
+non-promoting.
 
 ---
 
