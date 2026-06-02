@@ -10,6 +10,7 @@ from backend.api.schemas import (
     DeepResearchResponse,
     ResearchDossierOut,
     ResearchStateOut,
+    StressTestResponse,
 )
 from backend.data.database import get_db
 from backend.llm import runtime_readiness
@@ -173,4 +174,51 @@ def run_deep_research_endpoint(
             "llm": readiness,
             "search_configured": bool(readiness.get("search", {}).get("tavily") or readiness.get("search", {}).get("anspire")),
         },
+    )
+
+
+@router.post(
+    "/research/{symbol}/stress-test",
+    response_model=StressTestResponse,
+    dependencies=[Depends(agent_write_guard("research.stress_test"))],
+)
+def run_stress_test_endpoint(symbol: str, db: Session = Depends(get_db)):
+    """Run a single-pass red-team stress test against the ResearchCase. Advisory only.
+
+    Builds the dossier and case envelope then calls run_stress_test; the result is
+    never written to Signal, DecisionRun, or trusted ai_memory rows.
+    In remote agent mode this is gated by the ``research.stress_test`` write action.
+    """
+    from backend.research.dossier import build_research_dossier
+    from backend.research.case import build_case
+    from backend.research.stress_test import (
+        StressTestInputError,
+        StressTestUnavailable,
+        run_stress_test,
+    )
+
+    try:
+        dossier = build_research_dossier(db, symbol)
+        case = build_case(dossier)
+        result = run_stress_test(case)
+    except StressTestInputError as e:
+        raise HTTPException(404, str(e)) from e
+    except StressTestUnavailable as e:
+        raise HTTPException(503, str(e)) from e
+
+    readiness = runtime_readiness()
+    return StressTestResponse(
+        symbol=result["symbol"],
+        as_of=result.get("as_of"),
+        used_llm=result["used_llm"],
+        llm_valid=result["llm_valid"],
+        overall_severity=result["overall_severity"],
+        blockers=result["blockers"],
+        decision_deltas=result["decision_deltas"],
+        follow_up_questions=result["follow_up_questions"],
+        confidence_adjustments=result["confidence_adjustments"],
+        role_outputs=result["role_outputs"],
+        fallback_reason=result.get("fallback_reason"),
+        generated_at=result["generated_at"],
+        readiness={"llm": readiness},
     )

@@ -137,6 +137,9 @@ class Settings(BaseSettings):
     research_director_enabled: bool = True
     director_min_confidence: float = 0.25     # 平均置信度低于此值发出"数据不足"警告
 
+    # M34 Evidence-Bounded Stress Test
+    stress_test_enabled: bool = True
+
     # M4.3 Portfolio Manager（组合层仓位统筹）
     portfolio_manager_enabled: bool = True
 

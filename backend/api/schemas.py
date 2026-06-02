@@ -283,6 +283,22 @@ class DeepResearchResponse(BaseModel):
     readiness: dict = {}
 
 
+class StressTestResponse(BaseModel):
+    symbol: str
+    as_of: str | None = None
+    used_llm: bool = False
+    llm_valid: bool = False
+    overall_severity: str = "low"
+    blockers: list[str] = Field(default_factory=list)
+    decision_deltas: list[str] = Field(default_factory=list)
+    follow_up_questions: list[str] = Field(default_factory=list)
+    confidence_adjustments: dict = {}
+    role_outputs: dict = {}
+    fallback_reason: str | None = None
+    generated_at: str = ""
+    readiness: dict = {}
+
+
 class AIChatRequest(BaseModel):
     message: str
     mode: str = "general"  # general / long_term_team

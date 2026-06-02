@@ -31,7 +31,7 @@ _COST_IN_PER_TOKEN_CNY = 0.25 * 7.2 / 1_000_000    # Haiku input
 _COST_OUT_PER_TOKEN_CNY = 1.25 * 7.2 / 1_000_000   # Haiku output
 
 VALID_BUCKETS = frozenset(
-    ["sentiment", "copilot", "debate", "chat", "deep_research", "other"]
+    ["sentiment", "copilot", "debate", "chat", "deep_research", "red_team_review", "other"]
 )
 
 
