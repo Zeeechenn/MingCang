@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+_DATA_STALE_DAYS = 14
+_SIGNAL_STALE_DAYS = 7
+
+
+def _age_days(date_str: str | None, today: datetime | None = None) -> int | None:
+    if not date_str:
+        return None
+    try:
+        d = datetime.strptime(date_str[:10], "%Y-%m-%d")
+        ref = today or datetime.utcnow()
+        return (ref - d).days
+    except ValueError:
+        return None
+
+
+def _build_quality_gate(dossier: dict, as_of: str | None = None) -> dict:
+    """
+    QualityGate v0 — purely derived from the dossier dict, no new queries.
+
+    Checks:
+      signal_present      — latest_signal is not None
+      label_present       — long_term_label is not None
+      deep_research_present — deep_research list is non-empty
+      copilot_present     — research_state.copilot is not None
+      signal_fresh        — signal date <= _SIGNAL_STALE_DAYS old
+      label_trusted       — long_term_label.quality == 'trusted'
+      no_pending_questions — pending_questions is empty
+      source_coverage_ok  — missing list is empty (all four evidence gaps filled)
+    """
+    signal = dossier.get("latest_signal") or {}
+    label = dossier.get("long_term_label") or {}
+    research_state = dossier.get("research_state") or {}
+    missing = dossier.get("missing") or []
+    pending_questions = dossier.get("pending_questions") or []
+
+    signal_date = signal.get("date") if signal else None
+    signal_age = _age_days(signal_date)
+
+    # cutoff/as_of check: if as_of supplied, verify signal date is not after it
+    cutoff_ok: bool = True
+    if as_of and signal_date:
+        try:
+            cutoff = datetime.strptime(as_of[:10], "%Y-%m-%d")
+            sig_dt = datetime.strptime(signal_date[:10], "%Y-%m-%d")
+            cutoff_ok = sig_dt <= cutoff
+        except ValueError:
+            cutoff_ok = False
+
+    checks = {
+        "signal_present": bool(signal),
+        "label_present": bool(label),
+        "deep_research_present": bool(dossier.get("deep_research")),
+        "copilot_present": bool(research_state.get("copilot")),
+        "signal_fresh": (signal_age is not None and signal_age <= _SIGNAL_STALE_DAYS)
+                        if signal else False,
+        "label_trusted": label.get("quality") == "trusted" if label else False,
+        "no_pending_questions": not pending_questions,
+        "source_coverage_ok": not missing,
+        "cutoff_ok": cutoff_ok,
+    }
+
+    blockers = [k for k, v in checks.items() if not v]
+    warnings = []
+    if signal_age is not None and signal_age > _SIGNAL_STALE_DAYS:
+        warnings.append({"code": "signal_stale",
+                         "message": f"Signal is {signal_age} days old (threshold {_SIGNAL_STALE_DAYS})"})
+    for gap in missing:
+        warnings.append({"code": f"missing_{gap}",
+                         "message": f"Evidence gap: {gap}"})
+    if pending_questions:
+        warnings.append({"code": "pending_questions",
+                         "message": f"{len(pending_questions)} copilot question(s) unanswered"})
+
+    return {
+        "checks": checks,
+        "blockers": blockers,
+        "warnings": warnings,
+        "gate_pass": not blockers,
+        "as_of": as_of,
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
+def _build_structural_validity_card(dossier: dict) -> dict:
+    """
+    StructuralValidityCard v0 — purely derived from dossier dict.
+
+    Status fields:
+      pit_ok              — evidence[0].as_of is populated (point-in-time tag present)
+      universe_hash_present — evidence[0].input_snapshot contains 'universe_hash'
+      provenance_fields_present — evidence[0].input_snapshot contains at least
+                                  data_source, fetched_at, adjustment
+      calibration_status  — long_term_label.quality tri-state ('trusted'/'degraded'/'failed'/'unknown')
+      constraint_eligible — long_term_label.constraint_eligible bool
+      cost_awareness      — dict with budget proxy info derived from evidence length
+                            (actual CNY figures require DB; here we surface what's in the dossier)
+      label_expires_at    — long_term_label.expires_at for freshness awareness
+    """
+    evidence = dossier.get("evidence") or []
+    label = dossier.get("long_term_label") or {}
+    official_action = dossier.get("official_action") or {}
+
+    first_ev: dict[str, Any] = evidence[0] if evidence else {}
+    input_snapshot: dict = first_ev.get("input_snapshot") or {}
+
+    _PROVENANCE_MIN = {"data_source", "fetched_at", "adjustment"}
+    provenance_present = _PROVENANCE_MIN.issubset(input_snapshot.keys())
+    universe_hash_present = "universe_hash" in input_snapshot
+    pit_ok = bool(first_ev.get("as_of"))
+
+    calibration_status = label.get("quality", "unknown") if label else "unknown"
+    constraint_eligible = label.get("constraint_eligible", False) if label else False
+
+    # surface is_constrained from official_action as a cross-check
+    is_constrained = official_action.get("is_constrained", False)
+
+    status = {
+        "pit_ok": pit_ok,
+        "universe_hash_present": universe_hash_present,
+        "provenance_fields_present": provenance_present,
+        "calibration_status": calibration_status,
+        "constraint_eligible": constraint_eligible,
+        "is_constrained": is_constrained,
+        "label_expires_at": label.get("expires_at") if label else None,
+        "evidence_run_count": len(evidence),
+    }
+
+    missing_provenance = sorted(_PROVENANCE_MIN - set(input_snapshot.keys()))
+
+    return {
+        "status": status,
+        "missing_provenance": missing_provenance,
+        "card_pass": pit_ok and provenance_present,
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
+def build_case(dossier: dict, as_of: str | None = None) -> dict:
+    """
+    Build a ResearchCase envelope from an already-assembled dossier dict.
+
+    Pure function — no DB access, no LLM calls, no side effects.
+    Returns a dict that matches ResearchCaseOut.
+    """
+    quality_gate = _build_quality_gate(dossier, as_of=as_of)
+    validity_card = _build_structural_validity_card(dossier)
+    symbol = dossier.get("symbol", "")
+    return {
+        "symbol": symbol,
+        "as_of": as_of,
+        "quality_gate": quality_gate,
+        "validity_card": validity_card,
+        "ready": quality_gate["gate_pass"] and validity_card["card_pass"],
+        "generated_at": datetime.utcnow().isoformat(),
+    }

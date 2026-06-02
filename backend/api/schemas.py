@@ -202,6 +202,31 @@ class ResearchStateOut(BaseModel):
     updated_at: str | None = None
 
 
+class QualityGateOut(BaseModel):
+    checks: dict[str, bool] = {}
+    blockers: list[str] = []
+    warnings: list[dict] = []
+    gate_pass: bool = False
+    as_of: str | None = None
+    generated_at: str | None = None
+
+
+class StructuralValidityCardOut(BaseModel):
+    status: dict = {}
+    missing_provenance: list[str] = []
+    card_pass: bool = False
+    generated_at: str | None = None
+
+
+class ResearchCaseOut(BaseModel):
+    symbol: str
+    as_of: str | None = None
+    quality_gate: QualityGateOut = Field(default_factory=QualityGateOut)
+    validity_card: StructuralValidityCardOut = Field(default_factory=StructuralValidityCardOut)
+    ready: bool = False
+    generated_at: str | None = None
+
+
 class ResearchDossierOut(BaseModel):
     symbol: str
     stock: dict | None = None
@@ -215,6 +240,7 @@ class ResearchDossierOut(BaseModel):
     conflicts: list[dict] = []
     official_action: dict = {}
     missing: list[str] = []
+    case: ResearchCaseOut | None = None
 
 
 class DataCoverageStockOut(BaseModel):
