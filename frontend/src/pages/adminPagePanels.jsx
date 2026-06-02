@@ -195,19 +195,19 @@ export function AdminSettingsPanel({
               <SettingRow label="财报回填年限" hint="长期研究团队同步财务数据时回看的年份数量。">
                 <NumberInput value={financialYears} min={1} max={10} onChange={setFinancialYears} suffix="年" />
               </SettingRow>
-              <SettingRow label="新闻补缺阈值" hint="DB 内新闻数量低于该值时，先触发 Anspire 严格补缺；Tavily 配 key 后每轮信号都会补充。">
+              <SettingRow label="新闻补缺阈值" hint="DB 内新闻数量低于该值时，先用 iFinD MCP 资讯/公告补充；仍不足再走 Tavily。">
                 <NumberInput value={tavilyThreshold} min={0} max={10} onChange={setTavilyThreshold} />
               </SettingRow>
-              <SettingRow label="Anspire 新闻窗口" hint="短线新闻搜索回看天数。">
+              <SettingRow label="Anspire 新闻窗口" hint="显式 deep research / 手动严格新闻抓取的回看天数。">
                 <NumberInput value={anspireDays} min={1} max={7} onChange={setAnspireDays} suffix="天" />
               </SettingRow>
-              <SettingRow label="Anspire 结果上限" hint="每股最多读取的搜索结果。">
+              <SettingRow label="Anspire 结果上限" hint="显式 Anspire 抓取时每股最多读取的搜索结果。">
                 <NumberInput value={anspireMaxResults} min={1} max={20} onChange={setAnspireMaxResults} />
               </SettingRow>
-              <SettingRow label="Anspire 补入标题" hint="每股最多补入情感分析链路的标题数。">
+              <SettingRow label="Anspire 补入标题" hint="显式 Anspire 抓取时每股最多补入情感分析链路的标题数。">
                 <NumberInput value={anspireMaxAdd} min={0} max={10} onChange={setAnspireMaxAdd} />
               </SettingRow>
-              <SettingRow label="Anspire 最低审计分" hint="低于该分数的新闻不会进入情感分析链路。">
+              <SettingRow label="Anspire 最低审计分" hint="显式 Anspire 抓取时低于该分数的新闻不会进入情感分析链路。">
                 <NumberInput value={anspireMinScore} min={0} max={100} onChange={setAnspireMinScore} />
               </SettingRow>
               <SettingRow label="价格覆盖" hint="已有价格数据的标的数量。">

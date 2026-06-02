@@ -6,6 +6,24 @@
 
 ---
 
+## [v0.2.1] M29/M30 质量补丁与 iFinD 新闻补充链路（2026-06-02）
+
+### Added
+- M29 Forward Evidence Engine 工具链进入公开主线：read-only evidence ledger、hypothesis registry、forward readiness guard、close-confirmed price coverage refresh、post-event shadow validation 与 quant residual attribution。
+- M30 工程质量收敛进入公开主线：Python lock / frozen sync、CI job 拆分、coverage snapshot、低噪声安全扫描、dependency audit、核心路径专项测试和前端 advisory lint / format 入口。
+
+### Changed
+- 盘后新闻情绪补充链路从 Anspire 主力切换为 iFinD MCP `search_news` / `search_notice`（仅在 `IFIND_MCP_ENABLED=true` 且配置 token 时启用），仍不足时再走 Tavily；Anspire 保留给显式 deep research / 手动严格事件型新闻抓取。
+- `efinance` 从默认依赖改为 optional extra，默认 CN 日线与指数 fallback 不再带入 `retry -> py` dependency audit debt；安装 `pip install -e ".[efinance]"` 后可重新参与 fallback。
+- AdminPage 拆出 UI primitives、常量与 panels，主页面保留 state/API 容器职责。
+
+### Decision
+- 生产量化层结论不变：`WEIGHT_QUANT=0.0`、`kronos_enabled=false`，M29/M29.5 证据均保持 non-promoting。
+- iFinD MCP 只参与新闻/公告补充，不作为 A 股 OHLCV 行情写库源。
+
+### Tests
+- Release gate：`make verify` 通过；前端 lint / node tests / Vite build 通过，Python lock check、dependency audit 与核心路径专项测试可复现。
+
 ## [v0.2.0] Agent-ready research runtime 与 Alpha evidence release（2026-05-31）
 
 ### Added

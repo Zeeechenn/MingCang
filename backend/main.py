@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler_stop()
 
 
-app = FastAPI(title="StockSage API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="StockSage API", version="0.2.1", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -18,7 +18,7 @@ const PANEL = 'rounded-sm border border-stone-300/80 bg-[#faf6ec] dark:border-sl
 const PANEL_ALT = 'rounded-sm border border-stone-300/80 bg-[#fffaf0] dark:border-slate-700 dark:bg-[#222936]'
 const LABEL = 'text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500 dark:text-slate-400'
 const RELEASE_ITEMS = [
-  ['v0.2.0', '公开发布'],
+  ['v0.2.1', '质量补丁'],
   ['M28', '调研链路打通'],
   ['M29', 'Forward evidence'],
   ['Quant', '生产继续关闭'],

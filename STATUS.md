@@ -2,7 +2,7 @@
 
 > Public runtime and release snapshot. Detailed history lives in `CHANGELOG.md`; future work lives in `docs/ROADMAP.md`.
 
-当前公开 release：`v0.2.0`（2026-05-31），聚合 M26/M27/M28/M29 agent-ready research runtime 与 alpha evidence 更新；生产量化层继续关闭。
+当前公开 release：`v0.2.1`（2026-06-02），聚合 M29 forward evidence 工具链、M30 工程质量收敛、依赖审计收口、AdminPage 可维护性拆分与 iFinD MCP 盘后资讯/公告补充；生产量化层继续关闭。
 
 ---
 
@@ -87,6 +87,10 @@
 - M30.5/M30.6 首轮优化执行（2026-06-02）：Python 依赖已补上限并重锁 `uv.lock`，新增直接 `joblib` 依赖；`ruff check backend --select S301,S310,S324,S608` 已清零，S608 table/IN 查询改为白名单或 bind 参数，S324 保留为 cache/dedup/source_ref 精准 `noqa`，非 CLI 外部探测与 Bark 通知改用 `requests`，Qlib 模型持久化改为 `joblib`。前端新增 advisory `make frontend-lint` / `make frontend-format-check`，暂不并入 `make verify`。本轮验证：`make verify` 通过（backend 675 passed / 5 skipped，frontend node tests 19 passed，Vite build 通过），backend coverage snapshot 升至 64%。
 - M30.5 dependency audit 收口（2026-06-02）：`efinance` 已从默认依赖移到 optional extra，CN 日线与指数 provider 仅在安装后注册；默认环境不再带入 `retry -> py`，`pytest` 升至 9.0.3，`uv.lock` 已重锁，`make python-lock-check` 与 `make dependency-audit` 通过且无已知漏洞。前端已小步升级到 Vite 6.4.3 / `@vitejs/plugin-react` 4.7，`npm audit` 为 0 vulnerabilities，未使用 force 跳 Vite 8；非 CLI print 已审计，剩余 `print()` 都是 CLI/tools/backtest/manual report 输出。
 - M30.6 维护性拆分完成（2026-06-02）：AdminPage 已抽出 `frontend/src/pages/adminPageUi.jsx`、`adminPageConstants.js` 与 `adminPagePanels.jsx`，主体从 992 行降到约 391 行，前端 lint、node tests 19 passed、Vite build 通过；test2 A/B runner 本地 ignored 材料已按 data / stats / report / runner / cli 拆分，`paper_trading/test2_ab_runner.py` 保持兼容入口，runner 降到约 254 行，selftest 6 passed，固定 `--end 2026-06-01` 生成的 replay JSON 与 `paper_trading/test2_ab_state.json` 无差异，避免 2026-06-02 盘中不完整行情污染 replay truth。M30 当前无剩余规划项。
+
+**v0.2.1 发布补丁（2026-06-02）**
+- 盘后新闻情绪补充链路已按当前运行逻辑改为 iFinD MCP `search_news` / `search_notice`（需 `IFIND_MCP_ENABLED=true` 与 token）优先，仍不足再走 Tavily；Anspire 保留给显式 deep research / 手动严格事件型新闻抓取，不再作为盘后批量补充主链路。
+- README / README_EN / `.env.example` / Web 发布块 / API version / package version 已同步到 `v0.2.1`，CHANGELOG 新增 release note。
 
 **新对话接手目标（2026-06-01，M29）**
 - 先读本节和 `docs/ROADMAP.md § M29`，再看 `git status --short`；当前预期未提交变更包含 M27/M29/M30 交付文件，不要回滚 M27/M29 工具、测试和 M30 工程质量更新。

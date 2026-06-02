@@ -186,9 +186,9 @@ class Settings(BaseSettings):
 
     # Tavily Search API（补充实时新闻；配置 key 后每轮信号都会补充）
     tavily_api_key: str = ""             # 填入你的 Tavily API Key
-    tavily_supplement_threshold: int = 3  # DB新闻 < 此值时先触发 Anspire 严格补缺
+    tavily_supplement_threshold: int = 3  # DB 新闻不足时先用 iFinD MCP，仍不足再用 Tavily
 
-    # Anspire Search API（严格补缺：只补事件型新闻，不补行情/F10/资料页）
+    # Anspire Search API（保留给显式 deep research / 手动严格新闻抓取）
     anspire_api_key: str = ""             # 填入你的 Anspire API Key
     anspire_news_days: int = 2            # 短线新闻搜索窗口
     anspire_news_max_results: int = 5     # 每股最多读取的搜索结果
