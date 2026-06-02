@@ -444,6 +444,71 @@ class ThemeHypothesis(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class ReviewCase(Base):
+    """
+    M37 Review / Calibration / Memory Loop — one row per signal-review event.
+
+    Links a signal (by id), an optional thesis (by id), and an optional
+    ResearchCase (by symbol+as_of) into a single review record.  Outcome
+    attribution data is stored verbatim from review_latest_signal().
+    position_case_ref_json is a nullable stub for a future PositionCase milestone.
+
+    No ForeignKey() constraints — plain integer references following M35 style.
+    UniqueConstraint on (symbol, as_of) makes create_review_case idempotent.
+    """
+    __tablename__ = "review_cases"
+    __table_args__ = (UniqueConstraint("symbol", "as_of", name="uq_review_cases_symbol_as_of"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    as_of: Mapped[str] = mapped_column(String, index=True)            # ISO date — the signal/review date
+    signal_id: Mapped[int | None] = mapped_column(Integer, nullable=True)          # bare int, no FK constraint
+    thesis_id: Mapped[int | None] = mapped_column(Integer, nullable=True)          # bare int, links to ThesisRecord.id
+    research_case_symbol: Mapped[str | None] = mapped_column(String, nullable=True)
+    research_case_as_of: Mapped[str | None] = mapped_column(String, nullable=True)
+    position_case_ref_json: Mapped[str | None] = mapped_column(
+        Text, nullable=True,
+        comment="populated when PositionCase is built (future milestone)",
+    )
+    outcome_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)   # True/False/None from review
+    next_day_return: Mapped[float | None] = mapped_column(Float, nullable=True)    # percent, 2dp
+    composite_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    recommendation: Mapped[str | None] = mapped_column(String, nullable=True)      # BUY/HOLD/SELL
+    attribution_json: Mapped[str | None] = mapped_column(Text, nullable=True)      # JSON list of Chinese attribution strings
+    review_payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)   # full JSON blob from review_latest_signal
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class MemoryPromotionCandidate(Base):
+    """
+    M37 Review Loop — pending/trusted/rejected memory promotion candidates.
+
+    State machine: pending -> trusted (via promote_memory, explicit human-confirmed call)
+                   pending -> rejected (via reject_memory_candidate, explicit human-confirmed call)
+    Both 'trusted' and 'rejected' are terminal — no further transitions.
+
+    source_trust is always created as 'pending'. The only functions that write
+    'trusted' or 'rejected' are promote_memory and reject_memory_candidate
+    respectively, neither of which is callable from any LLM agent code path.
+    """
+    __tablename__ = "memory_promotion_candidates"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    review_case_id: Mapped[int | None] = mapped_column(Integer, nullable=True)         # bare int ref to review_cases.id
+    stock_memory_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # set after promotion fires the stock_memory write
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    summary: Mapped[str] = mapped_column(Text)
+    memory_type: Mapped[str] = mapped_column(String)
+    source_trust: Mapped[str] = mapped_column(String, default="pending", index=True)   # pending / trusted / rejected
+    source_ref: Mapped[str | None] = mapped_column(String, nullable=True)              # idempotency key
+    importance: Mapped[int] = mapped_column(Integer, default=3)
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)      # set when trusted
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)      # set when rejected
+    note: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 def get_latest_price_date(symbol: str, db) -> str | None:
     """返回该股最新一条价格记录的日期字符串，无数据时返回 None"""
     result = db.query(Price.date).filter(Price.symbol == symbol)\

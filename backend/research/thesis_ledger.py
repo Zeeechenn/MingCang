@@ -220,3 +220,31 @@ def append_confidence(
     )
     db.commit()
     return _entry_to_dict(entry)
+
+
+def attach_review_case(db, thesis_id: int, *, review_payload: dict, as_of: str) -> dict:
+    """Populate ThesisRecord.review_case_ref_json with the given review payload dict.
+
+    Raises ValueError if thesis_id does not exist.
+    Always calls audit_write on success.
+    The bidirectional link is: ReviewCase.thesis_id -> ThesisRecord.id (bare int),
+    and ThesisRecord.review_case_ref_json stores the full review payload dict.
+    """
+    from backend.data.database import ThesisRecord
+
+    row = db.query(ThesisRecord).filter(ThesisRecord.id == thesis_id).first()
+    if row is None:
+        raise ValueError(f"thesis {thesis_id} not found")
+
+    row.review_case_ref_json = json.dumps(review_payload, ensure_ascii=False, default=str)
+    row.updated_at = _utc_now()
+    db.flush()
+
+    audit_write(
+        db,
+        "thesis_ledger.review_case",
+        f"review_case attached as_of={as_of}",
+        related_symbol=row.symbol,
+    )
+    db.commit()
+    return _row_to_dict(row)
