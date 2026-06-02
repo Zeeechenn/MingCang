@@ -67,3 +67,58 @@ def test_export_coverage_csv_returns_csv_headers(test_db):
     assert "coverage.csv" in resp.headers["content-disposition"]
     body = resp.text.lstrip("﻿")
     assert "snapshot_at" in body
+
+
+def test_export_postmarket_review_html_includes_versions_and_disclaimer(test_db):
+    from backend.data.database import ReviewRun, Signal, Stock
+
+    test_db.add(Stock(symbol="300308", name="中际旭创", market="CN", active=True))
+    test_db.add(Signal(
+        symbol="300308",
+        date="2026-05-21",
+        technical_score=20,
+        sentiment_score=35,
+        composite_score=36,
+        recommendation="可小仓试错",
+        confidence="中",
+        limit_status="normal",
+        rule_version="multi_agent_v2:new_framework",
+    ))
+    test_db.add(ReviewRun(
+        kind="daily",
+        as_of="2026-05-21",
+        summary="盘后复盘已生成。",
+        status="created",
+    ))
+    test_db.commit()
+
+    client = _client_for_db(test_db)
+    try:
+        resp = client.get("/api/export/postmarket-review.html?as_of=2026-05-21")
+    finally:
+        _clear_client_override()
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/html")
+    assert "postmarket-review-2026-05-21.html" in resp.headers["content-disposition"]
+    assert "研究复盘，非投资建议、非价格预测" in resp.text
+    assert "rule/profile version" in resp.text
+    assert "multi_agent_v2:new_framework" in resp.text
+    assert "profile_version" in resp.text
+    assert "new_framework" in resp.text
+    assert "盘后复盘已生成。" in resp.text
+
+
+def test_export_postmarket_review_word_compatible_response(test_db):
+    client = _client_for_db(test_db)
+    try:
+        resp = client.get("/api/export/postmarket-review.html?as_of=2026-05-21&format=word")
+    finally:
+        _clear_client_override()
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/msword")
+    assert "postmarket-review-2026-05-21.doc" in resp.headers["content-disposition"]
+    assert "<html>" in resp.text
+    assert "研究复盘，非投资建议、非价格预测" in resp.text
+    assert "rule_version" in resp.text

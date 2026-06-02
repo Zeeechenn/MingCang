@@ -15,6 +15,7 @@ from backend.agent.context import (
     stock_sage_stock_context,
 )
 from backend.agent.security import AgentSecurityError, require_agent_access
+from backend.data.cache_policy import workflow_cache_policy
 from backend.data.database import SessionLocal, init_db
 
 # M21.4：init_db 幂等但每次调用仍需遍历 PRAGMA，进程内只需运行一次
@@ -173,6 +174,81 @@ def _command_actions(args: argparse.Namespace) -> dict:
     return {"actions": list_action_definitions()}
 
 
+def _workflow_payload(args: argparse.Namespace, phase: str) -> dict:
+    _read_guard(args)
+    workflows = {
+        "premarket": {
+            "label": "盘前自检",
+            "one_sentence": "盘前同步行情、个股新闻和沪深300指数，确认数据覆盖后再进入盘中观察。",
+            "reused_entrypoints": [
+                "backend.scheduler.job_premarket",
+                "GET /api/system/data-coverage",
+                "GET /api/system/health",
+            ],
+            "side_effects_if_executed": ["writes prices/news/index_prices", "may call market/news providers"],
+            "operator_command": "python3 -m backend.agent.cli premarket --pretty",
+        },
+        "intraday": {
+            "label": "盘中快速个股",
+            "one_sentence": "盘中只读本地缓存和SQLite，不触发远端网络，快速读取单股上下文或止损观察。",
+            "reused_entrypoints": [
+                "python3 -m backend.agent.cli stock-context <symbol>",
+                "backend.scheduler.job_stoploss_check",
+                "GET /api/system/health",
+            ],
+            "side_effects_if_executed": ["none in default CLI context read", "Bark alert only in scheduler stoploss job"],
+            "operator_command": "python3 -m backend.agent.cli intraday --symbol 300308 --pretty",
+        },
+        "postmarket": {
+            "label": "盘后复盘",
+            "one_sentence": "盘后跑全市场信号入库后，导出带证据与声明的复盘报告。",
+            "reused_entrypoints": [
+                "backend.scheduler.job_postmarket",
+                "GET /api/export/postmarket-review.html",
+                "GET /api/export/postmarket-review.html?format=word",
+            ],
+            "side_effects_if_executed": ["writes signals/reviews/memory", "may call news/LLM providers", "may send Bark alerts"],
+            "operator_command": "python3 -m backend.agent.cli postmarket --pretty",
+        },
+    }
+    payload = workflows[phase]
+    side_effects_if_executed = payload["side_effects_if_executed"]
+    return {
+        "ok": True,
+        "phase": phase,
+        "workflow": phase,
+        "label": payload["label"],
+        "one_sentence": payload["one_sentence"],
+        "dry_run": True,
+        "heavy_tasks_executed": False,
+        "executes_heavy_job": False,
+        "confirmation_required": True,
+        "confirmation_required_for_side_effects": True,
+        "symbol": args.symbol,
+        "cache_policy": workflow_cache_policy(phase),
+        "reused_entrypoints": payload["reused_entrypoints"],
+        "side_effects": {
+            "default": [],
+            "if_confirmed": side_effects_if_executed,
+        },
+        "side_effects_if_executed": side_effects_if_executed,
+        "operator_command": payload["operator_command"],
+        "disclaimer": "研究复盘，非投资建议、非价格预测。",
+    }
+
+
+def _command_premarket(args: argparse.Namespace) -> dict:
+    return _workflow_payload(args, "premarket")
+
+
+def _command_intraday(args: argparse.Namespace) -> dict:
+    return _workflow_payload(args, "intraday")
+
+
+def _command_postmarket(args: argparse.Namespace) -> dict:
+    return _workflow_payload(args, "postmarket")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="StockSage local agent CLI bridge")
     parser.add_argument("--api-key", help="StockSage remote agent API key")
@@ -226,6 +302,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="list registered local agent actions",
     )
     actions.set_defaults(handler=_command_actions)
+
+    premarket = subparsers.add_parser(
+        "premarket",
+        aliases=["盘前"],
+        help="盘前一句话工作流：同步前检查与入口说明",
+    )
+    premarket.add_argument("--symbol", help="optional focus symbol")
+    premarket.set_defaults(handler=_command_premarket)
+
+    intraday = subparsers.add_parser(
+        "intraday",
+        aliases=["盘中"],
+        help="盘中一句话工作流：只读本地缓存的快速个股入口",
+    )
+    intraday.add_argument("--symbol", help="optional focus symbol")
+    intraday.set_defaults(handler=_command_intraday)
+
+    postmarket = subparsers.add_parser(
+        "postmarket",
+        aliases=["盘后"],
+        help="盘后一句话工作流：全市场信号与复盘报告入口",
+    )
+    postmarket.add_argument("--symbol", help="optional focus symbol")
+    postmarket.set_defaults(handler=_command_postmarket)
 
     return parser
 

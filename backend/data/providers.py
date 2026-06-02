@@ -18,14 +18,19 @@ class DailyProvider:
     fetch: DailyFetcher
     priority: int = 100
     cooldown_seconds: int = 0
+    data_type: str = "daily_price"
+    observe_only: bool = False
 
 
 @dataclass(frozen=True)
 class IndexProvider:
     name: str
     fetch: IndexFetcher
+    markets: set[str]
     priority: int = 100
     cooldown_seconds: int = 0
+    data_type: str = "index_price"
+    observe_only: bool = False
 
 
 _DAILY_PROVIDERS: list[DailyProvider] = []
@@ -48,6 +53,8 @@ def register_daily_provider(
     *,
     priority: int = 100,
     cooldown_seconds: int = 0,
+    data_type: str = "daily_price",
+    observe_only: bool = False,
 ) -> None:
     """Register or replace a daily OHLCV provider."""
     global _DAILY_PROVIDERS
@@ -58,6 +65,8 @@ def register_daily_provider(
         fetch=fetch,
         priority=priority,
         cooldown_seconds=cooldown_seconds,
+        data_type=data_type,
+        observe_only=observe_only,
     ))
     _DAILY_PROVIDERS.sort(key=lambda p: p.priority)
     _health(name)
@@ -67,8 +76,11 @@ def register_index_provider(
     name: str,
     fetch: IndexFetcher,
     *,
+    markets: set[str] | None = None,
     priority: int = 100,
     cooldown_seconds: int = 0,
+    data_type: str = "index_price",
+    observe_only: bool = False,
 ) -> None:
     """Register or replace an index OHLC provider."""
     global _INDEX_PROVIDERS
@@ -76,8 +88,11 @@ def register_index_provider(
     _INDEX_PROVIDERS.append(IndexProvider(
         name=name,
         fetch=fetch,
+        markets=set(markets or {"CN"}),
         priority=priority,
         cooldown_seconds=cooldown_seconds,
+        data_type=data_type,
+        observe_only=observe_only,
     ))
     _INDEX_PROVIDERS.sort(key=lambda p: p.priority)
     _health(name)
@@ -138,11 +153,62 @@ def list_index_providers() -> list[str]:
     return [p.name for p in _INDEX_PROVIDERS]
 
 
+def daily_provider_chain(market: str | None = None) -> list[dict]:
+    """Return ordered daily provider metadata for status and audits."""
+    providers = _DAILY_PROVIDERS
+    if market is not None:
+        providers = [p for p in providers if "ALL" in p.markets or market in p.markets]
+    return [
+        {
+            "name": provider.name,
+            "markets": sorted(provider.markets),
+            "priority": provider.priority,
+            "cooldown_seconds": provider.cooldown_seconds,
+            "data_type": provider.data_type,
+            "observe_only": provider.observe_only,
+            "health": dict(_health(provider.name)),
+        }
+        for provider in providers
+    ]
+
+
+def index_provider_chain(market: str | None = None) -> list[dict]:
+    """Return ordered index provider metadata for status and audits."""
+    providers = _INDEX_PROVIDERS
+    if market is not None:
+        providers = [p for p in providers if "ALL" in p.markets or market in p.markets]
+    return [
+        {
+            "name": provider.name,
+            "markets": sorted(provider.markets),
+            "priority": provider.priority,
+            "cooldown_seconds": provider.cooldown_seconds,
+            "data_type": provider.data_type,
+            "observe_only": provider.observe_only,
+            "health": dict(_health(provider.name)),
+        }
+        for provider in providers
+    ]
+
+
+def provider_fallback_chains(market: str = "CN") -> dict:
+    """Return M31 observable provider fallback chains."""
+    return {
+        "daily": daily_provider_chain(market),
+        "index": index_provider_chain(market),
+        "selection_rule": "lowest priority value first; observe-only and cooling providers are skipped",
+    }
+
+
 def fetch_daily_with_fallback(symbol: str, market: str, days: int) -> tuple[pd.DataFrame, str]:
     """Fetch daily bars from the first provider covering market that succeeds."""
     errors: list[str] = []
     for provider in _DAILY_PROVIDERS:
         if "ALL" not in provider.markets and market not in provider.markets:
+            continue
+        if provider.observe_only:
+            _health(provider.name)["skipped"] += 1
+            errors.append(f"{provider.name}: observe_only")
             continue
         if _provider_in_cooldown(provider.name):
             errors.append(f"{provider.name}: cooling")
@@ -165,6 +231,10 @@ def fetch_index_with_fallback(index_symbol: str, days: int) -> tuple[pd.DataFram
     """Fetch index bars from the first index provider that succeeds."""
     errors: list[str] = []
     for provider in _INDEX_PROVIDERS:
+        if provider.observe_only:
+            _health(provider.name)["skipped"] += 1
+            errors.append(f"{provider.name}: observe_only")
+            continue
         if _provider_in_cooldown(provider.name):
             errors.append(f"{provider.name}: cooling")
             continue

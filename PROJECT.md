@@ -42,7 +42,8 @@ This index intentionally stays short:
 - M29: active alpha-reset / forward-evidence work; current execution order is
   in `docs/ROADMAP.md`.
 - M30: completed engineering-quality convergence.
-- M31-M32: planned product/engineering and forward-hypothesis follow-ups.
+- M31: completed product/engineering borrowings.
+- M32: planned forward-hypothesis bridge.
 
 Current production conclusion: quant remains disabled
 (`WEIGHT_QUANT=0.0`), Kronos remains off, and M29 evidence is still
@@ -56,7 +57,8 @@ non-promoting.
 backend/config.py                            配置入口（环境变量、路径、调度时间、Bark、双 profile）
 backend/data/database.py                     数据库模型 + 轻量幂等迁移
 backend/data/market.py                       行情数据拉取（TickFlow 可选优先，免费源 fallback，Tushare qfq 可选后置）
-backend/data/providers.py                    行情 Provider registry + fallback
+backend/data/cache_policy.py                 M31 L1/L2/L3 缓存层、盘中零网络与 freshness contract
+backend/data/providers.py                    行情 Provider registry + ordered fallback metadata
 backend/data/universe.py                     股票池候选 / 去重 / 市值流动性过滤 / 批量回填
 backend/data/qlib_data.py                    Qlib 特征构建（技术 + PIT 基本面 + price provenance）
 backend/data/quality.py                      数据覆盖报表 + provider 可靠性摘要（M6.1）
@@ -101,6 +103,7 @@ backend/tools/m29_shadow_validation.py       M29.2/M29.3 只读预注册 shadow 
 backend/tools/m29_provenance_audit.py        M29.3 只读 price/artifact provenance audit
 backend/tools/m29_forward_readiness.py       M29.3 只读 forward shadow readiness guard
 backend/tools/m29_price_coverage_refresh.py  M29.3 close-confirmed price/provenance refresh（默认 dry-run，--execute 写 prices）
+backend/tools/m31_cache_benchmark.py         M31 只读 L1/L2 cache latency benchmark（默认不触发 L3 远端）
 backend/portfolio/combo_weights.py           组合候选权重分配
 backend/portfolio/single_position.py         单信号仓位映射
 backend/portfolio/trailing_stop.py           Trailing stop 持仓追踪（M1.7）

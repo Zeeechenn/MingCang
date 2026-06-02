@@ -20,6 +20,7 @@ maintenance. It does not place real trades or provide financial advice.
 | Kronos | disabled for production |
 | M29 | active: forward evidence and residual attribution remain non-promoting |
 | M30 | complete: mypy, lockfile, CI/security, coverage, core tests, maintainability |
+| M31 | M31.1–31.3 complete; M31.4 partial: cache policy, provider fallback observability, rhythm CLI, signal/review export (position-review + evidence cards pending) |
 | remote agent mode | opt-in only; read-only by default |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
@@ -51,11 +52,21 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 |---|---|---|
 | M29 Alpha Reset / Forward Evidence Engine | active | wait for complete fresh forward coverage, then rerun readiness -> forward shadow -> ledger |
 | M29.5 Quant Residual Attribution | first pass complete, non-promoting | continue only if fresh evidence clears gates |
-| M31 Product/Engineering Borrowings | planned P2/P3 | cache benchmark, ordered provider fallback, trading-rhythm commands, report export |
+| M31 Product/Engineering Borrowings | M31.1–31.3 done; M31.4 partial | L1/L2/L3 policy, provider chains, dry-run rhythm commands, HTML/Word-compatible postmarket export; pending: position-review + evidence-card sections in export |
 | M32 Forward Hypothesis Bridge | design stance set | start only after review data is thick enough |
 
 For detailed sequencing, read `docs/ROADMAP.md`. For historical milestone
 details, read `CHANGELOG.md`.
+
+M31 completion note (2026-06-02): `backend.data.cache_policy` defines L1/L2/L3
+and the intraday zero-network contract; `/api/system/data-coverage` exposes
+freshness contracts and provider fallback chains; `backend.tools.m31_cache_benchmark`
+writes read-only latency reports under `/private/tmp`; `backend.agent.cli`
+and `stocksage` expose `premarket` / `intraday` / `postmarket` dry-run rhythm
+commands; `/api/export/postmarket-review.html` and `?format=word` export
+postmarket review reports with the day's signal table, review summary,
+rule/profile version, and non-advice disclaimers. Position-holding review and
+per-signal evidence cards are not yet in the export, so M31.4 remains partial.
 
 ## Validation Snapshot
 

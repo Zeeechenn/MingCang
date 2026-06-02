@@ -72,6 +72,28 @@ def _attach_provenance_attrs(df: pd.DataFrame, *, provider: str, adjustment: str
     return df
 
 
+def register_default_market_providers() -> None:
+    """Register default daily/index providers without fetching remote data."""
+    if settings.tickflow_enabled and settings.tickflow_api_key:
+        register_daily_provider("tickflow_cn", {"CN"}, fetch_cn_daily_tickflow, priority=-10, cooldown_seconds=30)
+    register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=0, cooldown_seconds=30)
+    if _efinance_available():
+        register_daily_provider("efinance_cn", {"CN"}, fetch_cn_daily_efinance, priority=10, cooldown_seconds=60)
+    register_daily_provider("eastmoney_cn", {"CN"}, fetch_cn_daily, priority=20, cooldown_seconds=60)
+    register_daily_provider("akshare_em_cn", {"CN"}, fetch_cn_daily_akshare_em, priority=30, cooldown_seconds=60)
+    if settings.tushare_qfq_enabled and settings.tushare_token:
+        register_daily_provider("tushare_qfq_cn", {"CN"}, fetch_cn_daily_tushare_qfq, priority=50, cooldown_seconds=120)
+    # M19.2: yfinance 对 A 股是后复权含分红再投，与其余源 qfq 口径冲突，不进入 CN fallback。
+    # akshare_tx 当前返回结构缺 volume，暂不进入 CN 生产 fallback；保留函数供手动调试。
+    register_daily_provider("yfinance_us", {"US"}, fetch_us_daily, priority=90, cooldown_seconds=120)
+
+    register_index_provider("akshare_index_cn", fetch_cn_index_akshare, priority=0, cooldown_seconds=60)
+    register_index_provider("eastmoney_index_cn", fetch_cn_index_eastmoney, priority=10, cooldown_seconds=60)
+    if _efinance_available():
+        register_index_provider("efinance_index_cn", fetch_cn_index_efinance, priority=20, cooldown_seconds=60)
+    register_index_provider("yfinance_index_cn", fetch_cn_index_yfinance, priority=90, cooldown_seconds=120)
+
+
 def _cn_market_prefix(symbol: str) -> str:
     """Return the east-money market prefix digit for a CN stock symbol."""
     return "1" if symbol[:2] in ("60", "68", "11") else "0"
@@ -315,18 +337,7 @@ def fetch_us_daily(symbol: str, days: int = 365) -> pd.DataFrame:
 
 def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
     """Dispatch to the appropriate market data fetcher based on market."""
-    if settings.tickflow_enabled and settings.tickflow_api_key:
-        register_daily_provider("tickflow_cn", {"CN"}, fetch_cn_daily_tickflow, priority=-10, cooldown_seconds=30)
-    register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=0, cooldown_seconds=30)
-    if _efinance_available():
-        register_daily_provider("efinance_cn", {"CN"}, fetch_cn_daily_efinance, priority=10, cooldown_seconds=60)
-    register_daily_provider("eastmoney_cn", {"CN"}, fetch_cn_daily, priority=20, cooldown_seconds=60)
-    register_daily_provider("akshare_em_cn", {"CN"}, fetch_cn_daily_akshare_em, priority=30, cooldown_seconds=60)
-    if settings.tushare_qfq_enabled and settings.tushare_token:
-        register_daily_provider("tushare_qfq_cn", {"CN"}, fetch_cn_daily_tushare_qfq, priority=50, cooldown_seconds=120)
-    # M19.2: yfinance 对 A 股是后复权含分红再投，与其余源 qfq 口径冲突，不进入 CN fallback。
-    # akshare_tx 当前返回结构缺 volume，暂不进入 CN 生产 fallback；保留函数供手动调试。
-    register_daily_provider("yfinance_us", {"US"}, fetch_us_daily, priority=90, cooldown_seconds=120)
+    register_default_market_providers()
     df, provider = fetch_daily_with_fallback(symbol, market, days)
     _attach_provenance_attrs(
         df,
@@ -421,11 +432,7 @@ def fetch_cn_index(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFr
     拉取A股指数日线数据，默认沪深300。
     index_symbol: "sh000300"（沪深300）/ "sh000001"（上证）/ "sh000016"（上证50）
     """
-    register_index_provider("akshare_index_cn", fetch_cn_index_akshare, priority=0, cooldown_seconds=60)
-    register_index_provider("eastmoney_index_cn", fetch_cn_index_eastmoney, priority=10, cooldown_seconds=60)
-    if _efinance_available():
-        register_index_provider("efinance_index_cn", fetch_cn_index_efinance, priority=20, cooldown_seconds=60)
-    register_index_provider("yfinance_index_cn", fetch_cn_index_yfinance, priority=90, cooldown_seconds=120)
+    register_default_market_providers()
     df, provider = fetch_index_with_fallback(index_symbol, days)
     _attach_provenance_attrs(
         df,

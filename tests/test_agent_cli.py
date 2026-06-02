@@ -56,6 +56,28 @@ def test_agent_cli_context_commands_emit_json(tmp_path):
         assert isinstance(json.loads(result.stdout), dict)
 
 
+def test_agent_cli_trading_rhythm_commands_are_dry_run_contract(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    db_path = tmp_path / f"rhythm-{uuid.uuid4().hex}.db"
+    db_url = f"sqlite:///{db_path}"
+
+    for command in ("premarket", "intraday", "postmarket"):
+        result = _run_cli(repo, db_url, command, "--symbol", "300308")
+
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["phase"] == command
+        assert payload["symbol"] == "300308"
+        assert payload["dry_run"] is True
+        assert payload["heavy_tasks_executed"] is False
+        assert payload["reused_entrypoints"]
+        assert payload["side_effects"]["default"] == []
+        assert payload["side_effects"]["if_confirmed"]
+        assert payload["confirmation_required"] is True
+
+    assert not db_path.exists()
+
+
 def test_agent_cli_memory_context_reads_project_memory(tmp_path):
     repo = Path(__file__).resolve().parents[1]
     db_url = f"sqlite:///{tmp_path / f'memory-context-{uuid.uuid4().hex}.db'}"

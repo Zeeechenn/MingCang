@@ -82,6 +82,23 @@ Verify things are healthy:
 python3 -m backend.agent.cli health --pretty
 ```
 
+Trading-rhythm quick entries (all are dry-run orchestration contracts and do not
+run heavy jobs by default):
+
+```bash
+python3 -m backend.agent.cli premarket --pretty
+python3 -m backend.agent.cli intraday --symbol 300308 --pretty
+python3 -m backend.agent.cli postmarket --pretty
+# The native launcher also supports: stocksage premarket / intraday / postmarket
+```
+
+M31 cache-layer SLA baseline (2026-06-02, local SQLite,
+`backend.tools.m31_cache_benchmark --iterations 20`): L1 in-process lookup
+p50≈0.0001ms; L2 single-stock latest-price lookup p50≈0.0982ms; L2 market scan
+counts p50≈18.8607ms. Intraday workflows explicitly read L1/L2 only; the L3
+remote API incremental layer is not triggered by default and is excluded from
+intraday benchmarks.
+
 Inside the terminal shell you can ask directly:
 
 ```text

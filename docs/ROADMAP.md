@@ -187,24 +187,33 @@
 
 ### M31.1 显式三级缓存与延迟基准（P2）
 
-- [ ] 把当前散落在 `backend/data/database.py` / `external_sources.py` 的缓存读路径抽象成命名的三层：L1 进程内内存 → L2 本地 SQLite → L3 远端 API 增量，单一入口、命中层可观测。
-- [ ] 给出"盘中零网络调用"的显式保证：盘中分析只读 L1/L2，L3 仅在盘后/增量补齐时触发。
-- [ ] 新增只读 benchmark 脚本（`backend.tools.*_benchmark`），产出全市场扫描耗时、单股分析耗时、各层命中延迟，写 `/private/tmp` 或 `~/.stock-sage`，并在 README 公布一组实测 SLA。
+- [x] 把当前散落在 `backend/data/database.py` / `external_sources.py` 的缓存读路径抽象成命名的三层：L1 进程内内存 → L2 本地 SQLite → L3 远端 API 增量，单一入口、命中层可观测。
+- [x] 给出"盘中零网络调用"的显式保证：盘中分析只读 L1/L2，L3 仅在盘后/增量补齐时触发。
+- [x] 新增只读 benchmark 脚本（`backend.tools.*_benchmark`），产出全市场扫描耗时、单股分析耗时、各层命中延迟，写 `/private/tmp` 或 `~/.stock-sage`，并在 README 公布一组实测 SLA。
+
+> 2026-06-02 M31.1 完成：新增 `backend.data.cache_policy`，统一输出 L1/L2/L3 cache layer、交易时段 workflow policy、盘中 zero-network contract 与 freshness contract；`backend.tools.m31_cache_benchmark` 默认只读、默认不触发 L3 远端 API，输出 `/private/tmp/m31_cache_benchmark*.{json,md}`。live baseline（20 iterations，本地 SQLite）为 L1 p50≈0.0001ms、L2 单股 latest price p50≈0.0982ms、L2 全市场 count scan p50≈18.8607ms；README / README_EN 已同步 SLA。沙盒不能打开 SQLite WAL 时，benchmark 会把 L2 标为 `measured=false` 而不是误触发远端。
 
 ### M31.2 数据源有序容灾链 + 按数据类型分新鲜度层（P2）
 
-- [ ] 在 `backend/data/providers.py` 把多源 fallback 显式编码为**有序优先级链**（含每条源的失败降级与 observe-only 标记）。
-- [ ] 为每类数据声明刷新频率 / TTL / staleness 容忍度（实时行情秒级、资金流 T+1、基本面季报、行业板块季度），并在 health/coverage 快照里暴露"某类数据当前新鲜度"。
+- [x] 在 `backend/data/providers.py` 把多源 fallback 显式编码为**有序优先级链**（含每条源的失败降级与 observe-only 标记）。
+- [x] 为每类数据声明刷新频率 / TTL / staleness 容忍度（实时行情秒级、资金流 T+1、基本面季报、行业板块季度），并在 health/coverage 快照里暴露"某类数据当前新鲜度"。
+
+> 2026-06-02 M31.2 完成：`DailyProvider` / `IndexProvider` 增加 `data_type`、`observe_only` 与 chain metadata，observe-only provider 会被 fallback 跳过并计入 skipped；`register_default_market_providers()` 可在不发网络请求时注册默认 chain；`build_data_coverage_snapshot()` / `/api/system/data-coverage` 通过 schema 暴露 `cache_policy`、`freshness_contract`、`intraday_zero_network_policy` 与按 market 展开的 `provider_fallback_chains`。
 
 ### M31.3 按交易节奏的命令 UX（P2）
 
-- [ ] 把现有 Pi 终端 / CLI 能力按"盘前 / 盘中 / 盘后"打包成少数几条一句话命令（如盘前自检、盘中快速个股、盘后全市场入库 + 复盘报告），降低入口心智负担。
-- [ ] 命令只做编排，复用现有 `backend.agent.cli` 子命令，不新增分析逻辑。
+- [x] 把现有 Pi 终端 / CLI 能力按"盘前 / 盘中 / 盘后"打包成少数几条一句话命令（如盘前自检、盘中快速个股、盘后全市场入库 + 复盘报告），降低入口心智负担。
+- [x] 命令只做编排，复用现有 `backend.agent.cli` 子命令，不新增分析逻辑。
+
+> 2026-06-02 M31.3 完成：`backend.agent.cli` 新增 `premarket` / `intraday` / `postmarket`（含中文 alias `盘前` / `盘中` / `盘后`），默认只输出 dry-run orchestration JSON，列出 reused entrypoints、side effects、confirmation_required 与 cache policy，不执行重型 job；`scripts/stocksage_launcher.sh` 同步支持 `stocksage premarket|intraday|postmarket` 薄封装。
 
 ### M31.4 一键多端报告输出（P3）
 
-- [ ] 扩展 `backend/api/routes/exports.py`：盘后一条命令生成可分享的复盘报告（Word / HTML 仪表盘），证据卡 / 信号 / 持仓复盘随报告导出。
-- [ ] 报告显式标注 rule/profile 版本与"研究复盘，非投资建议、非价格预测"声明。
+- [x] 扩展 `backend/api/routes/exports.py`：盘后一条命令生成可分享的复盘报告（Word-compatible / HTML），导出当日信号表与复盘摘要。
+- [x] 报告显式标注 rule/profile 版本与"研究复盘，非投资建议、非价格预测"声明。
+- [ ] 证据卡与独立持仓复盘段落随报告导出（M31.4 待补：当前导出仅含信号表 + 复盘摘要，未含逐信号证据卡与持仓复盘段）。
+
+> 2026-06-02 M31.4 部分完成：新增 `/api/export/postmarket-review.html?as_of=YYYY-MM-DD` 与 `?format=word` 的 Word-compatible `.doc` HTML 响应；报告包含 report_version、rule/profile version、当日信号表、复盘摘要与“研究复盘，非投资建议、非价格预测”声明。未引入 `python-docx` 或新依赖，避免依赖锁与审计 churn。**待补**：导出当前不含逐信号证据卡与独立持仓复盘段，故 M31.4 标记 partial。
 
 ---
 

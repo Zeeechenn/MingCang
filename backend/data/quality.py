@@ -5,12 +5,15 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func
 
+from backend.data.cache_policy import cache_policy_payload
 from backend.data.database import FinancialMetric, NewsItem, Price, Signal, Stock
-from backend.data.providers import get_provider_health
+from backend.data.market import register_default_market_providers
+from backend.data.providers import get_provider_health, provider_fallback_chains
 
 
 def build_data_coverage_report(db) -> dict:
     """Build a compact coverage report for active stocks."""
+    register_default_market_providers()
     stocks = db.query(Stock).filter(Stock.active).order_by(Stock.symbol).all()
     cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
     rows: list[dict] = []
@@ -48,6 +51,8 @@ def build_data_coverage_report(db) -> dict:
     def _covered(key: str) -> int:
         return sum(1 for row in rows if row.get(key))
 
+    cache_policy = cache_policy_payload()
+    provider_chains = provider_fallback_chains("CN")
     return {
         "summary": {
             "active_stocks": len(rows),
@@ -55,6 +60,13 @@ def build_data_coverage_report(db) -> dict:
             "two_year_price_covered": sum(1 for row in rows if row["price_rows"] >= 480),
             "financial_covered": _covered("latest_financial_report"),
             "news_24h_covered": sum(1 for row in rows if row["news_24h_count"] > 0),
+            "cache_policy": cache_policy,
+            "freshness_contract": cache_policy.get("freshness_contracts", {}),
+            "intraday_zero_network_policy": cache_policy.get("intraday_zero_network_policy", {}),
+            "provider_fallback_chains": {
+                "markets": ["CN"],
+                "chains_by_market": {"CN": provider_chains},
+            },
         },
         "provider_health": get_provider_health(),
         "stocks": rows,
@@ -102,6 +114,8 @@ def build_data_coverage_snapshot(db, generated_at: str | None = None) -> dict:
             "code": "fresh_news_coverage_gap",
             "message": "Fresh 24h news coverage is below the 80% operating threshold.",
         })
+    markets = sorted({row["market"] for row in report["stocks"] if row.get("market")}) or ["CN"]
+    cache_policy = summary.get("cache_policy", {})
 
     return {
         "generated_at": generated_at or datetime.now(UTC).isoformat(),
@@ -109,5 +123,15 @@ def build_data_coverage_snapshot(db, generated_at: str | None = None) -> dict:
         "checks": checks,
         "warnings": warnings,
         "provider_health": report.get("provider_health", {}),
+        "freshness_contract": cache_policy.get("freshness_contracts", {}),
+        "intraday_zero_network_policy": cache_policy.get("intraday_zero_network_policy", {}),
+        "provider_fallback_chains": {
+            "markets": markets,
+            "chains_by_market": {
+                market: provider_fallback_chains(market)
+                for market in markets
+            },
+        },
+        "cache_policy": cache_policy,
         "stocks": report["stocks"],
     }

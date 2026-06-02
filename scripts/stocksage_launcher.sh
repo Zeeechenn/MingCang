@@ -39,6 +39,9 @@ case "$command_name" in
     PYTHONPATH=. "$PYTHON_BIN" -m backend.agent.cli health --pretty
     PYTHONPATH=. "$PYTHON_BIN" -m backend.agent.cli actions --pretty
     ;;
+  premarket|intraday|postmarket)
+    PYTHONPATH=. "$PYTHON_BIN" -m backend.agent.cli "$command_name" --pretty "$@"
+    ;;
   update)
     if command -v git >/dev/null 2>&1; then
       git pull --ff-only
@@ -54,6 +57,9 @@ Usage:
   stocksage dev         Start native Pi in developer mode
   stocksage configure   Re-run StockSage setup/configuration
   stocksage doctor      Run health and action catalog checks
+  stocksage premarket   Show the premarket workflow contract (dry-run)
+  stocksage intraday    Show the intraday local-cache workflow contract (dry-run)
+  stocksage postmarket  Show the postmarket review/export workflow contract (dry-run)
   stocksage update      Pull latest code and refresh setup
 USAGE
     ;;

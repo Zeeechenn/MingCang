@@ -12,16 +12,20 @@ Excel (.xlsx) 作为后续增强，本期不实现。
 from __future__ import annotations
 
 import csv
+import html
 import io
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from backend.data.database import Position, ReviewRun, Signal, get_db
+from backend.data.database import Position, ReviewRun, Signal, Stock, get_db
 
 router = APIRouter()
+
+_POSTMARKET_REPORT_VERSION = "m31_postmarket_review_v1"
+_POSTMARKET_DISCLAIMER = "研究复盘，非投资建议、非价格预测"
 
 
 def _csv_response(rows: list[dict], columns: list[tuple[str, str]], filename: str) -> Response:
@@ -36,6 +40,143 @@ def _csv_response(rows: list[dict], columns: list[tuple[str, str]], filename: st
         content=data,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _format_number(value: float | None, digits: int = 1) -> str:
+    if value is None:
+        return ""
+    return f"{value:.{digits}f}"
+
+
+def _active_profile_for_day(day: str):
+    from backend.config import active_signal_weights
+
+    try:
+        parsed_day = date.fromisoformat(day)
+    except ValueError:
+        parsed_day = None
+    return active_signal_weights(parsed_day)
+
+
+def _postmarket_review_html(db: Session, day: str) -> str:
+    signals = (
+        db.query(Signal)
+        .filter(Signal.date == day)
+        .order_by(Signal.composite_score.desc())
+        .all()
+    )
+    review = (
+        db.query(ReviewRun)
+        .filter(ReviewRun.kind == "daily", ReviewRun.as_of == day)
+        .order_by(ReviewRun.created_at.desc())
+        .first()
+    )
+    symbols = [signal.symbol for signal in signals]
+    names = {}
+    if symbols:
+        names = {
+            row.symbol: row.name
+            for row in db.query(Stock).filter(Stock.symbol.in_(symbols)).all()
+        }
+    weights = _active_profile_for_day(day)
+    rule_versions = sorted({signal.rule_version or "unknown" for signal in signals}) or ["no_signal_rule_version"]
+    summary = (review.summary if review else None) or f"{day} 盘后复盘：读取 {len(signals)} 条当日信号。"
+
+    rows = []
+    for signal in signals:
+        label = f"{signal.symbol} {names.get(signal.symbol, '')}".strip()
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(label)}</td>"
+            f"<td>{html.escape(_format_number(signal.composite_score))}</td>"
+            f"<td>{html.escape(signal.recommendation or '')}</td>"
+            f"<td>{html.escape(signal.confidence or '')}</td>"
+            f"<td>{html.escape(_format_number(signal.technical_score))}</td>"
+            f"<td>{html.escape(_format_number(signal.sentiment_score))}</td>"
+            f"<td>{html.escape(signal.limit_status or '')}</td>"
+            f"<td>{html.escape(signal.rule_version or 'unknown')}</td>"
+            "</tr>"
+        )
+    signal_table = "\n".join(rows) if rows else '<tr><td colspan="8">当日没有信号。</td></tr>'
+    rule_version_text = ", ".join(rule_versions)
+    profile_text = str(weights.profile or "unknown")
+
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>StockSage 盘后复盘 - {html.escape(day)}</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; }}
+    h1, h2 {{ margin: 0 0 12px; }}
+    section {{ margin: 20px 0; }}
+    table {{ border-collapse: collapse; width: 100%; }}
+    th, td {{ border: 1px solid #d1d5db; padding: 7px 9px; text-align: left; }}
+    th {{ background: #f3f4f6; }}
+    .notice {{ font-weight: 700; color: #7c2d12; }}
+    .meta {{ color: #374151; }}
+  </style>
+</head>
+<body>
+  <h1>StockSage 盘后复盘 - {html.escape(day)}</h1>
+  <p class="notice">{_POSTMARKET_DISCLAIMER}</p>
+  <section>
+    <h2>版本</h2>
+    <ul class="meta">
+      <li><strong>report_version:</strong> {html.escape(_POSTMARKET_REPORT_VERSION)}</li>
+      <li><strong>rule/profile version:</strong> {html.escape(rule_version_text)} / {html.escape(profile_text)}</li>
+      <li><strong>rule_version:</strong> {html.escape(rule_version_text)}</li>
+      <li><strong>profile_version:</strong> {html.escape(profile_text)}</li>
+    </ul>
+  </section>
+  <section>
+    <h2>摘要</h2>
+    <p>{html.escape(summary)}</p>
+  </section>
+  <section>
+    <h2>当日信号</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>股票</th>
+          <th>综合分</th>
+          <th>建议</th>
+          <th>置信度</th>
+          <th>技术分</th>
+          <th>情感分</th>
+          <th>涨跌停状态</th>
+          <th>规则版本</th>
+        </tr>
+      </thead>
+      <tbody>
+        {signal_table}
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>
+"""
+
+
+@router.get("/export/postmarket-review.html")
+def export_postmarket_review_html(
+    as_of: str | None = Query(None),
+    export_format: str = Query("html", alias="format", pattern="^(html|word)$"),
+    db: Session = Depends(get_db),
+) -> Response:
+    day = as_of or datetime.now(UTC).replace(tzinfo=None).date().isoformat()
+    body = _postmarket_review_html(db, day)
+    if export_format == "word":
+        return Response(
+            content=body,
+            media_type="application/msword",
+            headers={"Content-Disposition": f'attachment; filename="postmarket-review-{day}.doc"'},
+        )
+    return Response(
+        content=body,
+        media_type="text/html; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="postmarket-review-{day}.html"'},
     )
 
 

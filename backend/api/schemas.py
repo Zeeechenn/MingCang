@@ -232,6 +232,10 @@ class DataCoverageStockOut(BaseModel):
 class DataCoverageOut(BaseModel):
     summary: dict = {}
     provider_health: dict = {}
+    freshness_contract: dict = {}
+    intraday_zero_network_policy: dict = {}
+    provider_fallback_chains: dict = {}
+    cache_policy: dict = {}
     stocks: list[DataCoverageStockOut] = []
 
 

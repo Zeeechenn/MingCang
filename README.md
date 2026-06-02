@@ -81,6 +81,17 @@ cp .env.example .env
 python3 -m backend.agent.cli health --pretty
 ```
 
+交易节奏快速入口（均为 dry-run 编排，不直接执行重型任务）：
+
+```bash
+python3 -m backend.agent.cli premarket --pretty
+python3 -m backend.agent.cli intraday --symbol 300308 --pretty
+python3 -m backend.agent.cli postmarket --pretty
+# 原生 launcher 也支持：stocksage premarket / intraday / postmarket
+```
+
+M31 缓存层 SLA 基线（2026-06-02，本地 SQLite，`backend.tools.m31_cache_benchmark --iterations 20`）：L1 进程内读取 p50≈0.0001ms；L2 单股最新价读取 p50≈0.0982ms；L2 全市场计数扫描 p50≈18.8607ms。盘中策略明确只读 L1/L2，L3 远端 API 增量层默认不触发、不纳入盘中 benchmark。
+
 进入终端 shell 后可以直接问：
 
 ```text
