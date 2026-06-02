@@ -40,6 +40,7 @@ dependencies = [
     "python-dotenv>=1.0.0,<2.0.0",
     "openai>=1.0.0,<3.0.0",
     "backtrader>=1.9.78.123,<2.0.0",
+    "jsonschema>=4.0,<5.0",
 ]
 
 [project.optional-dependencies]
