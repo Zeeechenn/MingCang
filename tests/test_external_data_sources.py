@@ -69,3 +69,60 @@ def test_external_data_sources_api_attaches_probe_when_requested(monkeypatch):
 
     assert payload["probes"]["ftshare"]["ok"] is True
     assert payload["probes"]["ftshare"]["symbol"] == "300308"
+
+
+def test_ftshare_probe_uses_requests_with_timeout_and_size_guard(monkeypatch):
+    import requests
+
+    from backend.data import external_sources
+
+    calls = []
+
+    class Response:
+        content = b"{}"
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"items": [{"stock_code": "600519.SH"}]}
+
+    def fake_get(url, headers, timeout):
+        calls.append((url, headers, timeout))
+        return Response()
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    result = external_sources.probe_ftshare_stock_list("600519", timeout_seconds=2.5)
+
+    assert result["ok"] is True
+    assert result["matched_symbol"] is True
+    assert calls == [
+        (
+            external_sources.FTSHARE_STOCK_LIST_URL,
+            {"User-Agent": "StockSage/1.0"},
+            2.5,
+        )
+    ]
+
+
+def test_ftshare_probe_reports_oversized_response(monkeypatch):
+    import requests
+
+    from backend.data import external_sources
+
+    class Response:
+        content = b"x" * 512_001
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            raise AssertionError("oversized response should be rejected before json parsing")
+
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: Response())
+
+    result = external_sources.probe_ftshare_stock_list("600519")
+
+    assert result["ok"] is False
+    assert result["error"] == "response too large"

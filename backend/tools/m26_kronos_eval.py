@@ -1,3 +1,4 @@
+# ruff: noqa: S608
 """M26.2 Kronos 接入评估。
 
 运行环境：.venv_kronos（含 torch, einops, huggingface_hub, safetensors, scipy）

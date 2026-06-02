@@ -193,6 +193,33 @@ def test_stock_memory_context_route_does_not_update_usage_or_audit(test_db):
     assert audits == 0
 
 
+def test_build_memory_context_marks_multiple_used_ids_with_bound_params(test_db):
+    from backend.memory.stock_memory import build_memory_context, create_stock_memory
+
+    first = create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="risk",
+        summary="供应链风险需要复核",
+        source_type="test",
+    )
+    second = create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="thesis",
+        summary="订单兑现是主线",
+        source_type="test",
+    )
+
+    ctx = build_memory_context(test_db, symbol="300308", limit=5)
+
+    assert set(ctx["used_stock_memory_ids"]) == {first["id"], second["id"]}
+    rows = test_db.execute(
+        text("SELECT id, last_used_at FROM stock_memory_items ORDER BY id")
+    ).all()
+    assert {row.id for row in rows if row.last_used_at is not None} == {first["id"], second["id"]}
+
+
 def test_stock_memory_patch_importance_does_not_refresh_updated_at(test_db):
     from backend.memory.stock_memory import create_stock_memory, patch_stock_memory
 

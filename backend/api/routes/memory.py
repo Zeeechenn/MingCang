@@ -309,7 +309,8 @@ def memory_patch(
         params["cat"] = payload.category
     if not sets:
         raise HTTPException(status_code=400, detail="no editable fields supplied")
-    db.execute(text(f"UPDATE ai_memory SET {', '.join(sets)} WHERE id = :id"), params)
+    query = "UPDATE ai_memory SET " + ", ".join(sets) + " WHERE id = :id"  # noqa: S608
+    db.execute(text(query), params)
     db.commit()
     audit_write(
         db,

@@ -329,7 +329,7 @@ def _time_features(index: pd.DatetimeIndex) -> np.ndarray:
 def _load_training_frames(dataset_dir: Path) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
     dataset_dir = dataset_dir.expanduser()
     with (dataset_dir / "train_data.pkl").open("rb") as fh:
-        raw_panels = pickle.load(fh)
+        raw_panels = pickle.load(fh)  # noqa: S301 - trusted StockSage-generated training data.
     if not isinstance(raw_panels, dict):
         raise ValueError("train_data.pkl must contain a symbol -> DataFrame mapping")
 

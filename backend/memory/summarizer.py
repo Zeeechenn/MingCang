@@ -41,14 +41,21 @@ def _fetch_window_for_summary(db, session_id: str, *, until_id: int | None, head
     Compresses messages with id > until_id (or all) up to but excluding the
     last `head_keep` rows (kept verbatim).
     """
-    params: dict = {"sid": session_id}
-    where = "WHERE session_id = :sid"
     if until_id is not None:
-        where += " AND id > :until"
-        params["until"] = until_id
-    rows = db.execute(text(
-        f"SELECT id, role, content FROM chat_messages {where} ORDER BY id ASC"
-    ), params).all()
+        query = """
+            SELECT id, role, content FROM chat_messages
+            WHERE session_id = :sid AND id > :until
+            ORDER BY id ASC
+        """
+        params: dict = {"sid": session_id, "until": until_id}
+    else:
+        query = """
+            SELECT id, role, content FROM chat_messages
+            WHERE session_id = :sid
+            ORDER BY id ASC
+        """
+        params = {"sid": session_id}
+    rows = db.execute(text(query), params).all()
     if len(rows) <= head_keep:
         return [], None
     to_compress = rows[:-head_keep]

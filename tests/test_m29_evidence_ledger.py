@@ -264,6 +264,7 @@ def test_build_ledger_flags_source_side_effects(tmp_path):
             "writes_db": True,
             "calls_llm_or_api": True,
             "saves_model": False,
+            "trains_model": True,
             "exit_days": 5,
             "sample_adequacy": {"filtered_trades": 60},
         },
@@ -275,6 +276,7 @@ def test_build_ledger_flags_source_side_effects(tmp_path):
     assert entry["production_unchanged"] is False
     assert "source_artifact_writes_db" in entry["blockers"]
     assert "source_artifact_calls_llm_or_api" in entry["data_quality_blockers"]
+    assert "source_artifact_trains_model" in entry["blockers"]
     assert "source_artifact_production_changed" in entry["blockers"]
 
 
@@ -300,6 +302,7 @@ def test_build_ledger_treats_missing_boundary_flags_as_unknown(tmp_path):
         "writes_db",
         "calls_llm_or_api",
         "saves_model",
+        "trains_model",
     ]
     assert "unknown_source_production_unchanged" in entry["blockers"]
     assert "unknown_source_writes_db" in entry["data_quality_blockers"]

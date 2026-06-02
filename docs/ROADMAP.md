@@ -65,6 +65,8 @@
 > 2026-06-01 M29.3 live readiness check：使用真实 SQLite 只读跑 `backend.tools.m29_forward_readiness --db-url sqlite:////Users/zeeechenn/stock-sage/stock-sage.db`，输出 `/private/tmp/m29_forward_readiness_live.{json,md}`。结果仍为 `ready_to_run_forward_shadow=false`、commands=[]；latest_price_date=2026-06-01，但 test3 universe 当日仅 10/100 支有价格，2026-05-27~2026-05-29 为 94/100 支且仅 25 支具备完整 price provenance；blockers=`no_new_complete_1d_forward_coverage`、`no_new_complete_3d_forward_coverage`、`no_new_complete_5d_forward_coverage`、`partial_latest_trading_day_after_last_artifact`。本轮不运行 forward shadow；若要刷新行情或补齐 DB，需要先按 M29 stop condition 汇报/确认。
 
 > 2026-06-01 M29.3 close-confirmed refresh：新增 `backend.tools.m29_price_coverage_refresh`，默认 dry-run，`--execute` 仅刷新显式日期窗口的 `prices` 行，并默认拒绝写入今日 partial bar。获准后执行 2026-05-27~2026-05-29 close-confirmed refresh，输出 `/private/tmp/m29_price_coverage_refresh_execute_20260527_20260529.{json,md}`：100 symbols attempted、0 errors、300 rows written，三天均达到 100/100 price provenance complete；复跑 readiness 到 `/private/tmp/m29_forward_readiness_after_price_refresh.{json,md}` 后仍 `ready_to_run_forward_shadow=false`、commands=[]，因为 2026-06-01 仍为 10/100 partial 且 1d/3d/5d future-return 覆盖尚未形成。本轮不运行 forward shadow、不追加 fresh evidence。
+>
+> 2026-06-01 M29.3 follow-up readiness：按接手目标继续只读跑 `backend.tools.m29_forward_readiness --db-url sqlite:////Users/zeeechenn/stock-sage/stock-sage.db`，输出 `/private/tmp/m29_forward_readiness_next_20260601.{json,md}`。结果仍为 `ready_to_run_forward_shadow=false`、commands=[]；latest_existing_forward_end=2026-05-29，latest_complete_price_date=2026-05-29，2026-06-01 仅 13/100 支有价格。blockers=`no_new_complete_1d_forward_coverage`、`no_new_complete_3d_forward_coverage`、`no_new_complete_5d_forward_coverage`、`recommended_forward_end_not_after_all_existing_artifacts`、`partial_latest_trading_day_after_last_artifact`。本轮不运行 forward shadow、不追加 fresh evidence。
 
 > 2026-06-01 M29.3 pure polarity / event overlay 只读复核：在不新增真实 `sentiment_cache` 写入、不调 LLM/API 的前提下，用 `backend.tools.m29_shadow_validation --hypothesis-id post_event_drift_pure_polarity_v1` 包装既有 v2 gate artifact。结果写入 `/private/tmp/m29_shadow_validation_post_event_drift_pure_polarity_v1.{json,md}`：cache/fallback 已清零、样本门通过，但 pure polarity 与 polarity+event 均 `monotonic=False`，且缺 fresh forward / old artifact provenance，不能晋升。
 
@@ -88,21 +90,23 @@
 **目标**：回答“量化负向影响来自策略/label、数据不足，还是新闻/技术面交互”这个因果问题；只做 attribution 与 shadow evidence，不恢复 `weight_quant`，不修改 production signal profile。
 
 - [ ] 先跑 readiness：每轮先用 `backend.tools.m29_forward_readiness --db-url ...` 确认完整新增交易日与 1d/3d/5d future-return 覆盖；未 ready 时不运行 forward shadow、不追加 fresh evidence。
-- [ ] 单变量 quant sweep：固定 entry threshold 与 tech:sent 比例，只改 `Q=0 / 0.225 / 0.45`，比较入场集合、收益、回撤、max positions 下的边缘持仓差异，避免把阈值变化误归因为量化。
-- [ ] 逐笔 attribution：对 quant_on 与 quant_off 差异交易记录 `composite_with_quant - composite_without_quant`、是否跨 entry threshold、后续 1d/3d/5d/10d 收益与相对沪深 300 超额收益。
-- [ ] 残差 IC：在同一 forward window 下分别评估 `technical only`、`sentiment/event only`、`T+S`、`quant only`、`T+S+quant`，再看 quant 对 `T+S` 残差收益是否有增量 IC / ICIR / monotonic。
-- [ ] 交互分桶：按强/弱技术面、正/负情绪、event/no event、low/high volatility 分桶测 quant IC、top-bottom 与分层单调；若只在特定状态有效，转入 M29 预注册的 regime-conditioned 或 post-event drift 假设。
-- [ ] 输出接入 ledger：所有 attribution/sweep/residual 结果必须写为 shadow artifact，并被 `m29_evidence_ledger` 纳入；未满足 fresh forward、stride ICIR、monotonic、provenance 与人工确认前，结论只能是 non-promoting。
+- [x] 单变量 quant sweep：固定 entry threshold 与 tech:sent 比例，只改 `Q=0 / 0.225 / 0.45`，比较入场集合、收益、回撤、max positions 下的边缘持仓差异，避免把阈值变化误归因为量化。
+- [x] 逐笔 attribution：对 quant_on 与 quant_off 差异交易记录 `composite_with_quant - composite_without_quant`、是否跨 entry threshold、后续 1d/3d/5d/10d 收益与相对沪深 300 超额收益。
+- [x] 残差 IC：在同一 forward window 下分别评估 `technical only`、`sentiment/event only`、`T+S`、`quant only`、`T+S+quant`，再看 quant 对 `T+S` 残差收益是否有增量 IC / ICIR / monotonic。
+- [x] 交互分桶：按强/弱技术面、正/负情绪、event/no event、low/high volatility 分桶测 quant IC、top-bottom 与分层单调；若只在特定状态有效，转入 M29 预注册的 regime-conditioned 或 post-event drift 假设。
+- [x] 输出接入 ledger：所有 attribution/sweep/residual 结果必须写为 shadow artifact，并被 `m29_evidence_ledger` 纳入；未满足 fresh forward、stride ICIR、monotonic、provenance 与人工确认前，结论只能是 non-promoting。
 
 **验收**：能把“量化是否有独立残差信息”与“融合/阈值是否放大噪声”分开判断；若 residual IC 仍弱或非单调，继续保持 `weight_quant=0.0`，并把 top-decile 只作为离散 entry filter 研究线索。
 
 > 2026-06-01 代理团队结论落地：当前更支持“量化策略/label/objective 与连续 score 形态未站住”，数据不足是 forward readiness 与置信度 blocker，新闻/技术面不是压坏有效量化的主因。下一步不打开量化层，而是按 M29.5 做 fixed-threshold quant sweep、逐笔 attribution、residual IC 与交互分桶；只有证明 quant 对 `technical+sentiment/event` 残差有稳定正贡献，才进入后续 non-promoting train candidate 讨论。
+>
+> 2026-06-01 M29.5 首轮只读 attribution 完成：新增 `backend.tools.m29_quant_residual_attribution`，默认产物 `/private/tmp/m29_quant_residual_attribution_v1.{json,md}`，并扩展 `backend.tools.m29_evidence_ledger` 解析 `read_only_quant_residual_attribution` artifact。本轮使用当前 `lgbm_alpha_v1` 对 2025-11-01~2026-05-14 test3 universe 做 attribution-only quant score 重算（`lookahead_quant_warning=true`，不作为 PIT-safe promotion proof），signal_inputs=2600、rows_with_nonzero_quant=2596、1/3/5/10d forward/excess 覆盖均为 2600/2600。固定阈值 sweep：Q=0 trades=296、avg net=0.005543、Sharpe=0.450818、max drawdown=0.796891；Q=0.225 trades=70、avg net=0.004945、Sharpe=0.407800；Q=0.45 trades=31、avg net=0.008292、Sharpe=0.638303、但主要来自大幅减少交易数（dropped_by_quant=281、added_by_quant=16）。关键残差结果：5d `quant_residual_to_technical_sentiment` IC=0.018251 / ICIR=0.151156 / monotonic=False / gate_pass=False；ledger 复核 `/private/tmp/m29_evidence_ledger_with_quant_residual_v1.{json,md}` 为 entries=1、gate_pass_count=0、promotable_count=0，并保留 `historical_current_model_attribution_only`、`post_registration_fresh_forward_missing`、`stride_icir_missing`、`requires_human_confirmation`、`quant_residual_not_monotonic` 与 provenance 缺口 blockers。结论：量化可能有离散过滤价值，但未证明对 `technical+sentiment/event` 残差有可晋升的稳定连续 alpha；继续 `weight_quant=0.0`，等待 fresh forward 覆盖后再追加 evidence。
 
 ### 新对话执行交接（2026-06-01）
 
 1. 先读 `STATUS.md § M29` 与本节，再运行 `git status --short`；不要回滚当前未提交的 M27/M29 工具、测试和文档更新。
 2. 第一动作是 M29.3 readiness：只读检查完整新增交易日与 1d/3d/5d future-return 覆盖；未 ready 时停在等待状态，不把 partial local data 当 fresh evidence。
-3. 第二动作是 M29.5：在同一 forward window 上设计或执行 fixed-threshold quant sweep、逐笔 attribution、residual IC 与交互分桶；先证明残差贡献，再讨论任何小权重灰度。
+3. 第二动作是 M29.5：首轮 attribution artifact 已完成；fresh coverage ready 后在同一 forward window 上追加或复跑 fixed-threshold quant sweep、逐笔 attribution、residual IC 与交互分桶，再讨论任何小权重灰度。
 4. 第三动作是把新增 shadow artifact 纳入 M29.1 ledger；若 ledger 仍有 `gate_pass_count=0` 或 provenance/data-quality blockers，保持 non-promoting。
 5. 停止条件：任何步骤会改变生产信号、恢复 quant、接入 checkpoint、继续 Kronos 长训、真实写 `sentiment_cache`、下载新依赖或调用额外付费外部服务。
 
@@ -144,12 +148,18 @@
 
 ### M30.5 低噪声安全与代码气味修复（P1/P2）
 
-- [ ] 逐条处理当前可复现的 `ruff --select S608` 发现：`backend/agent/context.py` 的 table name 走白名单；动态 `IN (...)` 迁移到安全 bind 参数或补充精准 `noqa` 注释；不要把参数化 placeholder 误报升级为注入漏洞。
-- [ ] 处理当前可复现的 `S324` 非密码学 hash 使用：确认用途是 cache key / dedup 后，加说明性 `noqa`，或替换为 `blake2b(digest_size=16)`。
+- [x] 逐条处理当前可复现的 `ruff --select S608` 发现：`backend/agent/context.py` 的 table name 走白名单；动态 `IN (...)` 迁移到安全 bind 参数或补充精准 `noqa` 注释；不要把参数化 placeholder 误报升级为注入漏洞。
+- [x] 处理当前可复现的 `S324` 非密码学 hash 使用：确认用途是 cache key / dedup 后，加说明性 `noqa`，或替换为 `blake2b(digest_size=16)`。
+- [x] 处理当前可复现的 `S301` / `S310` 噪声：Qlib 模型持久化改为直接 `joblib` 依赖；非 CLI 外部探测与 Bark 通知改用 `requests`，保留超时、错误降级与响应大小限制。
 - [ ] 对非 CLI 库代码中的 `print()` 分批替换为 logger；tools / backtest CLI 可以保留命令行输出，避免为了 lint 牺牲可读的本地工具体验。
+- [ ] Python dependency audit debt：`efinance -> retry -> py==1.11.0` 仍触发 `PYSEC-2022-42969` 且无 fix version；在把 `dependency-audit` 设为 hard gate 前，先决定是否把 `efinance` 改为 optional / observe-only provider，或用带到期日的例外管理。
+- [ ] npm audit debt：当前 `vite/esbuild` moderate advisory 需要前端依赖升级计划；不要用 `npm audit fix --force` 直接跳到破坏性 Vite 8。
+
+> 2026-06-02 M30.5 首轮完成：Python 依赖已补上限并同步 `uv.lock`；`ruff check backend --select S301,S310,S324,S608` 通过；新增 focused tests 覆盖 external source requests size guard、Bark requests retry、market OHLCV normalize、CN news dedupe/CST、Qlib joblib roundtrip 与 stock memory bound params。`make verify` 通过，backend coverage snapshot 升至 64%。依赖审计仍保留 `efinance -> retry -> py` 与 `vite/esbuild` 两项后置债务。
 
 ### M30.6 可维护性拆分（P2）
 
+- [x] 新增前端 advisory lint/format 入口：`make frontend-lint` 与 `make frontend-format-check` 可单独运行，先不并入 `make verify`，避免大规模格式化 churn。
 - [ ] `frontend/src/pages/AdminPage.jsx` 已接近 1000 行，后续改 Admin 功能时顺手拆成更小 panel，并保留现有 node:test 覆盖。
 - [ ] `paper_trading/test2_ab_runner.py` 是 A/B 验证核心，后续改 test2 逻辑时拆出 cli / runner / stats / report，避免一次性大重构影响回放真实性。
 
@@ -163,7 +173,62 @@
 - “docs/reviews 有 16 篇”与当前仓库不符；不基于这个数字建立整理任务。
 - “pre-commit 只有 ruff”不准确；当前已有基础 pre-commit hooks，M30 只补 mypy/安全等缺口。
 
-**主体验收（2026-06-01）**：M30.1-M30.4 已完成；`make verify` 主体通过，backend tests 为 662 passed / 5 skipped，frontend node tests 为 19 passed，frontend build 在沙盒外写入 Vite temp config 后通过；mypy、Python lock/frozen install、核心路径专项测试、coverage 与低噪声安全扫描都能复现。M30.5/M30.6 保留为后续安全债与可维护性拆分，不把外部报告的错误断言转成仓库任务。
+**主体验收（2026-06-01 / 2026-06-02 更新）**：M30.1-M30.4 已完成；M30.5 已完成第一轮低噪声安全修复，M30.6 已新增前端 advisory lint/format 入口。最新 `make verify` 通过，backend tests 为 675 passed / 5 skipped，frontend node tests 为 19 passed，frontend build 在沙盒外写入 Vite temp config 后通过；mypy、Python lock/frozen install、核心路径专项测试、coverage 与低噪声安全扫描都能复现。剩余 M30 债务为 `efinance -> retry -> py` dependency audit、`vite/esbuild` npm audit、非 CLI logger 化、AdminPage 与 test2 runner 后续拆分。
+
+---
+
+## M31 工程化与产品化借鉴（StockInsight 对标）🧰
+
+> 来源：2026-06-02 评估小红书博主 @我在偷偷学AI 的周末项目 StockInsight v3.0（50 模块 / 16k 行 / 5,220 只 A 股）。
+> 仅借鉴其**工程表达与产品化**长处，**明确不引入**其预测型卖点（AI 预测涨跌方向、Strong Buy/Sell 评级、ML 集成投票当作预言）——后者与 `AGENTS.md` 的"不把价格当确定性预测、不鼓励 strong buy"约束冲突，且本项目 promotion gate（M26/M27）已主动否决该类候选（`WEIGHT_QUANT=0.0`）。
+> 优先级低于 M29（forward evidence）/ M30（工程收敛），按 P2/P3 排期。
+
+### M31.1 显式三级缓存与延迟基准（P2）
+
+- [ ] 把当前散落在 `backend/data/database.py` / `external_sources.py` 的缓存读路径抽象成命名的三层：L1 进程内内存 → L2 本地 SQLite → L3 远端 API 增量，单一入口、命中层可观测。
+- [ ] 给出"盘中零网络调用"的显式保证：盘中分析只读 L1/L2，L3 仅在盘后/增量补齐时触发。
+- [ ] 新增只读 benchmark 脚本（`backend.tools.*_benchmark`），产出全市场扫描耗时、单股分析耗时、各层命中延迟，写 `/private/tmp` 或 `~/.stock-sage`，并在 README 公布一组实测 SLA。
+
+### M31.2 数据源有序容灾链 + 按数据类型分新鲜度层（P2）
+
+- [ ] 在 `backend/data/providers.py` 把多源 fallback 显式编码为**有序优先级链**（含每条源的失败降级与 observe-only 标记）。
+- [ ] 为每类数据声明刷新频率 / TTL / staleness 容忍度（实时行情秒级、资金流 T+1、基本面季报、行业板块季度），并在 health/coverage 快照里暴露"某类数据当前新鲜度"。
+
+### M31.3 按交易节奏的命令 UX（P2）
+
+- [ ] 把现有 Pi 终端 / CLI 能力按"盘前 / 盘中 / 盘后"打包成少数几条一句话命令（如盘前自检、盘中快速个股、盘后全市场入库 + 复盘报告），降低入口心智负担。
+- [ ] 命令只做编排，复用现有 `backend.agent.cli` 子命令，不新增分析逻辑。
+
+### M31.4 一键多端报告输出（P3）
+
+- [ ] 扩展 `backend/api/routes/exports.py`：盘后一条命令生成可分享的复盘报告（Word / HTML 仪表盘），证据卡 / 信号 / 持仓复盘随报告导出。
+- [ ] 报告显式标注 rule/profile 版本与"研究复盘，非投资建议、非价格预测"声明。
+
+---
+
+## M32 Forward 预测层 / 复盘 → 假设桥【设计立场 + 启动路径】🧭
+
+> 记录于 2026-06-02。背景：评估小红书 StockInsight v3.0 的"AI 预测 + Strong Buy 评级"卖点后，确立本项目对"预测"的立场，并把"想像 A 老师一样提前判断赛道方向"这个目标落到可执行路径上。供未来开发参考，**不要重复讨论要不要做价格预测**。
+
+### 立场：两种"预测"，只做一种
+
+- **不做（明确拒绝）**：个股短期涨跌方向的 ML 分类 + 置信度 + Strong Buy/Sell 评级。理由：
+  1. 违反 `AGENTS.md`「不把价格当确定性预测、不鼓励 strong buy」与 `PROJECT.md` 核心约束；
+  2. M26/M27 已用完整 gate（DSR/PBO/walk-forward）否决该类候选，生产 `WEIGHT_QUANT=0.0`——系统已如实证明该 edge 不显著；
+  3. 周末速成式 ML（多股 × 多技术特征）是过拟合 + 未来函数标本，输出"假确定性"比没有更危险。
+  - 评级分数可保留，但定位为**多因子体检快照 / 5000 股分诊工具**，显式标注"非预测"。
+- **要做（正路）**：赛道级、基本面/供应链驱动、**可证伪**的前瞻论点。这才是 A 老师"半年前判断存储牛市"的真实方法（供应链锁单 / 海外领先指标 / 周期 vs 结构性升维 / 盯边际变化），与 ML-on-price 无关。本项目已有的 M29 forward evidence + `/a-teacher` skill 就是它的载体。
+
+### 复盘 → Forward 的三步桥（启动前提：复盘数据足够厚）
+
+- [ ] **第 1 步 — 复盘攒"信号→结果"数据集**：用测试1/测试2 + `audit_log_fts` 沉淀"哪些信号在自有历史里真正领先行情"，作为 forward 假设的训练与校准基准。（与现有复盘工作合流，非新坑）
+- [ ] **第 2 步 — 把验证过的信号注册成 forward 假设**：扩展 `backend.tools.m29_hypothesis_registry`，新增"赛道级前瞻论点"类型——动机用供应链/海外领先指标证据、horizon、证伪条件、最小样本门、多重比较规则齐全；接入 `/a-teacher` 五层框架（供应链核查 / 海外领先指标 / 周期升维 / 炒作过滤 / 高位过滤）作为论点的证据模板。
+- [ ] **第 3 步 — forward 跟踪与回溯打分**：论点进入 M29 forward shadow / evidence ledger，事后按是否兑现做校准；输出形态是"带证据、可证伪、置信度被回溯打分的论点"，不是 Strong Buy 标签。
+
+### 边界
+
+- 启动时机：等第 1 步复盘数据更厚再正式开 M32.2/M32.3；当前保持 M29（forward evidence）为 P0。
+- 不恢复 `weight_quant`、不接 Kronos checkpoint、不改生产 signal profile——M32 是研究/论点层，与生产信号解耦，遵循 M29 的 non-promoting / production_unchanged 纪律。
 
 ---
 
@@ -445,7 +510,7 @@ QMT/miniQMT 券商对接；盘中实时止损；半自动→全自动渐进。
 | 里程碑 | 完成时间 | 简述 |
 |---|---|---|
 | M30 | 2026-06-01 主体完成 | 工程质量收敛：mypy、Python lock、CI/安全/覆盖率、核心路径专项测试；安全债与可维护性拆分后置 |
-| M29.0–M29.4 | 进行中 | Alpha Reset / Forward Evidence Engine，当前最高优先 |
+| M29.0–M29.5 | 进行中 | Alpha Reset / Forward Evidence Engine，M29.5 首轮 attribution 已完成，等待完整 fresh forward 覆盖 |
 | M27.0–M27.4 | 2026-05-31 | Alpha 根治工程证据闭环，未过 promotion gate，转入 M29 |
 | M26.0 量化基线 | 2026-05-30 | 初始 test2 基线归档；后续以 M26.1/M26.2 的生产边界为准 |
 | M26.1 训练盘扩容 | 2026-05-30 | 707 支，IC=0.021，仅过 M26 诊断阈值，未过生产 promotion gate |

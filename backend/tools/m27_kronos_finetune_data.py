@@ -1,10 +1,11 @@
+# ruff: noqa: S608
 """Prepare M27.4 Kronos Path A fine-tuning data.
 
 The tool builds an index-backed sliding-window dataset from the local
 StockSage SQLite price table. It intentionally does not materialize every
 400-bar tensor by default; instead it writes:
 
-- train_data.pkl / valid_data.pkl: per-symbol OHLCV panels for Kronos loaders.
+- train_data.pkl / valid_data.pkl: trusted StockSage-generated OHLCV panels for Kronos loaders.
 - windows.csv: every valid sliding window and its forward return label.
 - coverage_report.json: explicit data coverage, warnings, and pass/fail status.
 
@@ -386,9 +387,9 @@ def write_outputs(
     valid_data = _split_panels("valid")
 
     with (output_dir / "train_data.pkl").open("wb") as fh:
-        pickle.dump(train_data, fh, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(train_data, fh, protocol=pickle.HIGHEST_PROTOCOL)  # noqa: S301
     with (output_dir / "valid_data.pkl").open("wb") as fh:
-        pickle.dump(valid_data, fh, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(valid_data, fh, protocol=pickle.HIGHEST_PROTOCOL)  # noqa: S301
     windows.to_csv(output_dir / "windows.csv", index=False)
     (output_dir / "coverage_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2),

@@ -188,7 +188,8 @@ def fetch_stock_news_cn(symbol: str, limit: int = 20) -> list[RawNews]:
 
             # 无链接时用 symbol+title 的 hash 生成稳定唯一 URL
             if not url or url == "nan":
-                url = f"em://{symbol}#{hashlib.md5(title.encode()).hexdigest()[:8]}"
+                digest = hashlib.md5(title.encode()).hexdigest()[:8]  # noqa: S324 - stable local URL key.
+                url = f"em://{symbol}#{digest}"
 
             if url in seen_urls or not title:
                 continue
@@ -274,8 +275,9 @@ def save_news_to_db(news_list: list[RawNews], db) -> int:
     for n in news_list:
         if n.url in existing_urls:
             continue
-        # 用标题 MD5 做批次内跨源去重
-        title_hash = hashlib.md5(n.title.lower().strip().encode()).hexdigest()[:12]
+        title_hash = hashlib.md5(  # noqa: S324 - batch dedup key, not security-sensitive.
+            n.title.lower().strip().encode()
+        ).hexdigest()[:12]
         if title_hash in seen_title_hashes:
             continue
         seen_title_hashes.add(title_hash)

@@ -1,3 +1,4 @@
+# ruff: noqa: S608
 """Read-only readiness guard for the next M29.3 forward-shadow run.
 
 This tool decides whether the local price data has enough complete future

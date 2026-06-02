@@ -367,7 +367,7 @@ export default function AdminPage() {
           initPollingRef[0] = null
           if (s.step === 'done') loadAdmin()
         }
-      } catch (_) {}
+      } catch {}
     }, 2000)
     initPollingRef[0] = id
   }

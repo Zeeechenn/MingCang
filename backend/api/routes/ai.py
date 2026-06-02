@@ -149,7 +149,10 @@ def _detect_action(message: str, db: Session) -> tuple[str, dict] | None:
                 category = "preference"
             # key 用截断 body 自动生成；确保 UNIQUE
             from hashlib import sha1
-            key = f"chat:{category}:{sha1(body.encode('utf-8')).hexdigest()[:10]}"
+            digest = sha1(  # noqa: S324 - stable chat memory key, not security-sensitive.
+                body.encode("utf-8")
+            ).hexdigest()[:10]
+            key = f"chat:{category}:{digest}"
             return "memory.write", {
                 "key": key,
                 "value": body,

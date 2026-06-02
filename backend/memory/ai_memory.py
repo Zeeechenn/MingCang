@@ -186,12 +186,13 @@ def list_active(
         clauses.append("category = :category")
         params["category"] = category
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    rows = db.execute(text(f"""
+    query = f"""
         SELECT id, key, value, category, scope, ttl_days, created_at, updated_at
         FROM ai_memory
         {where}
         ORDER BY updated_at DESC, id DESC
-    """), params).all()
+    """  # noqa: S608 - WHERE fragments come only from the fixed filters above.
+    rows = db.execute(text(query), params).all()
     now = _utc_now()
     return [
         {

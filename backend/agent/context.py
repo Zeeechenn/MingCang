@@ -13,11 +13,23 @@ from backend.data.database import LongTermLabel, Position, ResearchState, Signal
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MEMORY_DIR = Path.home() / ".stock-sage" / "memory"
+_COUNT_TABLES = {
+    "ai_memory",
+    "stock_memory_items",
+    "decision_memory_layered",
+    "audit_log_fts",
+    "chat_sessions",
+    "chat_messages",
+    "research_states",
+}
 
 
 def _count(db: Session, table: str) -> int:
+    if table not in _COUNT_TABLES:
+        raise ValueError(f"table not allowed: {table}")
     try:
-        return int(db.execute(text(f"SELECT count(*) FROM {table}")).scalar() or 0)
+        sql = f"SELECT count(*) FROM {table}"  # noqa: S608 - table name is allowlisted above.
+        return int(db.execute(text(sql)).scalar() or 0)
     except OperationalError:
         return 0
 

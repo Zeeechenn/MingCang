@@ -45,7 +45,9 @@ def _normalized_title(title: str) -> str:
 
 def _duplicate_group(title: str) -> str:
     """Stable short hash for a normalized title."""
-    return hashlib.md5(_normalized_title(title).encode()).hexdigest()[:10]
+    return hashlib.md5(  # noqa: S324 - duplicate grouping key, not a security digest.
+        _normalized_title(title).encode()
+    ).hexdigest()[:10]
 
 
 def _source_score(source: str) -> tuple[int, list[str]]:

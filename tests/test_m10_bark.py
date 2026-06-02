@@ -1,16 +1,14 @@
 import json
-import urllib.error
+
+import requests
 
 
 class _Resp:
-    def __enter__(self):
-        return self
+    def raise_for_status(self):
+        return None
 
-    def __exit__(self, *args):
-        return False
-
-    def read(self):
-        return json.dumps({"code": 200}).encode()
+    def json(self):
+        return {"code": 200}
 
 
 def test_bark_send_result_retries_transient_network_error(monkeypatch):
@@ -21,13 +19,17 @@ def test_bark_send_result_retries_transient_network_error(monkeypatch):
     monkeypatch.setattr(settings, "bark_server", "https://bark.example")
     calls = {"count": 0}
 
-    def fake_urlopen(req, timeout):
+    def fake_post(url, data, headers, timeout):
         calls["count"] += 1
         if calls["count"] == 1:
-            raise urllib.error.URLError("temporary")
+            raise requests.RequestException("temporary")
+        assert url == "https://bark.example/push"
+        assert json.loads(data.decode())["device_key"] == "unit-key"
+        assert headers["Content-Type"] == "application/json; charset=utf-8"
+        assert timeout == 10
         return _Resp()
 
-    monkeypatch.setattr(bark.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(bark.requests, "post", fake_post)
     monkeypatch.setattr(bark.time, "sleep", lambda _: None)
 
     result = bark.send_result("title", "body", retries=2, backoff_seconds=0)

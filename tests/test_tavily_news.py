@@ -9,6 +9,43 @@ class _FakeResponse:
         return self._payload
 
 
+def test_normalize_ohlcv_converts_common_columns_and_drops_bad_close():
+    import pandas as pd
+
+    from backend.data.market import _normalize_ohlcv
+
+    frame = pd.DataFrame({
+        "日期": ["2026-01-03", "2026-01-01", "2026-01-02"],
+        "开盘": ["3.0", "1.0", "2.0"],
+        "最高": ["3.5", "1.5", "2.5"],
+        "最低": ["2.5", "0.5", "1.5"],
+        "收盘": ["bad", "1.2", "2.2"],
+        "成交量": ["300", "100", "200"],
+    })
+
+    normalized = _normalize_ohlcv(frame)
+
+    assert list(normalized.index) == ["2026-01-01", "2026-01-02"]
+    assert normalized.loc["2026-01-01", "open"] == 1.0
+    assert normalized.loc["2026-01-02", "volume"] == 200
+
+
+def test_normalize_ohlcv_requires_volume_column():
+    import pandas as pd
+    import pytest
+
+    from backend.data.market import _normalize_ohlcv
+
+    with pytest.raises(ValueError, match="missing OHLCV column: volume"):
+        _normalize_ohlcv(pd.DataFrame({
+            "date": ["2026-01-01"],
+            "open": [1],
+            "high": [2],
+            "low": [1],
+            "close": [1.5],
+        }))
+
+
 def test_eastmoney_stock_news_bypasses_system_proxy(monkeypatch):
     import sys
     from types import SimpleNamespace
@@ -55,6 +92,43 @@ def test_eastmoney_stock_news_bypasses_system_proxy(monkeypatch):
     assert calls[0][0] is False
     assert calls[0][1] == "https://search-api-web.eastmoney.com/search/jsonp"
     assert df.iloc[0]["新闻标题"] == "贵州茅台公告"
+
+
+def test_fetch_stock_news_cn_deduplicates_generates_url_and_converts_cst(monkeypatch):
+    import hashlib
+
+    import pandas as pd
+
+    from backend.data import news
+
+    monkeypatch.setattr(news, "_fetch_news_df", lambda symbol: pd.DataFrame([
+        {
+            "新闻标题": "贵州茅台公告",
+            "新闻链接": "https://example.com/a",
+            "文章来源": "东方财富",
+            "发布时间": "2026-05-26 12:00:00",
+        },
+        {
+            "新闻标题": "重复链接",
+            "新闻链接": "https://example.com/a",
+            "文章来源": "东方财富",
+            "发布时间": "2026-05-26 13:00:00",
+        },
+        {
+            "新闻标题": "无链接标题",
+            "新闻链接": "",
+            "文章来源": "东财",
+            "发布时间": "2026-05-26 14:00:00",
+        },
+    ]))
+
+    rows = news.fetch_stock_news_cn("600519", limit=10)
+
+    assert [row.title for row in rows] == ["贵州茅台公告", "无链接标题"]
+    assert rows[0].published_at.isoformat() == "2026-05-26T04:00:00"
+    digest = hashlib.md5("无链接标题".encode()).hexdigest()[:8]  # noqa: S324 - expected legacy URL key.
+    assert rows[1].url == f"em://600519#{digest}"
+    assert rows[1].symbol == "600519"
 
 
 def test_search_titles_tavily_bypasses_system_proxy(monkeypatch):

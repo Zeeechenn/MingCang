@@ -110,7 +110,7 @@ def _count_existing_cache_keys(db_url: str, cache_keys: list[str]) -> int:
             chunk = cache_keys[idx : idx + 500]
             placeholders = ",".join("?" * len(chunk))
             rows = con.execute(
-                f"SELECT cache_key FROM sentiment_cache WHERE cache_key IN ({placeholders})",
+                f"SELECT cache_key FROM sentiment_cache WHERE cache_key IN ({placeholders})",  # noqa: S608
                 chunk,
             ).fetchall()
             found.update(str(row[0]) for row in rows)

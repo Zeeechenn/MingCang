@@ -31,10 +31,12 @@ DEFAULT_ARTIFACTS = [
     Path.home() / ".stock-sage" / "m26_kronos_report.json",
     Path("/private/tmp/m29_shadow_validation_top_decile_entry_timing_v1.json"),
     Path("/private/tmp/m29_shadow_validation_post_event_drift_pure_polarity_v1.json"),
+    Path("/private/tmp/m29_quant_residual_attribution_v1.json"),
 ]
 DEFAULT_JSON_OUTPUT = Path.home() / ".stock-sage" / "m29_evidence_ledger.json"
 DEFAULT_MARKDOWN_OUTPUT = Path.home() / ".stock-sage" / "m29_evidence_ledger.md"
 DEFAULT_DYNAMIC_ARTIFACT_DIR = Path("/private/tmp")
+QUANT_RESIDUAL_NEXT_ACTION = "append_shadow_artifact_to_m29_ledger_and_wait_for_fresh_forward_coverage"
 M29_FORWARD_ARTIFACT_RE = re.compile(
     r"^m29_forward_shadow_rolling_(?P<start>\d{8})_(?P<end>\d{8})_(?P<exit_days>[135])d\.json$"
 )
@@ -136,6 +138,7 @@ def _read_only_flags(payload: dict[str, Any]) -> dict[str, bool | None]:
         "writes_db": _bool(payload.get("writes_db")),
         "calls_llm_or_api": _bool(payload.get("calls_llm_or_api")),
         "saves_model": _bool(payload.get("saves_model")),
+        "trains_model": _bool(payload.get("trains_model")),
     }
 
 
@@ -559,9 +562,76 @@ def _entry_from_shadow_validation(path: Path, payload: dict[str, Any]) -> dict[s
     return entry
 
 
+def _entry_from_quant_residual_attribution(path: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    exit_days = str(payload.get("exit_days") or "5")
+    residual = ((payload.get("residual_ic") or {}).get(exit_days) or {}).get(
+        "quant_residual_to_technical_sentiment",
+        {},
+    )
+    sample = payload.get("sample") or {}
+    trade_attribution = payload.get("trade_attribution") or {}
+    decision = payload.get("decision") or {}
+    entry = _base_entry(
+        path,
+        payload,
+        candidate="quant_residual_attribution",
+        variant="quant_residual_attribution_v1",
+    )
+    entry["artifact_kind"] = "m29_quant_residual_attribution"
+    entry["window"] = {
+        "start": payload.get("start"),
+        "end": payload.get("end"),
+    }
+    entry["sample_size"] = {
+        "signal_inputs": sample.get("signal_inputs"),
+        "scored_rows": sample.get("scored_rows"),
+        "rows_with_nonzero_quant": sample.get("rows_with_nonzero_quant"),
+        "rows_with_event": sample.get("rows_with_event"),
+        "threshold_crossers": trade_attribution.get("crossed_entry_threshold_count"),
+        "ic_days": residual.get("ic_days"),
+    }
+    entry["metrics"] = {
+        "ic": residual.get("ic_mean"),
+        "icir": residual.get("icir"),
+        "stride_ic": None,
+        "stride_icir": None,
+        "top_bottom": residual.get("top_bottom"),
+        "quantile_monotonic": residual.get("monotonic"),
+    }
+    entry["gate"] = payload.get("promotion_gate") or {}
+    entry["gate_pass"] = False
+    entry["shadow_validation"] = {
+        "reported_gate_pass": residual.get("gate_pass"),
+        "decision": decision.get("decision"),
+        "promotable": decision.get("promotable"),
+    }
+    entry["sub_evidence_summary"] = {
+        "quant_sweep_profiles": sorted(((payload.get("quant_sweep") or {}).get("arms") or {}).keys()),
+        "residual_horizons": sorted((payload.get("residual_ic") or {}).keys()),
+        "interaction_bucket_families": sorted((payload.get("interaction_buckets") or {}).keys()),
+        "direction_counts": trade_attribution.get("direction_counts"),
+    }
+    for blocker in payload.get("blockers") or decision.get("blockers") or []:
+        _append_blocker(entry, blocker)
+    for blocker in payload.get("data_quality_blockers") or []:
+        _add_data_quality_blocker(entry, blocker)
+    multiple = payload.get("multiple_comparison") or {}
+    entry["multiple_comparison_warning"] = multiple.get("warning")
+    entry["decision"] = decision.get("decision") or "non_promoting"
+    reported_next_action = decision.get("recommended_next_action")
+    if reported_next_action and reported_next_action != QUANT_RESIDUAL_NEXT_ACTION:
+        _append_blocker(entry, "quant_residual_recommended_next_action_ignored")
+        _add_data_quality_blocker(entry, "quant_residual_recommended_next_action_ignored")
+    entry["next_action"] = QUANT_RESIDUAL_NEXT_ACTION
+    _append_blocker(entry, "shadow_validation_non_promoting")
+    return entry
+
+
 def entry_from_artifact(path: Path, payload: dict[str, Any]) -> list[dict[str, Any]]:
     if "event_ab_5d" in payload:
         return _entries_from_event_ab(path, payload)
+    if payload.get("run_mode") == "read_only_quant_residual_attribution":
+        return [_entry_from_quant_residual_attribution(path, payload)]
     if payload.get("run_mode") == "read_only_shadow_validation":
         return [_entry_from_shadow_validation(path, payload)]
     if payload.get("run_mode") in {"offline_read_only_forward_shadow", "offline_read_only_forward_shadow_rolling"}:

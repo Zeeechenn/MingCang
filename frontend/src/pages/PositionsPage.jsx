@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { closePosition, createPosition, deleteClosedPosition, getPositions, searchStocks } from '../api'
 
 const PANEL = 'rounded-sm border border-stone-300/80 bg-[#faf6ec] dark:border-slate-700 dark:bg-[#1d232e]'
-const INSET = 'rounded-sm border border-stone-300 bg-[#f3eddc] dark:border-slate-700 dark:bg-[#161b25]'
 const LABEL = 'text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500 dark:text-slate-400'
 
 function money(value) {
@@ -179,15 +178,15 @@ export default function PositionsPage() {
 
   useEffect(() => { load() }, [])
 
-  const openPositions = positions.filter((item) => item.status !== 'closed')
-  const closedPositions = positions.filter((item) => item.status === 'closed')
+  const openPositions = useMemo(() => positions.filter((item) => item.status !== 'closed'), [positions])
+  const closedPositions = useMemo(() => positions.filter((item) => item.status === 'closed'), [positions])
 
   const total = useMemo(() => openPositions.reduce((acc, item) => ({
     market: acc.market + (item.market_value || 0),
     cost: acc.cost + (item.cost_value || 0),
     pnl: acc.pnl + (item.pnl || 0),
-  }), { market: 0, cost: 0, pnl: 0 }), [positions])
-  const realized = useMemo(() => closedPositions.reduce((acc, item) => acc + (item.realized_pnl || 0), 0), [positions])
+  }), { market: 0, cost: 0, pnl: 0 }), [openPositions])
+  const realized = useMemo(() => closedPositions.reduce((acc, item) => acc + (item.realized_pnl || 0), 0), [closedPositions])
   const totalPct = total.cost ? total.pnl / total.cost * 100 : null
   const overall = total.pnl + realized
 

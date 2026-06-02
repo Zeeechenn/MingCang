@@ -7,10 +7,10 @@ LightGBM Alpha 量化引擎（Qlib-style，不依赖 Qlib 数据基础设施）
 模型文件：~/.stock-sage/models/lgbm_alpha.pkl
 """
 import logging
-import pickle
 from pathlib import Path
 from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -78,8 +78,7 @@ def _load_model_unchecked(path: Path = MODEL_PATH) -> tuple[Any | None, str | No
     if not path.exists():
         return None, None
     try:
-        with open(path, "rb") as f:
-            return pickle.load(f), None
+        return joblib.load(path), None
     except Exception as e:
         return None, f"load_error: {e}"
 
@@ -200,8 +199,7 @@ def _passes_promotion_gate(report: dict, runtime_settings=None) -> bool:
 
 def _save_model(model, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        pickle.dump(model, f)
+    joblib.dump(model, path)
 
 
 def qlib_score(df_raw: pd.DataFrame, symbol: str | None = None, db=None) -> dict:

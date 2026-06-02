@@ -63,7 +63,9 @@ runtime databases and personal trading records stay outside Git tracking.
 | **M26** | 量化层重估 | ✅ M26.0-M26.2 完成；M26.3 暂停 |
 | **M27** | Alpha 根治工程 | ✅ 证据闭环完成但未晋升；生产 quant 继续关闭 |
 | **M28** | 调研模块整合与实时搜索接入 | ✅ 完成（deep_research / copilot / debate 信息流打通） |
-| **M29** | Alpha Reset / Forward Evidence Engine | ⏳ 当前重点：forward evidence ledger + 新 alpha 假设预注册 |
+| **M29** | Alpha Reset / Forward Evidence Engine | ⏳ 当前重点：readiness guard + M29.5 residual attribution，等待完整 fresh forward 覆盖 |
+| **M31** | 工程化与产品化借鉴（StockInsight 对标） | 🧰 P2/P3：三级缓存+延迟基准 / 有序容灾链 / 交易节奏命令 / 一键多端报告 |
+| **M32** | Forward 预测层 / 复盘→假设桥 | 🧭 设计立场已定（拒绝价格预测+Strong Buy；做可证伪赛道论点），启动待复盘数据变厚 |
 
 ---
 

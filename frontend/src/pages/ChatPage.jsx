@@ -4,7 +4,6 @@ import { getArchiveState, nextArchiveIntent } from './chatArchive'
 import { parseChatMarkdown } from './chatMarkdown'
 
 const PANEL = 'rounded-sm border border-stone-300/80 bg-[#faf6ec] dark:border-slate-700 dark:bg-[#1d232e]'
-const INSET = 'rounded-sm border border-stone-300 bg-[#f3eddc] dark:border-slate-700 dark:bg-[#161b25]'
 const LABEL = 'text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500 dark:text-slate-400'
 
 function ChatMarkdown({ text }) {

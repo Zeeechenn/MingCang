@@ -1,11 +1,5 @@
 import { useState } from 'react'
 
-const DIRECTION_OF = (rec) => {
-  if (['可小仓试错', '买入', '强买'].includes(rec)) return 'long'
-  if (['规避', '卖出', '强卖'].includes(rec)) return 'short'
-  return 'neutral'
-}
-
 const REC_BADGE = {
   可小仓试错: 'bg-red-500/20 text-red-300 border-red-500/40',
   可关注: 'bg-orange-400/20 text-orange-300 border-orange-400/40',
@@ -63,7 +57,6 @@ function DirectionRow({ label, avg, color }) {
 }
 
 function RecordRow({ rec }) {
-  const dir = DIRECTION_OF(rec.recommendation)
   const badge = REC_BADGE[rec.recommendation] || 'bg-gray-700 text-gray-300 border-gray-600'
   const ret = rec.next_day_return
   const retColor =

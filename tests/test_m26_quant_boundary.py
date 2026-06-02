@@ -1,11 +1,31 @@
 import pandas as pd
 
 
+class TinyJoblibModel:
+    n_features_in_ = 1
+
+    def predict(self, frame):
+        return [0.42] * len(frame)
+
+
 def test_m26_baseline_defaults_to_test2_universe():
     from backend.tools import m26_quant_baseline
 
     assert m26_quant_baseline.DEFAULT_UNIVERSE_PATH.name == "test2_universe.json"
     assert m26_quant_baseline.M27_TEST3_UNIVERSE_PATH.name == "test3_universe.json"
+
+
+def test_model_save_and_load_use_joblib_roundtrip(tmp_path):
+    from backend.analysis import qlib_engine
+
+    path = tmp_path / "model.pkl"
+
+    qlib_engine._save_model(TinyJoblibModel(), path)
+    model, error = qlib_engine._load_model_unchecked(path)
+
+    assert error is None
+    assert model.n_features_in_ == 1
+    assert model.predict([object(), object()]) == [0.42, 0.42]
 
 
 def test_production_validation_uses_legacy_feature_cols_for_legacy_model(monkeypatch):

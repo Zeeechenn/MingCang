@@ -197,7 +197,9 @@ def _stock_memory_write(payload: dict, db) -> dict:
     summary = payload["summary"].strip()
     source_ref = payload.get("source_ref")
     if not source_ref:
-        digest = sha1(f"{symbol}:{memory_type}:{summary}".encode()).hexdigest()[:12]
+        digest = sha1(  # noqa: S324 - stable source_ref identifier, not security-sensitive.
+            f"{symbol}:{memory_type}:{summary}".encode()
+        ).hexdigest()[:12]
         source_ref = f"chat:{symbol}:{memory_type}:{digest}"
     stock_memory = create_stock_memory(
         db,

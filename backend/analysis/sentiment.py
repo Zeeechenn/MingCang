@@ -60,8 +60,10 @@ _DISABLED_FALLBACK = {
 
 
 def _titles_hash(titles: list[str]) -> str:
-    """Return MD5 hex digest of sorted title list for cache keying."""
-    return hashlib.md5("|".join(sorted(titles[:15])).encode()).hexdigest()
+    """Return the stable legacy digest used for sentiment-cache keying."""
+    return hashlib.md5(  # noqa: S324 - legacy cache key, not a security digest.
+        "|".join(sorted(titles[:15])).encode()
+    ).hexdigest()
 
 
 def _cache_key(titles: list[str], symbol: str | None = None) -> tuple[str, str]:

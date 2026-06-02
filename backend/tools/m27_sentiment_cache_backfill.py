@@ -149,7 +149,7 @@ def _existing_keys(con: sqlite3.Connection, cache_keys: list[str]) -> set[str]:
         chunk = cache_keys[idx : idx + 500]
         placeholders = ",".join("?" * len(chunk))
         rows = con.execute(
-            f"SELECT cache_key FROM sentiment_cache WHERE cache_key IN ({placeholders})",
+            f"SELECT cache_key FROM sentiment_cache WHERE cache_key IN ({placeholders})",  # noqa: S608
             chunk,
         ).fetchall()
         found.update(str(row[0]) for row in rows)

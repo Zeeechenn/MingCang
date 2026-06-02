@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import asdict, dataclass
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+
+import requests
 
 
 @dataclass(frozen=True)
@@ -259,10 +259,15 @@ def _evidence_trials() -> list[ExternalEvidenceTrial]:
 
 
 def _fetch_json(url: str, timeout_seconds: float) -> dict:
-    request = Request(url, headers={"User-Agent": "StockSage/1.0"})
-    with urlopen(request, timeout=timeout_seconds) as response:
-        body = response.read(512_000)
-    return json.loads(body.decode("utf-8"))
+    response = requests.get(
+        url,
+        headers={"User-Agent": "StockSage/1.0"},
+        timeout=timeout_seconds,
+    )
+    response.raise_for_status()
+    if len(response.content) > 512_000:
+        raise ValueError("response too large")
+    return response.json()
 
 
 def probe_ftshare_stock_list(symbol: str = "600519", timeout_seconds: float = 5.0) -> dict:
@@ -286,7 +291,7 @@ def probe_ftshare_stock_list(symbol: str = "600519", timeout_seconds: float = 5.
             "matched_symbol": matched,
             "error": None,
         }
-    except (OSError, URLError, ValueError, json.JSONDecodeError) as exc:
+    except (requests.RequestException, ValueError, json.JSONDecodeError) as exc:
         return {
             "ok": False,
             "symbol": symbol,

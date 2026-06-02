@@ -7,7 +7,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.exc import OperationalError
 
 from backend.memory.audit_log import audit_write
@@ -258,13 +258,14 @@ def list_stock_memories(
     elif not include_archived:
         clauses.append("status != 'archived'")
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    rows = db.execute(text(f"""
+    query = f"""
         SELECT *
         FROM stock_memory_items
         {where}
         ORDER BY importance DESC, updated_at DESC, id DESC
         LIMIT :limit
-    """), params).all()
+    """  # noqa: S608 - WHERE fragments come only from the fixed filters above.
+    rows = db.execute(text(query), params).all()
     now = _utc_now()
     ql = q.lower() if q else None
     out = []
@@ -311,9 +312,8 @@ def patch_stock_memory(
         params["ttl_days"] = ttl_days
     if not sets:
         raise ValueError("no editable fields supplied")
-    db.execute(text(f"""
-        UPDATE stock_memory_items SET {', '.join(sets)} WHERE id = :id
-    """), params)
+    query = "UPDATE stock_memory_items SET " + ", ".join(sets) + " WHERE id = :id"  # noqa: S608
+    db.execute(text(query), params)
     db.commit()
     audit_write(
         db,
@@ -449,9 +449,10 @@ def build_memory_context(
     used_ids = [int(r["id"]) for r in stock_rows]
     if record_usage and used_ids:
         now = _utc_now().isoformat(timespec="seconds")
-        db.execute(text(
-            f"UPDATE stock_memory_items SET last_used_at = :now WHERE id IN ({','.join(str(i) for i in used_ids)})"
-        ), {"now": now})
+        stmt = text(
+            "UPDATE stock_memory_items SET last_used_at = :now WHERE id IN :used_ids"
+        ).bindparams(bindparam("used_ids", expanding=True))
+        db.execute(stmt, {"now": now, "used_ids": used_ids})
         db.commit()
     if record_usage:
         audit_write(
@@ -485,11 +486,12 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
     if symbol:
         clauses.append("symbol = :symbol")
         params["symbol"] = symbol
-    rows = db.execute(text(f"""
+    query = f"""
         SELECT * FROM stock_memory_items
         WHERE {' AND '.join(clauses)}
         ORDER BY id ASC
-    """), params).all()
+    """  # noqa: S608 - clauses are fixed literals plus a bound symbol predicate.
+    rows = db.execute(text(query), params).all()
     written = 0
     for row in rows:
         source_ref = f"outcome:{row.id}"

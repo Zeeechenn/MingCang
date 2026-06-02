@@ -17,7 +17,7 @@ COVERAGE_FILE ?= /tmp/stocksage-coverage
 COVERAGE_XML ?= coverage.xml
 PIP_AUDIT_CACHE_DIR ?= /tmp/stocksage-pip-audit-cache
 
-.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test lint security dependency-audit fmt typecheck check verify dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
+.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-format-check lint security dependency-audit fmt typecheck check verify dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
 
 help:
 	@echo "StockSage Makefile commands:"
@@ -29,6 +29,8 @@ help:
 	@echo "  test         跑后端测试套件"
 	@echo "  coverage     跑后端测试并输出覆盖率报告"
 	@echo "  frontend-test 跑前端 node:test 单元测试"
+	@echo "  frontend-lint 跑前端 ESLint（当前 advisory，不纳入 verify）"
+	@echo "  frontend-format-check 跑前端 Prettier 配置文件检查"
 	@echo "  lint         ruff 检查（不修复）"
 	@echo "  security     ruff 安全规则快照（当前不作为硬门槛）"
 	@echo "  dependency-audit Python 依赖漏洞审计"
@@ -73,6 +75,12 @@ coverage:
 
 frontend-test:
 	cd frontend && node --test src/*.test.js src/components/*.test.js src/pages/*.test.js
+
+frontend-lint:
+	cd frontend && npm run lint
+
+frontend-format-check:
+	cd frontend && npm run format:check
 
 lint:
 	$(RUFF) check backend tests --cache-dir $(RUFF_CACHE_DIR)

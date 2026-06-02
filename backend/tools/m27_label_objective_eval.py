@@ -165,7 +165,7 @@ def load_or_build_panel(
     if cache_path.exists() and meta_path.exists() and not refresh_cache:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         if _cache_matches_current_features(meta):
-            panel = pd.read_pickle(cache_path)
+            panel = pd.read_pickle(cache_path)  # noqa: S301 - trusted local panel cache.
             meta["cache_hit"] = True
             return panel, meta
 

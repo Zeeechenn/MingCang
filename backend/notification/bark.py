@@ -5,8 +5,8 @@ BARK_KEY 未配置时静默跳过，不影响主流程。
 import json
 import logging
 import time
-import urllib.error
-import urllib.request
+
+import requests
 
 from backend.config import settings
 
@@ -36,30 +36,30 @@ def send_result(
         "group": group,
         "sound": sound,
         "icon": "https://cdn-icons-png.flaticon.com/512/2521/2521826.png",
-    }, ensure_ascii=False).encode()
+    }, ensure_ascii=False)
 
     url = f"{settings.bark_server.rstrip('/')}/push"
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json; charset=utf-8"},
-        method="POST",
-    )
     last_error = None
     max_attempts = max(1, retries + 1)
     for attempt in range(1, max_attempts + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                result = json.loads(resp.read())
+            response = requests.post(
+                url,
+                data=payload.encode(),
+                headers={"Content-Type": "application/json; charset=utf-8"},
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            result = response.json()
             if result.get("code") == 200:
                 logger.debug("Bark 推送成功: %s", title)
                 return {"ok": True, "attempts": attempt, "response": result}
             last_error = f"non_200:{result}"
             logger.warning("Bark 返回非 200: %s", result)
-        except urllib.error.URLError as e:
+        except requests.RequestException as e:
             last_error = str(e)
             logger.warning("Bark 推送失败（网络，第%d次）: %s", attempt, e)
-        except Exception as e:
+        except (ValueError, json.JSONDecodeError) as e:
             last_error = str(e)
             logger.warning("Bark 推送失败（第%d次）: %s", attempt, e)
         if attempt < max_attempts and backoff_seconds > 0:
