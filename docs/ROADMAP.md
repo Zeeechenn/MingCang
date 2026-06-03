@@ -216,6 +216,19 @@
 
 ---
 
+## M42 价格复权口径(qfq/hfq)污染防护与修复【complete】🧹
+
+> 来源：ATLAS Gate-B 前瞻跟踪发现约 30% 的 5 日前瞻收益不可信（|net|>1.5）。根因：2026-05-25/26 有约 52 个标的的后复权(hfq)收盘价被写入 prices 表且 `adjustment=NULL`，与 qfq 行无法区分，导致 qfq 入场价 / hfq 退出价产生 100–330x 伪收益。`adjustment` 列历史上 99.94% 为 NULL，无法按标签过滤。
+
+- [x] 写入时护栏：`backend/data/price_quality.py:check_adjustment_basis_jump`（close > 3×前10中位数即判为污染）+ `PriceQualityPolicy.adjustment_jump_ratio`；接入 `backend/data/market.py:backfill_if_needed`，写库前跳过污染行（下次 backfill 以 qfq 重抓）。`evaluate_price_quality` 与打分逻辑不变。
+- [x] 一次性修复 CLI：`backend/tools/m42_remediate_hfq_contamination.py`（dry-run 默认、删前 `shutil.copy2` 备份、拒绝生产路径、原生 sqlite3、跑到 0 行；级联需 2 遍收敛）。
+- [x] 线上修复：删除 2026-05-25/26 共 84 行混合口径污染行（恢复备份 `~/.stock-sage/backups/stock-sage.db.bak.20260603_174914`）；真实判据复检 0 残留；周边日期 (05-22/05-27) 行数不变。新增 33 个 hermetic 测试，全量 754 passed。
+- [ ] 遗留（独立数据项，非本里程碑跳变污染范畴）：600519(茅台)/600601/600602 整条价格序列为 hfq（绝对价错、但入出同口径故收益内部一致），需 qfq 重抓修复。
+
+> 编号说明：M33–M40 属 ATLAS 研究架构分支（codex/atlas），主线 M32→M41 跳过了 M33–M40；M42 衔接 M41 之后，两分支编号无冲突。
+
+---
+
 ## M41 A/HK/US Global Data/Research Buildout【complete】🌐
 
 > 来源：2026-06-03 评估“Global Stock Data / 港美市场数据 Agent Skill”参考视频。视频的可借鉴点不是单一接口，而是把分散入口封装成 agent 可调用的数据能力：quote / kline / fundamental / capital / options / filings / fallback，并明确数据源边界、字段与失效策略。本项目先接 daily price seed，不把未验证的 fundamentals/options/filings 直接并入研究或生产信号。
