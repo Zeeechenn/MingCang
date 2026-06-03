@@ -443,3 +443,40 @@ def test_report_excludes_implausible_returns(test_db):
     assert r["n_total"] == 30
     # mean reflects the sane 0.02, not dragged toward 10.0
     assert r["avg_net_return_fail"] is not None and abs(r["avg_net_return_fail"] - 0.02) < 1e-6
+
+
+def test_realize_marks_hfq_artifact_as_data_error(test_db):
+    """A 5-trading-day exit landing on an hfq-scale price (ratio >> 3x) is marked
+    data_error, not realized — robust to the prices table's NULL adjustment tag."""
+    from datetime import UTC, datetime
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from backend.data.database import Base, GateBObservation
+    from backend.research.gate_b_recorder import realize_returns
+
+    src_engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(src_engine)
+    src = sessionmaker(bind=src_engine)()
+    # 5 forward prices; the 5th is an hfq artifact (¥1225 vs qfq entry ¥3.71)
+    _seed_prices(src, symbol="000002", entry_date="2026-05-20",
+                 closes=(3.60, 3.50, 3.50, 3.50, 1225.49))
+    src.commit()
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    obs = GateBObservation(
+        symbol="000002", signal_date="2026-05-19", as_of="2026-05-19", signal_id=1,
+        gate_pass_full=False, gate_pass_variant=False, card_pass=False, ready_variant=False,
+        entry_close=3.71, horizon_days=5, forward_status="pending",
+        blockers_json="[]", blockers_variant_json="[]", checks_json="{}",
+        gate_b_tracker_version="v1", recorded_at=now, updated_at=now,
+    )
+    test_db.add(obs); test_db.commit()
+
+    realize_returns(test_db, source_db=src, as_of="2026-06-02")
+    refreshed = test_db.query(GateBObservation).filter(GateBObservation.id == obs.id).first()
+    assert refreshed.forward_status == "data_error"
+    assert refreshed.forward_return_net is None
+    src.close()

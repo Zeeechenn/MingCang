@@ -393,6 +393,15 @@ def record_observations(
 # realize_returns
 # ---------------------------------------------------------------------------
 
+# realize_returns data-quality guards (robust to the prices table's NULL-tagged
+# qfq/hfq mixing). An A-share 5-day move is bounded by daily limits (~2.5x up /
+# 0.33x down), so an exit/entry ratio outside [0.1, 3.0] is a data artifact.
+# 16 calendar days bounds 5 trading days even across a long holiday.
+_MAX_PLAUSIBLE_PRICE_RATIO = 3.0
+_MIN_PLAUSIBLE_PRICE_RATIO = 0.1
+_MAX_FORWARD_SPAN_DAYS = 16
+
+
 def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dict]:
     """
     Fill forward_return_net for observations whose 5-day window has closed.
@@ -446,7 +455,46 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
         ).fetchall()
 
         if len(fwd_rows) == 5:
+            exit_date_str = fwd_rows[4][0]
             exit_close = float(fwd_rows[4][1])
+
+            # Data-quality guards. The prices table mixes qfq/hfq rows tagged
+            # adjustment=NULL, so a 5-trading-day exit can land on an hfq row
+            # (e.g. 万科 ¥3.71 qfq entry vs ¥1225 hfq exit -> 330x artifact). A
+            # real A-share 5-day move is bounded by daily limits, so an
+            # exit/entry ratio outside [0.1, 3.0] — or a window spanning far more
+            # than 5 trading days (data gap) — marks the row 'data_error' and is
+            # never realized. This is robust to the unreliable adjustment tag.
+            ratio = (exit_close / obs.entry_close) if obs.entry_close else 0.0
+            try:
+                span_days = (
+                    _date.fromisoformat(exit_date_str)
+                    - _date.fromisoformat(obs.signal_date)
+                ).days
+            except ValueError:
+                span_days = None
+            if (
+                obs.entry_close <= 0
+                or ratio > _MAX_PLAUSIBLE_PRICE_RATIO
+                or ratio < _MIN_PLAUSIBLE_PRICE_RATIO
+                or (span_days is not None and span_days > _MAX_FORWARD_SPAN_DAYS)
+            ):
+                obs.forward_status = "data_error"
+                obs.updated_at = _utc_now()
+                db.flush()
+                audit_write(
+                    db,
+                    "gate_b_recorder.realize",
+                    (
+                        f"data_error: symbol={obs.symbol} signal_date={obs.signal_date}"
+                        f" ratio={ratio:.2f} span_days={span_days}"
+                    ),
+                    related_symbol=obs.symbol,
+                    related_scope="gate_b",
+                )
+                db.commit()
+                continue
+
             raw = (exit_close - obs.entry_close) / obs.entry_close
             net = net_return_from_prices(obs.entry_close, exit_close)
             obs.forward_return_raw = raw
