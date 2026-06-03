@@ -311,3 +311,286 @@ class AIChatResponse(BaseModel):
     citations: list[str] = []
     used_resources: list[str] = []
     pending_action: dict | None = None
+
+
+# ── M40 Thesis Ledger schemas ─────────────────────────────────────────────────
+
+class ThesisOut(BaseModel):
+    id: int
+    symbol: str
+    title: str
+    status: str = "active"
+    kill_conditions: list[str] = []
+    update_cadence_days: int | None = None
+    research_case_as_of: str | None = None
+    confidence_history: list[dict] = []
+    review_cases: list[dict] = []
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class ThesisListOut(BaseModel):
+    symbol: str | None = None
+    items: list[ThesisOut] = []
+    total: int = 0
+
+
+class ThesisCreateRequest(BaseModel):
+    symbol: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    kill_conditions: list[str] = []
+    update_cadence_days: int | None = None
+    research_case_as_of: str | None = None
+    status: str = "active"
+
+
+class ThesisStatusRequest(BaseModel):
+    new_status: str = Field(min_length=1)
+    note: str | None = None
+
+
+class ThesisConfidenceRequest(BaseModel):
+    score: float
+    as_of: str
+    note: str | None = None
+
+
+class ThesisAttachReviewRequest(BaseModel):
+    review_payload: dict = {}
+    as_of: str
+
+
+# ── M40 Theme Hypothesis Engine schemas ───────────────────────────────────────
+
+class ThemeOut(BaseModel):
+    id: int
+    theme_name: str
+    description: str | None = None
+    status: str = "active"
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class ThemeListOut(BaseModel):
+    items: list[ThemeOut] = []
+    total: int = 0
+
+
+class ThemeCreateRequest(BaseModel):
+    theme_name: str = Field(min_length=1)
+    description: str | None = None
+    status: str = "active"
+
+
+class HypothesisOut(BaseModel):
+    id: int
+    theme_id: int
+    statement: str
+    status: str = "proposed"
+    beneficiary_tiers: list[dict] = []
+    evidence_gaps: list[str] = []
+    invalidation_conditions: list[str] = []
+    forward_evidence: list[dict] = []
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class HypothesisListOut(BaseModel):
+    theme_id: int | None = None
+    items: list[HypothesisOut] = []
+    total: int = 0
+
+
+class HypothesisCreateRequest(BaseModel):
+    statement: str = Field(min_length=1)
+    beneficiary_tiers: list | None = None
+    evidence_gaps: list | None = None
+    invalidation_conditions: list | None = None
+    status: str = "proposed"
+
+
+class HypothesisStatusRequest(BaseModel):
+    new_status: str = Field(min_length=1)
+    note: str | None = None
+
+
+class BeneficiaryTiersRequest(BaseModel):
+    # NOTE: tiers are advisory display metadata ONLY — must NOT feed
+    # aggregate/aggregate_v2/run_pipeline/apply_research_constraints
+    tiers: list[dict] = []
+
+
+class ForwardEvidenceRequest(BaseModel):
+    evidence_payload: dict = {}
+    as_of: str
+
+
+# ── M40 Review Loop schemas ───────────────────────────────────────────────────
+
+class ReviewCaseOut(BaseModel):
+    id: int
+    symbol: str
+    as_of: str
+    signal_id: int | None = None
+    thesis_id: int | None = None
+    research_case_as_of: str | None = None
+    review_payload: dict = {}
+    created_at: str | None = None
+
+
+class ReviewCaseListOut(BaseModel):
+    symbol: str | None = None
+    items: list[ReviewCaseOut] = []
+    total: int = 0
+
+
+class ReviewCaseCreateRequest(BaseModel):
+    symbol: str = Field(min_length=1)
+    as_of: str
+    signal_id: int | None = None
+    thesis_id: int | None = None
+    research_case_as_of: str | None = None
+    review_payload: dict | None = None
+
+
+class MemoryCandidateOut(BaseModel):
+    # source_trust is read-only in response; not accepted in any request schema
+    id: int
+    symbol: str
+    summary: str
+    memory_type: str
+    importance: int = 3
+    confidence: float = 0.5
+    source_trust: str = "pending"
+    source_ref: str | None = None
+    note: str | None = None
+    review_case_id: int | None = None
+    created_at: str | None = None
+
+
+class MemoryCandidateListOut(BaseModel):
+    items: list[MemoryCandidateOut] = []
+    total: int = 0
+
+
+class MemoryCandidateCreateRequest(BaseModel):
+    # source_trust intentionally omitted — storage layer hardcodes 'pending'
+    symbol: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    memory_type: str = Field(min_length=1)
+    importance: int = 3
+    confidence: float = 0.5
+    review_case_id: int | None = None
+    source_ref: str | None = None
+    note: str | None = None
+
+
+class MemoryPromoteRequest(BaseModel):
+    # HUMAN-GATED: non-empty confirmed_by required — never auto-callable
+    confirmed_by: str = Field(min_length=1)
+
+
+class MemoryRejectRequest(BaseModel):
+    confirmed_by: str = Field(min_length=1)
+    note: str | None = None
+
+
+# ── M40 Universe Guard schemas ────────────────────────────────────────────────
+
+class UniverseSnapshotOut(BaseModel):
+    id: int | None = None
+    symbols: list[str] = []
+    cutoff_date: str | None = None
+    market_filter: str = "ALL"
+    context: str | None = None
+    universe_hash: str | None = None
+    created_at: str | None = None
+
+
+class UniverseSnapshotListOut(BaseModel):
+    items: list[UniverseSnapshotOut] = []
+    total: int = 0
+
+
+class UniverseSnapshotRequest(BaseModel):
+    symbols: list[str]
+    cutoff_date: str
+    market_filter: str = "ALL"
+    context: str | None = None
+
+
+# ── M40 Forward Thesis schemas ────────────────────────────────────────────────
+
+class ForwardThesisOut(BaseModel):
+    id: int
+    statement: str
+    symbol: str | None = None
+    status: str = "draft"
+    horizon_date: str | None = None
+    thesis_id: int | None = None
+    theme_hypothesis_id: int | None = None
+    universe_snapshot_id: int | None = None
+    confidence_low: float | None = None
+    confidence_high: float | None = None
+    invalidation_conditions: list = []
+    follow_up_metrics: list = []
+    evidence_manifest: list = []
+    next_review_date: str | None = None
+    review_cadence_days: int | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class ForwardThesisListOut(BaseModel):
+    symbol: str | None = None
+    items: list[ForwardThesisOut] = []
+    total: int = 0
+
+
+class ForwardThesisCreateRequest(BaseModel):
+    statement: str = Field(min_length=1)
+    symbol: str | None = None
+    horizon_date: str | None = None
+    thesis_id: int | None = None
+    theme_hypothesis_id: int | None = None
+    universe_snapshot_id: int | None = None
+    confidence_low: float | None = None
+    confidence_high: float | None = None
+    invalidation_conditions: list | None = None
+    follow_up_metrics: list | None = None
+    evidence_manifest: list | None = None
+    next_review_date: str | None = None
+    review_cadence_days: int | None = None
+    status: str = "draft"
+
+
+class ForwardThesisStatusRequest(BaseModel):
+    new_status: str = Field(min_length=1)
+    note: str | None = None
+
+
+class ForwardThesisConfidenceRequest(BaseModel):
+    confidence_low: float
+    confidence_high: float
+    as_of: str
+
+
+class ForwardThesisEvidenceRequest(BaseModel):
+    manifest: list[dict] = []
+    as_of: str
+
+
+# ── M40 Case View schemas ─────────────────────────────────────────────────────
+
+class CaseViewInner(BaseModel):
+    theses: list[dict] = []
+    review_cases: list[dict] = []
+    forward_theses: list[dict] = []
+    theme_hypotheses: list[dict] = []
+    generated_at: str | None = None
+
+
+class CaseViewOut(BaseModel):
+    symbol: str
+    dossier: ResearchDossierOut
+    case_view: CaseViewInner
