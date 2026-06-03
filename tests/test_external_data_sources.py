@@ -396,7 +396,102 @@ def test_probe_summary_handles_mixed_cn_probe_payload_shapes():
     assert "volume" in tickflow["missing_fields"]
 
 
+def test_price_quality_module_reports_warning_without_blocking():
+    from datetime import date, datetime
+
+    from backend.data.database import Price
+    from backend.data.price_quality import evaluate_price_quality
+
+    row = {
+        "date": date.today().isoformat(),
+        "open": 10,
+        "high": 11,
+        "low": 9,
+        "close": 10.5,
+        "volume": 100,
+        "source": "akshare_sina_cn",
+        "fetched_at": datetime(2026, 6, 3, 8, 0).isoformat(),
+        "adjustment": "qfq",
+    }
+    gate = evaluate_price_quality(
+        market="CN",
+        row=row,
+        recent_rows=[
+            Price(symbol="600519", date=row["date"], close=10.5, source="akshare_sina_cn", adjustment="qfq"),
+            Price(symbol="600519", date=row["date"], close=10.4, source="eastmoney_cn", adjustment="qfq"),
+        ],
+    )
+
+    assert gate.status == "warning"
+    assert gate.blockers == []
+    assert gate.warnings == ["mixed_recent_sources"]
+    assert gate.to_payload() == {
+        "status": "warning",
+        "blockers": [],
+        "warnings": ["mixed_recent_sources"],
+        "recent_sources": ["akshare_sina_cn", "eastmoney_cn"],
+        "recent_adjustments": ["qfq"],
+    }
+
+
+def test_price_quality_module_policy_thresholds_and_not_applicable_gate():
+    from datetime import date
+
+    from backend.data.database import Price
+    from backend.data.price_quality import (
+        PriceQualityPolicy,
+        evaluate_price_quality,
+        not_applicable_price_quality_gate,
+    )
+
+    row = {
+        "date": date.today().isoformat(),
+        "open": 25,
+        "high": 30,
+        "low": 20,
+        "close": 25,
+        "volume": 100,
+        "source": "yfinance_hk",
+        "adjustment": "auto_adjust",
+    }
+    gate = evaluate_price_quality(
+        market="HK",
+        row=row,
+        recent_rows=[
+            Price(symbol="700", date=row["date"], close=1, source="yfinance_hk", adjustment="auto_adjust"),
+            Price(symbol="700", date=row["date"], close=25, source="yfinance_hk", adjustment="auto_adjust"),
+        ],
+        policy=PriceQualityPolicy(extreme_price_range_ratio=10.0),
+    )
+
+    assert gate.status == "blocked"
+    assert "extreme_recent_price_range" in gate.blockers
+    assert not_applicable_price_quality_gate().to_payload() == {
+        "status": "not_applicable",
+        "blockers": [],
+        "warnings": [],
+        "recent_sources": [],
+        "recent_adjustments": [],
+    }
+
+
+def test_price_quality_module_reports_unavailable_without_local_row():
+    from backend.data.price_quality import evaluate_price_quality
+
+    gate = evaluate_price_quality(market="CN", row=None, recent_rows=[])
+
+    assert gate.to_payload() == {
+        "status": "unavailable",
+        "blockers": ["no_local_price_row"],
+        "warnings": [],
+        "recent_sources": [],
+        "recent_adjustments": [],
+    }
+
+
 def test_global_data_context_returns_read_only_envelope_for_hk_price(test_db):
+    from datetime import date
+
     from backend.data.database import Price, Stock
     from backend.data.global_data import build_global_data_context
 
@@ -404,7 +499,7 @@ def test_global_data_context_returns_read_only_envelope_for_hk_price(test_db):
     test_db.add(
         Price(
             symbol="700",
-            date="2026-06-01",
+            date=date.today().isoformat(),
             open=300,
             high=310,
             low=299,
@@ -421,6 +516,14 @@ def test_global_data_context_returns_read_only_envelope_for_hk_price(test_db):
     assert payload["signal_impact"] == "none"
     assert payload["safe_for_research_scoring"] is False
     assert payload["safe_for_production_signal"] is False
+    assert payload["freshness_status"] == "latest_local_bar"
+    assert payload["quality_gate"] == {
+        "status": "passed",
+        "blockers": [],
+        "warnings": [],
+        "recent_sources": [],
+        "recent_adjustments": [],
+    }
     assert payload["normalization"]["currency"] == "HKD"
     assert payload["pit_gate"]["status"] == "passed_for_read_only"
     assert payload["data"]["close"] == 305
@@ -447,6 +550,8 @@ def test_global_data_context_blocks_cn_price_without_provenance(test_db):
     assert payload["quality_gate"]["status"] == "blocked"
     assert "missing_provenance_source" in payload["quality_gate"]["blockers"]
     assert "missing_provenance_fetched_at" in payload["quality_gate"]["blockers"]
+    assert "missing_provenance_adjustment" in payload["quality_gate"]["blockers"]
+    assert payload["freshness_status"] == "blocked"
     assert payload["safe_for_production_signal"] is False
 
 
@@ -486,6 +591,26 @@ def test_global_data_context_blocks_mixed_recent_adjustments(test_db):
 
     assert payload["quality_gate"]["status"] == "blocked"
     assert "mixed_recent_adjustments" in payload["quality_gate"]["blockers"]
+    assert payload["quality_gate"]["recent_adjustments"] == ["forward_additive", "qfq"]
+    assert payload["quality_gate"]["warnings"] == ["mixed_recent_sources"]
+    assert payload["safe_for_production_signal"] is False
+
+
+def test_global_data_context_reports_unavailable_price_without_local_row(test_db):
+    from backend.data.global_data import build_global_data_context
+
+    payload = build_global_data_context(test_db, market="CN", symbol="600519", intent="daily_ohlcv")
+
+    assert payload["status"] == "unavailable"
+    assert payload["data"] is None
+    assert payload["freshness_status"] == "unmeasured"
+    assert payload["quality_gate"] == {
+        "status": "unavailable",
+        "blockers": ["no_local_price_row"],
+        "warnings": [],
+        "recent_sources": [],
+        "recent_adjustments": [],
+    }
     assert payload["safe_for_production_signal"] is False
 
 
@@ -499,6 +624,13 @@ def test_global_data_context_reports_missing_non_price_adapter(test_db):
     assert payload["field_status"] == "missing_fields"
     assert "published_at" in payload["missing_fields"]
     assert payload["pit_gate"]["blockers"] == ["no_normalized_row"]
+    assert payload["quality_gate"] == {
+        "status": "not_applicable",
+        "blockers": [],
+        "warnings": [],
+        "recent_sources": [],
+        "recent_adjustments": [],
+    }
     assert payload["safe_for_production_signal"] is False
 
 
