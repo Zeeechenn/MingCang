@@ -6,9 +6,9 @@ StockSage organizes market data, news, fundamentals, QFII flows, positions, revi
 
 It supports research, reviews and risk alerts only — **it does not predict prices, place orders, or make the final investment decision for the user**.
 
-StockSage positions itself as **a research substrate for agents, not an agent itself** — it exposes context, memory and health checks as a tool set via MCP / CLI so outer agents like Codex, Claude Code, or Cursor can drive it directly. Research conclusions are anchored by an institutional-grade audit layer (DSR, PBO, Walk-Forward, Point-in-Time interception, IC significance, Kill Switch), and every decision leaves a traceable evidence trail through FinMem-style layered decision memory and full-text-search audit logs.
+StockSage positions itself as **a research substrate for agents, not an agent itself**: it exposes project context, long-term memory, single-stock dossiers and health checks via MCP / CLI so outer agents like Codex, Claude Code, or Cursor can drive research, reviews and project maintenance in natural language.
 
-A complete multi-agent pipeline — Bull/Bear three-round debate + Research Director + Risk Manager + Portfolio Manager — is built in, enabled on demand and defaulting to single-agent for daily postmarket runs to control token spend. Local dev sessions are trusted by default; remote exposure requires an API key + write switch + action allowlist (three gates) and stays read-only by default.
+Every decision leaves a traceable evidence trail. Local dev sessions are trusted by default; remote exposure requires an API key, a write switch and an action allowlist, and remains read-only by default.
 
 [![CI](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/stock-sage/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/Zeeechenn/stock-sage?logo=github&color=success)](https://github.com/Zeeechenn/stock-sage/releases)
@@ -26,9 +26,9 @@ A complete multi-agent pipeline — Bull/Bear three-round debate + Research Dire
 
 ## 📦 Current Release
 
-**v0.2.2 (2026-06-03)** ships the M41 A/HK/US read-only data facade: a three-market seven-layer capability catalog, HK/US daily price bridge, explicit external-data probes, probe summaries, global-data API/CLI, canonical schema/PIT gates, price quality gates, and probe health ledger are now on the public line.
+**v0.2.2 (2026-06-03)** expands StockSage from a local A-share workspace into a read-only A/HK/US research context: HK and US symbols can now appear in market-data lookup, capability discovery, data-quality checks and agent queries, while staying out of official signals and portfolio risk workflows.
 
-HK/US remain read-only research context: they do not generate official signals and do not enter postmarket batch, stop-loss checks, long-term constraints, position sizing, or composite_score. The M26 / M27 quant and Kronos evidence conclusion is unchanged, so production keeps `WEIGHT_QUANT=0.0` / `kronos_enabled=false`.
+The public line remains research-first and conservative by default. A-share production signals still rely on technical and news-sentiment layers; quant/Kronos evidence continues to be logged as auditable research until it clears the full promotion gate. See [CHANGELOG.md](CHANGELOG.md) for the detailed release history.
 
 ---
 
@@ -43,7 +43,7 @@ HK/US remain read-only research context: they do not generate official signals a
 | 📒 **Auditable memory** | Project memory, layered decision memory and chat summaries each stored in their own bucket, every write audit-logged. |
 | 🛡 **Risk-first** | Stop-loss / take-profit levels come from ATR formulas and portfolio constraints — LLMs never predict prices directly. |
 
-> Current focus: **M29 forward evidence and pre-registered alpha hypotheses**, agent-ready usage, data quality and research-review workflows. Not an automated trading system. The Web console is still evolving.
+> Current focus: validating whether signals have stable evidence, improving agent usage, data quality and research-review workflows. Not an automated trading system. The Web console is still evolving.
 
 ---
 
@@ -92,12 +92,7 @@ python3 -m backend.agent.cli postmarket --pretty
 # The native launcher also supports: stocksage premarket / intraday / postmarket
 ```
 
-M31 cache-layer SLA baseline (2026-06-02, local SQLite,
-`backend.tools.m31_cache_benchmark --iterations 20`): L1 in-process lookup
-p50≈0.0001ms; L2 single-stock latest-price lookup p50≈0.0982ms; L2 market scan
-counts p50≈18.8607ms. Intraday workflows explicitly read L1/L2 only; the L3
-remote API incremental layer is not triggered by default and is excluded from
-intraday benchmarks.
+Intraday entries read the local cache layer by default and do not trigger remote incremental APIs. Detailed cache baselines and verification notes live in [STATUS.md](STATUS.md) and [CHANGELOG.md](CHANGELOG.md).
 
 Inside the terminal shell you can ask directly:
 
@@ -161,7 +156,14 @@ Connect this MCP server to Claude Desktop, Claude Code, Cursor or any MCP-capabl
 
 ## 🤖 Agent Usage Guide
 
-StockSage already agent-ifies research, memory, reviews and health checks. The point is not "how to run it" — it's **what to delegate to it**.
+StockSage already agent-ifies research, memory, reviews and health checks. A new agent usually only needs to:
+
+1. Read [AGENTS.md](AGENTS.md) first to understand local / remote boundaries.
+2. Load `STATUS.md`, `PROJECT.md`, `docs/ROADMAP.md` or `CHANGELOG.md` according to the task.
+3. Use CLI / MCP to read project context, memory and single-stock dossiers; mutating actions dry-run first and wait for user confirmation.
+
+<details>
+<summary><b>Delegable tasks, example prompts and MCP tools</b></summary>
 
 ### Tasks you can delegate
 
@@ -196,25 +198,15 @@ Check current data coverage and scheduler health.
 | `stock_sage_stock_context` | Single-stock signals, news, positions, long-term labels and memory context. |
 | `stock_sage_health` | Agent mode, database, dependency and permission health. |
 
+</details>
+
 ---
 
 ## ⚙️ Configuration
 
 ### API Keys
 
-StockSage reads all external keys from `.env` in the project root. **Never commit `.env`, real keys, the database or personal trading records to Git.** The default local setup uses `AI_PROVIDER=local_cli`; enable news enrichment, push notifications and remote-agent exposure on demand. Empty keys and `your_*` placeholders are treated as unconfigured.
-
-| Variable | Purpose | Required? | How to obtain |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | Powers StockSage internal LLM calls when `AI_PROVIDER=anthropic`. | Optional; required for the Anthropic runtime | Create a key in the Anthropic Console |
-| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | Used by `AI_PROVIDER=openai` for OpenAI or OpenAI-compatible endpoints. | Optional; required for the OpenAI runtime | Create a key on the provider's platform; for third-party endpoints also set `OPENAI_BASE_URL` |
-| `TAVILY_API_KEY` | Real-time search supplement when local DB and iFinD MCP headlines are still insufficient; also used by `backfill_coverage --use-tavily` and long-term A-teacher evidence search. | Optional | Create an API key at [Tavily](https://app.tavily.com/) |
-| `ANSPIRE_API_KEY` | Retained for explicit deep research / manual strict event-style news fetches; daily postmarket sentiment supplement now uses iFinD MCP → Tavily. | Optional | Register at [Anspire AI Search](https://aisearch.anspire.cn), create a key on the API Keys page |
-| `BARK_KEY` / `BARK_SERVER` | iOS Bark push for postmarket signals, stop-loss alerts and circuit-breaker warnings. | Optional; pushes silently skipped if unset | Copy the device key from the Bark app; default server is `https://api.day.app` — override `BARK_SERVER` if self-hosting |
-| `STOCKSAGE_AGENT_API_KEY` | Authenticates remote agent / MCP / HTTP writes when `STOCKSAGE_AGENT_MODE=remote`. | Not needed locally; required when exposing the agent remotely | Generate a long random string; enable `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED` and the action allowlist on demand |
-| `TUSHARE_TOKEN` / `TUSHARE_QFQ_ENABLED` | Optional Tushare qfq daily-bar fallback; disabled by default and registered after TickFlow / Eastmoney / AkShare (and optional efinance when installed). The raw `daily` endpoint remains debug-only because it is unadjusted. | Optional; requires `TUSHARE_QFQ_ENABLED=true` for qfq fallback | Get a token from [Tushare](https://tushare.pro/) |
-| `TICKFLOW_ENABLED` / `TICKFLOW_API_KEY` / `TICKFLOW_BASE_URL` | TickFlow A-share daily-bar source; disabled by default, and when enabled uses `forward_additive` adjusted prices as the preferred CN provider. | Optional; requires `TICKFLOW_ENABLED=true` | Get a key from [TickFlow](https://tickflow.org/); default base URL is `https://api.tickflow.org` |
-| `IFIND_MCP_ENABLED` / `IFIND_MCP_TOKEN` / `IFIND_MCP_BASE_URL` | Tonghuashun iFinD MCP adapter; when enabled, postmarket sentiment first uses `search_news` / `search_notice` for stock headlines and announcements. It is still not an A-share OHLCV market-data ingestion source. | Optional; requires `IFIND_MCP_ENABLED=true`, `IFIND_MCP_TOKEN` and `IFIND_MCP_BASE_URL` | Create or copy the token from the Tonghuashun iFinD MCP profile page; default base URL is `https://api-mcp.51ifind.com:8643/ds-mcp-servers` |
+StockSage reads all external keys from `.env` in the project root. **Never commit `.env`, real keys, the database or personal trading records to Git.** The default local setup uses `AI_PROVIDER=local_cli`, so first-time local use usually needs no cloud LLM key; data sources, news enrichment, push notifications and remote-agent exposure are enabled only when needed.
 
 **A typical local setup**:
 
@@ -233,7 +225,34 @@ BARK_KEY=your_bark_device_key_here
 BARK_SERVER=https://api.day.app
 ```
 
-### Public Research Entry Points
+<details>
+<summary><b>Full API key and remote configuration</b></summary>
+
+| Variable | Purpose | Required? | How to obtain |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | Powers StockSage internal LLM calls when `AI_PROVIDER=anthropic`. | Optional; required for the Anthropic runtime | Create a key in the Anthropic Console |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | Used by `AI_PROVIDER=openai` for OpenAI or OpenAI-compatible endpoints. | Optional; required for the OpenAI runtime | Create a key on the provider's platform; for third-party endpoints also set `OPENAI_BASE_URL` |
+| `TAVILY_API_KEY` | Real-time search supplement when local DB and iFinD MCP headlines are still insufficient; also used by `backfill_coverage --use-tavily` and long-term A-teacher evidence search. | Optional | Create an API key at [Tavily](https://app.tavily.com/) |
+| `ANSPIRE_API_KEY` | Retained for explicit deep research / manual strict event-style news fetches; daily postmarket sentiment supplement now uses iFinD MCP -> Tavily. | Optional | Register at [Anspire AI Search](https://aisearch.anspire.cn), create a key on the API Keys page |
+| `BARK_KEY` / `BARK_SERVER` | iOS Bark push for postmarket signals, stop-loss alerts and circuit-breaker warnings. | Optional; pushes silently skipped if unset | Copy the device key from the Bark app; default server is `https://api.day.app` — override `BARK_SERVER` if self-hosting |
+| `STOCKSAGE_AGENT_API_KEY` | Authenticates remote agent / MCP / HTTP writes when `STOCKSAGE_AGENT_MODE=remote`. | Not needed locally; required when exposing the agent remotely | Generate a long random string; enable `STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED` and the action allowlist on demand |
+| `TUSHARE_TOKEN` / `TUSHARE_QFQ_ENABLED` | Optional Tushare qfq daily-bar fallback; disabled by default and registered after TickFlow / Eastmoney / AkShare (and optional efinance when installed). The raw `daily` endpoint remains debug-only because it is unadjusted. | Optional; requires `TUSHARE_QFQ_ENABLED=true` for qfq fallback | Get a token from [Tushare](https://tushare.pro/) |
+| `TICKFLOW_ENABLED` / `TICKFLOW_API_KEY` / `TICKFLOW_BASE_URL` | TickFlow A-share daily-bar source; disabled by default, and when enabled uses `forward_additive` adjusted prices as the preferred CN provider. | Optional; requires `TICKFLOW_ENABLED=true` | Get a key from [TickFlow](https://tickflow.org/); default base URL is `https://api.tickflow.org` |
+| `IFIND_MCP_ENABLED` / `IFIND_MCP_TOKEN` / `IFIND_MCP_BASE_URL` | Tonghuashun iFinD MCP adapter; when enabled, postmarket sentiment first uses `search_news` / `search_notice` for stock headlines and announcements. It is still not an A-share OHLCV market-data ingestion source. | Optional; requires `IFIND_MCP_ENABLED=true`, `IFIND_MCP_TOKEN` and `IFIND_MCP_BASE_URL` | Create or copy the token from the Tonghuashun iFinD MCP profile page; default base URL is `https://api-mcp.51ifind.com:8643/ds-mcp-servers` |
+
+For remote deployment / exposing MCP / HTTP to other machines, also add:
+
+```env
+STOCKSAGE_AGENT_MODE=remote
+STOCKSAGE_AGENT_API_KEY=replace_with_a_long_random_secret
+STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED=false
+STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS=
+```
+
+</details>
+
+<details>
+<summary><b>Developer HTTP research entry points</b></summary>
 
 | Capability | HTTP entry | Notes |
 |---|---|---|
@@ -244,18 +263,11 @@ BARK_SERVER=https://api.day.app
 
 Long-term labels include `quality`, `constraint_eligible` and `quality_notes`. Only trusted labels with `constraint_eligible=true` may block entries, reduce position size or cap scores; failed, stale, low-confidence or evidence-poor labels are display-only.
 
-**For remote deployment / exposing MCP / HTTP to other machines, also add**:
-
-```env
-STOCKSAGE_AGENT_MODE=remote
-STOCKSAGE_AGENT_API_KEY=replace_with_a_long_random_secret
-STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED=false
-STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS=
-```
+</details>
 
 ### Recommended Signal Weights
 
-Production currently defaults to the `new_framework` weighting. Based on existing backtests and validation results, the recommendation is to **temporarily exclude the quant layer from the composite score** and keep only technical and news-sentiment signals:
+Production currently defaults to the `new_framework` weighting. Quant layers are still computed, logged and validated, but they do not affect the default composite score until the evidence clears the full promotion gate:
 
 | Variable | Recommended | Meaning |
 |---|---:|---|
@@ -264,7 +276,7 @@ Production currently defaults to the `new_framework` weighting. Based on existin
 | `WEIGHT_SENTIMENT` | `0.4` | Weight of news-sentiment / event signals |
 | `NEW_FRAMEWORK_ENTRY_THRESHOLD` | `25.0` | Composite score must exceed this to become a small-position trial candidate |
 
-These are **current project recommendations, not hard-coded trading advice**. Adjust on the Web config page or in `.env`, and validate your own parameter mix with backtests and reviews.
+These are **current project defaults, not investment advice**. Adjust on the Web config page or in `.env`, and validate your own parameter mix with backtests and reviews.
 
 ---
 
@@ -280,7 +292,7 @@ The next phase expands StockSage along three axes — taking it from "personal A
 
 | Direction | Plan | Status |
 |---|---|---|
-| 🌐 **Multi-market support** | Beyond A-shares, ingest HKEX (HK) and US-market quotes, news, and basic fundamentals; reuse the existing layered signals, long-term research and memory stack. | Planned |
+| 🌐 **Multi-market support** | A/HK/US read-only research context is live; the next work is data-quality monitoring, broader news/fundamental coverage and fuller cross-market research flows. | Started |
 | 🎨 **Frontend polish** | Web console UX work — research dashboards, signal detail views, portfolio views, memory browser, and mobile responsiveness. | In progress |
 | 📱 **Client apps** | Native desktop / mobile clients so local data and the agent workflow work without a CLI or a browser. | Upcoming |
 
@@ -304,7 +316,18 @@ The next phase expands StockSage along three axes — taking it from "personal A
 
 ### 📊 Data & Quotas
 
+| Type | Default source | Key | Notes |
+|---|---|---|---|
+| A-share daily bars | Eastmoney / AkShare fallback | Not required | `efinance`, Tushare qfq and TickFlow are optional enhancement sources. |
+| Fundamentals / QFII / base news | AkShare / Eastmoney | Not required | Used as core local research and signal evidence. |
+| News supplement / deep research | iFinD MCP / Tavily / Anspire | Optional | iFinD and Tavily supplement news; Anspire is retained for explicit deep research. |
+| Push / remote agent | Bark / StockSage remote auth | Optional | Remote writes still require an API key, write switch and action allowlist. |
+
+<details>
+<summary><b>Data-source and free / trial quota details</b></summary>
+
 - **Data sources and corresponding API keys**: A-share daily bars use the Eastmoney / AkShare fallback chain by default; `efinance` is now an optional extra because of upstream dependency-audit debt, and installing `pip install -e ".[efinance]"` adds it back to the CN daily and index fallback chains. Setting `TICKFLOW_ENABLED=true` with `TICKFLOW_API_KEY` makes TickFlow the preferred CN provider using `forward_additive` adjusted prices, with the original fallback chain retained behind it. Setting `TUSHARE_QFQ_ENABLED=true` adds Tushare qfq as a late, normalized fallback while the raw `daily` endpoint stays debug-only. A-share fundamentals, QFII and base news go through AkShare / Eastmoney (no key required). When `IFIND_MCP_ENABLED=true` and a token is configured, postmarket news sentiment first supplements with iFinD MCP `search_news` / `search_notice`; if headlines are still insufficient, it falls back to `TAVILY_API_KEY`. Anspire is retained for explicit deep research / manual strict event-style news fetches, not the daily postmarket batch path. iOS push uses `BARK_KEY`; remote agent auth uses `STOCKSAGE_AGENT_API_KEY`.
+
 - **Free / trial quotas** (public information as of 2026-05-23):
   - **Tavily** Researcher free tier offers 1,000 credits / month; StockSage currently uses basic search (~1 credit per request); development keys default to 100 RPM, production keys to 1,000 RPM (paid plan or PAYGO required). See [Tavily Credits](https://docs.tavily.com/documentation/api-credits) · [Rate Limits](https://docs.tavily.com/documentation/rate-limits).
   - **Anspire** is currently retained for explicit deep research / manual strict news fetches. Public docs mention checking each resource package's total quota and usage in the console but give no fixed free-quota figure; treat the [Anspire console](https://aisearch.anspire.cn) resource-package page as authoritative. See [usage guide](https://open.anspire.cn/document/docs/openPlatform/).
@@ -312,6 +335,8 @@ The next phase expands StockSage along three axes — taking it from "personal A
   - **TickFlow** can optionally become the preferred A-share daily source; StockSage currently uses `forward_additive`, which TickFlow documents as aligned with Eastmoney / Tonghuashun-style adjusted prices. Realtime quotes, minute bars, and higher-frequency access depend on the plan. See [quickstart](https://docs.tickflow.org/zh-Hans/quickstart) · [API overview](https://docs.tickflow.org/zh-Hans/api-reference/introduction).
   - **Tonghuashun iFinD MCP** supplements postmarket sentiment with `search_news` / `search_notice` when enabled. It is still not a stable OHLCV market-data source; A-share daily-bar writes continue to use fieldized market-data providers.
   - **Bark**'s `api.day.app` is the push entry point; the key comes from the app's test URL / device key. Public tutorials make no guarantee of free quota or SLA — self-host for high-frequency push. See [Bark tutorial](https://github.com/Finb/Bark/blob/master/docs/en-us/tutorial.md).
+
+</details>
 
 ### 💡 Usage Habits
 
@@ -325,10 +350,10 @@ The next phase expands StockSage along three axes — taking it from "personal A
 
 | Document | Description |
 |---|---|
-| [PROJECT.md](PROJECT.md) | Project index, milestones and key file map |
-| [STATUS.md](STATUS.md) | Current snapshot, signal weights, schedules, tests and startup commands |
-| [CHANGELOG.md](CHANGELOG.md) | Completed milestones and major changes |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | In-progress work, roadmap and deferred items |
+| [PROJECT.md](PROJECT.md) | Project index, capability map and key file navigation |
+| [STATUS.md](STATUS.md) | Current runtime snapshot, production boundaries, signal weights, tests and startup commands |
+| [CHANGELOG.md](CHANGELOG.md) | Completed releases, milestones and major changes |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | M-numbered in-progress work, roadmap and deferred items |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, test expectations and contribution flow |
 | [AGENTS.md](AGENTS.md) | Codex / Claude Code / MCP local-agent instructions |
 
