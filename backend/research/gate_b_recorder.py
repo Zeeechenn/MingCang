@@ -497,18 +497,65 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
 # report
 # ---------------------------------------------------------------------------
 
+# Robustness constants for report() ----------------------------------------
+# A single 5-day after-cost return beyond this magnitude is a data artifact
+# (bad price / split / adjustment mismatch): A-share daily limits bound a 5-day
+# move to ~(1.2)^5-1 ≈ +149% / (0.8)^5-1 ≈ -67%, so |net| > 1.5 cannot be a real
+# trade. Such rows are EXCLUDED from metrics (and counted), not averaged in.
+_RETURN_PLAUSIBILITY_CAP = 1.5
+# Winsorize each arm's tails before averaging (only when large enough to trim).
+_WINSOR_FRAC = 0.025
+_WINSOR_MIN_N = 20
+# Abort if too large a share of realized rows had to be dropped as bad data.
+_DQ_ABORT_RATE = 0.30
+
+
+def _percentile(sorted_vals: list[float], q: float) -> float:
+    """Linear-interpolation percentile on an already-sorted list (q in [0, 1])."""
+    if not sorted_vals:
+        return 0.0
+    if len(sorted_vals) == 1:
+        return sorted_vals[0]
+    pos = q * (len(sorted_vals) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_vals) - 1)
+    frac = pos - lo
+    return sorted_vals[lo] * (1 - frac) + sorted_vals[hi] * frac
+
+
+def _winsorized_mean(values: list[float]) -> float | None:
+    """Mean after clamping each value to the [_WINSOR_FRAC, 1-_WINSOR_FRAC]
+    quantiles. Plain mean for small arms (< _WINSOR_MIN_N) where tail-trimming
+    is not meaningful. Robust to in-range outliers a plain mean would let dominate."""
+    if not values:
+        return None
+    if len(values) < _WINSOR_MIN_N:
+        return statistics.mean(values)
+    s = sorted(values)
+    lo = _percentile(s, _WINSOR_FRAC)
+    hi = _percentile(s, 1 - _WINSOR_FRAC)
+    return statistics.mean(min(max(v, lo), hi) for v in values)
+
+
 def report(db) -> dict:
     """
-    Compute pre-registered §7 metrics over all realized GateBObservation rows.
+    Compute the pre-registered §7 metrics over realized GateBObservation rows,
+    hardened against data-quality artifacts.
 
-    Decision rule (applied in strict order):
-      1. n_total < 30           → INCONCLUSIVE / insufficient_sample
-      2. avg_net_return_delta <= 0 OR icir <= 0 OR n_pass < 30 → REJECT
-      3. gate_pass_rate outside [0.02, 0.30] (exclusive)       → ABORT / bias_threat_coverage_or_rate
-      4. all positive thresholds met                            → PROMOTE
-      5. otherwise                                              → INCONCLUSIVE
+    Robustness:
+      - rows with a missing or implausible forward return (|net| > cap) are
+        EXCLUDED and counted (n_excluded_dq); they never enter a mean.
+      - per-arm means are WINSORIZED so a single in-range outlier cannot dominate
+        the verdict; raw means and medians are reported alongside for transparency.
 
-    Always returns INCONCLUSIVE (not PROMOTE or REJECT) when n_total < 30.
+    Decision rule (ABORT takes precedence over REJECT/PROMOTE, then sample size):
+      1. n_total < 30                         → INCONCLUSIVE / insufficient_sample
+      2. dq_exclusion_rate > 0.30             → ABORT / data_quality_exclusion_rate
+      3. gate_pass_rate < 0.02                → ABORT / gate_pass_rate_too_low
+      4. gate_pass_rate > 0.80                → ABORT / gate_not_discriminating
+      5. all PROMOTE thresholds met           → PROMOTE
+      6. delta<=0 OR icir<=0 OR n_pass<30     → REJECT
+      7. otherwise                            → INCONCLUSIVE / thresholds_not_met
     """
     from backend.data.database import GateBObservation
 
@@ -517,37 +564,45 @@ def report(db) -> dict:
         .filter(GateBObservation.forward_status == "realized")
         .all()
     )
+    n_realized = len(realized_rows)
 
-    pass_rows = [r for r in realized_rows if r.gate_pass_variant]
-    fail_rows = [r for r in realized_rows if not r.gate_pass_variant]
+    # Data-quality filter: drop missing / implausible forward returns.
+    clean_rows = []
+    n_excluded_dq = 0
+    for r in realized_rows:
+        v = r.forward_return_net
+        if v is None or abs(float(v)) > _RETURN_PLAUSIBILITY_CAP:
+            n_excluded_dq += 1
+            continue
+        clean_rows.append(r)
+    dq_exclusion_rate = (n_excluded_dq / n_realized) if n_realized else 0.0
 
+    pass_rows = [r for r in clean_rows if r.gate_pass_variant]
+    fail_rows = [r for r in clean_rows if not r.gate_pass_variant]
     n_pass = len(pass_rows)
     n_fail = len(fail_rows)
     n_total = n_pass + n_fail
 
-    # Pre-registered metrics
-    avg_net_return_pass: float | None = (
-        statistics.mean(float(r.forward_return_net) for r in pass_rows)
-        if n_pass > 0 else None
-    )
-    avg_net_return_fail: float | None = (
-        statistics.mean(float(r.forward_return_net) for r in fail_rows)
-        if n_fail > 0 else None
-    )
-    avg_net_return_delta: float | None = (
+    pass_returns = [float(r.forward_return_net) for r in pass_rows]
+    fail_returns = [float(r.forward_return_net) for r in fail_rows]
+
+    # Winsorized means drive the verdict; raw means + medians for transparency.
+    avg_net_return_pass = _winsorized_mean(pass_returns)
+    avg_net_return_fail = _winsorized_mean(fail_returns)
+    avg_net_return_delta = (
         avg_net_return_pass - avg_net_return_fail
         if avg_net_return_pass is not None and avg_net_return_fail is not None
         else None
     )
+    raw_avg_net_return_pass = statistics.mean(pass_returns) if pass_returns else None
+    raw_avg_net_return_fail = statistics.mean(fail_returns) if fail_returns else None
+    median_net_return_pass = statistics.median(pass_returns) if pass_returns else None
+    median_net_return_fail = statistics.median(fail_returns) if fail_returns else None
 
-    hit_rate_pass: float | None = (
-        sum(1 for r in pass_rows if float(r.forward_return_net) > 0) / n_pass
-        if n_pass > 0 else None
-    )
+    hit_rate_pass = (sum(1 for v in pass_returns if v > 0) / n_pass) if n_pass else None
+    gate_pass_rate = n_pass / n_total if n_total else None
 
-    gate_pass_rate: float | None = n_pass / n_total if n_total > 0 else None
-
-    # Stride ICIR via m27_alpha_diagnostic (best-effort; falls back to None on import error)
+    # Stride ICIR over the cleaned rows (best-effort).
     icir: float | None = None
     ic_days: int = 0
     try:
@@ -555,16 +610,15 @@ def report(db) -> dict:
         from backend.tools.m27_alpha_diagnostic import cross_sectional_ic, summarize_ic
 
         if n_total >= 5:
-            rows_data = [
+            df = pd.DataFrame([
                 {
                     "date": r.signal_date,
                     "symbol": r.symbol,
                     "gate_score": 1.0 if r.gate_pass_variant else 0.0,
                     "forward_return_net": float(r.forward_return_net),
                 }
-                for r in realized_rows
-            ]
-            df = pd.DataFrame(rows_data)
+                for r in clean_rows
+            ])
             ic_series = cross_sectional_ic(df, "gate_score", "forward_return_net", min_names=2)
             ic_summary = summarize_ic(ic_series)
             icir = ic_summary.get("icir")
@@ -572,24 +626,17 @@ def report(db) -> dict:
     except Exception:
         pass  # pandas/m27 unavailable in test or CI environments
 
-    # §7 decision rule (strict order — INCONCLUSIVE on small sample is checked first)
+    # Decision rule — ABORT (data/bias threats) preempts REJECT/PROMOTE.
     verdict: str
     reason: str | None = None
-
     if n_total < 30:
-        verdict = "INCONCLUSIVE"
-        reason = "insufficient_sample"
-    elif (
-        avg_net_return_delta is None
-        or avg_net_return_delta <= 0
-        or (icir is not None and icir <= 0)
-        or n_pass < 30
-    ):
-        verdict = "REJECT"
-        reason = "delta_or_icir_or_npass_failed"
-    elif gate_pass_rate is not None and (gate_pass_rate > 0.30 or gate_pass_rate < 0.02):
-        verdict = "ABORT"
-        reason = "bias_threat_coverage_or_rate"
+        verdict, reason = "INCONCLUSIVE", "insufficient_sample"
+    elif dq_exclusion_rate > _DQ_ABORT_RATE:
+        verdict, reason = "ABORT", "data_quality_exclusion_rate"
+    elif gate_pass_rate is not None and gate_pass_rate < 0.02:
+        verdict, reason = "ABORT", "gate_pass_rate_too_low"
+    elif gate_pass_rate is not None and gate_pass_rate > 0.80:
+        verdict, reason = "ABORT", "gate_not_discriminating"
     elif (
         avg_net_return_delta is not None
         and avg_net_return_delta > 0.003
@@ -598,19 +645,32 @@ def report(db) -> dict:
         and 0.05 <= gate_pass_rate <= 0.80
         and n_pass >= 30
     ):
-        verdict = "PROMOTE"
-        reason = None
+        verdict, reason = "PROMOTE", None
+    elif (
+        avg_net_return_delta is None
+        or avg_net_return_delta <= 0
+        or (icir is not None and icir <= 0)
+        or n_pass < 30
+    ):
+        verdict, reason = "REJECT", "delta_or_icir_or_npass_failed"
     else:
-        verdict = "INCONCLUSIVE"
-        reason = "thresholds_not_met"
+        verdict, reason = "INCONCLUSIVE", "thresholds_not_met"
 
     return {
+        "n_realized": n_realized,
+        "n_excluded_dq": n_excluded_dq,
+        "dq_exclusion_rate": dq_exclusion_rate,
+        "return_cap": _RETURN_PLAUSIBILITY_CAP,
         "n_pass": n_pass,
         "n_fail": n_fail,
         "n_total": n_total,
         "avg_net_return_pass": avg_net_return_pass,
         "avg_net_return_fail": avg_net_return_fail,
         "avg_net_return_delta": avg_net_return_delta,
+        "raw_avg_net_return_pass": raw_avg_net_return_pass,
+        "raw_avg_net_return_fail": raw_avg_net_return_fail,
+        "median_net_return_pass": median_net_return_pass,
+        "median_net_return_fail": median_net_return_fail,
         "hit_rate_pass": hit_rate_pass,
         "gate_pass_rate": gate_pass_rate,
         "icir": icir,

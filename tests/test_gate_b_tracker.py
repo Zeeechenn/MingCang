@@ -395,3 +395,51 @@ def test_source_dest_split_writes_only_to_dest(test_db):
     assert test_db.query(GateBObservation).count() == 1          # written to dest
     assert src.execute(text("SELECT COUNT(*) FROM gate_b_observations")).scalar() == 0  # never to source
     src.close()
+
+
+def _insert_realized(db, *, signal_id, gate_pass_variant, net, symbol="600519", signal_date="2026-05-15"):
+    """Insert a realized GateBObservation directly (bypasses record/realize) for report() tests."""
+    from datetime import UTC, datetime
+    from backend.data.database import GateBObservation
+    now = datetime.now(UTC).replace(tzinfo=None)
+    obs = GateBObservation(
+        symbol=symbol, signal_date=signal_date, as_of=signal_date,
+        signal_id=signal_id, label_id=None,
+        gate_pass_full=False, gate_pass_variant=gate_pass_variant,
+        card_pass=False, ready_variant=False,
+        recommendation="买入", composite_score=0.5, entry_close=100.0,
+        horizon_days=5, forward_status="realized", realized_at=signal_date,
+        forward_return_raw=net, forward_return_net=net,
+        blockers_json="[]", blockers_variant_json="[]", checks_json="{}",
+        gate_b_tracker_version="v1", recorded_at=now, updated_at=now,
+    )
+    db.add(obs); db.commit()
+    return obs
+
+
+def test_report_aborts_when_gate_never_passes(test_db):
+    """gate_pass_rate < 0.02 must yield ABORT (bias threat), not REJECT —
+    ABORT precedence per pre-registered §7."""
+    from backend.research.gate_b_recorder import report
+    for i in range(35):
+        _insert_realized(test_db, signal_id=i, gate_pass_variant=False, net=0.01)
+    r = report(test_db)
+    assert r["n_total"] == 35
+    assert r["gate_pass_rate"] == 0.0
+    assert r["verdict"] == "ABORT", r
+    assert r["reason"] == "gate_pass_rate_too_low"
+
+
+def test_report_excludes_implausible_returns(test_db):
+    """A single implausible 5-day return (data artifact) must be excluded as a
+    data-quality failure, not averaged into the mean."""
+    from backend.research.gate_b_recorder import report
+    for i in range(30):
+        _insert_realized(test_db, signal_id=i, gate_pass_variant=False, net=0.02)
+    _insert_realized(test_db, signal_id=999, gate_pass_variant=False, net=10.0)  # 1000% — bad data
+    r = report(test_db)
+    assert r["n_realized"] == 31
+    assert r["n_excluded_dq"] == 1
+    assert r["n_total"] == 30
+    # mean reflects the sane 0.02, not dragged toward 10.0
+    assert r["avg_net_return_fail"] is not None and abs(r["avg_net_return_fail"] - 0.02) < 1e-6
