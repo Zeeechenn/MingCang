@@ -182,3 +182,30 @@ production stance of `weight_quant = 0.0`. It does NOT get wired into decisions.
 - Data: 600519/600601/600602 carry hfq-scaled price series in production
   (absolute prices wrong, returns internally consistent) — a separate
   data-remediation item beyond M42's jump-contamination scope.
+
+---
+
+## M43.2 — single-factor candidates (Bonferroni α/4): **all REJECT** (2026-06-03)
+
+Pre-registered (rule frozen before computing): 3 single factors, OOS 2021-2024,
+stride=5, active_only=False, hfq excluded, 2025 sealed. PROMOTE needs
+|IC t-stat|>2.50 (α/4≈0.0125) AND |ic_mean|>0.02 AND |ICIR|>0.15 AND monotonic
+quintile spread in the expected direction.
+
+| factor | ICIR | ic_mean | IC t-stat | spread monotonic | verdict |
+|---|---|---|---|---|---|
+| sector_rel_strength_20_z | −0.015 | −0.0026 | −0.20 | no | **REJECT** |
+| amihud_20 (illiquidity) | −0.059 | −0.0105 | −0.82 | no (sign-mismatch) | **REJECT** |
+| rev_mom_12_1_z (reversal) | +0.097 | +0.017 | +1.35 | no (sign reversed) | **REJECT** |
+
+**Verdict: 0 of 3 promoted.** The strongest (rev_mom_12_1, t=1.35) is far below
+the 2.50 Bonferroni bar and shows sign reversal vs the reversal hypothesis (high
+12-1 momentum predicted *higher*, not lower, forward returns in 2021-2024). None
+clears even a single gate.
+
+**Interpretation.** Together with the M43 LightGBM REJECT, neither the ensemble
+nor any classic single factor shows exploitable OOS forward signal on this
+A-share universe — strong corroboration of the production `weight_quant = 0.0`
+stance. No factor is wired into decisions. The M27/quant overlay line is, on this
+evidence, not worth promoting; future work should look outside price/quant
+features (e.g. event/fundamental signals) rather than re-tuning these.
