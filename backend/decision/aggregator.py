@@ -427,7 +427,12 @@ def save_signal(symbol: str, date: str, result: dict, db) -> None:
     import json
 
     from backend.config import settings
-    from backend.data.database import Signal
+    from backend.data.database import Signal, Stock
+    from backend.decision.market_policy import is_production_signal_market
+
+    stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+    if stock is not None and not is_production_signal_market(stock.market):
+        raise ValueError(f"official signals are CN-only; {symbol} market={stock.market} is observe-only")
 
     arb = result.get("llm_arbitration")
     rationale_json = json.dumps(arb, ensure_ascii=False) if arb else None

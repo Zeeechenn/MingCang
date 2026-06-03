@@ -229,6 +229,79 @@ def test_prepare_symbol_research_returns_dossier_and_missing_items(test_db, monk
     assert response["steps"]["prices"]["ok"] is True
 
 
+def test_prepare_symbol_research_accepts_hk_without_cn_financial_sync(test_db, monkeypatch):
+    from backend.api.routes.research import prepare_symbol_research
+    from backend.data.database import Stock
+
+    monkeypatch.setattr("backend.data.market.backfill_if_needed", lambda *args, **kwargs: 0)
+
+    def fail_cn_financials(*args, **kwargs):
+        raise AssertionError("HK prepare should not call CN fundamentals sync")
+
+    monkeypatch.setattr("backend.data.fundamentals.sync_financial_metrics", fail_cn_financials)
+
+    response = prepare_symbol_research(
+        "700",
+        name="腾讯控股",
+        market="HK",
+        db=test_db,
+    )
+
+    assert response["status"] == "prepared"
+    assert response["symbol"] == "700"
+    assert response["signal_scope"] == "observe_only"
+    assert response["steps"]["prices"]["ok"] is True
+    assert "financials" not in response["steps"]
+    stock = test_db.query(Stock).filter(Stock.symbol == "700").one()
+    assert stock.market == "HK"
+    assert stock.active is False
+
+
+def test_single_symbol_long_term_run_rejects_hk_observe_only(test_db):
+    import pytest
+    from fastapi import HTTPException
+
+    from backend.api.routes.watchlist import run_long_term_label
+    from backend.data.database import Stock
+
+    test_db.add(Stock(symbol="700", name="腾讯控股", market="HK", active=True))
+    test_db.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        run_long_term_label("700", db=test_db)
+
+    assert exc.value.status_code == 400
+    assert "CN-only" in exc.value.detail
+
+
+def test_watchlist_hides_hk_us_legacy_signals_and_long_term_labels(test_db):
+    import json
+
+    from backend.api.routes.watchlist import get_watchlist
+    from backend.data.database import LongTermLabel, Signal, Stock
+
+    test_db.add(Stock(symbol="600519", name="贵州茅台", market="CN", active=True))
+    test_db.add(Stock(symbol="700", name="腾讯控股", market="HK", active=True))
+    test_db.add(Signal(symbol="700", date="2026-06-01", composite_score=99, recommendation="买入", confidence="高"))
+    test_db.add(
+        LongTermLabel(
+            symbol="700",
+            date="2026-06-01",
+            label="值得持有",
+            score=80,
+            votes_json=json.dumps({"legacy": "值得持有"}),
+            key_findings_json=json.dumps(["旧标签"]),
+            expires_at="2999-01-01",
+            quality="trusted",
+            constraint_eligible=True,
+        )
+    )
+    test_db.commit()
+
+    rows = {item.symbol: item for item in get_watchlist(db=test_db)}
+
+    assert rows["700"].latest_signal is None
+    assert rows["700"].long_term_label is None
 def test_single_symbol_long_term_run_returns_quality_metadata(test_db, monkeypatch):
     from backend.agents.long_term.base import LongTermLabel
     from backend.api.routes.watchlist import run_long_term_label

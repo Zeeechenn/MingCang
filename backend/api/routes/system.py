@@ -19,7 +19,11 @@ from backend.data.database import (
     Signal,
     get_db,
 )
-from backend.data.external_sources import build_external_source_catalog, probe_external_sources
+from backend.data.external_sources import (
+    build_external_source_catalog,
+    probe_external_sources,
+    summarize_probe_results,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -189,11 +193,42 @@ def data_coverage(db: Session = Depends(get_db)):
 
 
 @router.get("/system/external-data-sources")
-def external_data_sources(probe: bool = False, symbol: str = "600519"):
+def external_data_sources(probe: bool = False, symbol: str = "600519", market: str = "CN"):
     """Return candidate external data sources and optional side-effect-free probes."""
+    market = market.upper()
+    if market not in {"CN", "HK", "US"}:
+        raise HTTPException(400, "market must be CN, HK, or US")
     payload = build_external_source_catalog()
-    payload["probes"] = probe_external_sources(symbol=symbol) if probe else {}
+    probes = probe_external_sources(symbol=symbol, market=market) if probe else {}
+    payload["probes"] = probes
+    payload["probe_summary"] = (
+        summarize_probe_results(probes, market=market, symbol=symbol)
+        if probe
+        else {
+            "probed": False,
+            "market": market,
+            "symbol": symbol,
+            "safe_for_research_scoring": False,
+            "safe_for_production_signal": False,
+        }
+    )
     return payload
+
+
+@router.get("/system/global-data")
+def global_data_context(
+    market: str = "CN",
+    symbol: str = "600519",
+    intent: str = "daily_ohlcv",
+    db: Session = Depends(get_db),
+):
+    """Return the M41 read-only global data envelope for one market/symbol/intent."""
+    from backend.data.global_data import build_global_data_context
+
+    try:
+        return build_global_data_context(db, market=market, symbol=symbol, intent=intent)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/system/health")

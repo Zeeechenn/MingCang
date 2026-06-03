@@ -49,7 +49,7 @@ class Stock(Base):
     __tablename__ = "stocks"
     symbol: Mapped[str] = mapped_column(String, primary_key=True)   # e.g. "600519" or "AAPL"
     name: Mapped[str] = mapped_column(String)
-    market: Mapped[str] = mapped_column(String)                      # "CN" or "US"
+    market: Mapped[str] = mapped_column(String)                      # "CN", "HK", or "US"
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     industry: Mapped[str | None] = mapped_column(String, nullable=True)     # 申万一级行业（由 sync_industry 回填）
     added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

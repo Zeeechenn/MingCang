@@ -6,6 +6,19 @@
 
 ---
 
+## [Unreleased] M41 A/HK/US read-only data facade（2026-06-03）
+
+### Added
+- M41 三市场七层数据能力闭环：HK/US daily price bridge、A/HK/US capability catalog、explicit external probes、probe summary、global-data read-only envelope、canonical schema/PIT gate 和 `/private/tmp` probe health ledger 聚合器。
+- `GET /api/system/global-data` 与 `python3 -m backend.agent.cli global-data` 提供 `market + symbol + intent` 路由，输出 source、fetched_at、currency/timezone、freshness、missing fields、write policy 与 signal impact。
+
+### Changed
+- Production coverage checks 与 PortfolioManager 当前持仓权重改用 CN production 分母；HK/US watchlist/manual positions 保持 observe-only，不稀释 A 股官方组合决策。
+- Positions 页面按 CN/HK/US 原币分组展示，不自动合并 HKD/USD/CNY 总值。
+
+### Decision
+- HK/US 仍是 read-only research context：不生成 official signals、不进入 postmarket batch、stop-loss check、long-term constraints、position sizing 或 composite_score。任何升级仍需 M29/M41 evidence gate 与人工确认。
+
 ## [v0.2.1] M29/M30 质量补丁与 iFinD 新闻补充链路（2026-06-02）
 
 ### Added

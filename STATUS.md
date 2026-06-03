@@ -21,6 +21,7 @@ maintenance. It does not place real trades or provide financial advice.
 | M29 | active: forward evidence and residual attribution remain non-promoting |
 | M30 | complete: mypy, lockfile, CI/security, coverage, core tests, maintainability |
 | M31 | complete: cache policy, provider fallback observability, rhythm CLI (premarket/intraday/postmarket/weekend), postmarket export with evidence cards + position review |
+| M41 | complete: read-only A/HK/US seven-layer data/research facade; HK/US official signals remain observe-only |
 | remote agent mode | opt-in only; read-only by default |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
@@ -54,6 +55,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 | M29.5 Quant Residual Attribution | first pass complete, non-promoting | continue only if fresh evidence clears gates |
 | M31 Product/Engineering Borrowings | complete | L1/L2/L3 policy, provider chains, dry-run rhythm commands (incl. weekend review), postmarket export with evidence cards + position review |
 | M32 Forward Hypothesis Bridge | design stance set | start only after review data is thick enough |
+| M41 A/HK/US Global Data/Research Buildout | complete | read-only three-market data facade, health ledger, normalization/PIT contracts, UX boundary, and CN-only production guardrails |
 
 For detailed sequencing, read `docs/ROADMAP.md`. For historical milestone
 details, read `CHANGELOG.md`.
@@ -70,6 +72,63 @@ postmarket review reports with the day's signal table, per-signal evidence cards
 and non-advice disclaimers. The M31.3 weekend-review rhythm command
 (`weekend` / `周末`) is also packaged, so M31 is now fully complete.
 
+M41 seed note (2026-06-03): `backend.data.market` now registers
+`yfinance_hk` for HK daily OHLCV and keeps `yfinance_us` for US daily OHLCV;
+watchlist, research prepare, positions, and local agent action schemas accept
+`HK` alongside `CN`/`US`. This is a daily-price bridge only; non-price layers
+still need field normalization, PIT/freshness checks, and promotion gates before
+becoming research or signal inputs.
+
+M41 capability note (2026-06-03): `/api/system/data-coverage` now nests a
+StockSage-owned A/HK/US seven-layer market capability catalog under
+`summary.market_capability_catalog`, alongside per-market coverage and provider
+fallback chains. `backend.decision.market_policy` keeps official signal
+generation CN-only: HK/US may be prepared and viewed as read-only research
+context, but postmarket batch, stop-loss checks, long-term constraint labels,
+and `save_signal()` do not promote known HK/US stocks into official signals.
+
+M41 probe note (2026-06-03): `/api/system/external-data-sources?probe=true`
+now accepts `market=CN|HK|US`. CN keeps the existing ftshare/TickFlow/Tushare
+qfq/iFinD probes; US adds read-only SEC submissions/companyfacts plus yfinance
+basic/options-expiry probes; HK adds HKEXnews title-search reachability plus
+yfinance basic-info probing. `probe=false` remains offline, and all probe
+results keep `write_policy=no_database_writes` and `signal_impact=none`.
+The same probe links are now attached to `summary.market_capability_catalog`,
+so `/api/system/data-coverage` can show which read-only probe belongs to each
+market/layer without running those probes.
+
+M41 probe-summary note (2026-06-03): `/api/system/external-data-sources`
+now returns `probe_summary`. With `probe=true`, the API keeps raw probe payloads
+and adds normalized read-only health rows by market/layer/provider, including
+sample size, fields present, required StockSage fields, missing-field gaps,
+freshness status, and explicit `safe_for_research_scoring=false` /
+`safe_for_production_signal=false`. With `probe=false`, the endpoint still does
+not run network probes and reports `probed=false`. Field-complete rows are only
+marked `required_fields_present`; they are not treated as normalized or
+PIT-ready.
+
+Global data/research roadmap note (2026-06-03): `docs/ROADMAP.md` now records
+the full A-share/HK/US buildout under one M41 milestone instead of spreading
+the same work across multiple milestones: M41.4 probe health ledger, M41.5 field
+normalization and PIT gates, M41.6 agent-facing global data route, M41.7
+A-share seven-layer uplift, M41.8 HK/US read-only research context, M41.9
+global watchlist/portfolio UX, M41.10 evidence and promotion gates, and M41.11
+production-boundary review. HK/US remain read-only research context until these
+gates pass and human confirmation explicitly changes `market_policy`.
+
+M41 completion note (2026-06-03): `backend.data.global_data` now provides the
+read-only `market + symbol + intent` envelope used by
+`GET /api/system/global-data` and `python3 -m backend.agent.cli global-data`.
+Every envelope carries source, fetched_at, currency/timezone/namespace,
+freshness status, missing fields, canonical schema, PIT gate status,
+`write_policy=no_database_writes`, and explicit scoring/signal safety flags.
+`backend.tools.m41_probe_health_ledger` aggregates explicit probe summaries into
+a `/private/tmp` health ledger and only runs network probes with
+`--run-probes`. Production coverage checks and portfolio allocation weights now
+use the CN production denominator; HK/US watchlist/position rows remain
+observe-only and are not allowed to dilute A-share official decisions. HKD/USD
+/CNY position summaries are displayed by market without automatic FX merging.
+
 ## Validation Snapshot
 
 Last recorded full gate for the current release:
@@ -84,6 +143,11 @@ make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 Recorded result: ruff passed, mypy passed, backend pytest passed, frontend node
 tests passed, and Vite build passed after using a sandbox-compatible writable
 path.
+
+M41 verification update (2026-06-03): full `make verify` passed with ruff,
+mypy, 714 backend tests, 19 frontend node tests, and Vite build. A read-only
+`paper_trading.test2_ab_cli --end 2026-06-03` replay written to `/private/tmp`
+had zero JSON diff against `paper_trading/test2_ab_state.json`.
 
 For release-quality work, treat `make verify` as the canonical gate.
 

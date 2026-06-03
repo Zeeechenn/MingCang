@@ -216,6 +216,9 @@ export function AdminSettingsPanel({
               <SettingRow label="24h 新闻" hint="最近 24 小时有新闻覆盖的标的数量。">
                 <MiniStat label="news" value={cov.news_24h_covered ?? '-'} />
               </SettingRow>
+              <SettingRow label="三市场数据层" hint="A/HK/US 七层数据能力，只读展示，不代表港美已进入正式信号。">
+                <MarketCapabilityMatrix catalog={cov.market_capability_catalog} coverage={cov.market_coverage} />
+              </SettingRow>
             </>
           )}
           {active === 'schedule' && (
@@ -362,6 +365,49 @@ function LlmCostPanel({ llmUsage }) {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+function MarketCapabilityMatrix({ catalog, coverage = {} }) {
+  const markets = catalog?.markets || []
+  const detail = catalog?.markets_detail || {}
+  if (!markets.length) {
+    return <span className="text-xs text-stone-500 dark:text-slate-400">暂无能力目录</span>
+  }
+  const statusClass = {
+    production: 'border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-200',
+    seeded: 'border-cyan-700/30 bg-cyan-700/10 text-cyan-800 dark:text-cyan-200',
+    partial: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200',
+    observe_only: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200',
+    planned: 'border-stone-300 bg-[#f3eddc] text-stone-600 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-300',
+  }
+  return (
+    <div className="space-y-2">
+      {markets.map((market) => {
+        const info = detail[market] || {}
+        const stats = coverage?.[market] || {}
+        return (
+          <div key={market} className="rounded-sm border border-stone-300 bg-[#f3eddc] p-2 dark:border-slate-700 dark:bg-[#161b25]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-xs font-semibold text-stone-950 dark:text-slate-100">{market}</span>
+              <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold ${statusClass[info.status] || statusClass.planned}`}>
+                {info.status || 'unknown'}
+              </span>
+            </div>
+            <div className="mt-1 font-mono text-[10px] text-stone-500 dark:text-slate-400">
+              active {stats.active_stocks ?? 0} · price {stats.price_covered ?? 0} · financial {stats.financial_covered ?? 0}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {(info.layers || []).map((layer) => (
+                <span key={layer.id} className={`rounded-sm border px-1.5 py-0.5 text-[10px] ${statusClass[layer.status] || statusClass.planned}`}>
+                  {layer.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

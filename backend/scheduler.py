@@ -413,17 +413,29 @@ def _maybe_send_postmarket_alert(stock, result: dict) -> bool:
 
 
 def _open_position_weights(db) -> dict[str, float]:
-    """Best-effort current holding weights for PortfolioManager input."""
-    from backend.data.database import Position, Price
+    """Best-effort CN holding weights for PortfolioManager input."""
+    from backend.data.database import Position, Price, Stock
+    from backend.decision.market_policy import is_production_signal_market
 
     try:
-        positions = db.query(Position).filter(Position.status == "open").all()
+        positions = (
+            db.query(Position)
+            .outerjoin(Stock, Stock.symbol == Position.symbol)
+            .filter(Position.status == "open")
+            .all()
+        )
     except Exception as e:
         logger.warning("portfolio position load failed: %s", e)
         return {}
 
     values: dict[str, float] = {}
     for pos in positions:
+        market = getattr(pos, "market", None)
+        if not market:
+            stock = db.query(Stock).filter(Stock.symbol == pos.symbol).first()
+            market = getattr(stock, "market", None)
+        if not is_production_signal_market(market):
+            continue
         quantity = float(getattr(pos, "quantity", 0) or 0)
         if quantity <= 0:
             continue
@@ -514,14 +526,18 @@ def load_universe_symbols(path: str | Path) -> list[str]:
 def run_postmarket_batch(db, universe_symbols: list[str] | None = None) -> dict:
     """Run post-market analysis for active stocks or an explicit universe."""
     from backend.data.database import Stock
+    from backend.decision.market_policy import is_production_signal_eligible_stock
 
     if universe_symbols is None:
-        stocks = db.query(Stock).filter(Stock.active).all()
+        candidates = db.query(Stock).filter(Stock.active).all()
     else:
-        stocks = db.query(Stock).filter(Stock.symbol.in_(universe_symbols)).all()
+        candidates = db.query(Stock).filter(Stock.symbol.in_(universe_symbols)).all()
+    stocks = [stock for stock in candidates if is_production_signal_eligible_stock(stock)]
     context = _load_postmarket_context(db, stocks)
     stats = {
         "stocks": len(stocks),
+        "input_stocks": len(candidates),
+        "market_skipped": len(candidates) - len(stocks),
         "universe_filter": len(universe_symbols) if universe_symbols is not None else 0,
         "processed": 0,
         "saved": 0,
@@ -597,12 +613,17 @@ def job_stoploss_check() -> None:
     if _kill_switch_guard("stoploss_check"):
         return
     from backend.data.database import Price, SessionLocal, Signal, Stock
+    from backend.decision.market_policy import is_production_signal_eligible_stock
     from backend.decision.signal_policy import entry_recommendations
     from backend.notification.bark import send_stoploss_alert
 
     db = SessionLocal()
     try:
-        stocks = db.query(Stock).filter(Stock.active).all()
+        stocks = [
+            stock
+            for stock in db.query(Stock).filter(Stock.active).all()
+            if is_production_signal_eligible_stock(stock)
+        ]
         for stock in stocks:
             try:
                 sig = (

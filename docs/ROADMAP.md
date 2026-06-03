@@ -216,6 +216,109 @@
 
 ---
 
+## M41 A/HK/US Global Data/Research Buildout【complete】🌐
+
+> 来源：2026-06-03 评估“Global Stock Data / 港美市场数据 Agent Skill”参考视频。视频的可借鉴点不是单一接口，而是把分散入口封装成 agent 可调用的数据能力：quote / kline / fundamental / capital / options / filings / fallback，并明确数据源边界、字段与失效策略。本项目先接 daily price seed，不把未验证的 fundamentals/options/filings 直接并入研究或生产信号。
+
+### M41.1 Daily Price Seed（P2）
+
+- [x] HK daily OHLCV：`backend.data.market` 新增 `hk_yfinance_ticker()` 与 `fetch_hk_daily()`，并在 provider chain 注册 `yfinance_hk`（`auto_adjust`）。
+- [x] US daily OHLCV：保留既有 `yfinance_us` provider，并用同一 fallback/provenance attrs 入口暴露。
+- [x] API / agent / frontend 入口：watchlist、research prepare、positions 与本地 action schema 接受 `HK` alongside `CN` / `US`；A 股 fundamentals sync 仍只在 `market == "CN"` 时触发。
+- [x] 验证：focused backend/API tests 与 frontend tests/build 通过；live read-only smoke 显示 `700 HK -> yfinance_hk`、`AAPL US -> yfinance_us`。
+
+### M41.2 Provider Catalog And Probe Layer（P2）
+
+- [x] 将参考视频的七层映射成 StockSage-owned catalog：`quote`、`kline`、`fundamentals`、`capital_flow`、`derivatives`、`filings`、`tools_fallback`，每层写明 market support、required fields、provider/stage、signal impact 与是否 production / seeded / observe-only / planned。
+- [x] 在 `/api/system/data-coverage` 嵌入 A/HK/US per-market coverage、provider fallback chain、`summary.market_capability_catalog` 与 `production_signal_policy`；Admin 数据源面板展示三市场能力矩阵。
+- [x] 加入 CN-only 官方信号边界：HK/US 可做 read-only research context，但 `research.prepare` 不把新 HK/US 标的激活为生产宇宙；postmarket batch、stop-loss check、long-term constraint label 与 `save_signal()` 都阻止已知 HK/US 进入官方信号链。
+- [x] 为 HK/US 候选源先做 side-effect-free probes，不写 DB、不进入 production signal：US 覆盖 SEC submissions / companyfacts、yfinance basic info / options expiries；HK 覆盖 HKEXnews title-search reachability 与 yfinance basic info；CN 保留既有 ftshare / TickFlow / Tushare qfq / iFinD probe。
+- [x] `/api/system/external-data-sources?probe=true&market=CN|HK|US&symbol=...` 返回 read-only probe results；默认 `probe=false` 仍不联网，所有新 probe payload 带 `write_policy=no_database_writes` 与 `signal_impact=none`。
+- [x] 将 probe links 与 `/api/system/data-coverage` 的 `summary.market_capability_catalog` 做只读关联：每个 market/layer 能显示对应的 `probe_id`、`source_id`、默认 symbol、`write_policy` 与 `signal_impact`，但不自动运行 probe。
+- [x] 将显式 probe 结果汇总为 `probe_summary`：按 market/layer/provider 输出 health、sample size、fields_present、required_fields、missing_fields、freshness_status；即使 required fields 已出现，也只标记 `required_fields_present`，并固定 `safe_for_research_scoring=false` / `safe_for_production_signal=false`。
+- [x] 积累连续 health/freshness 样本的只读 ledger 入口已建立；字段归一化 / PIT/freshness gate 以 canonical schema 和 envelope 形式暴露，通过前不进入 research scoring 或 production signal。
+
+### M41.3 Agent-Facing Skill Facade（P3）
+
+- [x] catalog 先暴露 agent facade contract：routing keys、required output fields 与 fallback rule，作为后续 route/CLI 的稳定规格。
+- [x] 新增只读 agent-facing route/CLI：`GET /api/system/global-data` 与 `python3 -m backend.agent.cli global-data` 按 `market + symbol + intent` 返回 quote/kline/fundamentals/filings/options/capital_flow/tools_fallback envelope。
+- [x] 输出带 source、fetched_at、currency / timezone / symbol namespace、freshness_status、field_status 与 missing-field 说明。
+- [x] 未通过 provider health、field normalization、PIT/freshness gates 前，不把 HK/US 非价格数据并入 composite_score、position sizing 或 production signal profile。
+
+### 后续总规划（执行顺序）
+
+> 目标：把 A 股现有体系升级成三市场通用的数据/研究工作台，同时让港股、美股先成为可审计的 read-only research context。任何进入交易评分、仓位、生产信号的动作，都必须先过数据质量、PIT、freshness、forward evidence 与人工确认。
+
+#### M41.4 Probe Health Ledger（P1）
+
+- [x] 为 `/api/system/external-data-sources?probe=true` 增加只读/低副作用 health snapshot 工具：`backend.tools.m41_probe_health_ledger` 按 market/source/layer/symbol 输出 ok rate、latency、sample size、field gaps、error class、checked_at。
+- [x] 默认产物写 `/private/tmp` 或显式指定输出；若要写 DB 表、scheduler 自动跑、长期留存样本，仍先单独评估 schema 与调度影响。
+- [x] 覆盖 CN/HK/US 代表 symbol：默认 probe target 为 CN `600519`，HK `700`/`9988`，US `AAPL`/`MSFT`；`--run-probes` 显式触网，默认可聚合已有 probe JSON。
+- [x] 验收：能回答“哪个 market/layer/source 连续可用、字段缺什么、是否新鲜、是否只是偶发成功”；仍不产生 research score 或 signal input。
+
+#### M41.5 Field Normalization And PIT Gates（P1）
+
+- [x] 为七层分别定义 StockSage canonical schema：quote、kline、fundamentals、capital_flow、derivatives、filings、tools_fallback。
+- [x] 为 HK/US 非价格层先做 parser/adapter contract，不直接写生产表：SEC filings/companyfacts、HKEX filings、yfinance basic/options 只输出标准字段与缺失说明。
+- [x] 每个 envelope 带 source、fetched_at、market timezone、currency、symbol namespace、as_of/disclosure/published date、staleness、missing_fields。
+- [x] PIT gate：任何 fundamentals/filings/capital_flow 在 decision date 之后披露的数据不得回填成当日可见信息；缺披露时间时只能作为 observe-only evidence。
+- [x] 验收：adapter/context tests 覆盖 happy path、缺字段、时区/币种、provider error；未通过前不接入 scoring。
+
+#### M41.6 Agent-Facing Global Data Route（P2）
+
+- [x] 新增只读 route/CLI：按 `market + symbol + intent` 路由到 quote/kline/fundamentals/filings/options/fallback，不让 agent 临时拼外部接口。
+- [x] 输出统一 envelope：`market`、`symbol`、`intent`、`source`、`fetched_at`、`freshness_status`、`field_status`、`missing_fields`、`write_policy`、`signal_impact`。
+- [x] 对不可用数据返回 `unavailable` / `observe_only_unavailable` 和原因，不返回编造字段或 neutral 值。
+- [x] 验收：agent 可以问“给我 AAPL filings context / 700 HK 基本面可用性 / 600519 资金面 probe”，系统返回可审计结果；仍为 read-only。
+
+#### M41.7 A-Share Seven-Layer Upgrade（P1）
+
+- [x] 把 A 股也按同一七层 facade 暴露，避免 A 股与港美股形成两套不可比接口。
+- [x] 现有 CN production 层保持不变：daily/kline/technical/fundamentals/filings 按既有 provider 和 DB 运行；capital_flow/外部 evidence 先只读。
+- [x] 给 A 股补同样的 field/freshness summary：让 Admin 与 agent 能看到每层数据是否 production、observe-only、planned、blocked。
+- [x] A 股现有 composite_score 不因为七层 facade 自动改变；新增数据层若要进入评分，必须走 M29/M41.10 evidence gate。
+- [x] 验收：A 股研究报告能引用统一 data envelope；旧 watchlist、postmarket、test2 replay 不变。
+
+#### M41.8 HK/US Read-Only Research Context（P2）
+
+- [x] 先做港股/美股单股 read-only context，而不是交易建议：daily bars、basic info、filings/options availability、source health、missing fields、currency/timezone caveats。
+- [x] `research.prepare` 对 HK/US 继续保持 observe-only stock，不自动 active，不进入 postmarket batch。
+- [x] 前端展示：港股/美股观察标的标明“观察”；缺数据通过 global-data envelope 明确显示缺口。
+- [x] 验收：可以分析 HK/US 标的的数据可用性和研究问题，但不会给 official buy/sell、position sizing、stop/take。
+
+#### M41.9 Global Portfolio/Watchlist UX（P2）
+
+- [x] Watchlist / Positions / Admin 数据源面板支持三市场筛选、货币/交易所/时区提示、market-specific data coverage。
+- [x] 持仓展示支持 HKD/USD/CNY 原币字段；涉及汇率、总资产折算、跨币种 P/L 时先停下单独评估，不在本阶段自动合并。
+- [x] 增加 evidence cards/envelope：每个 HK/US context 展示 source、freshness、missing_fields、observe-only policy。
+- [x] 验收：用户能把 HK/US 放进观察与手动持仓记录，但不会被误认为 A 股同等级生产信号。
+
+#### M41.10 Research Evidence And Promotion Gates（P0/P1）
+
+- [x] 所有新增层若想影响评分，必须先注册成 hypothesis/evidence candidate：定义 horizon、样本、non-overlap、multiple-comparison、失败条件。
+- [x] 对 A 股新增 evidence、港股/美股非价格 evidence 统一走 M29 ledger：fresh forward、IC/ICIR、monotonic、stride、PIT/provenance blockers 全部可见。
+- [x] HK/US 若未来要从 read-only 升级，先做 shadow research report，不做 official signal；只有长期稳定 evidence 才讨论 small-scope gray release。
+- [x] 验收：没有任何 provider 因“可抓到数据”直接进入 composite_score；只有 evidence gate 通过且人工确认后，才可能改 signal policy。
+
+#### M41.11 Production Boundary Review（P1）
+
+- [x] 在 M41.4-M41.10 完成后，做一次全仓库 blast-radius review：scheduler、aggregator、watchlist、research、positions、exports、tests、docs。
+- [x] 明确三市场最终等级：
+  - CN：当前 production signal market。
+  - HK/US：默认 read-only research context。
+  - 任何升级：必须单独确认 market_policy、risk rules、currency/PIT/schema/test2 impact。
+- [x] 跑完整 gate：backend full tests、frontend tests/build、ruff、mypy、test2 replay diff、必要时 `make verify`。
+- [x] 验收：项目可以清楚回答“哪些市场能拉数据、哪些能研究、哪些能产生官方信号、为什么”。
+
+### 停止条件
+
+- [ ] 会写生产 DB schema、迁移、定时任务、长期 health 表、真实外部付费 API 批量调用时，先单独评估影响。
+- [ ] 会影响 official signal、composite_score、position sizing、stop/take、scheduler、test2 replay truth 时，先做只读验证和用户确认。
+- [ ] HK/US 非价格数据未通过 field normalization、PIT、freshness、provider health 前，不进入 research scoring 或 production signal。
+- [ ] 任何“强买/强卖/确定预测涨跌”的输出不纳入项目路线。
+
+---
+
 ## M32 Forward 预测层 / 复盘 → 假设桥【设计立场 + 启动路径】🧭
 
 > 记录于 2026-06-02。背景：评估小红书 StockInsight v3.0 的"AI 预测 + Strong Buy 评级"卖点后，确立本项目对"预测"的立场，并把"想像 A 老师一样提前判断赛道方向"这个目标落到可执行路径上。供未来开发参考，**不要重复讨论要不要做价格预测**。

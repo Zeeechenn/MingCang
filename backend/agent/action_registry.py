@@ -260,7 +260,7 @@ _ACTIONS: dict[str, ActionDefinition] = {
         input_schema=_object_schema(["symbol"], {
             "symbol": {"type": "string"},
             "name": {"type": "string"},
-            "market": {"type": "string", "enum": ["CN", "US"]},
+            "market": {"type": "string", "enum": ["CN", "HK", "US"]},
         }),
         risk_level="medium",
         requires_confirmation=True,
@@ -280,7 +280,7 @@ _ACTIONS: dict[str, ActionDefinition] = {
         input_schema=_object_schema(["symbol", "quantity", "avg_cost"], {
             "symbol": {"type": "string", "minLength": 1},
             "name": {"type": "string"},
-            "market": {"type": "string", "enum": ["CN", "US"]},
+            "market": {"type": "string", "enum": ["CN", "HK", "US"]},
             "quantity": {"type": "number", "exclusiveMinimum": 0},
             "avg_cost": {"type": "number", "exclusiveMinimum": 0},
             "opened_at": {"type": "string", "format": "date"},
@@ -356,7 +356,7 @@ _ACTIONS: dict[str, ActionDefinition] = {
         input_schema=_object_schema(["symbol"], {
             "symbol": {"type": "string", "minLength": 1},
             "name": {"type": "string"},
-            "market": {"type": "string", "enum": ["CN", "US"]},
+            "market": {"type": "string", "enum": ["CN", "HK", "US"]},
         }),
         risk_level="medium",
         requires_confirmation=True,

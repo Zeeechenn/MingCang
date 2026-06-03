@@ -37,17 +37,24 @@ def prepare_symbol_research(
 ):
     """Best-effort public first-run path: make one symbol researchable and return its dossier."""
     from backend.data.database import Stock
+    from backend.decision.market_policy import is_production_signal_market
     from backend.research.dossier import build_research_dossier
 
-    if market not in ("CN", "US"):
-        raise HTTPException(400, "market must be CN or US")
+    if market not in ("CN", "HK", "US"):
+        raise HTTPException(400, "market must be CN, HK, or US")
 
     stock = db.query(Stock).filter(Stock.symbol == symbol).first()
     if stock is None:
-        stock = Stock(symbol=symbol, name=name or symbol, market=market, active=True)
+        stock = Stock(
+            symbol=symbol,
+            name=name or symbol,
+            market=market,
+            active=is_production_signal_market(market),
+        )
         db.add(stock)
     else:
-        stock.active = True
+        if is_production_signal_market(stock.market or market):
+            stock.active = True
         if name:
             stock.name = name
         stock.market = stock.market or market
@@ -73,6 +80,7 @@ def prepare_symbol_research(
     return {
         "status": "prepared",
         "symbol": symbol,
+        "signal_scope": "production" if is_production_signal_market(stock.market) else "observe_only",
         "steps": steps,
         "runtime_readiness": runtime_readiness(),
         "missing": dossier.get("missing", []),

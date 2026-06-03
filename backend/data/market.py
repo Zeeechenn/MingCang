@@ -51,6 +51,7 @@ DAILY_PROVIDER_ADJUSTMENTS = {
     "eastmoney_cn": "qfq",
     "akshare_em_cn": "qfq",
     "tushare_qfq_cn": "qfq",
+    "yfinance_hk": "auto_adjust",
     "yfinance_us": "auto_adjust",
 }
 INDEX_PROVIDER_ADJUSTMENTS = {
@@ -85,6 +86,7 @@ def register_default_market_providers() -> None:
         register_daily_provider("tushare_qfq_cn", {"CN"}, fetch_cn_daily_tushare_qfq, priority=50, cooldown_seconds=120)
     # M19.2: yfinance 对 A 股是后复权含分红再投，与其余源 qfq 口径冲突，不进入 CN fallback。
     # akshare_tx 当前返回结构缺 volume，暂不进入 CN 生产 fallback；保留函数供手动调试。
+    register_daily_provider("yfinance_hk", {"HK"}, fetch_hk_daily, priority=90, cooldown_seconds=120)
     register_daily_provider("yfinance_us", {"US"}, fetch_us_daily, priority=90, cooldown_seconds=120)
 
     register_index_provider("akshare_index_cn", fetch_cn_index_akshare, priority=0, cooldown_seconds=60)
@@ -112,6 +114,21 @@ def cn_yfinance_ticker(symbol: str) -> str:
     """Map an A-share symbol to a Yahoo Finance ticker suffix."""
     suffix = "SS" if symbol[:2] in ("60", "68", "11") else "SZ"
     return f"{symbol}.{suffix}"
+
+
+def hk_yfinance_ticker(symbol: str) -> str:
+    """Map a Hong Kong stock code to Yahoo Finance ticker format."""
+    normalized = str(symbol).strip().upper()
+    if normalized.endswith(".HK"):
+        code = normalized[:-3]
+    else:
+        code = normalized
+    if code.isdigit():
+        if len(code) == 5 and code.startswith("0"):
+            code = code[-4:]
+        elif len(code) < 4:
+            code = code.zfill(4)
+    return f"{code}.HK"
 
 
 def cn_tushare_ts_code(symbol: str) -> str:
@@ -330,6 +347,18 @@ def fetch_us_daily(symbol: str, days: int = 365) -> pd.DataFrame:
     """拉取美股日线数据"""
     ticker = yf.Ticker(symbol)
     df = ticker.history(period=f"{days}d", interval="1d", auto_adjust=True)
+    df.index = df.index.strftime("%Y-%m-%d")
+    df.index.name = "date"
+    return df[["Open", "High", "Low", "Close", "Volume"]].rename(columns=str.lower)
+
+
+@_retry(max_attempts=3, delay=1.0)
+def fetch_hk_daily(symbol: str, days: int = 365) -> pd.DataFrame:
+    """Fetch Hong Kong stock daily data via Yahoo Finance."""
+    ticker = yf.Ticker(hk_yfinance_ticker(symbol))
+    df = ticker.history(period=f"{days}d", interval="1d", auto_adjust=True)
+    if df.empty:
+        raise ValueError(f"No yfinance data for HK symbol {symbol}")
     df.index = df.index.strftime("%Y-%m-%d")
     df.index.name = "date"
     return df[["Open", "High", "Low", "Close", "Volume"]].rename(columns=str.lower)

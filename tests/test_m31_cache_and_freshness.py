@@ -101,12 +101,104 @@ def test_data_coverage_snapshot_exposes_freshness_policy_and_market_chains(test_
 
     assert snapshot["freshness_contract"]["daily_price"]["intraday_policy"] == "read_L1_L2_only"
     assert snapshot["intraday_zero_network_policy"]["remote_fetch_allowed"] is False
-    assert snapshot["provider_fallback_chains"]["markets"] == ["CN"]
+    assert snapshot["provider_fallback_chains"]["markets"] == ["CN", "HK", "US"]
     chain = snapshot["provider_fallback_chains"]["chains_by_market"]["CN"]["daily"]
     assert chain[0]["name"] == "snapshot_cn"
     assert chain[0]["priority"] == 3
     assert chain[0]["cooldown_seconds"] == 17
     assert snapshot["summary"]["latest_price_date"] == "2026-06-01"
+    assert snapshot["summary"]["market_capability_catalog"]["policy"]["write_policy"] == "no_database_writes"
+    assert snapshot["summary"]["production_signal_policy"]["production_signal_markets"] == ["CN"]
+
+
+def test_data_coverage_catalog_covers_cn_hk_us_seven_layers(test_db, monkeypatch):
+    from backend.data import quality
+    from backend.data.database import Price, Stock
+    from backend.data.providers import reset_provider_registry
+
+    reset_provider_registry()
+    monkeypatch.setattr(quality, "register_default_market_providers", lambda: None)
+    for stock in [
+        Stock(symbol="600519", name="Moutai", market="CN", active=True),
+        Stock(symbol="700", name="Tencent", market="HK", active=True),
+        Stock(symbol="AAPL", name="Apple", market="US", active=True),
+    ]:
+        test_db.add(stock)
+    for symbol in ("600519", "700", "AAPL"):
+        test_db.add(
+            Price(
+                symbol=symbol,
+                date="2026-06-01",
+                open=1,
+                high=2,
+                low=1,
+                close=2,
+                volume=1000,
+            )
+        )
+    test_db.commit()
+
+    snapshot = quality.build_data_coverage_snapshot(test_db, generated_at="2026-06-02T00:00:00+00:00")
+    catalog = snapshot["summary"]["market_capability_catalog"]
+
+    assert snapshot["summary"]["markets"] == ["CN", "HK", "US"]
+    assert snapshot["summary"]["market_coverage"]["HK"]["price_covered"] == 1
+    assert snapshot["summary"]["market_coverage"]["HK"]["signal_scope"] == "observe_only"
+    assert snapshot["summary"]["production_coverage"]["active_stocks"] == 1
+    assert snapshot["summary"]["observe_only_coverage"]["active_stocks"] == 2
+    assert snapshot["provider_fallback_chains"]["markets"] == ["CN", "HK", "US"]
+    assert catalog["markets"] == ["CN", "HK", "US"]
+    assert [layer["id"] for layer in catalog["layers"]] == [
+        "quote",
+        "kline",
+        "fundamentals",
+        "capital_flow",
+        "derivatives",
+        "filings",
+        "tools_fallback",
+    ]
+    assert catalog["markets_detail"]["CN"]["layers"][1]["status"] == "production"
+    assert catalog["markets_detail"]["HK"]["layers"][2]["signal_impact"] == "none"
+    assert catalog["markets_detail"]["US"]["layers"][5]["providers"] == ["sec_filings_candidate"]
+    assert catalog["markets_detail"]["HK"]["layers"][5]["probe_links"][0]["probe_id"] == "hkex_filings"
+    assert catalog["markets_detail"]["US"]["layers"][2]["probe_links"][0]["probe_id"] == "sec_companyfacts"
+    assert catalog["markets_detail"]["US"]["layers"][4]["probe_links"][0]["probe_id"] == "yfinance_options"
+    assert catalog["probe_links"]["US"]["filings"][0]["write_policy"] == "no_database_writes"
+    assert catalog["probe_links"]["HK"]["fundamentals"][0]["signal_impact"] == "none"
+
+
+def test_data_coverage_checks_use_cn_production_denominator(test_db, monkeypatch):
+    from backend.data import quality
+    from backend.data.database import Price, Stock
+    from backend.data.providers import reset_provider_registry
+
+    reset_provider_registry()
+    monkeypatch.setattr(quality, "register_default_market_providers", lambda: None)
+    for stock in [
+        Stock(symbol="600519", name="Moutai", market="CN", active=True),
+        Stock(symbol="700", name="Tencent", market="HK", active=True),
+    ]:
+        test_db.add(stock)
+    test_db.add(
+        Price(
+            symbol="600519",
+            date="2026-06-01",
+            open=1,
+            high=2,
+            low=1,
+            close=2,
+            volume=1000,
+        )
+    )
+    test_db.commit()
+
+    snapshot = quality.build_data_coverage_snapshot(test_db, generated_at="2026-06-02T00:00:00+00:00")
+
+    assert snapshot["summary"]["active_stocks"] == 2
+    assert snapshot["summary"]["price_covered"] == 1
+    assert snapshot["summary"]["production_coverage"]["price_covered"] == 1
+    assert snapshot["summary"]["observe_only_coverage"]["price_covered"] == 0
+    assert snapshot["checks"]["price_coverage_ok"] is True
 
 
 def test_m31_cache_benchmark_defaults_to_no_network_no_persistent_db_writes(tmp_path, monkeypatch):

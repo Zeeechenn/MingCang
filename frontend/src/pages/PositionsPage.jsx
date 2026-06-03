@@ -21,6 +21,12 @@ function signedMoney(value) {
   return `${n > 0 ? '+' : ''}${money(n)}`
 }
 
+const MARKET_CURRENCY = { CN: 'CNY', HK: 'HKD', US: 'USD' }
+
+function currencyFor(market) {
+  return MARKET_CURRENCY[market] || market || '-'
+}
+
 function PnlText({ value, children }) {
   const n = Number(value || 0)
   return (
@@ -137,7 +143,7 @@ function PositionForm({ onCreated }) {
   return (
     <form onSubmit={submit} className={`${PANEL} p-4`}>
       <div className={LABEL}>持仓设置</div>
-      <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_110px_110px_90px]">
+      <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_90px_110px_110px_90px]">
         <div className="relative">
           <input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="代码或名称" className="w-full rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm outline-none focus:border-cyan-700 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100" />
           {suggestions.length > 0 && (
@@ -152,6 +158,11 @@ function PositionForm({ onCreated }) {
           )}
         </div>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="名称自动补全" className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100" />
+        <select value={market} onChange={(e) => setMarket(e.target.value)} className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100">
+          <option value="CN">A股</option>
+          <option value="HK">港股</option>
+          <option value="US">美股</option>
+        </select>
         <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="数量" className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100" />
         <input value={avgCost} onChange={(e) => setAvgCost(e.target.value)} placeholder="成本价" className="rounded-sm border border-stone-300 bg-[#fffaf0] px-3 py-2 text-sm outline-none dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-100" />
         <button disabled={busy || !symbol || !quantity || !avgCost} className="rounded-sm bg-cyan-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
@@ -181,14 +192,21 @@ export default function PositionsPage() {
   const openPositions = useMemo(() => positions.filter((item) => item.status !== 'closed'), [positions])
   const closedPositions = useMemo(() => positions.filter((item) => item.status === 'closed'), [positions])
 
-  const total = useMemo(() => openPositions.reduce((acc, item) => ({
-    market: acc.market + (item.market_value || 0),
-    cost: acc.cost + (item.cost_value || 0),
-    pnl: acc.pnl + (item.pnl || 0),
-  }), { market: 0, cost: 0, pnl: 0 }), [openPositions])
+  const totalsByMarket = useMemo(() => openPositions.reduce((acc, item) => {
+    const market = item.market || 'CN'
+    const current = acc[market] || { market: 0, cost: 0, pnl: 0, count: 0 }
+    acc[market] = {
+      market: current.market + (item.market_value || 0),
+      cost: current.cost + (item.cost_value || 0),
+      pnl: current.pnl + (item.pnl || 0),
+      count: current.count + 1,
+    }
+    return acc
+  }, {}), [openPositions])
   const realized = useMemo(() => closedPositions.reduce((acc, item) => acc + (item.realized_pnl || 0), 0), [closedPositions])
-  const totalPct = total.cost ? total.pnl / total.cost * 100 : null
-  const overall = total.pnl + realized
+  const cnTotal = totalsByMarket.CN || { market: 0, cost: 0, pnl: 0, count: 0 }
+  const cnPct = cnTotal.cost ? cnTotal.pnl / cnTotal.cost * 100 : null
+  const markets = Object.keys(totalsByMarket).sort()
 
   return (
     <div className="space-y-4">
@@ -197,12 +215,27 @@ export default function PositionsPage() {
           <div className={LABEL}>Portfolio</div>
             <h1 className="mt-1 text-2xl font-semibold text-stone-950 dark:text-slate-50">持仓设置</h1>
         </div>
-        <div className="grid gap-1 text-right text-xs text-stone-500 dark:text-slate-400 sm:grid-cols-3 sm:gap-3">
-          <div>持仓市值 <span className="font-mono text-stone-800 dark:text-slate-100">{money(total.market)}</span></div>
-          <div>浮动盈亏 <PnlText value={total.pnl}>{signedMoney(total.pnl)} / {signedPct(totalPct)}</PnlText></div>
-          <div>整体盈亏 <PnlText value={overall}>{signedMoney(overall)}</PnlText></div>
+        <div className="grid gap-1 text-right text-xs text-stone-500 dark:text-slate-400 sm:grid-cols-2 sm:gap-3">
+          <div>CN 市值 <span className="font-mono text-stone-800 dark:text-slate-100">{money(cnTotal.market)} CNY</span></div>
+          <div>CN 浮盈 <PnlText value={cnTotal.pnl}>{signedMoney(cnTotal.pnl)} / {signedPct(cnPct)}</PnlText></div>
         </div>
       </div>
+      {markets.length > 0 && (
+        <div className={`${PANEL} grid gap-2 p-3 text-xs sm:grid-cols-3`}>
+          {markets.map((market) => {
+            const total = totalsByMarket[market]
+            const pct = total.cost ? total.pnl / total.cost * 100 : null
+            return (
+              <div key={market} className="rounded-sm border border-stone-300 bg-[#fffaf0] p-2 dark:border-slate-700 dark:bg-[#161b25]">
+                <div className={LABEL}>{market} · {currencyFor(market)}</div>
+                <div className="mt-1 font-mono text-stone-800 dark:text-slate-100">
+                  市值 {money(total.market)} · <PnlText value={total.pnl}>{signedMoney(total.pnl)} / {signedPct(pct)}</PnlText>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
       <PositionForm onCreated={load} />
       <section className={PANEL}>
         <div className="border-b border-stone-300 p-4 dark:border-slate-700">
@@ -220,7 +253,7 @@ export default function PositionsPage() {
           <div key={item.id} className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr_auto] items-center gap-3 border-b border-stone-300 px-4 py-3 text-sm last:border-0 dark:border-slate-700">
             <div>
               <div className="font-semibold text-stone-950 dark:text-slate-100">{item.name}</div>
-              <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{item.symbol}</div>
+              <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{item.symbol} · {item.market} · {currencyFor(item.market)}</div>
             </div>
             <span className="font-mono">{money(item.quantity)}</span>
             <span className="font-mono">{money(item.avg_cost)}</span>

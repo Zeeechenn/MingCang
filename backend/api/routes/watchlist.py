@@ -45,12 +45,15 @@ def label_to_schema(lt) -> LongTermLabelOut | None:
 def get_watchlist(db: Session = Depends(get_db)):
     """Return all active watchlist stocks with their latest signal and long-term label."""
     from backend.agents.long_term.storage import bulk_get_labels
+    from backend.decision.market_policy import is_production_signal_market
 
     stocks = db.query(Stock).filter(Stock.active).all()
-    labels = bulk_get_labels([s.symbol for s in stocks], db) if stocks else {}
+    production_symbols = [s.symbol for s in stocks if is_production_signal_market(s.market)]
+    labels = bulk_get_labels(production_symbols, db) if production_symbols else {}
     result = []
     for s in stocks:
-        sig = latest_signal(s.symbol, db)
+        production_market = is_production_signal_market(s.market)
+        sig = latest_signal(s.symbol, db) if production_market else None
         lt = labels.get(s.symbol)
         result.append(WatchlistItem(
             symbol=s.symbol,
@@ -83,10 +86,13 @@ def run_long_term_label(symbol: str, db: Session = Depends(get_db)):
     """Run the long-term analyst team for one symbol and return the saved label."""
     from backend.agents.long_term.storage import save_label
     from backend.agents.long_term.team import LongTermTeam
+    from backend.decision.market_policy import is_production_signal_market
 
     stock = db.query(Stock).filter(Stock.symbol == symbol).first()
     if stock is None:
         raise HTTPException(404, f"stock {symbol} not found")
+    if not is_production_signal_market(stock.market):
+        raise HTTPException(400, "long-term constraint labels are CN-only; HK/US remain observe-only")
     label = LongTermTeam().run(stock.symbol, stock.name, db)
     save_label(label, db)
     return label_to_schema(label)
@@ -116,8 +122,8 @@ def add_stock(
     db: Session = Depends(get_db),
 ):
     """Add or reactivate a stock in the watchlist and trigger backfill."""
-    if market not in ("CN", "US"):
-        raise HTTPException(400, "market must be CN or US")
+    if market not in ("CN", "HK", "US"):
+        raise HTTPException(400, "market must be CN, HK, or US")
     existing = db.query(Stock).filter(Stock.symbol == symbol).first()
     if existing:
         existing.active = True

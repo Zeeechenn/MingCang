@@ -77,7 +77,7 @@ class WatchlistItem(BaseModel):
     long_term_label: LongTermLabelOut | None = None
 
 
-Market = Literal["CN", "US"]
+Market = Literal["CN", "HK", "US"]
 PositionStatus = Literal["open", "closed"]
 
 

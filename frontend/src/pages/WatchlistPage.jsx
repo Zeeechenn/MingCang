@@ -394,6 +394,7 @@ function WatchlistManage({ items, onRemove, onReload }) {
         <select value={market} onChange={(e) => setMarket(e.target.value)} className="rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-2 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]">
           <option value="all">全部市场</option>
           <option value="CN">A股</option>
+          <option value="HK">港股</option>
           <option value="US">美股</option>
         </select>
         <select value={recommendation} onChange={(e) => setRecommendation(e.target.value)} className="rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-2 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]">
@@ -411,6 +412,11 @@ function WatchlistManage({ items, onRemove, onReload }) {
               {item.long_term_label?.label && (
                 <div className={`mt-1 inline-flex rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold ${longTermClass(item.long_term_label.label)}`}>
                   长期 {item.long_term_label.label}
+                </div>
+              )}
+              {item.market !== 'CN' && !item.latest_signal && (
+                <div className="mt-1 inline-flex rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-200">
+                  观察
                 </div>
               )}
             </Link>
@@ -489,6 +495,7 @@ function AddStockForm({ onAdd }) {
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="名称" className="w-24 rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-1 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]" />
       <select value={market} onChange={(e) => setMarket(e.target.value)} className="rounded-sm border border-stone-300 bg-[#fffaf0] px-2 py-1 text-xs outline-none dark:border-slate-700 dark:bg-[#161b25]">
         <option value="CN">A股</option>
+        <option value="HK">港股</option>
         <option value="US">美股</option>
       </select>
       <button type="submit" disabled={loading} className="rounded-sm bg-cyan-700 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50">{loading ? '保存中' : '保存'}</button>

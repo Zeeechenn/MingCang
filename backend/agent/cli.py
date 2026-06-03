@@ -142,6 +142,20 @@ def _command_stock_context(args: argparse.Namespace) -> dict:
     )
 
 
+def _command_global_data(args: argparse.Namespace) -> dict:
+    _read_guard(args)
+    from backend.data.global_data import build_global_data_context
+
+    return _with_read_only_memory_usage(
+        lambda: _with_db(lambda db: build_global_data_context(
+            db,
+            market=args.market,
+            symbol=args.symbol,
+            intent=args.intent,
+        ))
+    )
+
+
 def _command_action(args: argparse.Namespace) -> dict:
     from backend.agent.action_registry import get_action_definition
 
@@ -303,6 +317,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stock.add_argument("symbol")
     stock.set_defaults(handler=_command_stock_context)
+
+    global_data = subparsers.add_parser(
+        "global-data",
+        aliases=["全球数据"],
+        help="read M41 global data envelope by market, symbol, and intent",
+    )
+    global_data.add_argument("symbol")
+    global_data.add_argument("--market", choices=["CN", "HK", "US"], default="CN")
+    global_data.add_argument(
+        "--intent",
+        default="daily_ohlcv",
+        help="quote/kline/fundamentals/filings/options/capital_flow/tools_fallback",
+    )
+    global_data.set_defaults(handler=_command_global_data)
 
     action = subparsers.add_parser(
         "action",

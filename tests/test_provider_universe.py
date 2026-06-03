@@ -157,6 +157,91 @@ def test_fetch_daily_registers_tushare_qfq_only_when_enabled(monkeypatch):
     assert "tushare_qfq_cn" in providers
 
 
+def test_fetch_daily_registers_hk_yfinance_provider(monkeypatch):
+    from backend.data import market
+    from backend.data.providers import list_daily_providers, reset_provider_registry
+
+    reset_provider_registry()
+    monkeypatch.setattr(market.settings, "tickflow_enabled", False)
+    monkeypatch.setattr(market.settings, "tickflow_api_key", "")
+
+    def fake_fetch(symbol, market_name, days):
+        return pd.DataFrame([{"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]), "yfinance_hk"
+
+    monkeypatch.setattr(market, "fetch_daily_with_fallback", fake_fetch)
+
+    df = market.fetch_daily("700", "HK", days=30)
+
+    assert not df.empty
+    assert df.attrs["source"] == "yfinance_hk"
+    assert df.attrs["adjustment"] == "auto_adjust"
+    assert list_daily_providers("HK") == ["yfinance_hk"]
+
+
+def test_fetch_daily_registers_us_yfinance_provider(monkeypatch):
+    from backend.data import market
+    from backend.data.providers import (
+        daily_provider_chain,
+        list_daily_providers,
+        reset_provider_registry,
+    )
+
+    reset_provider_registry()
+    monkeypatch.setattr(market.settings, "tickflow_enabled", False)
+    monkeypatch.setattr(market.settings, "tickflow_api_key", "")
+
+    def fake_fetch(symbol, market_name, days):
+        return pd.DataFrame([{"open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]), "yfinance_us"
+
+    monkeypatch.setattr(market, "fetch_daily_with_fallback", fake_fetch)
+
+    df = market.fetch_daily("AAPL", "US", days=30)
+
+    assert not df.empty
+    assert df.attrs["source"] == "yfinance_us"
+    assert df.attrs["adjustment"] == "auto_adjust"
+    assert list_daily_providers("US") == ["yfinance_us"]
+    chain = daily_provider_chain("US")
+    assert chain[0]["name"] == "yfinance_us"
+    assert chain[0]["data_type"] == "daily_price"
+    assert chain[0]["observe_only"] is False
+    assert "health" in chain[0]
+
+
+def test_fetch_hk_daily_uses_yfinance_symbol(monkeypatch):
+    from backend.data import market
+
+    calls = []
+
+    class FakeTicker:
+        def __init__(self, ticker):
+            calls.append(ticker)
+
+        def history(self, **kwargs):
+            assert kwargs["period"] == "30d"
+            assert kwargs["interval"] == "1d"
+            assert kwargs["auto_adjust"] is True
+            return pd.DataFrame(
+                [{
+                    "Open": 300.0,
+                    "High": 310.0,
+                    "Low": 295.0,
+                    "Close": 305.0,
+                    "Volume": 1000,
+                }],
+                index=pd.to_datetime(["2026-05-22"]),
+            )
+
+    monkeypatch.setattr(market.yf, "Ticker", FakeTicker)
+
+    df = market.fetch_hk_daily("700", days=30)
+
+    assert calls == ["0700.HK"]
+    assert list(df.columns) == ["open", "high", "low", "close", "volume"]
+    assert df.index.tolist() == ["2026-05-22"]
+    assert float(df.loc["2026-05-22", "close"]) == 305.0
+
+
 def test_fetch_cn_daily_tushare_normalizes_daily_bars(monkeypatch):
     from backend.config import settings
     from backend.data import market
@@ -343,3 +428,12 @@ def test_cn_yfinance_ticker_suffix_mapping():
     assert cn_yfinance_ticker("300308") == "300308.SZ"
     assert cn_yfinance_ticker("600519") == "600519.SS"
     assert cn_yfinance_ticker("688008") == "688008.SS"
+
+
+def test_hk_yfinance_ticker_suffix_mapping():
+    from backend.data.market import hk_yfinance_ticker
+
+    assert hk_yfinance_ticker("700") == "0700.HK"
+    assert hk_yfinance_ticker("00700.HK") == "0700.HK"
+    assert hk_yfinance_ticker("9988") == "9988.HK"
+    assert hk_yfinance_ticker("AAPL.HK") == "AAPL.HK"

@@ -44,6 +44,7 @@ This index intentionally stays short:
 - M30: completed engineering-quality convergence.
 - M31: completed product/engineering borrowings.
 - M32: planned forward-hypothesis bridge.
+- M41: completed read-only A/HK/US global data/research buildout.
 
 Current production conclusion: quant remains disabled
 (`WEIGHT_QUANT=0.0`), Kronos remains off, and M29 evidence is still
@@ -56,14 +57,17 @@ non-promoting.
 ```
 backend/config.py                            配置入口（环境变量、路径、调度时间、Bark、双 profile）
 backend/data/database.py                     数据库模型 + 轻量幂等迁移
-backend/data/market.py                       行情数据拉取（TickFlow 可选优先，免费源 fallback，Tushare qfq 可选后置）
+backend/data/market.py                       行情数据拉取（A 股多源 fallback，HK/US yfinance daily，Tushare qfq 可选后置）
 backend/data/cache_policy.py                 M31 L1/L2/L3 缓存层、盘中零网络与 freshness contract
+backend/data/market_capabilities.py          A/HK/US 七层市场数据能力目录（metadata-only）
+backend/data/global_data.py                  M41 只读 global-data envelope、canonical schema/PIT gate、probe health ledger 聚合
 backend/data/providers.py                    行情 Provider registry + ordered fallback metadata
 backend/data/universe.py                     股票池候选 / 去重 / 市值流动性过滤 / 批量回填
 backend/data/qlib_data.py                    Qlib 特征构建（技术 + PIT 基本面 + price provenance）
 backend/data/quality.py                      数据覆盖报表 + provider 可靠性摘要（M6.1）
 backend/data/market_features.py              市值/股本/资金流 PIT 特征 join（M6.1）
-backend/data/external_sources.py             外部数据源候选目录 + 显式可达性探针（默认不进生产信号）
+backend/data/external_sources.py             外部数据源候选目录 + 显式可达性探针/health 摘要（默认不进生产信号）
+backend/decision/market_policy.py            官方信号市场边界（当前 CN-only；HK/US observe-only）
 backend/data/ifind_mcp.py                    同花顺 iFinD MCP observe-only 客户端 + Markdown/JSON 解析
 backend/data/tushare_qfq.py                  Tushare daily + adj_factor 前复权 OHLCV fallback（默认关闭）
 backend/data/news.py                         新闻抓取（stock_news_em，含重试）
@@ -104,6 +108,7 @@ backend/tools/m29_provenance_audit.py        M29.3 只读 price/artifact provena
 backend/tools/m29_forward_readiness.py       M29.3 只读 forward shadow readiness guard
 backend/tools/m29_price_coverage_refresh.py  M29.3 close-confirmed price/provenance refresh（默认 dry-run，--execute 写 prices）
 backend/tools/m31_cache_benchmark.py         M31 只读 L1/L2 cache latency benchmark（默认不触发 L3 远端）
+backend/tools/m41_probe_health_ledger.py     M41 只读 probe health ledger 聚合器（默认输出 /private/tmp，显式 --run-probes 才触网）
 backend/portfolio/combo_weights.py           组合候选权重分配
 backend/portfolio/single_position.py         单信号仓位映射
 backend/portfolio/trailing_stop.py           Trailing stop 持仓追踪（M1.7）
