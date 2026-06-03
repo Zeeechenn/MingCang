@@ -26,9 +26,9 @@ A complete multi-agent pipeline — Bull/Bear three-round debate + Research Dire
 
 ## 📦 Current Release
 
-**v0.2.1 (2026-06-02)** is a small quality patch after `v0.2.0`: the M29 forward-evidence toolchain, M30 engineering quality gates, dependency-audit cleanup, AdminPage maintainability split, and iFinD MCP postmarket news / announcement supplement path are now on the public line.
+**v0.2.2 (2026-06-03)** ships the M41 A/HK/US read-only data facade: a three-market seven-layer capability catalog, HK/US daily price bridge, explicit external-data probes, probe summaries, global-data API/CLI, canonical schema/PIT gates, price quality gates, and probe health ledger are now on the public line.
 
-The M26 / M27 quant and Kronos evidence conclusion is unchanged: no candidate passed the production promotion gate, so production keeps `WEIGHT_QUANT=0.0` / `kronos_enabled=false`. M29 continues with read-only evidence ledgers and pre-registered alpha hypotheses; M30 now closes mypy, Python lock, CI/security/coverage, core-path tests, dependency audits, and frontend maintainability work.
+HK/US remain read-only research context: they do not generate official signals and do not enter postmarket batch, stop-loss checks, long-term constraints, position sizing, or composite_score. The M26 / M27 quant and Kronos evidence conclusion is unchanged, so production keeps `WEIGHT_QUANT=0.0` / `kronos_enabled=false`.
 
 ---
 

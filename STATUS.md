@@ -3,7 +3,7 @@
 > Compact current-state snapshot for fresh agents and public readers. Detailed
 > plans live in `docs/ROADMAP.md`; completed history lives in `CHANGELOG.md`.
 
-Current release: `v0.2.1` (2026-06-02).
+Current release: `v0.2.2` (2026-06-03).
 
 StockSage is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code

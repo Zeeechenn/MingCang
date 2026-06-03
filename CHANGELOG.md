@@ -6,7 +6,7 @@
 
 ---
 
-## [Unreleased] M41 A/HK/US read-only data facade（2026-06-03）
+## [v0.2.2] M41 A/HK/US read-only data facade（2026-06-03）
 
 ### Added
 - M41 三市场七层数据能力闭环：HK/US daily price bridge、A/HK/US capability catalog、explicit external probes、probe summary、global-data read-only envelope、canonical schema/PIT gate 和 `/private/tmp` probe health ledger 聚合器。
