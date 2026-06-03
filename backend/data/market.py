@@ -586,8 +586,52 @@ def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
             Price.date.in_(dates_to_replace),
         ).delete(synchronize_session=False)
 
+    # M42: build a rolling window of the last 10 *committed* closes for each
+    # candidate row so the write-time hfq guard has a baseline.  We initialise
+    # from existing DB rows (already committed) and extend with rows we have
+    # already accepted in this batch.  This means:
+    #   - First N rows of a brand-new symbol have < 10 preceding closes →
+    #     guard returns False (passes through) as documented in
+    #     check_adjustment_basis_jump.
+    #   - For refresh_today the deleted rows are gone before this loop runs,
+    #     so the baseline comes from rows *outside* the refresh window — exactly
+    #     the rows that were not contaminated.
+    from statistics import median as _median
+
+    from backend.data.price_quality import (  # local import avoids circular at module level
+        HFQ_JUMP_RATIO_THRESHOLD,
+        check_adjustment_basis_jump,
+    )
+
+    _PRECEDING_WINDOW = 10
+    # Seed the window from existing DB closes (up to _PRECEDING_WINDOW rows),
+    # ordered ascending so we keep the most-recent ones at the end.
+    _seed_rows = (
+        db.query(Price.close)
+        .filter(Price.symbol == symbol)
+        .order_by(Price.date.desc())
+        .limit(_PRECEDING_WINDOW)
+        .all()
+    )
+    # rows come back newest-first; reverse so list is oldest→newest
+    _preceding_closes: list[float] = [float(r.close) for r in reversed(_seed_rows) if r.close]
+
     records = []
+    _rejected = 0
     for date_str, row in df_factors.iterrows():
+        close_val = float(row["close"])
+        # M42 write-time guard: reject probable hfq-contaminated rows.
+        if check_adjustment_basis_jump(close_val, _preceding_closes):
+            _usable = [c for c in _preceding_closes if c > 0]
+            logger.warning(
+                "M42 hfq-jump guard: rejected %s %s close=%.4f "
+                "(preceding 10-day median=%.4f, threshold=%.1f×) — skipping row",
+                symbol, date_str, close_val,
+                _median(_usable) if _usable else 0,
+                HFQ_JUMP_RATIO_THRESHOLD,
+            )
+            _rejected += 1
+            continue
         atr = row.get("atr14")
         records.append(Price(
             symbol=symbol,
@@ -595,13 +639,20 @@ def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
             open=float(row["open"]),
             high=float(row["high"]),
             low=float(row["low"]),
-            close=float(row["close"]),
+            close=close_val,
             volume=float(row["volume"]),
             atr14=float(atr) if atr is not None and not pd.isna(atr) else None,
             source=source,
             fetched_at=fetched_at,
             adjustment=adjustment,
         ))
+        # Slide the window forward with the accepted close.
+        _preceding_closes.append(close_val)
+        if len(_preceding_closes) > _PRECEDING_WINDOW:
+            _preceding_closes.pop(0)
+
+    if _rejected:
+        logger.warning("M42 hfq-jump guard: rejected %d/%d rows for %s", _rejected, _rejected + len(records), symbol)
 
     db.bulk_save_objects(records)
     db.commit()
