@@ -48,37 +48,55 @@ def _sqlite_readonly_url(raw_url: str) -> str:
 
 @contextmanager
 def readonly_session(database_url: str | None = None):
-    """Open a read-only SQLAlchemy session on the given SQLite database."""
+    """Open a read-only SQLAlchemy session on the given SQLite database.
+
+    The read-only/read-write fallback wraps ONLY engine creation (with a probe
+    connect), so the single ``yield`` is reached exactly once. An exception from
+    inside the with-body is never swallowed and re-yielded (which previously
+    caused 'generator didn't stop after throw()').
+    """
     url = database_url or settings.database_url
-    # Try read-only first; fall back to read-write for in-memory / test DBs
     try:
         ro_url = _sqlite_readonly_url(url)
         engine = create_engine(ro_url, connect_args={"check_same_thread": False})
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        try:
-            yield db
-        finally:
-            db.close()
-            engine.dispose()
+        engine.connect().close()  # probe: fall back if the RO URI cannot open
     except Exception:
-        # Fallback for :memory: or non-file DBs
+        # Fallback for :memory: / non-file DBs (and missing-file RO opens).
         engine = create_engine(url, connect_args={"check_same_thread": False})
-        Session = sessionmaker(bind=engine)
-        db = Session()
-        try:
-            yield db
-        finally:
-            db.close()
-            engine.dispose()
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    try:
+        yield db
+    finally:
+        db.close()
+        engine.dispose()
 
 
 @contextmanager
 def write_session(database_url: str | None = None):
-    """Open a writable SQLAlchemy session."""
+    """Open a writable SQLAlchemy session, ensuring the schema exists.
+
+    create_all is idempotent (only creates missing tables), so a dedicated,
+    initially-empty observations DB gets gate_b_observations on first use
+    without disturbing any existing data.
+    """
+    from backend.data.database import Base
+    from backend.memory.audit_log import _ensure_schema
+
     url = database_url or settings.database_url
     engine = create_engine(url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
+    # Pre-create the audit_log_fts virtual table BEFORE any write transaction.
+    # audit_write()'s _ensure_schema opens a second connection to CREATE it; on a
+    # fresh file DB that would deadlock against the session's open obs transaction
+    # ("database is locked"). Creating it up-front (outside any txn) avoids that —
+    # matching production, where the table already exists.
+    _boot = Session()
+    try:
+        _ensure_schema(_boot)
+    finally:
+        _boot.close()
     db = Session()
     try:
         yield db
@@ -197,9 +215,11 @@ def main() -> int:
         if args.symbols:
             sym_list = [s.strip() for s in args.symbols.split(",") if s.strip()]
 
-        with write_session(args.database_url) as db:
+        with write_session(args.database_url) as db, \
+                readonly_session(args.source_database_url) as src:
             rows = record_observations(
                 db,
+                source_db=src,
                 as_of=args.as_of,
                 horizon_days=args.horizon_days,
                 symbols=sym_list,
@@ -208,8 +228,9 @@ def main() -> int:
         return 0
 
     elif args.cmd == "realize":
-        with write_session(args.database_url) as db:
-            rows = realize_returns(db, as_of=args.as_of)
+        with write_session(args.database_url) as db, \
+                readonly_session(args.source_database_url) as src:
+            rows = realize_returns(db, source_db=src, as_of=args.as_of)
         print(f"Realized {len(rows)} observation(s).")
         return 0
 

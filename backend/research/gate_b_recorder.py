@@ -253,6 +253,7 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
 def record_observations(
     db,
     *,
+    source_db=None,
     as_of: str | None = None,
     horizon_days: int = 5,
     symbols: list[str] | None = None,
@@ -260,6 +261,12 @@ def record_observations(
     """
     For each Signal with date <= as_of, evaluate the M33 gate AS-OF that date
     and write a GateBObservation row.
+
+    Reads (signals / labels / decisions / prices) come from ``source_db`` when
+    provided (a read-only production session); GateBObservation rows are written
+    to ``db``. When ``source_db`` is None, ``db`` is used for both (test default).
+    This separation lets the tracker read production data read-only while
+    persisting observations in a dedicated, isolated database.
 
     Idempotent: skips signals already recorded for the same (signal_id, as_of).
     Returns list of newly inserted row dicts (existing rows are not returned).
@@ -270,6 +277,7 @@ def record_observations(
 
     from sqlalchemy import text
 
+    src = source_db if source_db is not None else db
     effective_as_of: str = as_of or datetime.now(UTC).date().isoformat()
 
     from backend.data.database import GateBObservation, Price
@@ -283,7 +291,7 @@ def record_observations(
         for i, s in enumerate(symbols):
             params[f"s{i}"] = s
 
-    sig_rows = db.execute(
+    sig_rows = src.execute(
         text(f"""
             SELECT id, symbol, date, recommendation, composite_score
             FROM signals
@@ -312,8 +320,8 @@ def record_observations(
         if existing is not None:
             continue  # already recorded — skip silently
 
-        # Build PIT dossier and evaluate gate
-        dossier = _build_pit_dossier(db, symbol, sig_date)
+        # Build PIT dossier and evaluate gate (read from the source session)
+        dossier = _build_pit_dossier(src, symbol, sig_date)
         case = build_case(dossier, as_of=sig_date)
 
         raw_blockers: list[str] = case["quality_gate"]["blockers"]
@@ -330,8 +338,8 @@ def record_observations(
         if label:
             label_id = label.get("id")
 
-        # entry_close from Price on sig_date
-        price_row = db.execute(
+        # entry_close from Price on sig_date (read from the source session)
+        price_row = src.execute(
             text("SELECT close FROM prices WHERE symbol=:sym AND date=:d LIMIT 1"),
             {"sym": symbol, "d": sig_date},
         ).fetchone()
@@ -385,9 +393,12 @@ def record_observations(
 # realize_returns
 # ---------------------------------------------------------------------------
 
-def realize_returns(db, *, as_of: str | None = None) -> list[dict]:
+def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dict]:
     """
     Fill forward_return_net for observations whose 5-day window has closed.
+
+    Observations are read/updated in ``db``; forward prices are read from
+    ``source_db`` when provided (read-only production session), else from ``db``.
 
     For each pending GateBObservation:
       - Query the 5 trading-day prices strictly after signal_date.
@@ -408,6 +419,7 @@ def realize_returns(db, *, as_of: str | None = None) -> list[dict]:
     from backend.backtest.costs import net_return_from_prices
     from backend.data.database import GateBObservation
 
+    src = source_db if source_db is not None else db
     effective_as_of: str = as_of or datetime.now(UTC).date().isoformat()
 
     pending_rows = (
@@ -422,8 +434,8 @@ def realize_returns(db, *, as_of: str | None = None) -> list[dict]:
         if obs.entry_close is None:
             continue
 
-        # Fetch up to 5 forward prices strictly after signal_date
-        fwd_rows = db.execute(
+        # Fetch up to 5 forward prices strictly after signal_date (from source)
+        fwd_rows = src.execute(
             text("""
                 SELECT date, close FROM prices
                 WHERE symbol = :sym AND date > :sig_date

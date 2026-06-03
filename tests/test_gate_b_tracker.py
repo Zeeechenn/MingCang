@@ -369,3 +369,29 @@ class TestReport:
         assert test_db.query(Signal).count() == 1
         assert test_db.query(LongTermLabel).count() == 1
         assert test_db.query(DecisionRun).count() == 1
+
+
+def test_source_dest_split_writes_only_to_dest(test_db):
+    """record_observations(dest, source_db=src) reads signals/prices from src and
+    writes observations ONLY to dest — the production-read / isolated-write split
+    the scheduled CLI relies on (so production stock-sage.db is never written)."""
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from backend.data.database import Base, GateBObservation
+    from backend.research.gate_b_recorder import record_observations
+
+    src_engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(src_engine)
+    src = sessionmaker(bind=src_engine)()
+    _seed_signal(src, symbol="600519", sig_date="2025-11-15")
+    _seed_prices(src, symbol="600519", entry_date="2025-11-15")
+    src.commit()
+
+    rows = record_observations(test_db, source_db=src, as_of="2025-11-20")
+    assert len(rows) == 1
+    assert test_db.query(GateBObservation).count() == 1          # written to dest
+    assert src.execute(text("SELECT COUNT(*) FROM gate_b_observations")).scalar() == 0  # never to source
+    src.close()
