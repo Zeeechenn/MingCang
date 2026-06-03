@@ -204,6 +204,46 @@ Scope:
 - review/evidence ledger entry;
 - case-linked dossier view.
 
+> Note: **M41** is reserved by `main` (A/HK/US Global Data/Research Buildout,
+> M41.1–M41.11). The next ATLAS numbers continue at **M42**.
+
+### M42 — Price Adjustment-Basis Remediation (main side)
+
+Goal: fix the qfq/hfq price contamination that breaks any price-based evaluation
+(diagnosed in `docs/GATE_B_DQ_FINDINGS.md`: hfq rows for ~336–344 symbols on
+2026-05-25/26 written with `adjustment=NULL`, indistinguishable from qfq).
+Executed on `main` (production price data), as a branch off `main`; it is a
+prerequisite for M43.
+
+Scope:
+
+- a write-time data-quality guard rejecting/repairing implausible adjustment
+  jumps on ingest (close/prev_close ratio sanity), aligned with main's existing
+  price-quality-gate work;
+- a one-off remediation: back up, detect contaminated rows, delete + re-fetch
+  with explicit `adjustment`/`source`, verified on a copy before touching the
+  live DB;
+- (optional, design-time) make `adjustment` part of the prices unique key so two
+  bases cannot silently collide on one (symbol, date).
+
+Non-goals: no change to signal/scoring logic; no Gate-B tracker change (it is
+already robust to the artifact).
+
+### M43 — Backtestable Capability Experiment (design)
+
+Goal: design a pre-registered, statistically-powered RETROSPECTIVE experiment for
+a capability that IS reconstructable from the deep price history (2018+) — unlike
+the live-state M33 gate, which only supports the prospective Gate-B tracker.
+Depends on M42 (clean prices).
+
+Scope:
+
+- pick a price/quant-derived overlay (not live-state) testable over the full
+  history via the test2 A/B + m27/m29 forward-shadow tooling;
+- point-in-time, non-overlapping folds, M38 survivorship correction;
+- pre-registered metrics + decision rule (mirror `docs/ATLAS_GATE_B_EXPERIMENT.md`);
+- design only — no production wiring, no run, until reviewed.
+
 ---
 
 ## 6. First PR Definition
