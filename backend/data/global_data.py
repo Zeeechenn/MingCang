@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -184,6 +184,95 @@ def _latest_price_payload(db, symbol: str) -> dict[str, Any] | None:
         "low": price.low,
         "close": price.close,
         "volume": price.volume,
+        "source": price.source,
+        "fetched_at": price.fetched_at.isoformat() if price.fetched_at else None,
+        "adjustment": price.adjustment,
+    }
+
+
+def _recent_price_rows(db, symbol: str, limit: int = 20) -> list[Price]:
+    return (
+        db.query(Price)
+        .filter(Price.symbol == symbol)
+        .order_by(desc(Price.date))
+        .limit(limit)
+        .all()
+    )
+
+
+def _price_quality_gate(
+    *,
+    market: str,
+    row: dict[str, Any] | None,
+    recent_rows: list[Price],
+) -> dict[str, Any]:
+    """Return local DB quality warnings without fetching remote providers."""
+    blockers: list[str] = []
+    warnings: list[str] = []
+
+    if row is None:
+        return {
+            "status": "unavailable",
+            "blockers": ["no_local_price_row"],
+            "warnings": [],
+            "recent_sources": [],
+            "recent_adjustments": [],
+        }
+
+    for field in ("open", "high", "low", "close", "volume"):
+        value = row.get(field)
+        if value is None:
+            blockers.append(f"missing_{field}")
+            continue
+        if field != "volume" and float(value) <= 0:
+            blockers.append(f"non_positive_{field}")
+    high = row.get("high")
+    low = row.get("low")
+    open_ = row.get("open")
+    close = row.get("close")
+    if high is not None and low is not None and float(high) < float(low):
+        blockers.append("high_below_low")
+    if high is not None and low is not None:
+        for field_name, value in (("open", open_), ("close", close)):
+            if value is not None and not (float(low) <= float(value) <= float(high)):
+                blockers.append(f"{field_name}_outside_daily_range")
+
+    if market == "CN":
+        for field in ("source", "fetched_at", "adjustment"):
+            if not row.get(field):
+                blockers.append(f"missing_provenance_{field}")
+
+    try:
+        latest_date = date.fromisoformat(str(row.get("date")))
+        days_old = (date.today() - latest_date).days
+        if days_old > 7:
+            warnings.append(f"stale_latest_bar_{days_old}d")
+    except (TypeError, ValueError):
+        blockers.append("invalid_price_date")
+
+    sources = sorted({str(item.source) for item in recent_rows if item.source})
+    adjustments = sorted({str(item.adjustment) for item in recent_rows if item.adjustment})
+    if len(adjustments) > 1:
+        blockers.append("mixed_recent_adjustments")
+    if len(sources) > 1:
+        warnings.append("mixed_recent_sources")
+
+    closes = [float(item.close) for item in recent_rows if item.close and float(item.close) > 0]
+    if closes:
+        min_close = min(closes)
+        max_close = max(closes)
+        if min_close > 0 and max_close / min_close > 20:
+            blockers.append("extreme_recent_price_range")
+
+    status = "passed" if not blockers and not warnings else "warning"
+    if blockers:
+        status = "blocked"
+    return {
+        "status": status,
+        "blockers": sorted(set(blockers)),
+        "warnings": sorted(set(warnings)),
+        "recent_sources": sources,
+        "recent_adjustments": adjustments,
     }
 
 
@@ -205,7 +294,14 @@ def build_global_data_context(
 
     capability = _capability_for(market, layer)
     source = "local_price_db" if layer in {"quote", "kline"} else "capability_catalog"
-    row = _latest_price_payload(db, symbol) if layer in {"quote", "kline"} else None
+    is_price_layer = layer in {"quote", "kline"}
+    row = _latest_price_payload(db, symbol) if is_price_layer else None
+    recent_rows = _recent_price_rows(db, symbol) if is_price_layer else []
+    quality_gate = (
+        _price_quality_gate(market=market, row=row, recent_rows=recent_rows)
+        if is_price_layer
+        else {"status": "not_applicable", "blockers": [], "warnings": [], "recent_sources": [], "recent_adjustments": []}
+    )
     normalized = normalize_global_data_row(
         market=market,
         symbol=symbol,
@@ -227,8 +323,11 @@ def build_global_data_context(
         "status": status,
         "source": source,
         "fetched_at": normalized["data"]["fetched_at"],
-        "freshness_status": "unmeasured" if not row else "latest_local_bar",
+        "freshness_status": "unmeasured" if not row else (
+            "latest_local_bar" if quality_gate["status"] == "passed" else quality_gate["status"]
+        ),
         "field_status": normalized["field_status"],
+        "quality_gate": quality_gate,
         "required_fields": normalized["required_fields"],
         "missing_fields": normalized["missing_fields"],
         "canonical_schema": CANONICAL_SCHEMAS[layer],
@@ -245,7 +344,12 @@ def build_global_data_context(
         "write_policy": "no_database_writes",
         "signal_impact": "none" if not is_production_signal_market(market) else capability.get("signal_impact", "none"),
         "safe_for_research_scoring": False,
-        "safe_for_production_signal": is_production_signal_market(market) and capability.get("status") == "production",
+        "safe_for_production_signal": (
+            is_production_signal_market(market)
+            and capability.get("status") == "production"
+            and available
+            and quality_gate["status"] != "blocked"
+        ),
         "production_signal_policy": production_signal_policy_payload(),
     }
 

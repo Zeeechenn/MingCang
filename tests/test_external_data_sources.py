@@ -426,6 +426,69 @@ def test_global_data_context_returns_read_only_envelope_for_hk_price(test_db):
     assert payload["data"]["close"] == 305
 
 
+def test_global_data_context_blocks_cn_price_without_provenance(test_db):
+    from backend.data.database import Price
+    from backend.data.global_data import build_global_data_context
+
+    test_db.add(Price(
+        symbol="600519",
+        date="2026-06-02",
+        open=1300,
+        high=1320,
+        low=1290,
+        close=1307.22,
+        volume=100,
+    ))
+    test_db.commit()
+
+    payload = build_global_data_context(test_db, market="CN", symbol="600519", intent="daily_ohlcv")
+
+    assert payload["status"] == "available"
+    assert payload["quality_gate"]["status"] == "blocked"
+    assert "missing_provenance_source" in payload["quality_gate"]["blockers"]
+    assert "missing_provenance_fetched_at" in payload["quality_gate"]["blockers"]
+    assert payload["safe_for_production_signal"] is False
+
+
+def test_global_data_context_blocks_mixed_recent_adjustments(test_db):
+    from datetime import datetime
+
+    from backend.data.database import Price
+    from backend.data.global_data import build_global_data_context
+
+    test_db.add(Price(
+        symbol="300308",
+        date="2026-06-01",
+        open=1100,
+        high=1120,
+        low=1090,
+        close=1110,
+        volume=100,
+        source="tickflow_cn",
+        fetched_at=datetime(2026, 6, 1, 8, 0),
+        adjustment="forward_additive",
+    ))
+    test_db.add(Price(
+        symbol="300308",
+        date="2026-06-02",
+        open=1130,
+        high=1200,
+        low=1120,
+        close=1191.81,
+        volume=100,
+        source="akshare_sina_cn",
+        fetched_at=datetime(2026, 6, 2, 8, 0),
+        adjustment="qfq",
+    ))
+    test_db.commit()
+
+    payload = build_global_data_context(test_db, market="CN", symbol="300308", intent="daily_ohlcv")
+
+    assert payload["quality_gate"]["status"] == "blocked"
+    assert "mixed_recent_adjustments" in payload["quality_gate"]["blockers"]
+    assert payload["safe_for_production_signal"] is False
+
+
 def test_global_data_context_reports_missing_non_price_adapter(test_db):
     from backend.data.global_data import build_global_data_context
 
@@ -436,6 +499,26 @@ def test_global_data_context_reports_missing_non_price_adapter(test_db):
     assert payload["field_status"] == "missing_fields"
     assert "published_at" in payload["missing_fields"]
     assert payload["pit_gate"]["blockers"] == ["no_normalized_row"]
+    assert payload["safe_for_production_signal"] is False
+
+
+def test_market_capability_catalog_exposes_ifind_runtime_status(monkeypatch):
+    from backend.config import settings
+    from backend.data.market_capabilities import build_market_capability_catalog
+
+    monkeypatch.setattr(settings, "ifind_mcp_enabled", True)
+    monkeypatch.setattr(settings, "ifind_mcp_token", "unit-token")
+    monkeypatch.setattr(settings, "ifind_mcp_qps_limit", 0.5)
+
+    catalog = build_market_capability_catalog()
+    cn_layers = catalog["markets_detail"]["CN"]["layers"]
+    fundamentals = next(row for row in cn_layers if row["id"] == "fundamentals")
+    ifind = next(row for row in fundamentals["probe_links"] if row["probe_id"] == "ifind_mcp")
+
+    assert ifind["enabled"] is True
+    assert ifind["configured"] is True
+    assert ifind["qps_limit"] == 0.5
+    assert "read-only evidence" in ifind["role"]
 
 
 def test_probe_health_ledger_aggregates_multiple_summaries():

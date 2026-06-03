@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from backend.config import settings
 from backend.data.providers import provider_fallback_chains
 
 SUPPORTED_MARKETS = ("CN", "HK", "US")
@@ -320,14 +321,22 @@ _CAPABILITIES: dict[str, dict[str, dict[str, object]]] = {
 
 def _probe_links_for(market: str, layer_id: str) -> list[dict[str, object]]:
     links = PROBE_LINKS.get(market, {}).get(layer_id, [])
-    return [
-        {
+    rows: list[dict[str, object]] = []
+    for link in links:
+        row = {
             **deepcopy(link),
             "write_policy": "no_database_writes",
             "signal_impact": "none",
         }
-        for link in links
-    ]
+        if row.get("source_id") == "ifind_mcp":
+            row.update({
+                "enabled": bool(settings.ifind_mcp_enabled),
+                "configured": bool(settings.ifind_mcp_token),
+                "qps_limit": float(settings.ifind_mcp_qps_limit),
+                "role": "stable read-only evidence source for news, notices, fundamentals, and filings",
+            })
+        rows.append(row)
+    return rows
 
 
 def build_market_probe_links() -> dict:
