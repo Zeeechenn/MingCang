@@ -122,14 +122,6 @@ def prepare_symbol_research(
     }
 
 
-@router.get("/research/{symbol}", response_model=ResearchStateOut)
-def get_symbol_research_state(symbol: str, db: Session = Depends(get_db)):
-    """Return the persistent research state for a symbol."""
-    from backend.decision.harness import get_research_state
-
-    return get_research_state(db, symbol)
-
-
 @router.post(
     "/research/{symbol}/review",
     dependencies=[Depends(agent_write_guard("research.review"))],
@@ -936,3 +928,15 @@ def get_symbol_case_view(
     }
     case_view = build_case_view(db, symbol)
     return {"symbol": symbol, "dossier": dossier, "case_view": case_view}
+
+
+# NOTE: this catch-all single-segment route MUST stay registered LAST — after the
+# static /research/<name> routes (themes, memory-candidates, universe-snapshots).
+# FastAPI matches routes in declaration order, so if this were defined earlier it
+# would shadow those static routes (treating e.g. "themes" as a {symbol}).
+@router.get("/research/{symbol}", response_model=ResearchStateOut)
+def get_symbol_research_state(symbol: str, db: Session = Depends(get_db)):
+    """Return the persistent research state for a symbol."""
+    from backend.decision.harness import get_research_state
+
+    return get_research_state(db, symbol)
