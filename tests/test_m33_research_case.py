@@ -284,3 +284,21 @@ def test_existing_clients_unaffected_by_extra_key():
     }
     out = ResearchDossierOut(**payload)
     assert not hasattr(out, "unknown_future_key")
+
+
+def test_signal_fresh_uses_as_of_not_wall_clock():
+    """Regression: signal freshness must be measured against as_of (point-in-time),
+    not datetime.utcnow(). The full-dossier signal is dated 2026-06-01.
+
+    Before the fix, _build_quality_gate ignored as_of for freshness, so a replay
+    at a far-future as_of would still look 'fresh' relative to the wall clock.
+    """
+    from backend.research.case import build_case
+
+    d = _full_dossier()
+    # as_of 4 days after the signal -> fresh (<= 7d threshold)
+    near = build_case(d, as_of="2026-06-05")
+    assert near["quality_gate"]["checks"]["signal_fresh"] is True
+    # as_of ~44 days after the signal -> stale, regardless of today's wall clock
+    far = build_case(d, as_of="2026-07-15")
+    assert far["quality_gate"]["checks"]["signal_fresh"] is False

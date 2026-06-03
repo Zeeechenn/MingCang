@@ -39,7 +39,17 @@ def _build_quality_gate(dossier: dict, as_of: str | None = None) -> dict:
     pending_questions = dossier.get("pending_questions") or []
 
     signal_date = signal.get("date") if signal else None
-    signal_age = _age_days(signal_date)
+    # Measure freshness relative to as_of when provided (point-in-time replay),
+    # falling back to "now" only for live use (as_of is None). Without this, a
+    # historical replay would measure every past signal against the wall clock.
+    if as_of:
+        try:
+            _fresh_ref = datetime.strptime(as_of[:10], "%Y-%m-%d")
+        except ValueError:
+            _fresh_ref = None
+    else:
+        _fresh_ref = None
+    signal_age = _age_days(signal_date, today=_fresh_ref)
 
     # cutoff/as_of check: if as_of supplied, verify signal date is not after it
     cutoff_ok: bool = True
