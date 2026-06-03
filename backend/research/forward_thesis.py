@@ -21,8 +21,8 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from backend.memory.audit_log import audit_write
 from backend.config import settings
+from backend.memory.audit_log import audit_write
 
 # ---------------------------------------------------------------------------
 # Status state machine
@@ -126,7 +126,7 @@ def create_forward_thesis(
     symbol: str | None = None,
     status: str = "draft",
 ) -> dict:
-    """Create a ForwardThesis row, or return the existing one if (statement, horizon_date) already exists.
+    """Create a ForwardThesis row, or return the existing one if (symbol, statement, horizon_date) already exists.
 
     Validates:
       - status is in FORWARD_THESIS_STATUSES
@@ -157,11 +157,17 @@ def create_forward_thesis(
 
     from backend.data.database import ForwardThesis
 
+    horizon_filter = (
+        ForwardThesis.horizon_date.is_(None)
+        if horizon_date is None
+        else ForwardThesis.horizon_date == horizon_date
+    )
     existing = (
         db.query(ForwardThesis)
         .filter(
+            ForwardThesis.symbol == symbol,
             ForwardThesis.statement == statement,
-            ForwardThesis.horizon_date == horizon_date,
+            horizon_filter,
         )
         .first()
     )

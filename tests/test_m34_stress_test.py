@@ -57,8 +57,8 @@ _FIVE_FAKE_OUTPUTS = [
 # ── Fallback path tests ──────────────────────────────────────────────────────
 
 def test_structural_fallback_when_disabled(monkeypatch):
-    from backend.research.stress_test import run_stress_test
     import backend.research.stress_test as st_mod
+    from backend.research.stress_test import run_stress_test
     monkeypatch.setattr(st_mod.settings, "stress_test_enabled", False)
     case = _full_case()
     result = run_stress_test(case)
@@ -70,8 +70,8 @@ def test_structural_fallback_when_disabled(monkeypatch):
 
 
 def test_structural_fallback_when_no_provider(monkeypatch):
-    from backend.research.stress_test import run_stress_test
     import backend.research.stress_test as st_mod
+    from backend.research.stress_test import run_stress_test
     monkeypatch.setattr(st_mod, "has_runtime_llm_provider", lambda _=None: False)
     monkeypatch.setattr(st_mod.settings, "stress_test_enabled", True)
     case = _full_case()
@@ -81,8 +81,8 @@ def test_structural_fallback_when_no_provider(monkeypatch):
 
 
 def test_structural_fallback_minimal_dossier_is_critical(monkeypatch):
-    from backend.research.stress_test import run_stress_test
     import backend.research.stress_test as st_mod
+    from backend.research.stress_test import run_stress_test
     monkeypatch.setattr(st_mod, "has_runtime_llm_provider", lambda _=None: False)
     monkeypatch.setattr(st_mod.settings, "stress_test_enabled", True)
     case = _minimal_case()
@@ -94,8 +94,8 @@ def test_structural_fallback_minimal_dossier_is_critical(monkeypatch):
 # ── LLM path tests ───────────────────────────────────────────────────────────
 
 def test_full_llm_path_happy(monkeypatch):
-    from backend.research.stress_test import run_stress_test
     import backend.research.stress_test as st_mod
+    from backend.research.stress_test import run_stress_test
     monkeypatch.setattr(st_mod.settings, "stress_test_enabled", True)
     monkeypatch.setattr(st_mod, "has_runtime_llm_provider", lambda _=None: True)
     case = _full_case()
@@ -112,8 +112,8 @@ def test_full_llm_path_happy(monkeypatch):
 
 def test_confidence_adjustments_clamped_to_non_positive(monkeypatch):
     """LLM must not be able to raise scores via stress-test output."""
-    from backend.research.stress_test import run_stress_test
     import backend.research.stress_test as st_mod
+    from backend.research.stress_test import run_stress_test
     monkeypatch.setattr(st_mod.settings, "stress_test_enabled", True)
     monkeypatch.setattr(st_mod, "has_runtime_llm_provider", lambda _=None: True)
     bad_adj = dict(_FAKE_ADJUDICATOR)
@@ -125,8 +125,8 @@ def test_confidence_adjustments_clamped_to_non_positive(monkeypatch):
 
 
 def test_adjudicator_empty_falls_back_to_specialist_aggregate(monkeypatch):
-    from backend.research.stress_test import run_stress_test
     import backend.research.stress_test as st_mod
+    from backend.research.stress_test import run_stress_test
     monkeypatch.setattr(st_mod.settings, "stress_test_enabled", True)
     monkeypatch.setattr(st_mod, "has_runtime_llm_provider", lambda _=None: True)
     # Adjudicator returns {} — triggers structural assembly from specialist outputs
@@ -139,8 +139,8 @@ def test_adjudicator_empty_falls_back_to_specialist_aggregate(monkeypatch):
 
 
 def test_all_roles_empty_returns_structural_fallback(monkeypatch):
-    from backend.research.stress_test import run_stress_test
     import backend.research.stress_test as st_mod
+    from backend.research.stress_test import run_stress_test
     monkeypatch.setattr(st_mod.settings, "stress_test_enabled", True)
     monkeypatch.setattr(st_mod, "has_runtime_llm_provider", lambda _=None: True)
     outputs = [{} for _ in range(5)]
@@ -151,15 +151,16 @@ def test_all_roles_empty_returns_structural_fallback(monkeypatch):
 
 
 def test_invalid_case_raises_input_error():
-    from backend.research.stress_test import StressTestInputError, run_stress_test
     import pytest
+
+    from backend.research.stress_test import StressTestInputError, run_stress_test
     with pytest.raises(StressTestInputError):
         run_stress_test({"symbol": "600519"})  # missing quality_gate
 
 
 def test_role_outputs_keyed_correctly(monkeypatch):
-    from backend.research.stress_test import run_stress_test
     import backend.research.stress_test as st_mod
+    from backend.research.stress_test import run_stress_test
     monkeypatch.setattr(st_mod.settings, "stress_test_enabled", True)
     monkeypatch.setattr(st_mod, "has_runtime_llm_provider", lambda _=None: True)
     case = _full_case()

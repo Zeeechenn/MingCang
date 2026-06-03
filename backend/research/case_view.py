@@ -31,10 +31,10 @@ def build_case_view(
     Python-side on beneficiary_tiers for mentions of the symbol. This is safe
     for small hypothesis tables and avoids SQLite JSON function portability issues.
     """
-    from backend.research.thesis_ledger import list_theses
-    from backend.research.review_loop import list_review_cases
     from backend.research.forward_thesis import list_forward_theses
+    from backend.research.review_loop import list_review_cases
     from backend.research.theme_hypothesis_engine import list_hypotheses
+    from backend.research.thesis_ledger import list_theses
 
     theses = list_theses(db, symbol=symbol, limit=theses_limit)
     review_cases = list_review_cases(db, symbol=symbol, limit=review_cases_limit)

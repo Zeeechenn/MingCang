@@ -250,7 +250,7 @@ def test_research_dossier_out_case_field_optional():
 
 def test_research_dossier_out_case_field_populated():
     """ResearchDossierOut accepts a 'case' dict and exposes it via .case."""
-    from backend.api.schemas import ResearchCaseOut, ResearchDossierOut
+    from backend.api.schemas import ResearchDossierOut
     from backend.research.case import build_case
     dossier_dict = _full_dossier()
     case_dict = build_case(dossier_dict)

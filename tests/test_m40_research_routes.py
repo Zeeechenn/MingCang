@@ -5,6 +5,7 @@ import importlib
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 
 class _FakeRequest:
@@ -54,8 +55,8 @@ def test_update_thesis_status(test_db, sample_stocks):
 
 
 def test_append_confidence(test_db, sample_stocks):
-    from backend.api.routes.research import create_symbol_thesis, append_thesis_confidence
-    from backend.api.schemas import ThesisCreateRequest, ThesisConfidenceRequest
+    from backend.api.routes.research import append_thesis_confidence, create_symbol_thesis
+    from backend.api.schemas import ThesisConfidenceRequest, ThesisCreateRequest
 
     req = ThesisCreateRequest(symbol="600519", title="Confidence test thesis")
     created = create_symbol_thesis(symbol="600519", request=req, db=test_db)
@@ -80,8 +81,8 @@ def test_create_and_list_theme(test_db):
 
 
 def test_create_hypothesis_for_theme(test_db):
-    from backend.api.routes.research import create_theme_endpoint, create_hypothesis_endpoint
-    from backend.api.schemas import ThemeCreateRequest, HypothesisCreateRequest
+    from backend.api.routes.research import create_hypothesis_endpoint, create_theme_endpoint
+    from backend.api.schemas import HypothesisCreateRequest, ThemeCreateRequest
 
     theme = create_theme_endpoint(request=ThemeCreateRequest(theme_name="Optical"), db=test_db)
     hyp_req = HypothesisCreateRequest(statement="Optical capex accelerates in H2")
@@ -91,8 +92,16 @@ def test_create_hypothesis_for_theme(test_db):
 
 
 def test_update_hypothesis_status(test_db):
-    from backend.api.routes.research import create_theme_endpoint, create_hypothesis_endpoint, update_hypothesis_status_endpoint
-    from backend.api.schemas import ThemeCreateRequest, HypothesisCreateRequest, HypothesisStatusRequest
+    from backend.api.routes.research import (
+        create_hypothesis_endpoint,
+        create_theme_endpoint,
+        update_hypothesis_status_endpoint,
+    )
+    from backend.api.schemas import (
+        HypothesisCreateRequest,
+        HypothesisStatusRequest,
+        ThemeCreateRequest,
+    )
 
     theme = create_theme_endpoint(request=ThemeCreateRequest(theme_name="T_status"), db=test_db)
     hyp = create_hypothesis_endpoint(theme_id=theme["id"], request=HypothesisCreateRequest(statement="H_status"), db=test_db)
@@ -104,8 +113,16 @@ def test_update_hypothesis_status(test_db):
 
 def test_beneficiary_tiers_advisory_only(test_db):
     """set_beneficiary_tiers writes advisory display metadata only; tiers must not feed scoring."""
-    from backend.api.routes.research import create_theme_endpoint, create_hypothesis_endpoint, set_hypothesis_tiers
-    from backend.api.schemas import ThemeCreateRequest, HypothesisCreateRequest, BeneficiaryTiersRequest
+    from backend.api.routes.research import (
+        create_hypothesis_endpoint,
+        create_theme_endpoint,
+        set_hypothesis_tiers,
+    )
+    from backend.api.schemas import (
+        BeneficiaryTiersRequest,
+        HypothesisCreateRequest,
+        ThemeCreateRequest,
+    )
 
     theme = create_theme_endpoint(request=ThemeCreateRequest(theme_name="T1"), db=test_db)
     hyp = create_hypothesis_endpoint(theme_id=theme["id"], request=HypothesisCreateRequest(statement="H1"), db=test_db)
@@ -119,8 +136,11 @@ def test_beneficiary_tiers_advisory_only(test_db):
 # ── Review case + memory candidate routes ────────────────────────────────────
 
 def test_create_review_case_and_memory_candidate(test_db, sample_stocks):
-    from backend.api.routes.research import create_review_case_endpoint, create_memory_candidate_endpoint
-    from backend.api.schemas import ReviewCaseCreateRequest, MemoryCandidateCreateRequest
+    from backend.api.routes.research import (
+        create_memory_candidate_endpoint,
+        create_review_case_endpoint,
+    )
+    from backend.api.schemas import MemoryCandidateCreateRequest, ReviewCaseCreateRequest
 
     rc = create_review_case_endpoint(
         symbol="600519",
@@ -162,7 +182,10 @@ def test_memory_candidate_create_request_has_no_source_trust_field(test_db):
 
 
 def test_promote_requires_confirmed_by(test_db, sample_stocks):
-    from backend.api.routes.research import create_memory_candidate_endpoint, promote_memory_candidate
+    from backend.api.routes.research import (
+        create_memory_candidate_endpoint,
+        promote_memory_candidate,
+    )
     from backend.api.schemas import MemoryCandidateCreateRequest, MemoryPromoteRequest
 
     mc = create_memory_candidate_endpoint(
@@ -170,7 +193,7 @@ def test_promote_requires_confirmed_by(test_db, sample_stocks):
         db=test_db,
     )
     # Empty confirmed_by must be rejected at schema validation (min_length=1)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         MemoryPromoteRequest(confirmed_by="")
 
     # Valid confirmed_by should work
@@ -185,7 +208,7 @@ def test_promote_requires_confirmed_by(test_db, sample_stocks):
 def test_reject_requires_confirmed_by(test_db):
     from backend.api.schemas import MemoryRejectRequest
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         MemoryRejectRequest(confirmed_by="")
 
     # Valid should work
@@ -194,7 +217,10 @@ def test_reject_requires_confirmed_by(test_db):
 
 
 def test_promote_memory_candidate_end_to_end(test_db, sample_stocks):
-    from backend.api.routes.research import create_memory_candidate_endpoint, promote_memory_candidate
+    from backend.api.routes.research import (
+        create_memory_candidate_endpoint,
+        promote_memory_candidate,
+    )
     from backend.api.schemas import MemoryCandidateCreateRequest, MemoryPromoteRequest
 
     mc = create_memory_candidate_endpoint(
@@ -251,7 +277,10 @@ def test_forward_thesis_disabled_returns_503(test_db, monkeypatch):
 
 
 def test_create_and_list_forward_thesis(test_db, sample_stocks, monkeypatch):
-    from backend.api.routes.research import create_forward_thesis_endpoint, list_symbol_forward_theses
+    from backend.api.routes.research import (
+        create_forward_thesis_endpoint,
+        list_symbol_forward_theses,
+    )
     from backend.api.schemas import ForwardThesisCreateRequest
 
     monkeypatch.setattr("backend.config.settings.forward_thesis_enabled", True, raising=False)
@@ -299,15 +328,15 @@ def test_case_view_dossier_keys_unchanged(test_db, sample_stocks):
 def test_case_view_aggregates_linked_records(test_db, sample_stocks, monkeypatch):
     """Create thesis + review_case + forward_thesis for 600519, verify case-view lists them."""
     from backend.api.routes.research import (
-        create_symbol_thesis,
-        create_review_case_endpoint,
         create_forward_thesis_endpoint,
+        create_review_case_endpoint,
+        create_symbol_thesis,
         get_symbol_case_view,
     )
     from backend.api.schemas import (
-        ThesisCreateRequest,
-        ReviewCaseCreateRequest,
         ForwardThesisCreateRequest,
+        ReviewCaseCreateRequest,
+        ThesisCreateRequest,
     )
 
     monkeypatch.setattr("backend.config.settings.forward_thesis_enabled", True, raising=False)
@@ -347,10 +376,14 @@ def test_existing_dossier_route_still_works(test_db, sample_stocks):
 
 _GUARDED_M40_ROUTES = [
     ("backend.api.routes.research", "/research/{symbol}/theses", "POST", "research.thesis.create"),
-    ("backend.api.routes.research", "/research/memory-candidates/{candidate_id}/promote", "POST", "research.memory.promote"),
-    ("backend.api.routes.research", "/research/memory-candidates/{candidate_id}/reject", "POST", "research.memory.reject"),
     ("backend.api.routes.research", "/research/universe-snapshots", "POST", "research.universe.snapshot"),
     ("backend.api.routes.research", "/research/{symbol}/forward-theses", "POST", "research.forward_thesis.create"),
+]
+
+
+_LOCAL_HUMAN_M40_ROUTES = [
+    ("backend.api.routes.research", "/research/memory-candidates/{candidate_id}/promote", "POST"),
+    ("backend.api.routes.research", "/research/memory-candidates/{candidate_id}/reject", "POST"),
 ]
 
 
@@ -386,6 +419,29 @@ def test_m40_write_route_honors_action_allowlist(monkeypatch, module, path, meth
 
 @pytest.mark.parametrize("module,path,method,action", _GUARDED_M40_ROUTES)
 def test_m40_write_route_passes_in_local_mode(monkeypatch, module, path, method, action):
+    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "local")
+    router = importlib.import_module(module).router
+    guards = _route_guards(router, path, method)
+    guards[0](_FakeRequest())
+
+
+@pytest.mark.parametrize("module,path,method", _LOCAL_HUMAN_M40_ROUTES)
+def test_m40_memory_trust_routes_reject_remote_even_with_allowlist(monkeypatch, module, path, method):
+    router = importlib.import_module(module).router
+    guards = _route_guards(router, path, method)
+    assert guards, f"{path} is missing its local human memory gate"
+    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
+    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", "research.memory.promote,research.memory.reject")
+    headers = {"x-stocksage-agent-api-key": "secret"}
+    with pytest.raises(HTTPException) as exc:
+        guards[0](_FakeRequest(headers))
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize("module,path,method", _LOCAL_HUMAN_M40_ROUTES)
+def test_m40_memory_trust_routes_pass_in_local_mode(monkeypatch, module, path, method):
     monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "local")
     router = importlib.import_module(module).router
     guards = _route_guards(router, path, method)

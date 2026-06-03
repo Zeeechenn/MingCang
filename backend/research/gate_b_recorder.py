@@ -4,7 +4,7 @@ M40 Gate-B prospective tracker — injectable-Session storage layer.
 Exposes:
   record_observations   — walk Signal rows AS-OF a date, evaluate M33 gate,
                           write GateBObservation rows (idempotent).
-  realize_returns       — fill forward_return_net for observations whose 5-day
+  realize_returns       — fill forward_return_net for observations whose configured
                           window has closed (idempotent).
   report                — compute pre-registered §7 metrics and apply the
                           PROMOTE/REJECT/INCONCLUSIVE/ABORT decision rule.
@@ -179,7 +179,9 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
             "created_at": _iso(dr[10]),
         })
 
-    # ResearchState — current singleton, copilot forced to None
+    # ResearchState — current singleton, copilot forced to None. open_questions
+    # has no temporal history, so do not let the current mutable row affect a
+    # historical PIT replay.
     rs_row = db.execute(
         text("""
             SELECT id, symbol, thesis, risks_json, open_questions_json,
@@ -193,18 +195,11 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
 
     research_state: dict | None = None
     if rs_row:
-        open_questions: list = []
-        if rs_row[4]:
-            try:
-                open_questions = json.loads(rs_row[4])
-            except (json.JSONDecodeError, TypeError):
-                pass
         research_state = {
             "id": rs_row[0],
             "symbol": rs_row[1],
             "thesis": rs_row[2],
             "copilot": None,   # forced to None — no temporal history; copilot_present excluded in variant
-            "open_questions": open_questions,
         }
 
     # StockMemoryItem deep_research — only items created by as_of
@@ -231,9 +226,6 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
             "created_at": _iso(mr[3]),
         })
 
-    # Pending questions from research_state
-    pending_questions = research_state.get("open_questions", []) if research_state else []
-
     return {
         "symbol": symbol,
         "latest_signal": latest_signal,
@@ -241,7 +233,7 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
         "evidence": evidence,
         "research_state": research_state,
         "deep_research": deep_research,
-        "pending_questions": pending_questions,
+        "pending_questions": [],
         "missing": [],  # not computable PIT without full pipeline; left empty
     }
 
@@ -280,7 +272,7 @@ def record_observations(
     src = source_db if source_db is not None else db
     effective_as_of: str = as_of or datetime.now(UTC).date().isoformat()
 
-    from backend.data.database import GateBObservation, Price
+    from backend.data.database import GateBObservation
 
     # Fetch all signals with date <= as_of
     sym_filter = ""
@@ -404,15 +396,16 @@ _MAX_FORWARD_SPAN_DAYS = 16
 
 def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dict]:
     """
-    Fill forward_return_net for observations whose 5-day window has closed.
+    Fill forward_return_net for observations whose configured horizon has closed.
 
     Observations are read/updated in ``db``; forward prices are read from
     ``source_db`` when provided (read-only production session), else from ``db``.
 
     For each pending GateBObservation:
-      - Query the 5 trading-day prices strictly after signal_date.
-      - If 5 rows exist: compute gross return, subtract 0.4% round-trip cost.
-      - If < 5 rows and latest price is > 30 calendar days after signal_date: mark 'unrealizable'.
+      - Query horizon_days trading-day prices strictly after signal_date and no
+        later than as_of.
+      - If horizon_days rows exist: compute gross return, subtract 0.4% round-trip cost.
+      - If < horizon_days rows and latest price is > 30 calendar days after signal_date: mark 'unrealizable'.
       - Otherwise: leave 'pending'.
 
     Idempotent: only processes rows where forward_status == 'pending'.
@@ -421,7 +414,7 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
     if not settings.gate_b_tracker_enabled:
         return []
 
-    from datetime import date as _date, timedelta
+    from datetime import date as _date
 
     from sqlalchemy import text
 
@@ -443,20 +436,32 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
         if obs.entry_close is None:
             continue
 
-        # Fetch up to 5 forward prices strictly after signal_date (from source)
+        horizon_days = int(obs.horizon_days or 5)
+        if horizon_days <= 0:
+            continue
+
+        # Fetch up to horizon_days forward prices strictly after signal_date and
+        # no later than effective_as_of (from source).
         fwd_rows = src.execute(
             text("""
                 SELECT date, close FROM prices
-                WHERE symbol = :sym AND date > :sig_date
+                WHERE symbol = :sym
+                  AND date > :sig_date
+                  AND date <= :as_of
                 ORDER BY date ASC
-                LIMIT 5
+                LIMIT :limit
             """),
-            {"sym": obs.symbol, "sig_date": obs.signal_date},
+            {
+                "sym": obs.symbol,
+                "sig_date": obs.signal_date,
+                "as_of": effective_as_of,
+                "limit": horizon_days,
+            },
         ).fetchall()
 
-        if len(fwd_rows) == 5:
-            exit_date_str = fwd_rows[4][0]
-            exit_close = float(fwd_rows[4][1])
+        if len(fwd_rows) == horizon_days:
+            exit_date_str = fwd_rows[horizon_days - 1][0]
+            exit_close = float(fwd_rows[horizon_days - 1][1])
 
             # Data-quality guards. The prices table mixes qfq/hfq rows tagged
             # adjustment=NULL, so a 5-trading-day exit can land on an hfq row
@@ -473,11 +478,15 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
                 ).days
             except ValueError:
                 span_days = None
+            max_forward_span_days = max(
+                _MAX_FORWARD_SPAN_DAYS,
+                int(_MAX_FORWARD_SPAN_DAYS * horizon_days / 5),
+            )
             if (
                 obs.entry_close <= 0
                 or ratio > _MAX_PLAUSIBLE_PRICE_RATIO
                 or ratio < _MIN_PLAUSIBLE_PRICE_RATIO
-                or (span_days is not None and span_days > _MAX_FORWARD_SPAN_DAYS)
+                or (span_days is not None and span_days > max_forward_span_days)
             ):
                 obs.forward_status = "data_error"
                 obs.updated_at = _utc_now()
@@ -596,9 +605,9 @@ def report(db) -> dict:
       - per-arm means are WINSORIZED so a single in-range outlier cannot dominate
         the verdict; raw means and medians are reported alongside for transparency.
 
-    Decision rule (ABORT takes precedence over REJECT/PROMOTE, then sample size):
-      1. n_total < 30                         → INCONCLUSIVE / insufficient_sample
-      2. dq_exclusion_rate > 0.30             → ABORT / data_quality_exclusion_rate
+    Decision rule (DQ/bias ABORT checks take precedence over sample size):
+      1. dq_exclusion_rate > 0.30             → ABORT / data_quality_exclusion_rate
+      2. n_total < 30                         → INCONCLUSIVE / insufficient_sample
       3. gate_pass_rate < 0.02                → ABORT / gate_pass_rate_too_low
       4. gate_pass_rate > 0.80                → ABORT / gate_not_discriminating
       5. all PROMOTE thresholds met           → PROMOTE
@@ -612,18 +621,25 @@ def report(db) -> dict:
         .filter(GateBObservation.forward_status == "realized")
         .all()
     )
+    data_error_rows = (
+        db.query(GateBObservation)
+        .filter(GateBObservation.forward_status == "data_error")
+        .all()
+    )
     n_realized = len(realized_rows)
+    n_data_error = len(data_error_rows)
+    n_quality_total = n_realized + n_data_error
 
     # Data-quality filter: drop missing / implausible forward returns.
     clean_rows = []
-    n_excluded_dq = 0
+    n_excluded_dq = n_data_error
     for r in realized_rows:
         v = r.forward_return_net
         if v is None or abs(float(v)) > _RETURN_PLAUSIBILITY_CAP:
             n_excluded_dq += 1
             continue
         clean_rows.append(r)
-    dq_exclusion_rate = (n_excluded_dq / n_realized) if n_realized else 0.0
+    dq_exclusion_rate = (n_excluded_dq / n_quality_total) if n_quality_total else 0.0
 
     pass_rows = [r for r in clean_rows if r.gate_pass_variant]
     fail_rows = [r for r in clean_rows if not r.gate_pass_variant]
@@ -655,6 +671,7 @@ def report(db) -> dict:
     ic_days: int = 0
     try:
         import pandas as pd
+
         from backend.tools.m27_alpha_diagnostic import cross_sectional_ic, summarize_ic
 
         if n_total >= 5:
@@ -674,13 +691,22 @@ def report(db) -> dict:
     except Exception:
         pass  # pandas/m27 unavailable in test or CI environments
 
+    # This row-level tracker cannot prove the pre-registered rolling stability
+    # or coverage gates. Keep PROMOTE impossible until those metrics are supplied
+    # by the Stage-2 runner rather than inferred from incomplete state here.
+    positive_delta_windows: int | None = None
+    total_delta_windows: int | None = None
+    coverage_loss: float | None = None
+    stability_gate_pass = False
+    coverage_gate_pass = False
+
     # Decision rule — ABORT (data/bias threats) preempts REJECT/PROMOTE.
     verdict: str
     reason: str | None = None
-    if n_total < 30:
-        verdict, reason = "INCONCLUSIVE", "insufficient_sample"
-    elif dq_exclusion_rate > _DQ_ABORT_RATE:
+    if dq_exclusion_rate > _DQ_ABORT_RATE:
         verdict, reason = "ABORT", "data_quality_exclusion_rate"
+    elif n_total < 30:
+        verdict, reason = "INCONCLUSIVE", "insufficient_sample"
     elif gate_pass_rate is not None and gate_pass_rate < 0.02:
         verdict, reason = "ABORT", "gate_pass_rate_too_low"
     elif gate_pass_rate is not None and gate_pass_rate > 0.80:
@@ -688,7 +714,10 @@ def report(db) -> dict:
     elif (
         avg_net_return_delta is not None
         and avg_net_return_delta > 0.003
-        and (icir is None or icir > 0.15)
+        and icir is not None
+        and icir > 0.15
+        and stability_gate_pass
+        and coverage_gate_pass
         and gate_pass_rate is not None
         and 0.05 <= gate_pass_rate <= 0.80
         and n_pass >= 30
@@ -706,6 +735,8 @@ def report(db) -> dict:
 
     return {
         "n_realized": n_realized,
+        "n_data_error": n_data_error,
+        "n_quality_total": n_quality_total,
         "n_excluded_dq": n_excluded_dq,
         "dq_exclusion_rate": dq_exclusion_rate,
         "return_cap": _RETURN_PLAUSIBILITY_CAP,
@@ -723,6 +754,11 @@ def report(db) -> dict:
         "gate_pass_rate": gate_pass_rate,
         "icir": icir,
         "ic_days": ic_days,
+        "positive_delta_windows": positive_delta_windows,
+        "total_delta_windows": total_delta_windows,
+        "coverage_loss": coverage_loss,
+        "stability_gate_pass": stability_gate_pass,
+        "coverage_gate_pass": coverage_gate_pass,
         "verdict": verdict,
         "reason": reason,
     }

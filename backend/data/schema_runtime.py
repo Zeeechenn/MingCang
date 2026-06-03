@@ -1,14 +1,19 @@
 """Runtime schema patches for SQLite deployments."""
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import text
 
 
-def _ensure_runtime_schema() -> None:
+def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
     """SQLite create_all 不会补既有表字段，这里做轻量幂等迁移。"""
-    from backend.data.database import engine
+    if runtime_engine is None:
+        from backend.data.database import engine
 
-    with engine.begin() as conn:
+        runtime_engine = engine
+
+    with runtime_engine.begin() as conn:
         price_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(prices)")).fetchall()]
         for col, ddl in {
             "source": "ALTER TABLE prices ADD COLUMN source TEXT",

@@ -25,12 +25,10 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.config import settings
 from backend.research.gate_b_recorder import (
-    list_observations,
     realize_returns,
     record_observations,
     report,
 )
-
 
 # ---------------------------------------------------------------------------
 # Session context managers
@@ -191,9 +189,13 @@ def _format_markdown(result: dict) -> str:
         lines.append(f"**Reason**: {result['reason']}")
     lines += [
         "",
-        f"| Metric | Value |",
-        f"|--------|-------|",
+        "| Metric | Value |",
+        "|--------|-------|",
         f"| n_total | {result['n_total']} |",
+        f"| n_quality_total | {result.get('n_quality_total')} |",
+        f"| n_data_error | {result.get('n_data_error')} |",
+        f"| n_excluded_dq | {result.get('n_excluded_dq')} |",
+        f"| dq_exclusion_rate | {result.get('dq_exclusion_rate')!r} |",
         f"| n_pass | {result['n_pass']} |",
         f"| n_fail | {result['n_fail']} |",
         f"| gate_pass_rate | {result['gate_pass_rate']!r} |",
@@ -203,6 +205,11 @@ def _format_markdown(result: dict) -> str:
         f"| hit_rate_pass | {result['hit_rate_pass']!r} |",
         f"| icir | {result['icir']!r} |",
         f"| ic_days | {result['ic_days']} |",
+        f"| positive_delta_windows | {result.get('positive_delta_windows')!r} |",
+        f"| total_delta_windows | {result.get('total_delta_windows')!r} |",
+        f"| coverage_loss | {result.get('coverage_loss')!r} |",
+        f"| stability_gate_pass | {result.get('stability_gate_pass')!r} |",
+        f"| coverage_gate_pass | {result.get('coverage_gate_pass')!r} |",
     ]
     return "\n".join(lines)
 

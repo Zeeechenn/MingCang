@@ -21,11 +21,8 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, text
-
 from backend.config import settings
 from backend.memory.audit_log import audit_write
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -100,7 +97,9 @@ def snapshot_universe(
     if not settings.universe_guard_enabled:
         return {}
 
-    from backend.data.database import UniverseSnapshot  # local import — avoids circular at module load
+    from backend.data.database import (
+        UniverseSnapshot,  # local import — avoids circular at module load
+    )
 
     universe_hash = compute_universe_hash(symbols)
     sorted_symbols = sorted(list(symbols))

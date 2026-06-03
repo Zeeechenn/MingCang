@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -11,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     event,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
@@ -28,6 +30,12 @@ def _utcnow() -> datetime:
 engine = create_engine(settings.database_url, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 _DEFAULT_DB_PATH = (BASE_DIR / "stock-sage.db").resolve()
+_FORWARD_THESES_LEGACY_UNIQUE_RE = re.compile(
+    r"\bunique\s*\(\s*statement\s*,\s*horizon_date\s*\)"
+)
+_FORWARD_THESES_SYMBOL_UNIQUE_RE = re.compile(
+    r"\bunique\s*\(\s*symbol\s*,\s*statement\s*,\s*horizon_date\s*\)"
+)
 
 
 @event.listens_for(engine, "connect")
@@ -499,7 +507,7 @@ class MemoryPromotionCandidate(Base):
     summary: Mapped[str] = mapped_column(Text)
     memory_type: Mapped[str] = mapped_column(String)
     source_trust: Mapped[str] = mapped_column(String, default="pending", index=True)   # pending / trusted / rejected
-    source_ref: Mapped[str | None] = mapped_column(String, nullable=True)              # idempotency key
+    source_ref: Mapped[str | None] = mapped_column(String, nullable=True)              # part of the explicit idempotency key
     importance: Mapped[int] = mapped_column(Integer, default=3)
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     promoted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)      # set when trusted
@@ -581,13 +589,16 @@ class ForwardThesis(Base):
     No price_target, direction, or buy_score columns by design.
 
     Append-on-update: past rows are updated in place (status transitions, band updates).
-    The (statement, horizon_date) pair is unique, making create_forward_thesis idempotent.
+    The (symbol, statement, horizon_date) tuple is unique for non-NULL horizons.
+    Runtime schema setup also creates a normalised unique index so SQLite NULLs
+    do not bypass direct-SQL duplicate checks. create_forward_thesis keeps an
+    explicit NULL-horizon lookup for application-level idempotency.
     """
     __tablename__ = "forward_theses"
     __table_args__ = (
         UniqueConstraint(
-            "statement", "horizon_date",
-            name="uq_forward_theses_statement_horizon",
+            "symbol", "statement", "horizon_date",
+            name="uq_forward_theses_symbol_statement_horizon",
         ),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -613,6 +624,159 @@ class ForwardThesis(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+def _quote_sqlite_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _normalise_sqlite_schema_sql(schema_sql: str | None) -> str:
+    if not schema_sql:
+        return ""
+    unquoted = (
+        schema_sql
+        .replace('"', "")
+        .replace("`", "")
+        .replace("[", "")
+        .replace("]", "")
+        .lower()
+    )
+    return re.sub(r"\s+", " ", unquoted)
+
+
+def _forward_theses_has_legacy_unique(create_sql: str | None) -> bool:
+    normalised = _normalise_sqlite_schema_sql(create_sql)
+    if not normalised:
+        return False
+    return (
+        bool(_FORWARD_THESES_LEGACY_UNIQUE_RE.search(normalised))
+        and not _FORWARD_THESES_SYMBOL_UNIQUE_RE.search(normalised)
+    )
+
+
+def _sqlite_column_definition_from_pragma(row: Any, create_sql: str) -> str:
+    name = str(row[1])
+    column_type = str(row[2] or "").strip()
+    not_null = bool(row[3])
+    default = row[4]
+    primary_key_order = int(row[5] or 0)
+
+    parts = [_quote_sqlite_identifier(name)]
+    if column_type:
+        parts.append(column_type)
+    if primary_key_order:
+        parts.append("PRIMARY KEY")
+        if column_type.upper() == "INTEGER" and "autoincrement" in create_sql.lower():
+            parts.append("AUTOINCREMENT")
+    if not_null and not primary_key_order:
+        parts.append("NOT NULL")
+    if default is not None:
+        parts.append(f"DEFAULT {default}")
+    return " ".join(parts)
+
+
+def _migrate_forward_theses_legacy_unique(conn: Any) -> None:
+    """Move old forward_theses unique key to include symbol without dropping data.
+
+    This only fixes the non-NULL unique key shape. SQLite still permits multiple
+    NULL horizon_date rows under UNIQUE constraints; create_forward_thesis keeps
+    the explicit NULL-horizon lookup for application-level idempotency.
+    """
+    create_sql = conn.execute(text("""
+        SELECT sql
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'forward_theses'
+    """)).scalar()
+    if not _forward_theses_has_legacy_unique(create_sql):
+        return
+
+    columns = conn.execute(text("PRAGMA table_info(forward_theses)")).fetchall()
+    if not columns:
+        return
+
+    temp_table = "forward_theses__symbol_unique_migration"
+    column_names = [str(row[1]) for row in columns]
+    column_defs = [
+        _sqlite_column_definition_from_pragma(row, str(create_sql or ""))
+        for row in columns
+    ]
+    if "symbol" not in column_names:
+        insert_at = column_names.index("id") + 1 if "id" in column_names else 0
+        column_defs.insert(insert_at, f"{_quote_sqlite_identifier('symbol')} TEXT")
+
+    column_defs.append(
+        "CONSTRAINT uq_forward_theses_symbol_statement_horizon "
+        'UNIQUE("symbol", "statement", "horizon_date")'
+    )
+
+    conn.execute(text(f"DROP TABLE IF EXISTS {_quote_sqlite_identifier(temp_table)}"))
+    conn.execute(text(
+        f"CREATE TABLE {_quote_sqlite_identifier(temp_table)} (\n"
+        + ",\n".join(f"                {definition}" for definition in column_defs)
+        + "\n            )"
+    ))
+
+    copy_cols = ", ".join(_quote_sqlite_identifier(name) for name in column_names)
+    conn.execute(text(
+        f"INSERT INTO {_quote_sqlite_identifier(temp_table)} ({copy_cols}) "
+        f"SELECT {copy_cols} FROM {_quote_sqlite_identifier('forward_theses')}"
+    ))
+    conn.execute(text(f"DROP TABLE {_quote_sqlite_identifier('forward_theses')}"))
+    conn.execute(text(
+        f"ALTER TABLE {_quote_sqlite_identifier(temp_table)} "
+        f"RENAME TO {_quote_sqlite_identifier('forward_theses')}"
+    ))
+
+
+def _forward_theses_normalized_duplicate_rows(conn: Any) -> list[Any]:
+    return list(conn.execute(text("""
+        SELECT
+            CASE WHEN symbol IS NULL THEN 1 ELSE 0 END AS symbol_is_null,
+            COALESCE(symbol, '') AS normalized_symbol,
+            statement,
+            CASE WHEN horizon_date IS NULL THEN 1 ELSE 0 END AS horizon_is_null,
+            COALESCE(horizon_date, '') AS normalized_horizon,
+            COUNT(*) AS n_rows,
+            GROUP_CONCAT(id) AS ids
+        FROM forward_theses
+        GROUP BY
+            CASE WHEN symbol IS NULL THEN 1 ELSE 0 END,
+            COALESCE(symbol, ''),
+            statement,
+            CASE WHEN horizon_date IS NULL THEN 1 ELSE 0 END,
+            COALESCE(horizon_date, '')
+        HAVING COUNT(*) > 1
+        ORDER BY n_rows DESC, statement
+        LIMIT 10
+    """)).fetchall())
+
+
+def _ensure_forward_theses_normalized_unique_index(conn: Any) -> None:
+    """Enforce forward thesis uniqueness even when symbol/horizon_date are NULL."""
+    duplicate_rows = _forward_theses_normalized_duplicate_rows(conn)
+    if duplicate_rows:
+        examples = []
+        for row in duplicate_rows:
+            symbol = "<NULL>" if int(row[0]) else str(row[1])
+            horizon = "<NULL>" if int(row[3]) else str(row[4])
+            examples.append(
+                f"(symbol={symbol}, statement={row[2]}, horizon_date={horizon}, ids={row[6]})"
+            )
+        raise RuntimeError(
+            "forward_theses has duplicate normalized keys; merge or delete duplicates "
+            "before runtime schema migration: " + "; ".join(examples)
+        )
+
+    conn.execute(text("""
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_forward_theses_symbol_statement_horizon_norm
+        ON forward_theses (
+            CASE WHEN symbol IS NULL THEN 1 ELSE 0 END,
+            COALESCE(symbol, ''),
+            statement,
+            CASE WHEN horizon_date IS NULL THEN 1 ELSE 0 END,
+            COALESCE(horizon_date, '')
+        )
+    """))
+
+
 def get_latest_price_date(symbol: str, db) -> str | None:
     """返回该股最新一条价格记录的日期字符串，无数据时返回 None"""
     result = db.query(Price.date).filter(Price.symbol == symbol)\
@@ -620,12 +784,14 @@ def get_latest_price_date(symbol: str, db) -> str | None:
     return result[0] if result else None
 
 
-def _ensure_runtime_schema() -> None:
+def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
     """Compatibility wrapper for runtime schema patches."""
     from backend.data.schema_runtime import _ensure_runtime_schema as ensure_runtime_schema
 
-    ensure_runtime_schema()
+    target_engine = runtime_engine or engine
+    ensure_runtime_schema(target_engine)
 
+    with target_engine.begin() as conn:
         # M38 Dynamic Universe / Survivorship Guard
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS universe_snapshots (
@@ -670,9 +836,11 @@ def _ensure_runtime_schema() -> None:
                 universe_snapshot_id INTEGER,
                 created_at DATETIME,
                 updated_at DATETIME,
-                UNIQUE(statement, horizon_date)
+                UNIQUE(symbol, statement, horizon_date)
             )
         """))
+        _migrate_forward_theses_legacy_unique(conn)
+        _ensure_forward_theses_normalized_unique_index(conn)
         conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_forward_theses_symbol
             ON forward_theses(symbol)

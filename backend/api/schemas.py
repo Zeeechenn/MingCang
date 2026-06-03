@@ -323,6 +323,7 @@ class ThesisOut(BaseModel):
     kill_conditions: list[str] = []
     update_cadence_days: int | None = None
     research_case_as_of: str | None = None
+    review_case_ref: dict | None = None
     confidence_history: list[dict] = []
     review_cases: list[dict] = []
     created_at: str | None = None
@@ -353,6 +354,15 @@ class ThesisConfidenceRequest(BaseModel):
     score: float
     as_of: str
     note: str | None = None
+
+
+class ThesisConfidenceOut(BaseModel):
+    id: int
+    thesis_id: int
+    score: float
+    as_of: str
+    note: str | None = None
+    created_at: str | None = None
 
 
 class ThesisAttachReviewRequest(BaseModel):
@@ -391,6 +401,7 @@ class HypothesisOut(BaseModel):
     evidence_gaps: list[str] = []
     invalidation_conditions: list[str] = []
     forward_evidence: list[dict] = []
+    forward_evidence_ref: dict | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

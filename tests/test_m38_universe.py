@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ── hash determinism ──────────────────────────────────────────────────────────
 
 def test_hash_determinism():

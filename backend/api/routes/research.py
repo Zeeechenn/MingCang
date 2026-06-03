@@ -1,10 +1,11 @@
 """Research state and deep-research routes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
+from backend.agent.security import agent_mode
 from backend.api.schemas import (
     BeneficiaryTiersRequest,
     CaseViewOut,
@@ -36,6 +37,7 @@ from backend.api.schemas import (
     ThemeListOut,
     ThemeOut,
     ThesisAttachReviewRequest,
+    ThesisConfidenceOut,
     ThesisConfidenceRequest,
     ThesisCreateRequest,
     ThesisListOut,
@@ -49,6 +51,15 @@ from backend.data.database import get_db
 from backend.llm import runtime_readiness
 
 router = APIRouter()
+
+
+def local_human_memory_gate(request: Request) -> None:
+    """Allow memory trust decisions only from local human-operated paths."""
+    if agent_mode() == "remote":
+        raise HTTPException(
+            status_code=403,
+            detail="memory promote/reject is local human gated and unavailable to remote agents",
+        )
 
 
 @router.get("/research/{symbol}/dossier", response_model=ResearchDossierOut)
@@ -214,8 +225,8 @@ def run_stress_test_endpoint(symbol: str, db: Session = Depends(get_db)):
     never written to Signal, DecisionRun, or trusted ai_memory rows.
     In remote agent mode this is gated by the ``research.stress_test`` write action.
     """
-    from backend.research.dossier import build_research_dossier
     from backend.research.case import build_case
+    from backend.research.dossier import build_research_dossier
     from backend.research.stress_test import (
         StressTestInputError,
         StressTestUnavailable,
@@ -318,7 +329,7 @@ def update_thesis_status_endpoint(
 
 @router.post(
     "/research/theses/{thesis_id}/confidence",
-    response_model=ThesisOut,
+    response_model=ThesisConfidenceOut,
     dependencies=[Depends(agent_write_guard("research.thesis.append_confidence"))],
 )
 def append_thesis_confidence(
@@ -620,7 +631,7 @@ def create_memory_candidate_endpoint(
 @router.post(
     "/research/memory-candidates/{candidate_id}/promote",
     response_model=MemoryCandidateOut,
-    dependencies=[Depends(agent_write_guard("research.memory.promote"))],
+    dependencies=[Depends(local_human_memory_gate)],
 )
 def promote_memory_candidate(
     candidate_id: int,
@@ -647,7 +658,7 @@ def promote_memory_candidate(
 @router.post(
     "/research/memory-candidates/{candidate_id}/reject",
     response_model=MemoryCandidateOut,
-    dependencies=[Depends(agent_write_guard("research.memory.reject"))],
+    dependencies=[Depends(local_human_memory_gate)],
 )
 def reject_memory_candidate_endpoint(
     candidate_id: int,
@@ -912,8 +923,8 @@ def get_symbol_case_view(
     Aggregates M35-M39 records for the symbol without altering /dossier contract.
     Set ?include_dossier=false to skip the dossier sub-call when already cached.
     """
-    from backend.research.dossier import build_research_dossier
     from backend.research.case_view import build_case_view
+    from backend.research.dossier import build_research_dossier
 
     dossier = build_research_dossier(db, symbol) if include_dossier else {
         "symbol": symbol, "stock": None, "latest_signal": None,

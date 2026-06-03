@@ -18,7 +18,6 @@ from sqlalchemy.pool import StaticPool
 from backend.data.database import Base, get_db
 from backend.main import app
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -114,6 +113,47 @@ def test_thesis_list_http(client):
     assert body["total"] >= 1
 
 
+def test_thesis_confidence_returns_entry_http(client):
+    """POST /confidence returns ThesisConfidenceOut, not ThesisOut."""
+    thesis_id = client.post(
+        f"/api/research/{_SYM}/theses",
+        json={"symbol": _SYM, "title": "confidence response model thesis"},
+    ).json()["id"]
+
+    resp = client.post(
+        f"/api/research/theses/{thesis_id}/confidence",
+        json={"score": 0.72, "as_of": "2026-03-01", "note": "HTTP confidence"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["thesis_id"] == thesis_id
+    assert body["score"] == pytest.approx(0.72)
+    assert body["as_of"] == "2026-03-01"
+    assert body["note"] == "HTTP confidence"
+    assert "title" not in body
+
+
+def test_thesis_attach_review_case_returns_and_gets_ref_http(client):
+    """POST attach-review-case and GET thesis both expose review_case_ref."""
+    thesis_id = client.post(
+        f"/api/research/{_SYM}/theses",
+        json={"symbol": _SYM, "title": "review case ref thesis"},
+    ).json()["id"]
+    payload = {"recommendation": "BUY", "correct": True, "source": "http-test"}
+
+    attach_resp = client.post(
+        f"/api/research/theses/{thesis_id}/attach-review-case",
+        json={"review_payload": payload, "as_of": "2026-03-02"},
+    )
+    assert attach_resp.status_code == 200, attach_resp.text
+    assert attach_resp.json()["review_case_ref"] == payload
+
+    get_resp = client.get(f"/api/research/theses/{thesis_id}")
+    assert get_resp.status_code == 200, get_resp.text
+    assert get_resp.json()["review_case_ref"] == payload
+
+
 # ---------------------------------------------------------------------------
 # Theme round-trip
 # ---------------------------------------------------------------------------
@@ -188,6 +228,31 @@ def test_hypothesis_list_for_theme_http(client):
     body = resp.json()
     assert "items" in body
     assert body["total"] >= 1
+
+
+def test_hypothesis_attach_forward_evidence_returns_and_gets_ref_http(client):
+    """POST forward-evidence and GET hypothesis both expose forward_evidence_ref."""
+    theme_id = client.post("/api/research/themes", json={"theme_name": "Forward Evidence Theme"}).json()["id"]
+    hypo_id = client.post(
+        f"/api/research/themes/{theme_id}/hypotheses",
+        json={"statement": "Forward evidence survives response model"},
+    ).json()["id"]
+    payload = {
+        "forward_thesis_id": 11,
+        "universe_snapshot_id": 22,
+        "schema_version": "m39.v1",
+    }
+
+    attach_resp = client.post(
+        f"/api/research/hypotheses/{hypo_id}/forward-evidence",
+        json={"evidence_payload": payload, "as_of": "2026-03-03"},
+    )
+    assert attach_resp.status_code == 200, attach_resp.text
+    assert attach_resp.json()["forward_evidence_ref"] == payload
+
+    get_resp = client.get(f"/api/research/hypotheses/{hypo_id}")
+    assert get_resp.status_code == 200, get_resp.text
+    assert get_resp.json()["forward_evidence_ref"] == payload
 
 
 # ---------------------------------------------------------------------------

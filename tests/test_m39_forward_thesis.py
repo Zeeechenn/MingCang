@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
@@ -41,10 +40,24 @@ def test_create_forward_thesis_returns_expected_keys(test_db):
     assert result["status"] == "draft"
 
 
-def test_create_forward_thesis_idempotent_on_same_statement_horizon(test_db):
-    r1 = _make_thesis(test_db)
-    r2 = _make_thesis(test_db)
+def test_create_forward_thesis_idempotent_on_same_symbol_statement_horizon(test_db):
+    r1 = _make_thesis(test_db, symbol="600519")
+    r2 = _make_thesis(test_db, symbol="600519")
     assert r1["id"] == r2["id"]
+
+
+def test_create_forward_thesis_symbol_is_part_of_idempotency_key(test_db):
+    r1 = _make_thesis(test_db, symbol="600519")
+    r2 = _make_thesis(test_db, symbol="300308")
+    assert r1["id"] != r2["id"]
+
+
+def test_create_forward_thesis_null_horizon_idempotent_per_symbol(test_db):
+    r1 = _make_thesis(test_db, statement="null horizon thesis", horizon=None, symbol="600519")
+    r2 = _make_thesis(test_db, statement="null horizon thesis", horizon=None, symbol="600519")
+    r3 = _make_thesis(test_db, statement="null horizon thesis", horizon=None, symbol="300308")
+    assert r1["id"] == r2["id"]
+    assert r1["id"] != r3["id"]
 
 
 def test_get_forward_thesis_returns_none_for_missing_id(test_db):

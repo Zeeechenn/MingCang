@@ -185,27 +185,54 @@ production stance of `weight_quant = 0.0`. It does NOT get wired into decisions.
 
 ---
 
-## M43.2 — single-factor candidates (Bonferroni α/4): **all REJECT** (2026-06-03)
+## M43.2 — single-factor candidates (Bonferroni α/4): **script-backed reproduction** (2026-06-03; harness expanded)
 
 Pre-registered (rule frozen before computing): 3 single factors, OOS 2021-2024,
 stride=5, active_only=False, hfq excluded, 2025 sealed. PROMOTE needs
 |IC t-stat|>2.50 (α/4≈0.0125) AND |ic_mean|>0.02 AND |ICIR|>0.15 AND monotonic
 quintile spread in the expected direction.
 
+**Current reproducibility status.** The repository now contains a parameterized
+M43.2 reproduction script, `m43_2_amihud_ic.py`, covering all three frozen
+single-factor candidates:
+
+```bash
+python3 m43_2_amihud_ic.py --factor all --db-path ~/.stock-sage/m43_work.db
+```
+
+For single-factor checks, pass `--factor amihud_20`,
+`--factor sector_rel_strength_20_z`, or `--factor rev_mom_12_1_z`. The script
+keeps the sealed-2025 guard (`--end-date` must be `<= 2024-12-31`), refuses to
+create a missing SQLite DB, and writes per-factor JSON containing IC summary,
+t-stat, quintile/spread, and verdict when `--output-json` is provided.
+
+The script keeps the IC and quintile-spread gates on cross-sectional footing:
+IC is computed per date, and quintile spread is bucketed per date before
+averaging bucket returns across dates. `rev_mom_12_1_z` matches the existing
+M27 feature builder: it uses negative 12-1 momentum when 252-day lookback is
+available and records a 60-day fallback share in JSON metadata for shorter
+history rows.
+
+The local work DB is not stored in the repository. The rows below are retained
+as historical local `m43_work.db` run notes from 2026-06-03; rerun the command
+above on the current work DB to refresh them. This section records script
+support for all three factors, not a new real-DB rerun by this worker unless
+such an artifact is explicitly added.
+
 | factor | ICIR | ic_mean | IC t-stat | spread monotonic | verdict |
 |---|---|---|---|---|---|
-| sector_rel_strength_20_z | −0.015 | −0.0026 | −0.20 | no | **REJECT** |
-| amihud_20 (illiquidity) | −0.059 | −0.0105 | −0.82 | no (sign-mismatch) | **REJECT** |
-| rev_mom_12_1_z (reversal) | +0.097 | +0.017 | +1.35 | no (sign reversed) | **REJECT** |
+| sector_rel_strength_20_z | −0.015 | −0.0026 | −0.20 | no | **REJECT, script-supported** |
+| amihud_20 (illiquidity) | −0.059 | −0.0105 | −0.82 | no (sign-mismatch) | **REJECT, script-backed** |
+| rev_mom_12_1_z (reversal) | +0.097 | +0.017 | +1.35 | no (sign reversed) | **REJECT, script-supported** |
 
-**Verdict: 0 of 3 promoted.** The strongest (rev_mom_12_1, t=1.35) is far below
-the 2.50 Bonferroni bar and shows sign reversal vs the reversal hypothesis (high
-12-1 momentum predicted *higher*, not lower, forward returns in 2021-2024). None
-clears even a single gate.
+**Historical verdict: 0 of 3 promoted.** All three retained work-DB rows miss the
+frozen promotion bars. The strongest retained row (`rev_mom_12_1_z`, t=1.35) is
+still below the 2.50 Bonferroni threshold, and none has a monotonic quintile
+spread in the expected direction.
 
-**Interpretation.** Together with the M43 LightGBM REJECT, neither the ensemble
-nor any classic single factor shows exploitable OOS forward signal on this
-A-share universe — strong corroboration of the production `weight_quant = 0.0`
-stance. No factor is wired into decisions. The M27/quant overlay line is, on this
-evidence, not worth promoting; future work should look outside price/quant
-features (e.g. event/fundamental signals) rather than re-tuning these.
+**Interpretation.** Together with the M43 LightGBM REJECT, the script-backed
+M43.2 harness provides no current reason to change the production
+`weight_quant = 0.0` stance. No factor is wired into decisions. If the current
+local work DB has drifted from the 2026-06-03 notes, rerun `--factor all` and
+replace the table with the refreshed script output before making a stronger
+claim.

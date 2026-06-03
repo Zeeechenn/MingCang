@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _rc(db, symbol: str = "600519", as_of: str = "2026-06-01", **kw):
@@ -123,9 +122,37 @@ def test_create_memory_candidate_idempotent_on_source_ref(test_db):
     assert c1["id"] == c2["id"]
 
 
+def test_create_memory_candidate_without_explicit_key_does_not_merge(test_db):
+    c1 = _cand(test_db)
+    c2 = _cand(test_db)
+    assert c1["id"] != c2["id"]
+
+
+def test_create_memory_candidate_idempotent_on_review_case_id(test_db):
+    rc = _rc(test_db)
+    c1 = _cand(test_db, review_case_id=rc["id"])
+    c2 = _cand(test_db, review_case_id=rc["id"])
+    assert c1["id"] == c2["id"]
+
+
+def test_create_memory_candidate_source_ref_null_is_part_of_key(test_db):
+    rc = _rc(test_db)
+    c1 = _cand(test_db, review_case_id=rc["id"], source_ref="test-ref-001")
+    c2 = _cand(test_db, review_case_id=rc["id"])
+    assert c1["id"] != c2["id"]
+
+
+def test_create_memory_candidate_review_case_null_is_part_of_key(test_db):
+    rc = _rc(test_db)
+    c1 = _cand(test_db, source_ref="test-ref-001")
+    c2 = _cand(test_db, review_case_id=rc["id"], source_ref="test-ref-001")
+    assert c1["id"] != c2["id"]
+
+
 def test_no_direct_trusted_write_path(test_db):
     """create_memory_candidate must not accept source_trust as a parameter."""
     import inspect
+
     from backend.research.review_loop import create_memory_candidate
     sig = inspect.signature(create_memory_candidate)
     assert "source_trust" not in sig.parameters, (
@@ -152,7 +179,7 @@ def test_get_memory_candidate_returns_none_for_missing_id(test_db):
 def test_list_memory_candidates_filters_by_source_trust(test_db):
     from backend.research.review_loop import list_memory_candidates, promote_memory
     c1 = _cand(test_db, symbol="600519", memory_type="outcome", source_ref="ref-a")
-    c2 = _cand(test_db, symbol="600519", memory_type="lesson", source_ref="ref-b")
+    _cand(test_db, symbol="600519", memory_type="lesson", source_ref="ref-b")
 
     pending = list_memory_candidates(test_db, symbol="600519", source_trust="pending")
     assert len(pending) == 2
@@ -244,7 +271,6 @@ def test_reject_is_audited(test_db):
 # ── attach_review_case (thesis_ledger) ────────────────────────────────────────
 
 def test_attach_review_case_populates_thesis_review_case_ref(test_db):
-    from backend.research.review_loop import create_review_case
     from backend.research.thesis_ledger import attach_review_case, create_thesis, get_thesis
     thesis = create_thesis(
         test_db,

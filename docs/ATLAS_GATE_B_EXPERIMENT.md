@@ -89,6 +89,10 @@ with date ≤ `W_start`:
   gate must yield net-positive alpha to be worth wiring. **No post-hoc metric
   selection:** if ICIR is positive but trade-weighted delta is not, the result
   is REJECT.
+- The row-level `gate_b_tracker report` is conservative: if stride ICIR,
+  positive-window stability, or coverage_loss is unavailable, it must not emit
+  PROMOTE. Stage 2 must supply those pre-registered gates before promotion is
+  possible.
 
 ## 8. Bias controls
 - **Single hypothesis:** `gate_pass` is the one pre-registered composite feature;

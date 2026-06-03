@@ -201,9 +201,11 @@ def create_memory_candidate(
     source_trust is NOT accepted as a parameter — callers cannot override it.
     The only path to 'trusted' is the gated promote_memory function.
 
-    Idempotent on (review_case_id, symbol, memory_type, source_ref): if a
-    pending row with the same combination already exists it is returned
-    without inserting a duplicate.
+    Idempotent only when review_case_id or source_ref provides an explicit key.
+    When a key is present, both review_case_id and source_ref participate in the
+    match, with NULL matched explicitly. This prevents a broad source_ref rerun
+    from swallowing a later case-specific lesson. Calls without either key
+    always create a new candidate so unrelated lessons are not merged broadly.
     Raises ValueError on invalid memory_type.
     Always calls audit_write after a successful insert.
     """
@@ -214,22 +216,26 @@ def create_memory_candidate(
 
     from backend.data.database import MemoryPromotionCandidate
 
-    # Idempotency check — look for an existing pending row with same key
-    q = (
-        db.query(MemoryPromotionCandidate)
-        .filter(
-            MemoryPromotionCandidate.symbol == symbol,
-            MemoryPromotionCandidate.memory_type == memory_type,
-            MemoryPromotionCandidate.source_trust == "pending",
+    if review_case_id is not None or source_ref is not None:
+        q = (
+            db.query(MemoryPromotionCandidate)
+            .filter(
+                MemoryPromotionCandidate.symbol == symbol,
+                MemoryPromotionCandidate.memory_type == memory_type,
+                MemoryPromotionCandidate.source_trust == "pending",
+            )
         )
-    )
-    if review_case_id is not None:
-        q = q.filter(MemoryPromotionCandidate.review_case_id == review_case_id)
-    if source_ref is not None:
-        q = q.filter(MemoryPromotionCandidate.source_ref == source_ref)
-    existing = q.first()
-    if existing is not None:
-        return _cand_to_dict(existing)
+        if review_case_id is not None:
+            q = q.filter(MemoryPromotionCandidate.review_case_id == review_case_id)
+        else:
+            q = q.filter(MemoryPromotionCandidate.review_case_id.is_(None))
+        if source_ref is not None:
+            q = q.filter(MemoryPromotionCandidate.source_ref == source_ref)
+        else:
+            q = q.filter(MemoryPromotionCandidate.source_ref.is_(None))
+        existing = q.first()
+        if existing is not None:
+            return _cand_to_dict(existing)
 
     now = _utc_now()
     row = MemoryPromotionCandidate(

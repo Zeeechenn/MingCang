@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _create(db, symbol="600519", title="贵州茅台高端白酒护城河", **kw):
