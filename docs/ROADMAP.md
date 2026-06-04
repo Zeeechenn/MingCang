@@ -223,7 +223,7 @@
 - [x] 写入时护栏：`backend/data/price_quality.py:check_adjustment_basis_jump`（close > 3×前10中位数即判为污染）+ `PriceQualityPolicy.adjustment_jump_ratio`；接入 `backend/data/market.py:backfill_if_needed`，写库前跳过污染行（下次 backfill 以 qfq 重抓）。`evaluate_price_quality` 与打分逻辑不变。
 - [x] 一次性修复 CLI：`backend/tools/m42_remediate_hfq_contamination.py`（dry-run 默认、删前 `shutil.copy2` 备份、拒绝生产路径、原生 sqlite3、跑到 0 行；级联需 2 遍收敛）。
 - [x] 线上修复：删除 2026-05-25/26 共 84 行混合口径污染行（恢复备份 `~/.stock-sage/backups/stock-sage.db.bak.20260603_174914`）；真实判据复检 0 残留；周边日期 (05-22/05-27) 行数不变。新增 33 个 hermetic 测试，全量 754 passed。
-- [ ] 遗留（独立数据项，非本里程碑跳变污染范畴）：600519(茅台)/600601/600602 整条价格序列为 hfq（绝对价错、但入出同口径故收益内部一致），需 qfq 重抓修复。
+- [x] 整条 hfq 标的修复（2026-06-04）：600519(茅台)/600601/600602 三只整条序列为 hfq（茅台 ¥9,108、600601 ¥151,341、600602 ¥10,767），删整条 + 经项目 backfill 链 qfq 重抓（years=6，源 tickflow_cn，adjustment 标签已填）。修后茅台 ¥1,268、600601 ¥12.62、600602 ¥18.35；全库 max close>10000 清零；OHLC 自洽；备份 `~/.stock-sage/backups/stock-sage.db.bak.20260604_203532`。
 
 > 编号说明：M33–M40 属 ATLAS 研究架构分支（codex/atlas），主线 M32→M41 跳过了 M33–M40；M42 衔接 M41 之后，两分支编号无冲突。
 
