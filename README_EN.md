@@ -26,9 +26,9 @@ Every decision leaves a traceable evidence trail. Local dev sessions are trusted
 
 ## 📦 Current Release
 
-**v0.2.2 (2026-06-03)** expands StockSage from a local A-share workspace into a read-only A/HK/US research context: HK and US symbols can now appear in market-data lookup, capability discovery, data-quality checks and agent queries, while staying out of official signals and portfolio risk workflows.
+**v0.2.3 (2026-06-04)** ships the M42 adjustment-basis contamination guard: A-share daily-bar writes now reject suspected hfq jump rows before they enter `prices`, and a dry-run-first, backup-protected remediation CLI can clean the discovered 2026-05-25/26 qfq/hfq mixed-basis rows.
 
-The public line remains research-first and conservative by default. A-share production signals still rely on technical and news-sentiment layers; quant/Kronos evidence continues to be logged as auditable research until it clears the full promotion gate. See [CHANGELOG.md](CHANGELOG.md) for the detailed release history.
+The public line remains research-first and conservative by default. M42 does not change production signals, quant weights, or HK/US read-only boundaries; A-share production signals still rely on technical and news-sentiment layers, while quant/Kronos evidence stays audit-only until it clears the full promotion gate. See [CHANGELOG.md](CHANGELOG.md) for the detailed release history.
 
 ---
 

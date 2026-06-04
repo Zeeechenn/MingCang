@@ -6,6 +6,16 @@
 
 ---
 
+## [v0.2.3] M42 qfq/hfq price-contamination guard（2026-06-04）
+
+### Added
+- M42 写入时复权口径污染护栏：`backend.data.price_quality.check_adjustment_basis_jump` 会在历史中位数口径下拦截 close > 3x 的疑似 hfq 跳变，`backfill_if_needed` 写库前跳过污染行，等待后续 qfq 重抓。
+- 一次性修复 CLI `backend.tools.m42_remediate_hfq_contamination`：默认 dry-run，执行前备份 DB，拒绝生产路径，使用原生 sqlite3 删除已识别的 2026-05-25/26 hfq 污染行，并支持复跑到 0 残留。
+- 33 个 hermetic M42 测试覆盖污染判据、dry-run/execute 行为、备份保护和级联收敛。
+
+### Decision
+- M42 只处理 qfq/hfq 跳变污染，不改变 production signal profile、量化权重或 HK/US observe-only 边界；600519/600601/600602 整条价格序列口径问题仍作为独立遗留数据项处理。
+
 ## [v0.2.2] M41 A/HK/US read-only data facade（2026-06-03）
 
 ### Added

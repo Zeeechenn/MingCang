@@ -3,7 +3,7 @@
 > Compact current-state snapshot for fresh agents and public readers. Detailed
 > plans live in `docs/ROADMAP.md`; completed history lives in `CHANGELOG.md`.
 
-Current release: `v0.2.2` (2026-06-03).
+Current release: `v0.2.3` (2026-06-04).
 
 StockSage is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
@@ -22,6 +22,7 @@ maintenance. It does not place real trades or provide financial advice.
 | M30 | complete: mypy, lockfile, CI/security, coverage, core tests, maintainability |
 | M31 | complete: cache policy, provider fallback observability, rhythm CLI (premarket/intraday/postmarket/weekend), postmarket export with evidence cards + position review |
 | M41 | complete: read-only A/HK/US seven-layer data/research facade; HK/US official signals remain observe-only |
+| M42 | complete: qfq/hfq price-contamination write guard and dry-run-first remediation CLI |
 | remote agent mode | opt-in only; read-only by default |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
@@ -56,6 +57,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 | M31 Product/Engineering Borrowings | complete | L1/L2/L3 policy, provider chains, dry-run rhythm commands (incl. weekend review), postmarket export with evidence cards + position review |
 | M32 Forward Hypothesis Bridge | design stance set | start only after review data is thick enough |
 | M41 A/HK/US Global Data/Research Buildout | complete | read-only three-market data facade, health ledger, normalization/PIT contracts, UX boundary, and CN-only production guardrails |
+| M42 qfq/hfq Price-Contamination Guard | complete | write-time jump guard, dry-run-first remediation CLI, 33 hermetic tests; legacy full-series hfq rows remain a separate data cleanup item |
 
 For detailed sequencing, read `docs/ROADMAP.md`. For historical milestone
 details, read `CHANGELOG.md`.
@@ -128,6 +130,15 @@ a `/private/tmp` health ledger and only runs network probes with
 use the CN production denominator; HK/US watchlist/position rows remain
 observe-only and are not allowed to dilute A-share official decisions. HKD/USD
 /CNY position summaries are displayed by market without automatic FX merging.
+
+M42 completion note (2026-06-04): `backend.data.price_quality` now includes a
+write-time qfq/hfq jump guard that flags close prices more than 3x the recent
+history median before `backfill_if_needed` writes rows to `prices`.
+`backend.tools.m42_remediate_hfq_contamination` provides a dry-run-first,
+backup-protected sqlite remediation path for the 2026-05-25/26 hfq rows found
+in ATLAS follow-up analysis. The production decision layer is unchanged:
+`WEIGHT_QUANT=0.0`, CN-only official signals, and HK/US observe-only boundaries
+all remain intact.
 
 ## Validation Snapshot
 
