@@ -8,9 +8,11 @@
 
 Current answer: **CLEARED FOR PHASE 1 ARCHITECTURE REVIEW; NOT CLEARED FOR
 DIRECT MERGE.** Atlas is now based on current local `main` and focused parity
-checks passed, but final merge approval still requires the later dormant-switch,
-official-signal parity, scheduler/postmarket, DB migration, dependency, and
-human review gates from `docs/ATLAS_MERGE.md`.
+checks passed. `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` is now
+wired and tested as the Atlas total dormant switch for Atlas-only routes/features,
+but final merge approval still requires the full Phase 5 official-signal,
+scheduler/postmarket, DB migration, dependency, and human review gates from
+`docs/ATLAS_MERGE.md`.
 
 ## Snapshot
 
@@ -114,14 +116,18 @@ MYPY_CACHE_DIR=/private/tmp/stocksage_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Result: ruff passed, mypy passed on 203 source files, backend pytest
-`990 passed, 5 skipped`, frontend node tests `19 passed`, and Vite build passed.
+Result after dormant-switch wiring: ruff passed, mypy passed on 203 source
+files, backend pytest `1027 passed, 5 skipped`, frontend node tests `19 passed`,
+and Vite build passed.
 
 ## Remaining Blockers Before Direct Merge
 
-1. Add or confirm an Atlas total dormant switch before merge-day behavior
-   equivalence work. The current research feature flags are module-level and do
-   not replace the total dormant merge contract.
+1. `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` is now wired as the
+   Atlas total dormant switch for Atlas-only routes/features, with legacy
+   research routes preserved. Keep it in the Phase 5 parity pack and confirm
+   shared-infra behavior separately because module-level flags and the total
+   switch do not protect database, dependency, scheduler, or shared helper
+   changes by themselves.
 2. Run the full Phase 5 parity pack before any merge into `main`: final Gate-A,
    `make verify`, test2 raw/canonical parity, official signal parity smoke,
    scheduler/postmarket smoke, DB migration copy-smoke, dependency/lockfile

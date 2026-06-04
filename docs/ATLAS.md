@@ -39,6 +39,7 @@ The first implementation slice is `ResearchCase v0`, but that is only the upstre
 - LLM output may organize evidence, propose contradictions, and create review questions, but it must not directly write trusted memory or production ledgers.
 - The project does not issue strong-buy labels, deterministic price forecasts, or automatic broker orders.
 - Theme research may create hypotheses and candidate tiers, but it must not directly raise buy scores.
+- `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` is the total dormant switch: Atlas-only M33-M40 routes/features stay disabled by default, while legacy research, official signal, test2, scheduler, and postmarket behavior stay live.
 
 ---
 

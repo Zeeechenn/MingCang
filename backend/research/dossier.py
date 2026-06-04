@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.agents.long_term.storage import get_active_label
 from backend.api.routes._shared import latest_signal, signal_to_schema
+from backend.config import settings
 from backend.data.database import Stock
 from backend.decision.harness import (
     get_decision_evidence,
@@ -168,5 +169,5 @@ def build_research_dossier(db: Session, symbol: str) -> dict:
         "official_action": _latest_official_action(signal, official_evidence),
         "missing": missing,
     }
-    out["case"] = build_case(out)
+    out["case"] = build_case(out) if settings.atlas_enabled else None
     return out

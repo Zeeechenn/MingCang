@@ -387,6 +387,53 @@ _LOCAL_HUMAN_M40_ROUTES = [
 ]
 
 
+_ATLAS_DORMANT_ROUTES = [
+    ("backend.api.routes.research", "/research/{symbol}/stress-test", "POST"),
+    ("backend.api.routes.research", "/research/{symbol}/theses", "GET"),
+    ("backend.api.routes.research", "/research/theses/{thesis_id}", "GET"),
+    ("backend.api.routes.research", "/research/{symbol}/theses", "POST"),
+    ("backend.api.routes.research", "/research/theses/{thesis_id}/status", "POST"),
+    ("backend.api.routes.research", "/research/theses/{thesis_id}/confidence", "POST"),
+    ("backend.api.routes.research", "/research/theses/{thesis_id}/attach-review-case", "POST"),
+    ("backend.api.routes.research", "/research/themes", "GET"),
+    ("backend.api.routes.research", "/research/themes/{theme_id}", "GET"),
+    ("backend.api.routes.research", "/research/themes", "POST"),
+    ("backend.api.routes.research", "/research/themes/{theme_id}/hypotheses", "GET"),
+    ("backend.api.routes.research", "/research/hypotheses/{hypothesis_id}", "GET"),
+    ("backend.api.routes.research", "/research/themes/{theme_id}/hypotheses", "POST"),
+    ("backend.api.routes.research", "/research/hypotheses/{hypothesis_id}/status", "POST"),
+    ("backend.api.routes.research", "/research/hypotheses/{hypothesis_id}/beneficiary-tiers", "POST"),
+    ("backend.api.routes.research", "/research/hypotheses/{hypothesis_id}/forward-evidence", "POST"),
+    ("backend.api.routes.research", "/research/{symbol}/review-cases", "GET"),
+    ("backend.api.routes.research", "/research/review-cases/{review_case_id}", "GET"),
+    ("backend.api.routes.research", "/research/{symbol}/review-cases", "POST"),
+    ("backend.api.routes.research", "/research/memory-candidates", "GET"),
+    ("backend.api.routes.research", "/research/memory-candidates/{candidate_id}", "GET"),
+    ("backend.api.routes.research", "/research/memory-candidates", "POST"),
+    ("backend.api.routes.research", "/research/memory-candidates/{candidate_id}/promote", "POST"),
+    ("backend.api.routes.research", "/research/memory-candidates/{candidate_id}/reject", "POST"),
+    ("backend.api.routes.research", "/research/universe-snapshots", "GET"),
+    ("backend.api.routes.research", "/research/universe-snapshots/by-cutoff", "GET"),
+    ("backend.api.routes.research", "/research/universe-snapshots/{snapshot_id}", "GET"),
+    ("backend.api.routes.research", "/research/universe-provenance", "GET"),
+    ("backend.api.routes.research", "/research/universe-snapshots", "POST"),
+    ("backend.api.routes.research", "/research/{symbol}/forward-theses", "GET"),
+    ("backend.api.routes.research", "/research/forward-theses/{forward_thesis_id}", "GET"),
+    ("backend.api.routes.research", "/research/{symbol}/forward-theses", "POST"),
+    ("backend.api.routes.research", "/research/forward-theses/{forward_thesis_id}/status", "POST"),
+    ("backend.api.routes.research", "/research/forward-theses/{forward_thesis_id}/confidence-band", "POST"),
+    ("backend.api.routes.research", "/research/forward-theses/{forward_thesis_id}/evidence", "POST"),
+    ("backend.api.routes.research", "/research/{symbol}/case-view", "GET"),
+]
+
+
+@pytest.mark.parametrize("module,path,method", _ATLAS_DORMANT_ROUTES)
+def test_atlas_routes_have_total_dormant_guard(module, path, method):
+    router = importlib.import_module(module).router
+    guards = _route_guards(router, path, method)
+    assert any(getattr(guard, "__name__", "") == "atlas_dormant_guard" for guard in guards)
+
+
 @pytest.mark.parametrize("module,path,method,action", _GUARDED_M40_ROUTES)
 def test_m40_write_route_rejects_remote_without_key(monkeypatch, module, path, method, action):
     router = importlib.import_module(module).router

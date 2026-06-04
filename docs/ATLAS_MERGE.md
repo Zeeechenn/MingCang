@@ -6,7 +6,7 @@
 
 | Item | Status |
 |---|---|
-| Current phase | Phase 1 next: rebase Atlas onto M43 `main` and rerun Gate-A |
+| Current phase | Phase 1 complete; Atlas total dormant switch wired; next: Phase 5 parity pack and architecture-owner review before direct merge |
 | Main baseline | Phase 0 completed locally; `main` includes M43 at merge commit `4882d49` |
 | Baseline marker | local tag `pre-atlas-m43-baseline` points to `4882d49` |
 | Atlas worktree | `/Users/zeeechenn/Documents/项目s/atlas` on `codex/atlas` |
@@ -24,7 +24,8 @@
 
 - Atlas is not a permanent side project; it is the next-generation main architecture candidate.
 - First Atlas merge must be a dormant merge: new code may exist on `main`, but official signal, test2, test3, 标的1, scheduler, and postmarket paths do not use Atlas behavior by default.
-- Add an Atlas total dormant switch such as `ATLAS_ENABLED=false` / `atlas_research_enabled=false`; module-level flags are secondary and cannot replace the total switch.
+- `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` is the Atlas total dormant switch: it disables Atlas-only M33-M40 routes/features by default while preserving legacy research routes and all official signal, test2, scheduler, and postmarket behavior.
+- Module-level flags are secondary and cannot replace the total switch.
 - The dormant switch does not protect shared infra. Database migrations, runtime schema, dependency/lockfile changes, scheduler helpers, API helpers, and shared data-loading helpers need their own parity gates.
 - First merge allows only additive / non-destructive migration: new tables, nullable columns, non-destructive indexes, idempotent runtime schema patches. No dropping/renaming old tables or columns, no rewriting live old rows, no incompatible constraints on existing production tables.
 - Do not use Atlas tip to overwrite `main`. Rebase/replay Atlas increments onto current `main` and preserve main-only M31/M41/M42/M43 capabilities.
@@ -67,24 +68,24 @@ Evidence:
 
 Goal: turn Atlas from an old long-lived branch into a candidate based on current `main`.
 
-- [ ] In `/Users/zeeechenn/Documents/项目s/atlas`, verify branch is `codex/atlas` and worktree is clean before starting.
-- [ ] Rebase/replay Atlas onto `main` after `pre-atlas-m43-baseline`.
-- [ ] Preserve M31/M41/M42/M43 mainline modules; do not let Atlas delete or overwrite them.
-- [ ] Protect main-only surfaces: cache policy, global data, market capabilities, price quality, M43 facades/jobs/architecture guards.
-- [ ] Resolve known conflict areas only as integration work: project docs, `backend/data/database.py`, API/schema, `pyproject.toml`, `uv.lock`, scheduler and shared data helpers.
-- [ ] Do not expand Atlas functionality during conflict resolution.
-- [ ] Rebuild Gate-A merge-safety report from current code. Old `ATLAS_MERGE_SAFETY.md` is historical reference only.
-- [ ] Run focused migration tests.
-- [ ] Run M43 reproduction / architecture-boundary focused tests.
-- [ ] Run `make verify` in the rebased Atlas worktree.
-- [ ] Confirm Atlas no longer appears to delete M31/M41/M42/M43 mainline files.
+- [x] In `/Users/zeeechenn/Documents/项目s/atlas`, verify branch is `codex/atlas` and worktree is clean before starting.
+- [x] Rebase/replay Atlas onto `main` after `pre-atlas-m43-baseline`.
+- [x] Preserve M31/M41/M42/M43 mainline modules; do not let Atlas delete or overwrite them.
+- [x] Protect main-only surfaces: cache policy, global data, market capabilities, price quality, M43 facades/jobs/architecture guards.
+- [x] Resolve known conflict areas only as integration work: project docs, `backend/data/database.py`, API/schema, `pyproject.toml`, `uv.lock`, scheduler and shared data helpers.
+- [x] Do not expand Atlas functionality during conflict resolution.
+- [x] Rebuild Gate-A merge-safety report from current code. Old `ATLAS_MERGE_SAFETY.md` is historical reference only.
+- [x] Run focused migration tests.
+- [x] Run M43 reproduction / architecture-boundary focused tests.
+- [x] Run `make verify` in the rebased Atlas worktree.
+- [x] Confirm Atlas no longer appears to delete M31/M41/M42/M43 mainline files.
 
 Acceptance:
 
-- [ ] Atlas worktree clean after rebase.
-- [ ] Gate-A says “ready for architecture review” or gives concrete blockers.
-- [ ] `make verify` passes.
-- [ ] No production/test2/test3/official signal behavior changes are introduced merely by rebase.
+- [x] Atlas worktree clean after rebase.
+- [x] Gate-A says “ready for architecture review” or gives concrete blockers.
+- [x] `make verify` passes.
+- [x] No production/test2/test3/official signal behavior changes are introduced merely by rebase.
 
 Stop if:
 
@@ -144,8 +145,8 @@ Goal: prove one old module can enter the new architecture safely without migrati
 - [ ] Implement one minimal `EvidenceCard` mapping.
 - [ ] Implement one memory candidate / promotion gate path.
 - [ ] Pick one adapter, preferably deep_research or existing dossier, because it can stay read-only and avoid official signal impact.
-- [ ] Add Atlas total dormant switch.
-- [ ] With dormant switch off, Atlas routes/modules return disabled, empty, or manual-only behavior.
+- [x] Confirm/wire `settings.atlas_enabled` as the Atlas total dormant switch; module-level flags remain secondary.
+- [x] With dormant switch off, Atlas routes/modules return disabled, empty, or manual-only behavior.
 
 Deferred until after first merge:
 
@@ -161,7 +162,7 @@ Acceptance:
 
 - [ ] Focused tests cover the minimal adapter.
 - [ ] Unfinished modules have owners / migration notes.
-- [ ] Atlas total switch off means no official path impact.
+- [x] Atlas total switch off means Atlas-only routes/features are dormant and no official path impact is introduced.
 - [ ] Merge-day behavior remains equivalent.
 
 ## Phase 5: Behavior-Equivalent Atlas Merge

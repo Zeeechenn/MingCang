@@ -66,12 +66,35 @@ def client(http_db):
         _clear_override()
 
 
+@pytest.fixture(autouse=True)
+def enable_atlas_routes(monkeypatch):
+    """M40 route tests exercise Atlas routes explicitly."""
+    monkeypatch.setattr("backend.config.settings.atlas_enabled", True, raising=False)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 # A safe symbol that won't collide with literal route segments
 _SYM = "600519"
+
+
+def test_atlas_total_switch_disables_new_routes_but_keeps_legacy_research_state(client, monkeypatch):
+    """Atlas routes are dormant by default; legacy research state route stays live."""
+    monkeypatch.setattr("backend.config.settings.atlas_enabled", False, raising=False)
+
+    atlas_resp = client.get("/api/research/themes")
+    assert atlas_resp.status_code == 503
+    assert atlas_resp.json()["detail"] == "atlas feature is disabled"
+
+    legacy_resp = client.get(f"/api/research/{_SYM}")
+    assert legacy_resp.status_code == 200, legacy_resp.text
+    assert legacy_resp.json()["symbol"] == _SYM
+
+    dossier_resp = client.get(f"/api/research/{_SYM}/dossier")
+    assert dossier_resp.status_code == 200, dossier_resp.text
+    assert dossier_resp.json()["case"] is None
 
 
 # ---------------------------------------------------------------------------

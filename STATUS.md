@@ -61,7 +61,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 | M41 A/HK/US Global Data/Research Buildout | complete | read-only three-market data facade, health ledger, normalization/PIT contracts, UX boundary, and CN-only production guardrails |
 | M42 qfq/hfq Price-Contamination Guard | complete | write-time jump guard, dry-run-first remediation CLI, 33 hermetic tests; legacy full-series hfq rows remain a separate data cleanup item |
 | M43 Architecture Boundary Hardening | complete | compatibility facades, behavior-characterization tests, and AST architecture guards are in place |
-| M44 Atlas Merge / L0-L4 Architecture | active: Phase 1 next | rebase Atlas onto `main` at `pre-atlas-m43-baseline`, preserve M31/M41/M42/M43 boundaries, then rerun Gate-A and focused parity checks |
+| M44 Atlas Merge / L0-L4 Architecture | active: Phase 1 complete; dormant switch wired | run Phase 5 parity pack and architecture-owner review before any direct merge |
 
 For detailed sequencing, read `docs/ROADMAP.md`; for the Atlas/M44 detailed
 checklist, read `docs/ATLAS_MERGE.md`. For historical milestone details, read
@@ -73,10 +73,12 @@ handoff. Atlas is the next-generation main architecture candidate, not a
 permanent side project. Phase 0 completed locally: M43 was merged into `main` at
 `4882d49`, tagged
 `pre-atlas-m43-baseline`, post-merge `make verify` passed, and fixed-end test2
-replay (`--end 2026-06-04`) stayed byte-for-byte equivalent by SHA-256. The next
-step is Phase 1 Atlas rebase/Gate-A. Atlas behavior must remain dormant until
-engineering parity gates pass; any investment-impact promotion requires later
-shadow/test4 evidence.
+replay (`--end 2026-06-04`) stayed byte-for-byte equivalent by SHA-256. Phase 1
+Atlas rebase/Gate-A is complete, and `ATLAS_ENABLED=false` /
+`settings.atlas_enabled=False` is wired as the Atlas total dormant switch for
+Atlas-only routes/features while preserving legacy research routes. Atlas
+behavior must remain dormant until engineering parity gates pass; any
+investment-impact promotion requires later shadow/test4 evidence.
 
 M31 completion note (2026-06-02): `backend.data.cache_policy` defines L1/L2/L3
 and the intraday zero-network contract; `/api/system/data-coverage` exposes

@@ -47,6 +47,7 @@ from backend.api.schemas import (
     UniverseSnapshotOut,
     UniverseSnapshotRequest,
 )
+from backend.config import settings
 from backend.data.database import get_db
 from backend.llm import runtime_readiness
 
@@ -79,6 +80,12 @@ def local_human_memory_gate(request: Request) -> None:
             status_code=403,
             detail="memory promote/reject is local human gated and unavailable to remote agents",
         )
+
+
+def atlas_dormant_guard() -> None:
+    """Keep Atlas research architecture dormant unless explicitly enabled."""
+    if not settings.atlas_enabled:
+        raise HTTPException(status_code=503, detail="atlas feature is disabled")
 
 
 @router.get("/research/{symbol}/dossier", response_model=ResearchDossierOut)
@@ -235,7 +242,7 @@ def run_deep_research_endpoint(
 @router.post(
     "/research/{symbol}/stress-test",
     response_model=StressTestResponse,
-    dependencies=[Depends(agent_write_guard("research.stress_test"))],
+    dependencies=[Depends(agent_write_guard("research.stress_test")), Depends(atlas_dormant_guard)],
 )
 def run_stress_test_endpoint(symbol: str, db: Session = Depends(get_db)):
     """Run a single-pass red-team stress test against the ResearchCase. Advisory only.
@@ -281,7 +288,11 @@ def run_stress_test_endpoint(symbol: str, db: Session = Depends(get_db)):
 
 # ── M40 Thesis Ledger routes ──────────────────────────────────────────────────
 
-@router.get("/research/{symbol}/theses", response_model=ThesisListOut)
+@router.get(
+    "/research/{symbol}/theses",
+    response_model=ThesisListOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def list_symbol_theses(symbol: str, db: Session = Depends(get_db)):
     """List all theses for a symbol."""
     from backend.research.thesis_ledger import list_theses
@@ -289,7 +300,11 @@ def list_symbol_theses(symbol: str, db: Session = Depends(get_db)):
     return {"symbol": symbol, "items": items, "total": len(items)}
 
 
-@router.get("/research/theses/{thesis_id}", response_model=ThesisOut)
+@router.get(
+    "/research/theses/{thesis_id}",
+    response_model=ThesisOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_thesis_by_id(thesis_id: int, db: Session = Depends(get_db)):
     """Return a single thesis by id."""
     from backend.research.thesis_ledger import get_thesis
@@ -302,7 +317,7 @@ def get_thesis_by_id(thesis_id: int, db: Session = Depends(get_db)):
 @router.post(
     "/research/{symbol}/theses",
     response_model=ThesisOut,
-    dependencies=[Depends(agent_write_guard("research.thesis.create"))],
+    dependencies=[Depends(agent_write_guard("research.thesis.create")), Depends(atlas_dormant_guard)],
 )
 def create_symbol_thesis(
     symbol: str,
@@ -328,7 +343,7 @@ def create_symbol_thesis(
 @router.post(
     "/research/theses/{thesis_id}/status",
     response_model=ThesisOut,
-    dependencies=[Depends(agent_write_guard("research.thesis.update_status"))],
+    dependencies=[Depends(agent_write_guard("research.thesis.update_status")), Depends(atlas_dormant_guard)],
 )
 def update_thesis_status_endpoint(
     thesis_id: int,
@@ -349,7 +364,7 @@ def update_thesis_status_endpoint(
 @router.post(
     "/research/theses/{thesis_id}/confidence",
     response_model=ThesisConfidenceOut,
-    dependencies=[Depends(agent_write_guard("research.thesis.append_confidence"))],
+    dependencies=[Depends(agent_write_guard("research.thesis.append_confidence")), Depends(atlas_dormant_guard)],
 )
 def append_thesis_confidence(
     thesis_id: int,
@@ -372,7 +387,7 @@ def append_thesis_confidence(
 @router.post(
     "/research/theses/{thesis_id}/attach-review-case",
     response_model=ThesisOut,
-    dependencies=[Depends(agent_write_guard("research.thesis.attach_review"))],
+    dependencies=[Depends(agent_write_guard("research.thesis.attach_review")), Depends(atlas_dormant_guard)],
 )
 def attach_review_case_to_thesis(
     thesis_id: int,
@@ -394,7 +409,11 @@ def attach_review_case_to_thesis(
 
 # ── M40 Theme Hypothesis Engine routes ───────────────────────────────────────
 
-@router.get("/research/themes", response_model=ThemeListOut)
+@router.get(
+    "/research/themes",
+    response_model=ThemeListOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def list_themes_endpoint(db: Session = Depends(get_db)):
     """List all themes."""
     from backend.research.theme_hypothesis_engine import list_themes
@@ -402,7 +421,11 @@ def list_themes_endpoint(db: Session = Depends(get_db)):
     return {"items": items, "total": len(items)}
 
 
-@router.get("/research/themes/{theme_id}", response_model=ThemeOut)
+@router.get(
+    "/research/themes/{theme_id}",
+    response_model=ThemeOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_theme_endpoint(theme_id: int, db: Session = Depends(get_db)):
     """Return a single theme by id."""
     from backend.research.theme_hypothesis_engine import get_theme
@@ -415,7 +438,7 @@ def get_theme_endpoint(theme_id: int, db: Session = Depends(get_db)):
 @router.post(
     "/research/themes",
     response_model=ThemeOut,
-    dependencies=[Depends(agent_write_guard("research.theme.create"))],
+    dependencies=[Depends(agent_write_guard("research.theme.create")), Depends(atlas_dormant_guard)],
 )
 def create_theme_endpoint(request: ThemeCreateRequest, db: Session = Depends(get_db)):
     """Create a new theme."""
@@ -431,7 +454,11 @@ def create_theme_endpoint(request: ThemeCreateRequest, db: Session = Depends(get
         raise HTTPException(400, str(e)) from e
 
 
-@router.get("/research/themes/{theme_id}/hypotheses", response_model=HypothesisListOut)
+@router.get(
+    "/research/themes/{theme_id}/hypotheses",
+    response_model=HypothesisListOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def list_theme_hypotheses(theme_id: int, db: Session = Depends(get_db)):
     """List hypotheses for a theme."""
     from backend.research.theme_hypothesis_engine import list_hypotheses
@@ -439,7 +466,11 @@ def list_theme_hypotheses(theme_id: int, db: Session = Depends(get_db)):
     return {"theme_id": theme_id, "items": items, "total": len(items)}
 
 
-@router.get("/research/hypotheses/{hypothesis_id}", response_model=HypothesisOut)
+@router.get(
+    "/research/hypotheses/{hypothesis_id}",
+    response_model=HypothesisOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_hypothesis_endpoint(hypothesis_id: int, db: Session = Depends(get_db)):
     """Return a single hypothesis by id."""
     from backend.research.theme_hypothesis_engine import get_hypothesis
@@ -452,7 +483,7 @@ def get_hypothesis_endpoint(hypothesis_id: int, db: Session = Depends(get_db)):
 @router.post(
     "/research/themes/{theme_id}/hypotheses",
     response_model=HypothesisOut,
-    dependencies=[Depends(agent_write_guard("research.hypothesis.create"))],
+    dependencies=[Depends(agent_write_guard("research.hypothesis.create")), Depends(atlas_dormant_guard)],
 )
 def create_hypothesis_endpoint(
     theme_id: int,
@@ -495,7 +526,7 @@ def create_hypothesis_endpoint(
 @router.post(
     "/research/hypotheses/{hypothesis_id}/status",
     response_model=HypothesisOut,
-    dependencies=[Depends(agent_write_guard("research.hypothesis.update_status"))],
+    dependencies=[Depends(agent_write_guard("research.hypothesis.update_status")), Depends(atlas_dormant_guard)],
 )
 def update_hypothesis_status_endpoint(
     hypothesis_id: int,
@@ -516,7 +547,7 @@ def update_hypothesis_status_endpoint(
 @router.post(
     "/research/hypotheses/{hypothesis_id}/beneficiary-tiers",
     response_model=HypothesisOut,
-    dependencies=[Depends(agent_write_guard("research.hypothesis.set_tiers"))],
+    dependencies=[Depends(agent_write_guard("research.hypothesis.set_tiers")), Depends(atlas_dormant_guard)],
 )
 def set_hypothesis_tiers(
     hypothesis_id: int,
@@ -541,7 +572,7 @@ def set_hypothesis_tiers(
 @router.post(
     "/research/hypotheses/{hypothesis_id}/forward-evidence",
     response_model=HypothesisOut,
-    dependencies=[Depends(agent_write_guard("research.hypothesis.attach_evidence"))],
+    dependencies=[Depends(agent_write_guard("research.hypothesis.attach_evidence")), Depends(atlas_dormant_guard)],
 )
 def attach_forward_evidence_endpoint(
     hypothesis_id: int,
@@ -563,7 +594,11 @@ def attach_forward_evidence_endpoint(
 
 # ── M40 Review Loop routes ────────────────────────────────────────────────────
 
-@router.get("/research/{symbol}/review-cases", response_model=ReviewCaseListOut)
+@router.get(
+    "/research/{symbol}/review-cases",
+    response_model=ReviewCaseListOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def list_symbol_review_cases(symbol: str, db: Session = Depends(get_db)):
     """List review cases for a symbol."""
     from backend.research.review_loop import list_review_cases
@@ -571,7 +606,11 @@ def list_symbol_review_cases(symbol: str, db: Session = Depends(get_db)):
     return {"symbol": symbol, "items": items, "total": len(items)}
 
 
-@router.get("/research/review-cases/{review_case_id}", response_model=ReviewCaseOut)
+@router.get(
+    "/research/review-cases/{review_case_id}",
+    response_model=ReviewCaseOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_review_case_endpoint(review_case_id: int, db: Session = Depends(get_db)):
     """Return a single review case by id."""
     from backend.research.review_loop import get_review_case
@@ -584,7 +623,7 @@ def get_review_case_endpoint(review_case_id: int, db: Session = Depends(get_db))
 @router.post(
     "/research/{symbol}/review-cases",
     response_model=ReviewCaseOut,
-    dependencies=[Depends(agent_write_guard("research.review_case.create"))],
+    dependencies=[Depends(agent_write_guard("research.review_case.create")), Depends(atlas_dormant_guard)],
 )
 def create_review_case_endpoint(
     symbol: str,
@@ -607,7 +646,11 @@ def create_review_case_endpoint(
         raise HTTPException(400, str(e)) from e
 
 
-@router.get("/research/memory-candidates", response_model=MemoryCandidateListOut)
+@router.get(
+    "/research/memory-candidates",
+    response_model=MemoryCandidateListOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def list_memory_candidates_endpoint(
     symbol: str | None = Query(default=None),
     source_trust: str | None = Query(default=None),
@@ -624,7 +667,11 @@ def list_memory_candidates_endpoint(
     return {"items": items, "total": len(items)}
 
 
-@router.get("/research/memory-candidates/{candidate_id}", response_model=MemoryCandidateOut)
+@router.get(
+    "/research/memory-candidates/{candidate_id}",
+    response_model=MemoryCandidateOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_memory_candidate_endpoint(candidate_id: int, db: Session = Depends(get_db)):
     """Return a single memory candidate by id."""
     from backend.research.review_loop import get_memory_candidate
@@ -637,7 +684,7 @@ def get_memory_candidate_endpoint(candidate_id: int, db: Session = Depends(get_d
 @router.post(
     "/research/memory-candidates",
     response_model=MemoryCandidateOut,
-    dependencies=[Depends(agent_write_guard("research.memory_candidate.create"))],
+    dependencies=[Depends(agent_write_guard("research.memory_candidate.create")), Depends(atlas_dormant_guard)],
 )
 def create_memory_candidate_endpoint(
     request: MemoryCandidateCreateRequest,
@@ -664,7 +711,7 @@ def create_memory_candidate_endpoint(
 @router.post(
     "/research/memory-candidates/{candidate_id}/promote",
     response_model=MemoryCandidateOut,
-    dependencies=[Depends(local_human_memory_gate)],
+    dependencies=[Depends(local_human_memory_gate), Depends(atlas_dormant_guard)],
 )
 def promote_memory_candidate(
     candidate_id: int,
@@ -691,7 +738,7 @@ def promote_memory_candidate(
 @router.post(
     "/research/memory-candidates/{candidate_id}/reject",
     response_model=MemoryCandidateOut,
-    dependencies=[Depends(local_human_memory_gate)],
+    dependencies=[Depends(local_human_memory_gate), Depends(atlas_dormant_guard)],
 )
 def reject_memory_candidate_endpoint(
     candidate_id: int,
@@ -718,7 +765,11 @@ def reject_memory_candidate_endpoint(
 
 # ── M40 Universe Guard routes ─────────────────────────────────────────────────
 
-@router.get("/research/universe-snapshots", response_model=UniverseSnapshotListOut)
+@router.get(
+    "/research/universe-snapshots",
+    response_model=UniverseSnapshotListOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def list_universe_snapshots(db: Session = Depends(get_db)):
     """List universe snapshots. Returns 503 if universe_guard_enabled=False."""
     from backend.config import settings
@@ -729,7 +780,11 @@ def list_universe_snapshots(db: Session = Depends(get_db)):
     return {"items": items, "total": len(items)}
 
 
-@router.get("/research/universe-snapshots/by-cutoff", response_model=UniverseSnapshotOut)
+@router.get(
+    "/research/universe-snapshots/by-cutoff",
+    response_model=UniverseSnapshotOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_snapshot_by_cutoff(
     cutoff_date: str = Query(...),
     market_filter: str = Query(default="ALL"),
@@ -743,7 +798,11 @@ def get_snapshot_by_cutoff(
     return result
 
 
-@router.get("/research/universe-snapshots/{snapshot_id}", response_model=UniverseSnapshotOut)
+@router.get(
+    "/research/universe-snapshots/{snapshot_id}",
+    response_model=UniverseSnapshotOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_universe_snapshot(snapshot_id: int, db: Session = Depends(get_db)):
     """Return a single universe snapshot by id."""
     from backend.research.universe_guard import get_snapshot
@@ -753,7 +812,7 @@ def get_universe_snapshot(snapshot_id: int, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/research/universe-provenance")
+@router.get("/research/universe-provenance", dependencies=[Depends(atlas_dormant_guard)])
 def get_universe_provenance(
     symbols: list[str] = Query(default=[]),
     db: Session = Depends(get_db),
@@ -766,7 +825,7 @@ def get_universe_provenance(
 @router.post(
     "/research/universe-snapshots",
     response_model=UniverseSnapshotOut,
-    dependencies=[Depends(agent_write_guard("research.universe.snapshot"))],
+    dependencies=[Depends(agent_write_guard("research.universe.snapshot")), Depends(atlas_dormant_guard)],
 )
 def snapshot_universe_endpoint(
     request: UniverseSnapshotRequest,
@@ -794,7 +853,11 @@ def snapshot_universe_endpoint(
 
 # ── M40 Forward Thesis routes ─────────────────────────────────────────────────
 
-@router.get("/research/{symbol}/forward-theses", response_model=ForwardThesisListOut)
+@router.get(
+    "/research/{symbol}/forward-theses",
+    response_model=ForwardThesisListOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def list_symbol_forward_theses(symbol: str, db: Session = Depends(get_db)):
     """List forward theses for a symbol."""
     from backend.research.forward_thesis import list_forward_theses
@@ -802,7 +865,11 @@ def list_symbol_forward_theses(symbol: str, db: Session = Depends(get_db)):
     return {"symbol": symbol, "items": items, "total": len(items)}
 
 
-@router.get("/research/forward-theses/{forward_thesis_id}", response_model=ForwardThesisOut)
+@router.get(
+    "/research/forward-theses/{forward_thesis_id}",
+    response_model=ForwardThesisOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_forward_thesis_endpoint(forward_thesis_id: int, db: Session = Depends(get_db)):
     """Return a single forward thesis by id."""
     from backend.research.forward_thesis import get_forward_thesis
@@ -815,7 +882,7 @@ def get_forward_thesis_endpoint(forward_thesis_id: int, db: Session = Depends(ge
 @router.post(
     "/research/{symbol}/forward-theses",
     response_model=ForwardThesisOut,
-    dependencies=[Depends(agent_write_guard("research.forward_thesis.create"))],
+    dependencies=[Depends(agent_write_guard("research.forward_thesis.create")), Depends(atlas_dormant_guard)],
 )
 def create_forward_thesis_endpoint(
     symbol: str,
@@ -868,7 +935,7 @@ def create_forward_thesis_endpoint(
 @router.post(
     "/research/forward-theses/{forward_thesis_id}/status",
     response_model=ForwardThesisOut,
-    dependencies=[Depends(agent_write_guard("research.forward_thesis.update_status"))],
+    dependencies=[Depends(agent_write_guard("research.forward_thesis.update_status")), Depends(atlas_dormant_guard)],
 )
 def update_forward_thesis_status_endpoint(
     forward_thesis_id: int,
@@ -897,7 +964,7 @@ def update_forward_thesis_status_endpoint(
 @router.post(
     "/research/forward-theses/{forward_thesis_id}/confidence-band",
     response_model=ForwardThesisOut,
-    dependencies=[Depends(agent_write_guard("research.forward_thesis.update_confidence"))],
+    dependencies=[Depends(agent_write_guard("research.forward_thesis.update_confidence")), Depends(atlas_dormant_guard)],
 )
 def update_forward_thesis_confidence(
     forward_thesis_id: int,
@@ -930,7 +997,7 @@ def update_forward_thesis_confidence(
 @router.post(
     "/research/forward-theses/{forward_thesis_id}/evidence",
     response_model=ForwardThesisOut,
-    dependencies=[Depends(agent_write_guard("research.forward_thesis.attach_evidence"))],
+    dependencies=[Depends(agent_write_guard("research.forward_thesis.attach_evidence")), Depends(atlas_dormant_guard)],
 )
 def attach_forward_thesis_evidence(
     forward_thesis_id: int,
@@ -958,7 +1025,11 @@ def attach_forward_thesis_evidence(
 
 # ── M40 Case View route ───────────────────────────────────────────────────────
 
-@router.get("/research/{symbol}/case-view", response_model=CaseViewOut)
+@router.get(
+    "/research/{symbol}/case-view",
+    response_model=CaseViewOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
 def get_symbol_case_view(
     symbol: str,
     include_dossier: bool = Query(default=True),
