@@ -31,7 +31,39 @@ The first implementation slice is `ResearchCase v0`, but that is only the upstre
 
 ---
 
-## 2. Non-Negotiable Boundaries
+## 2. L0-L4 Main Architecture Contract
+
+ATLAS is the future main architecture, not a side research feature. The merge
+contract is still behavior-equivalent: these layers may enter `main` only while
+official signal, test2, test3, 标的1, scheduler, and postmarket behavior remain
+unchanged by default.
+
+| Layer | Name | Current merge-time role | Boundary |
+|---|---|---|---|
+| L0 | Memory / Knowledge Base | priority layer for user rules, reviewed lessons, research memory, and legacy import staging | legacy rows default to pending / legacy_import_pending; LLM output cannot become trusted memory by itself |
+| L1 | Evidence Layer | source/time/PIT/quality-aware evidence cards and dossier mappings | read-only evidence packaging; no production score or position effect |
+| L2 | Thesis Layer | ResearchCase, Thesis, theme hypothesis, and forward thesis skeletons | advisory research state; no official action override |
+| L3 | Action / Signal / Position Layer | future SignalCase / PositionCase and proposal objects | `ActionProposal` is future shadow/proposal output, not the current runtime action registry and not an official signal path |
+| L4 | Review / Promotion / Calibration Layer | ReviewCase plus MemoryPromotionCandidate / promote-memory workflow | reviewed outcome attribution may propose memory promotion; trusted promotion remains local-human gated |
+
+Current role mapping:
+
+- Researcher: enabled for evidence gathering, ResearchCase construction, stress
+  testing, thesis drafting, and review questions.
+- Portfolio Manager: may create proposal or review context, but it cannot
+  promote an Atlas proposal into official position sizing during the dormant
+  merge.
+- Execution Trader: interface/shadow only. It may describe future execution
+  constraints; it must not place broker orders or mutate official execution
+  state.
+
+`Gate-B` remains the M40 prospective tracker name. It is not L4. L4 is the
+Review / Promotion / Calibration layer implemented today through ReviewCase and
+memory-promotion candidates.
+
+---
+
+## 3. Non-Negotiable Boundaries
 
 - M29 remains the highest-priority current line until fresh forward evidence and quant residual attribution reach a clear gate outcome.
 - `weight_quant=0.0` stays unchanged unless M29 promotion gates pass and the user explicitly approves a production change.
@@ -40,10 +72,16 @@ The first implementation slice is `ResearchCase v0`, but that is only the upstre
 - The project does not issue strong-buy labels, deterministic price forecasts, or automatic broker orders.
 - Theme research may create hypotheses and candidate tiers, but it must not directly raise buy scores.
 - `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` is the total dormant switch: Atlas-only M33-M40 routes/features stay disabled by default, while legacy research, official signal, test2, scheduler, and postmarket behavior stay live.
+- The dormant switch is an HTTP/API and default-runtime contract. Internal
+  Python storage functions may still be imported by tests or explicit local
+  tooling; they must not be wired into production paths while Atlas is disabled.
+- Local memory promotion is trusted local-operator workflow, not strong identity
+  authentication. Remote agents are rejected even when write allowlists exist;
+  future remote or fully automated promotion requires a stronger human gate.
 
 ---
 
-## 3. Why Not a Big-Bang Rewrite
+## 4. Why Not a Big-Bang Rewrite
 
 The reports and discussion point to a large destination, but a single rewrite would mix too many risk surfaces:
 
@@ -66,7 +104,7 @@ The chosen path is **large architecture, small verifiable slices**:
 
 ---
 
-## 4. Relationship To Existing Milestones
+## 5. Relationship To Existing Milestones
 
 ### M29 — Alpha Reset / Forward Evidence Engine
 
@@ -88,7 +126,7 @@ M33 and later milestones unify research, signal, position, and review objects so
 
 ---
 
-## 5. Milestone Plan
+## 6. Milestone Plan
 
 ### M33 — ResearchCase v0
 

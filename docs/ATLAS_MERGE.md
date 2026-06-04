@@ -6,7 +6,7 @@
 
 | Item | Status |
 |---|---|
-| Current phase | Phase 1 complete; Atlas total dormant switch wired; next: Phase 5 parity pack and architecture-owner review before direct merge |
+| Current phase | Phase 2 architecture contract complete; Phase 5 parity pack in progress before any direct merge decision |
 | Main baseline | Phase 0 completed locally; `main` includes M43 at merge commit `4882d49` |
 | Baseline marker | local tag `pre-atlas-m43-baseline` points to `4882d49` |
 | Atlas worktree | `/Users/zeeechenn/Documents/项目s/atlas` on `codex/atlas` |
@@ -97,20 +97,20 @@ Stop if:
 
 Goal: make the target main architecture explicit before implementing more behavior.
 
-- [ ] Update project-owned Atlas architecture docs to describe L0-L4 as the future main architecture, not a side feature.
-- [ ] State that merge-time behavior must remain dormant by default.
-- [ ] State that test2, test3, 标的1, and official signal behavior do not change on merge day.
-- [ ] Define current roles: Researcher enabled, Portfolio Manager proposal enabled, Execution Trader shadow/interface only.
-- [ ] Clarify that `ActionProposal` is a future object and does not equal the current runtime action registry.
-- [ ] Clarify that early `ActionProposal` output is shadow/proposal only and does not connect to official paths.
-- [ ] Keep `Gate-B` reserved for the current prospective tracker.
+- [x] Update project-owned Atlas architecture docs to describe L0-L4 as the future main architecture, not a side feature.
+- [x] State that merge-time behavior must remain dormant by default.
+- [x] State that test2, test3, 标的1, and official signal behavior do not change on merge day.
+- [x] Define current roles: Researcher enabled, Portfolio Manager proposal enabled, Execution Trader shadow/interface only.
+- [x] Clarify that `ActionProposal` is a future object and does not equal the current runtime action registry.
+- [x] Clarify that early `ActionProposal` output is shadow/proposal only and does not connect to official paths.
+- [x] Keep `Gate-B` reserved for the current prospective tracker.
 
 Acceptance:
 
-- [ ] L0 is named as the priority implementation layer.
-- [ ] test2 frozen baseline is explicit.
-- [ ] dormant merge contract is explicit.
-- [ ] No generic temporary planning files are created.
+- [x] L0 is named as the priority implementation layer.
+- [x] test2 frozen baseline is explicit.
+- [x] dormant merge contract is explicit.
+- [x] No generic temporary planning files are created.
 
 ## Phase 3: L0 Memory / Knowledge Base First
 
@@ -146,7 +146,7 @@ Goal: prove one old module can enter the new architecture safely without migrati
 - [ ] Implement one memory candidate / promotion gate path.
 - [ ] Pick one adapter, preferably deep_research or existing dossier, because it can stay read-only and avoid official signal impact.
 - [x] Confirm/wire `settings.atlas_enabled` as the Atlas total dormant switch; module-level flags remain secondary.
-- [x] With dormant switch off, Atlas routes/modules return disabled, empty, or manual-only behavior.
+- [x] With dormant switch off, Atlas HTTP/API routes return disabled, empty, or manual-only behavior; internal storage helpers remain importable for tests and explicit local tooling.
 
 Deferred until after first merge:
 

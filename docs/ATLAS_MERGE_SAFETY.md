@@ -6,13 +6,13 @@
 > Question answered: can the rebased Atlas candidate proceed to architecture
 > review without production/test2/scheduler drift?
 
-Current answer: **CLEARED FOR PHASE 1 ARCHITECTURE REVIEW; NOT CLEARED FOR
-DIRECT MERGE.** Atlas is now based on current local `main` and focused parity
-checks passed. `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` is now
-wired and tested as the Atlas total dormant switch for Atlas-only routes/features,
-but final merge approval still requires the full Phase 5 official-signal,
-scheduler/postmarket, DB migration, dependency, and human review gates from
-`docs/ATLAS_MERGE.md`.
+Current answer: **CLEARED FOR ARCHITECTURE REVIEW AND LOCAL PHASE 5 PARITY
+PACK; NOT CLEARED FOR DIRECT MERGE WITHOUT USER APPROVAL.** Atlas is now based
+on current local `main`, focused parity checks passed, and the first local Phase
+5 pack passed on 2026-06-04. `ATLAS_ENABLED=false` /
+`settings.atlas_enabled=False` is wired and tested as the Atlas total dormant
+switch for Atlas-only HTTP/API routes/features. Direct merge still requires a
+final re-sync check and explicit user approval.
 
 ## Snapshot
 
@@ -120,26 +120,51 @@ Result after dormant-switch wiring: ruff passed, mypy passed on 203 source
 files, backend pytest `1027 passed, 5 skipped`, frontend node tests `19 passed`,
 and Vite build passed.
 
+## Phase 5 Local Parity Update
+
+Additional local checks run on 2026-06-04 after the architecture-contract review:
+
+- `make verify` passed again: ruff, mypy on 203 source files, backend pytest
+  `1027 passed, 5 skipped`, frontend node tests `19 passed`, and Vite build
+  passed.
+- Test2 fixed-end replay used Atlas code with main's protected DB and universe:
+  `/private/tmp/stocksage_m44_phase5_test2_ab_state.json` had zero raw JSON diff
+  against `/Users/zeeechenn/stock-sage/paper_trading/test2_ab_state.json`.
+- Canonical test2 parity passed with stable key ordering and explicit ignored
+  non-semantic timestamp fields.
+- Official-signal, scheduler/postmarket, API route, memory-promotion,
+  dormant-flag, runtime-schema, M31/M42, and architecture focused tests passed
+  across the Phase 5 smoke set.
+- Live DB migration copy-smoke used `/private/tmp/stocksage_m44_phase5_copy.db`;
+  `init_db()` completed, required Atlas tables/columns existed, and
+  `PRAGMA integrity_check` returned `ok`.
+- `git diff --check` passed and conflict-marker scan returned no matches.
+
+Review notes from the architecture and infra pass:
+
+- `docs/ATLAS.md` now records L0-L4 as the future main architecture, the current
+  Researcher / Portfolio Manager / Execution Trader roles, the `ActionProposal`
+  shadow/proposal boundary, and the Gate-B versus L4 naming boundary.
+- The dormant switch is documented as an HTTP/API and default-runtime contract.
+  Internal Python storage helpers remain importable for tests and explicit local
+  tooling; they are not wired into production paths while Atlas is disabled.
+- `forward_theses` runtime schema has a compatibility table-rebuild path for old
+  unique indexes, so it is not purely additive in implementation mechanics. The
+  `/private/tmp` copy-smoke is the merge-day guard for duplicate normalized keys
+  or startup blocking.
+
 ## Remaining Blockers Before Direct Merge
 
-1. `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` is now wired as the
-   Atlas total dormant switch for Atlas-only routes/features, with legacy
-   research routes preserved. Keep it in the Phase 5 parity pack and confirm
-   shared-infra behavior separately because module-level flags and the total
-   switch do not protect database, dependency, scheduler, or shared helper
-   changes by themselves.
-2. Run the full Phase 5 parity pack before any merge into `main`: final Gate-A,
-   `make verify`, test2 raw/canonical parity, official signal parity smoke,
-   scheduler/postmarket smoke, DB migration copy-smoke, dependency/lockfile
-   review, API route smoke, memory promotion gate smoke, Atlas dormant flag
-   smoke, and `git diff --check`.
+1. Final re-sync check against `main` must be repeated immediately before any
+   merge decision if `main` advances.
+2. Merge, push, publish, or release still requires explicit user instruction.
 3. Keep investment-effect validation separate. Atlas research/Gate-B/test4
    evidence must not alter official signals, positions, stops, sizing, or
    scheduler behavior without later shadow/test4 evidence and user confirmation.
-4. Do not push, publish, merge to `main`, or release without explicit user
-   instruction.
+4. If any merge-day copy-smoke finds duplicate normalized `forward_theses` keys
+   or DB integrity drift, stop and attribute before merging.
 
 ## Recommendation
 
-Proceed to the next M44 step: architecture-owner review of the rebased Atlas
-candidate and dormant-switch contract. Do not merge directly into `main` yet.
+Proceed to a user-owned merge decision only after confirming `main` has not
+advanced. Do not merge directly into `main` without explicit approval.
