@@ -267,14 +267,16 @@
 
 目标：让 `main` 先拥有 M43 架构边界硬化，成为 Atlas rebase 的唯一真实基准。
 
-- [ ] 确认主仓当前分支为 `codex/m43-architecture-boundaries` 或等价 M43 分支，worktree 干净，且相对 `main` 只有 M43/文档相关提交。
-- [ ] 跑完整主仓 gate：`make verify`，并记录结果；若环境 cache 或 Vite temp 权限导致假失败，使用 `/private/tmp` cache 或正常文件权限复跑对应步骤。
-- [ ] 固定 `--end` 重跑 test2 replay 到 `/private/tmp`，要求与 `paper_trading/test2_ab_state.json` 零 diff；不要改 `paper_trading/test2_ab_state.json`。
-- [ ] 将 M43 合入 `main`，保留可追溯历史，不 push。
-- [ ] 合并后建立 `pre-atlas-m43-baseline` 或同义 tag/branch。
-- [ ] 合并后确认：production profile 仍是 `new_framework`，`WEIGHT_QUANT=0.0` 不变，test2 replay、test3 universe、标的1文件、official signal 行为不变。
+- [x] 确认主仓 M43 分支为 `codex/m43-architecture-boundaries`，worktree 干净，且相对 `main` 只有 M43/文档相关提交。
+- [x] 跑完整主仓 gate：`make verify`，并记录结果；若环境 cache 或 Vite temp 权限导致假失败，使用 `/private/tmp` cache 或正常文件权限复跑对应步骤。
+- [x] 固定 `--end` 重跑 test2 replay 到 `/private/tmp`，要求与 `paper_trading/test2_ab_state.json` 零 diff；不要改 `paper_trading/test2_ab_state.json`。
+- [x] 将 M43 合入 `main`，保留可追溯历史，不 push。
+- [x] 合并后建立 `pre-atlas-m43-baseline` 或同义 tag/branch。
+- [x] 合并后确认：production profile 仍是 `new_framework`，`WEIGHT_QUANT=0.0` 不变，test2 replay、test3 universe、标的1文件、official signal 行为不变。
 
 停止条件：`make verify` 失败、test2 JSON diff 非零、`main` 有未纳入判断的反向提交、或 M43 分支出现非 M43 范围改动时，先停下归因，不进入 Atlas rebase。
+
+> 2026-06-04 Phase 0 completed locally：`main` merge commit `4882d49` 已包含 M43 与 M44 文档接手更新，并打本地 tag `pre-atlas-m43-baseline`（未 push）。M43 分支与 post-merge `main` 的 `make verify` 均通过：ruff、mypy、759 backend tests、19 frontend node tests、Vite build。test2 replay 固定 `--end 2026-06-04` 写入 `/private/tmp/stocksage_test2_ab_state_20260604_postmerge.json`，与 `paper_trading/test2_ab_state.json` JSON 相等且 SHA-256 均为 `3ad1af227d3767d27720122df8303d5afa84bc7b89415e69e9f60b68c298cdcd`。运行时边界确认：active profile `new_framework`，quant/technical/sentiment=`0.0/0.6/0.4`，entry threshold `25.0`，multi-agent off，Kronos off，official signal markets 仍为 `CN`，HK/US observe-only。
 
 ### M44.2 Phase 1：Atlas rebase 到 M43/main
 

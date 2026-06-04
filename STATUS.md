@@ -24,7 +24,7 @@ maintenance. It does not place real trades or provide financial advice.
 | M41 | complete: read-only A/HK/US seven-layer data/research facade; HK/US official signals remain observe-only |
 | M42 | complete: qfq/hfq price-contamination write guard and dry-run-first remediation CLI |
 | M43 | complete: architecture boundary hardening for market data, runtime schema, AI chat routes, and scheduler jobs |
-| M44 / Atlas merge | active: M43 -> main baseline first; Atlas remains dormant architecture candidate until engineering parity gates pass |
+| M44 / Atlas merge | active: Phase 0 complete locally; `main` has M43 baseline and Atlas remains dormant architecture candidate until engineering parity gates pass |
 | remote agent mode | opt-in only; read-only by default |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
@@ -61,17 +61,19 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 | M41 A/HK/US Global Data/Research Buildout | complete | read-only three-market data facade, health ledger, normalization/PIT contracts, UX boundary, and CN-only production guardrails |
 | M42 qfq/hfq Price-Contamination Guard | complete | write-time jump guard, dry-run-first remediation CLI, 33 hermetic tests; legacy full-series hfq rows remain a separate data cleanup item |
 | M43 Architecture Boundary Hardening | complete | compatibility facades, behavior-characterization tests, and AST architecture guards are in place |
-| M44 Atlas Merge / L0-L4 Architecture | active: Phase 0 | run M43 `make verify`, fixed-end test2 replay zero diff, local merge to `main`, baseline tag; then rebase Atlas |
+| M44 Atlas Merge / L0-L4 Architecture | active: Phase 1 next | rebase Atlas onto `main` at `pre-atlas-m43-baseline`, preserve M31/M41/M42/M43 boundaries, then rerun Gate-A and focused parity checks |
 
 For detailed sequencing, read `docs/ROADMAP.md`. For historical milestone
 details, read `CHANGELOG.md`.
 
 M44 planning note (2026-06-04): `docs/ROADMAP.md` now treats Atlas as the
-next-generation main architecture candidate, not a permanent side project. The
-first execution step is still conservative: land M43 on `main`, pin a
-`pre-atlas-m43-baseline`, verify test2 replay parity, and only then rebase
-Atlas. Atlas behavior must remain dormant until engineering parity gates pass;
-any investment-impact promotion requires later shadow/test4 evidence.
+next-generation main architecture candidate, not a permanent side project. Phase
+0 completed locally: M43 was merged into `main` at `4882d49`, tagged
+`pre-atlas-m43-baseline`, post-merge `make verify` passed, and fixed-end test2
+replay (`--end 2026-06-04`) stayed byte-for-byte equivalent by SHA-256. The next
+step is Phase 1 Atlas rebase/Gate-A. Atlas behavior must remain dormant until
+engineering parity gates pass; any investment-impact promotion requires later
+shadow/test4 evidence.
 
 M31 completion note (2026-06-02): `backend.data.cache_policy` defines L1/L2/L3
 and the intraday zero-network contract; `/api/system/data-coverage` exposes
