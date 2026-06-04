@@ -447,6 +447,7 @@ class ThemeHypothesis(Base):
     beneficiary_tiers_json: Mapped[str | None] = mapped_column(Text, nullable=True)    # advisory display only — JSON array of {symbol, tier, rationale}
     evidence_gaps_json: Mapped[str | None] = mapped_column(Text, nullable=True)        # JSON array of strings
     invalidation_conditions_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array of strings
+    ai_supply_chain_json: Mapped[str | None] = mapped_column(Text, nullable=True)      # observe-only template payload; never used for scoring
     forward_evidence_ref_json: Mapped[str | None] = mapped_column(Text, nullable=True) # populated by M39 when M29 promotion gate passes
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
