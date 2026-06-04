@@ -7,9 +7,6 @@ breaking existing behaviour.
 """
 from __future__ import annotations
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # PriceQualityPolicy: new field present and backward-compatible
 # ---------------------------------------------------------------------------
@@ -144,7 +141,6 @@ def test_none_values_in_preceding_are_ignored():
 
 def test_evaluate_price_quality_still_works_after_m42(test_db):
     """evaluate_price_quality must still function correctly after M42 changes."""
-    from datetime import date
 
     from backend.data.database import Price
     from backend.data.price_quality import evaluate_price_quality

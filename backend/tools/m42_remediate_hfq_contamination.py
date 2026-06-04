@@ -136,9 +136,6 @@ def _detect_contaminated(
     flagged: list[tuple[str, str, str]] = []
 
     for symbol, rows in symbol_rows.items():
-        # Build a dict of date → index for snap-back lookup.
-        date_to_idx: dict[str, int] = {r[0]: i for i, r in enumerate(rows)}
-
         for idx, (date_str, close, adjustment) in enumerate(rows):
             # Both predicates require adjustment IS NULL.
             if adjustment is not None:
