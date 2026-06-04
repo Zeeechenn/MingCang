@@ -53,6 +53,25 @@ from backend.llm import runtime_readiness
 router = APIRouter()
 
 
+def _merge_template_list(explicit: list | None, generated: list) -> list | None:
+    if explicit is None:
+        return generated
+    result = list(explicit)
+    for item in generated:
+        if item not in result:
+            result.append(item)
+    return result
+
+
+def _normalize_template_payload(template: str | None, payload: dict | None) -> dict | None:
+    if template is None and payload is None:
+        return None
+    if template not in (None, "ai_supply_chain"):
+        raise ValueError(f"unsupported template: {template}")
+    from backend.research.ai_supply_chain_template import normalize_ai_supply_chain_payload
+    return normalize_ai_supply_chain_payload(payload)
+
+
 def local_human_memory_gate(request: Request) -> None:
     """Allow memory trust decisions only from local human-operated paths."""
     if agent_mode() == "remote":
@@ -443,13 +462,27 @@ def create_hypothesis_endpoint(
     """Create a new hypothesis under a theme."""
     from backend.research.theme_hypothesis_engine import create_hypothesis
     try:
+        ai_supply_chain = _normalize_template_payload(request.template, request.template_payload)
+        beneficiary_tiers = request.beneficiary_tiers
+        evidence_gaps = request.evidence_gaps
+        invalidation_conditions = request.invalidation_conditions
+        if ai_supply_chain is not None:
+            from backend.research.ai_supply_chain_template import hypothesis_fields_from_payload
+            mapped = hypothesis_fields_from_payload(ai_supply_chain)
+            beneficiary_tiers = _merge_template_list(beneficiary_tiers, mapped["beneficiary_tiers"])
+            evidence_gaps = _merge_template_list(evidence_gaps, mapped["evidence_gaps"])
+            invalidation_conditions = _merge_template_list(
+                invalidation_conditions,
+                mapped["invalidation_conditions"],
+            )
         return create_hypothesis(
             db,
             theme_id=theme_id,
             statement=request.statement,
-            beneficiary_tiers=request.beneficiary_tiers,
-            evidence_gaps=request.evidence_gaps,
-            invalidation_conditions=request.invalidation_conditions,
+            beneficiary_tiers=beneficiary_tiers,
+            evidence_gaps=evidence_gaps,
+            invalidation_conditions=invalidation_conditions,
+            ai_supply_chain=ai_supply_chain,
             status=request.status,
         )
     except ValueError as e:
@@ -795,6 +828,19 @@ def create_forward_thesis_endpoint(
         raise HTTPException(503, "forward_thesis feature is disabled")
     from backend.research.forward_thesis import create_forward_thesis
     try:
+        ai_supply_chain = _normalize_template_payload(request.template, request.template_payload)
+        invalidation_conditions = request.invalidation_conditions
+        follow_up_metrics = request.follow_up_metrics
+        evidence_manifest = request.evidence_manifest
+        if ai_supply_chain is not None:
+            from backend.research.ai_supply_chain_template import forward_thesis_fields_from_payload
+            mapped = forward_thesis_fields_from_payload(ai_supply_chain)
+            invalidation_conditions = _merge_template_list(
+                invalidation_conditions,
+                mapped["invalidation_conditions"],
+            )
+            follow_up_metrics = _merge_template_list(follow_up_metrics, mapped["follow_up_metrics"])
+            evidence_manifest = _merge_template_list(evidence_manifest, mapped["evidence_manifest"])
         result = create_forward_thesis(
             db,
             statement=request.statement,
@@ -805,9 +851,9 @@ def create_forward_thesis_endpoint(
             universe_snapshot_id=request.universe_snapshot_id,
             confidence_low=request.confidence_low,
             confidence_high=request.confidence_high,
-            invalidation_conditions=request.invalidation_conditions,
-            follow_up_metrics=request.follow_up_metrics,
-            evidence_manifest=request.evidence_manifest,
+            invalidation_conditions=invalidation_conditions,
+            follow_up_metrics=follow_up_metrics,
+            evidence_manifest=evidence_manifest,
             next_review_date=request.next_review_date,
             review_cadence_days=request.review_cadence_days,
             status=request.status,

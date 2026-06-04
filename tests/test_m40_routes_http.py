@@ -255,6 +255,108 @@ def test_hypothesis_attach_forward_evidence_returns_and_gets_ref_http(client):
     assert get_resp.json()["forward_evidence_ref"] == payload
 
 
+def _ai_supply_chain_payload(symbol=_SYM):
+    return {
+        "new_capability": "推理成本下降带来企业应用调用量上升",
+        "new_bottleneck": "HBM 与数据中心电力",
+        "payer": "云厂商与企业客户",
+        "spend_source": "AI capex 与推理预算",
+        "profit_pool": "具备认证与产能约束的上游供应链",
+        "pricing_gap": "市场仍按训练算力叙事定价",
+        "catalysts_30d": ["云厂商 capex 指引"],
+        "catalysts_90d": ["HBM 合约价"],
+        "catalysts_180d": ["800G/1.6T 订单兑现"],
+        "evidence_cards": [{
+            "claim": "HBM 供需继续紧张",
+            "source": "company_call",
+            "source_date": "2026-06-01",
+            "status": "needs_verification",
+            "gap": "缺少交期与客户集中度数据",
+            "linked_symbols": [symbol],
+        }],
+        "evidence_gaps": ["缺少客户订单明细"],
+        "invalidation_conditions": ["云厂商下修 capex"],
+        "follow_up_metrics": ["HBM contract price"],
+        "beneficiary_tiers": [{"symbol": symbol, "tier": 1, "rationale": "直接受益"}],
+    }
+
+
+def test_hypothesis_ai_supply_chain_http_round_trip(client):
+    """Template payload is visible on hypothesis and maps into existing display fields."""
+    theme_id = client.post("/api/research/themes", json={"theme_name": "AI Supply Chain"}).json()["id"]
+
+    post_resp = client.post(
+        f"/api/research/themes/{theme_id}/hypotheses",
+        json={
+            "statement": "AI推理需求会拉动上游瓶颈资产",
+            "template": "ai_supply_chain",
+            "template_payload": _ai_supply_chain_payload(),
+        },
+    )
+    assert post_resp.status_code == 200, post_resp.text
+    body = post_resp.json()
+    assert body["ai_supply_chain"]["observe_only"] is True
+    assert body["ai_supply_chain"]["signal_impact"] == "none"
+    assert body["ai_supply_chain"]["not_a_buy_score"] is True
+    assert body["beneficiary_tiers"][0]["symbol"] == _SYM
+    assert "缺少交期与客户集中度数据" in body["evidence_gaps"]
+    assert "云厂商下修 capex" in body["invalidation_conditions"]
+
+    get_resp = client.get(f"/api/research/hypotheses/{body['id']}")
+    assert get_resp.status_code == 200, get_resp.text
+    assert get_resp.json()["ai_supply_chain"]["chain"]["new_bottleneck"] == "HBM 与数据中心电力"
+
+
+def test_case_view_exposes_ai_supply_chain_fields_for_symbol(client):
+    """case-view should show template fields through the existing symbol tier linkage."""
+    theme_id = client.post("/api/research/themes", json={"theme_name": "AI Case View"}).json()["id"]
+    client.post(
+        f"/api/research/themes/{theme_id}/hypotheses",
+        json={
+            "statement": "AI产业链瓶颈有可跟踪性",
+            "template": "ai_supply_chain",
+            "template_payload": _ai_supply_chain_payload(),
+        },
+    )
+
+    resp = client.get(f"/api/research/{_SYM}/case-view?include_dossier=false")
+    assert resp.status_code == 200, resp.text
+    hypotheses = resp.json()["case_view"]["theme_hypotheses"]
+    assert hypotheses
+    assert hypotheses[0]["ai_supply_chain"]["catalysts"]["90d"] == ["HBM 合约价"]
+
+
+def test_ai_supply_chain_case_view_is_display_only_no_signal_side_effects(client, http_db, monkeypatch):
+    """Template creation + case-view must not invoke scoring or write official signal state."""
+    def fail_if_called(*_, **__):
+        raise AssertionError("scoring path must not be called")
+
+    monkeypatch.setattr("backend.decision.aggregator.aggregate", fail_if_called)
+    monkeypatch.setattr("backend.decision.aggregator.aggregate_v2", fail_if_called)
+    monkeypatch.setattr("backend.agents.pipeline.run_pipeline", fail_if_called)
+    monkeypatch.setattr("backend.decision.research_constraints.apply_research_constraints", fail_if_called)
+    monkeypatch.setattr("backend.portfolio.single_position.suggest_position_pct", fail_if_called)
+
+    theme_id = client.post("/api/research/themes", json={"theme_name": "No Signal Side Effects"}).json()["id"]
+    resp = client.post(
+        f"/api/research/themes/{theme_id}/hypotheses",
+        json={
+            "statement": "模板只用于展示",
+            "template": "ai_supply_chain",
+            "template_payload": _ai_supply_chain_payload(),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    case_view = client.get(f"/api/research/{_SYM}/case-view?include_dossier=false")
+    assert case_view.status_code == 200, case_view.text
+
+    from backend.data.database import DecisionRun, ResearchState, Signal
+
+    assert http_db.query(Signal).count() == 0
+    assert http_db.query(DecisionRun).count() == 0
+    assert http_db.query(ResearchState).count() == 0
+
+
 # ---------------------------------------------------------------------------
 # Review case round-trip
 # ---------------------------------------------------------------------------
@@ -433,6 +535,24 @@ def test_forward_thesis_list_http(client):
     body = resp.json()
     assert "items" in body
     assert "total" in body
+
+
+def test_forward_thesis_ai_supply_chain_template_maps_manifest_and_metrics(client):
+    """Forward thesis template input maps into pointer-only evidence and tracking fields."""
+    post_resp = client.post(
+        f"/api/research/{_SYM}/forward-theses",
+        json={
+            "statement": "AI推理瓶颈 thesis",
+            "template": "ai_supply_chain",
+            "template_payload": _ai_supply_chain_payload(),
+        },
+    )
+    assert post_resp.status_code == 200, post_resp.text
+    body = post_resp.json()
+    assert body["evidence_manifest"][0]["kind"] == "ai_supply_chain_evidence_card"
+    assert body["evidence_manifest"][0]["summary"] == "HBM 供需继续紧张"
+    assert "HBM contract price" in body["follow_up_metrics"]
+    assert "云厂商下修 capex" in body["invalidation_conditions"]
 
 
 # ---------------------------------------------------------------------------

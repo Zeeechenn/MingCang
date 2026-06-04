@@ -148,6 +148,8 @@ Scope:
 - beneficiary tiers;
 - evidence gaps;
 - invalidation conditions;
+- AI supply-chain observe-only template: capability shift, bottleneck, payer, profit pool, catalysts, evidence cards, and failure conditions;
+- no position sizing, buy score, production signal, or Ming/Atlas decision override from this template;
 - bridge to M29/M32 forward evidence when enough review data exists.
 
 ### M37 — Review / Calibration / Memory Loop

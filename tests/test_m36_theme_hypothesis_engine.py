@@ -63,6 +63,7 @@ def test_create_hypothesis_returns_dict(test_db):
     assert h["id"] is not None
     assert h["theme_id"] == t["id"]
     assert h["status"] == "proposed"
+    assert h["ai_supply_chain"] is None
 
 
 def test_create_hypothesis_idempotent(test_db):
@@ -107,6 +108,51 @@ def test_evidence_gaps_and_invalidation_conditions(test_db):
     )
     assert "需要Q2出货数据" in h["evidence_gaps"]
     assert "CPO渗透率低于20%" in h["invalidation_conditions"]
+
+
+def test_create_hypothesis_with_ai_supply_chain_template(test_db):
+    from backend.research.theme_hypothesis_engine import create_hypothesis
+
+    t = _theme(test_db, name="AI算力")
+    h = create_hypothesis(
+        test_db,
+        theme_id=t["id"],
+        statement="AI推理需求会拉动上游瓶颈资产",
+        ai_supply_chain={
+            "new_capability": "推理成本下降",
+            "new_bottleneck": "HBM 与数据中心电力",
+            "payer": "云厂商",
+            "evidence_cards": [{
+                "claim": "HBM 供需紧张",
+                "source": "company_call",
+                "gap": "缺少交期数据",
+                "linked_symbols": ["300308"],
+            }],
+            "beneficiary_tiers": [{"symbol": "300308", "tier": 1, "rationale": "直接受益"}],
+            "invalidation_conditions": ["云厂商下修 capex"],
+        },
+    )
+    assert h["ai_supply_chain"]["observe_only"] is True
+    assert h["ai_supply_chain"]["signal_impact"] == "none"
+    assert h["beneficiary_tiers"][0]["symbol"] == "300308"
+    assert "缺少交期数据" in h["evidence_gaps"]
+    assert "云厂商下修 capex" in h["invalidation_conditions"]
+
+
+def test_create_hypothesis_ai_supply_chain_rejects_score_like_fields(test_db):
+    from backend.research.theme_hypothesis_engine import create_hypothesis
+
+    t = _theme(test_db, name="AI算力")
+    with pytest.raises(ValueError, match="position_pct"):
+        create_hypothesis(
+            test_db,
+            theme_id=t["id"],
+            statement="bad scoring payload",
+            ai_supply_chain={
+                "new_capability": "推理成本下降",
+                "nested": {"position_pct": 0.2},
+            },
+        )
 
 
 # update_hypothesis_status

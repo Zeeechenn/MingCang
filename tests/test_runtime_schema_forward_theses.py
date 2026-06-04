@@ -176,3 +176,43 @@ def test_runtime_schema_reports_existing_forward_theses_normalized_duplicates(tm
     assert "forward_theses has duplicate normalized keys" in message
     assert "duplicate null horizon" in message
     assert "ids=1,2" in message
+
+
+def test_runtime_schema_adds_theme_hypothesis_ai_supply_chain_column(tmp_path):
+    from backend.data.database import Base, _ensure_runtime_schema
+
+    db_path = tmp_path / "legacy-theme-hypotheses.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(engine)
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE theme_hypotheses"))
+        conn.execute(text("""
+            CREATE TABLE theme_hypotheses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                theme_id INTEGER,
+                statement TEXT,
+                status TEXT DEFAULT 'proposed',
+                beneficiary_tiers_json TEXT,
+                evidence_gaps_json TEXT,
+                invalidation_conditions_json TEXT,
+                forward_evidence_ref_json TEXT,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        before_cols = [
+            row[1] for row in conn.execute(text("PRAGMA table_info(theme_hypotheses)")).fetchall()
+        ]
+        assert "ai_supply_chain_json" not in before_cols
+
+    _ensure_runtime_schema(engine)
+
+    with engine.begin() as conn:
+        after_cols = [
+            row[1] for row in conn.execute(text("PRAGMA table_info(theme_hypotheses)")).fetchall()
+        ]
+        assert "ai_supply_chain_json" in after_cols

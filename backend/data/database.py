@@ -792,6 +792,12 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
     ensure_runtime_schema(target_engine)
 
     with target_engine.begin() as conn:
+        theme_hypothesis_cols = [
+            r[1] for r in conn.execute(text("PRAGMA table_info(theme_hypotheses)")).fetchall()
+        ]
+        if theme_hypothesis_cols and "ai_supply_chain_json" not in theme_hypothesis_cols:
+            conn.execute(text("ALTER TABLE theme_hypotheses ADD COLUMN ai_supply_chain_json TEXT"))
+
         # M38 Dynamic Universe / Survivorship Guard
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS universe_snapshots (

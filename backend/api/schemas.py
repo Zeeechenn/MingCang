@@ -400,6 +400,7 @@ class HypothesisOut(BaseModel):
     beneficiary_tiers: list[dict] = []
     evidence_gaps: list[str] = []
     invalidation_conditions: list[str] = []
+    ai_supply_chain: dict | None = None
     forward_evidence: list[dict] = []
     forward_evidence_ref: dict | None = None
     created_at: str | None = None
@@ -417,6 +418,8 @@ class HypothesisCreateRequest(BaseModel):
     beneficiary_tiers: list | None = None
     evidence_gaps: list | None = None
     invalidation_conditions: list | None = None
+    template: str | None = None
+    template_payload: dict | None = None
     status: str = "proposed"
 
 
@@ -570,6 +573,8 @@ class ForwardThesisCreateRequest(BaseModel):
     invalidation_conditions: list | None = None
     follow_up_metrics: list | None = None
     evidence_manifest: list | None = None
+    template: str | None = None
+    template_payload: dict | None = None
     next_review_date: str | None = None
     review_cadence_days: int | None = None
     status: str = "draft"

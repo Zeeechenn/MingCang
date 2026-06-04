@@ -65,6 +65,7 @@ def _hyp_to_dict(row) -> dict:
         "beneficiary_tiers": json.loads(row.beneficiary_tiers_json) if row.beneficiary_tiers_json else [],
         "evidence_gaps": json.loads(row.evidence_gaps_json) if row.evidence_gaps_json else [],
         "invalidation_conditions": json.loads(row.invalidation_conditions_json) if row.invalidation_conditions_json else [],
+        "ai_supply_chain": json.loads(row.ai_supply_chain_json) if row.ai_supply_chain_json else None,
         "forward_evidence_ref": json.loads(row.forward_evidence_ref_json) if row.forward_evidence_ref_json else None,
         "created_at": _iso(row.created_at),
         "updated_at": _iso(row.updated_at),
@@ -122,6 +123,7 @@ def create_hypothesis(
     beneficiary_tiers: list | None = None,
     evidence_gaps: list | None = None,
     invalidation_conditions: list | None = None,
+    ai_supply_chain: dict | None = None,
     status: str = "proposed",
 ) -> dict:
     """Create a new hypothesis under a theme, or return existing one if (theme_id, statement) already exists (idempotent)."""
@@ -137,6 +139,21 @@ def create_hypothesis(
     ).first()
     if existing is not None:
         return _hyp_to_dict(existing)
+    normalized_ai_supply_chain = None
+    if ai_supply_chain is not None:
+        from backend.research.ai_supply_chain_template import (
+            hypothesis_fields_from_payload,
+            normalize_ai_supply_chain_payload,
+        )
+        normalized_ai_supply_chain = normalize_ai_supply_chain_payload(ai_supply_chain)
+        mapped = hypothesis_fields_from_payload(normalized_ai_supply_chain)
+        beneficiary_tiers = beneficiary_tiers if beneficiary_tiers is not None else mapped["beneficiary_tiers"]
+        evidence_gaps = evidence_gaps if evidence_gaps is not None else mapped["evidence_gaps"]
+        invalidation_conditions = (
+            invalidation_conditions
+            if invalidation_conditions is not None
+            else mapped["invalidation_conditions"]
+        )
     now = _utc_now()
     row = ThemeHypothesis(
         theme_id=theme_id,
@@ -145,6 +162,7 @@ def create_hypothesis(
         beneficiary_tiers_json=json.dumps(beneficiary_tiers or [], ensure_ascii=False),
         evidence_gaps_json=json.dumps(evidence_gaps or [], ensure_ascii=False),
         invalidation_conditions_json=json.dumps(invalidation_conditions or [], ensure_ascii=False),
+        ai_supply_chain_json=json.dumps(normalized_ai_supply_chain, ensure_ascii=False) if normalized_ai_supply_chain else None,
         forward_evidence_ref_json=None,  # populated by M39 when M29 promotion gate passes
         created_at=now,
         updated_at=now,
