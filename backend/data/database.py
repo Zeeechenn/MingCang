@@ -339,6 +339,70 @@ class StockMemoryItem(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class MemoryAtom(Base):
+    """
+    L0 Memory / Knowledge Base — one minimal memory unit.
+
+    Inspired by TencentDB-Agent-Memory's local layered design, but kept as a
+    StockSage-owned SQLite contract.  LLM/tool paths may create raw/pending
+    atoms; trusted/refuted states are reserved for explicit human/review gates.
+    """
+    __tablename__ = "memory_atoms"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope_type: Mapped[str] = mapped_column(String, index=True)
+    scope_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    memory_type: Mapped[str] = mapped_column(String, index=True)
+    summary: Mapped[str] = mapped_column(Text)
+    evidence_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_type: Mapped[str] = mapped_column(String, index=True)
+    source_ref: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    trust_state: Mapped[str] = mapped_column(String, default="raw", index=True)
+    importance: Mapped[int] = mapped_column(Integer, default=3)
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    valid_from: Mapped[str | None] = mapped_column(String, nullable=True)
+    valid_to: Mapped[str | None] = mapped_column(String, nullable=True)
+    ttl_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    review_case_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    stock_memory_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    promoted_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    refuted_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    refutation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MemoryScenario(Base):
+    """L0 scenario rollup: a compact cluster of related memory atoms."""
+    __tablename__ = "memory_scenarios"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope_type: Mapped[str] = mapped_column(String, index=True)
+    scope_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String)
+    summary: Mapped[str] = mapped_column(Text)
+    atom_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trust_state: Mapped[str] = mapped_column(String, default="pending", index=True)
+    source_type: Mapped[str] = mapped_column(String, default="manual")
+    source_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class MemoryProfile(Base):
+    """L0 profile rollup for user rules, methodology, and project preferences."""
+    __tablename__ = "memory_profiles"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    profile_type: Mapped[str] = mapped_column(String, index=True)
+    profile_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    summary: Mapped[str] = mapped_column(Text)
+    atom_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trust_state: Mapped[str] = mapped_column(String, default="pending", index=True)
+    source_type: Mapped[str] = mapped_column(String, default="manual")
+    source_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class ChatSession(Base):
     """Project AI chat window; memory is scoped to this session only."""
     __tablename__ = "chat_sessions"
@@ -503,6 +567,7 @@ class MemoryPromotionCandidate(Base):
     __tablename__ = "memory_promotion_candidates"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     review_case_id: Mapped[int | None] = mapped_column(Integer, nullable=True)         # bare int ref to review_cases.id
+    memory_atom_id: Mapped[int | None] = mapped_column(Integer, nullable=True)         # set after L0 promotion/rejection
     stock_memory_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # set after promotion fires the stock_memory write
     symbol: Mapped[str] = mapped_column(String, index=True)
     summary: Mapped[str] = mapped_column(Text)

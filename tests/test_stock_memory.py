@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
 from sqlalchemy import text
 
 
@@ -85,6 +86,50 @@ def test_build_memory_context_prioritizes_user_rules_stock_items_and_research(te
     assert "算力链重点观察光模块订单兑现" in text_value
     assert text_value.index("用户偏好") < text_value.index("300308 需要跟踪")
     assert ctx["used_stock_memory_ids"]
+    assert "used_memory_atom_ids" in ctx
+    assert "l0_context" in ctx
+
+
+def test_build_memory_context_includes_l0_trusted_and_pending_sections(test_db):
+    from backend.memory.l0_memory import create_memory_atom, promote_atom
+    from backend.memory.stock_memory import build_memory_context, create_stock_memory
+
+    trusted = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="thesis",
+        summary="L0 trusted thesis：订单兑现改善",
+        source_type="test",
+        source_ref="stock-context-trusted",
+        trust_state="pending",
+    )
+    promote_atom(test_db, trusted["id"], confirmed_by="tester")
+    pending = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="risk",
+        summary="L0 pending risk：客户砍单",
+        source_type="test",
+        source_ref="stock-context-pending",
+        trust_state="pending",
+    )
+    create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="risk",
+        summary="旧股票记忆仍然保留",
+        source_type="test",
+    )
+
+    ctx = build_memory_context(test_db, symbol="300308", limit=8)
+
+    assert "L0 trusted thesis：订单兑现改善" in ctx["text"]
+    assert "L0 pending risk：客户砍单" in ctx["text"]
+    assert "旧股票记忆仍然保留" in ctx["text"]
+    assert set(ctx["used_memory_atom_ids"]) == {trusted["id"], pending["id"]}
+    assert ctx["l0_context"]["legacy_memory"] == []
 
 
 def test_build_memory_context_keeps_unrelated_global_preference_out_of_symbol_context(test_db):
@@ -168,6 +213,7 @@ def test_stock_memory_api_context_list_archive_and_patch(test_db):
 
 def test_stock_memory_context_route_does_not_update_usage_or_audit(test_db):
     from backend.api.routes.memory import stock_memory_context
+    from backend.memory.l0_memory import create_memory_atom, promote_atom
     from backend.memory.stock_memory import create_stock_memory
 
     row = create_stock_memory(
@@ -178,6 +224,17 @@ def test_stock_memory_context_route_does_not_update_usage_or_audit(test_db):
         source_type="test",
         importance=5,
     )
+    atom = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="thesis",
+        summary="L0 只读 context",
+        source_type="test",
+        source_ref="route-readonly",
+        trust_state="pending",
+    )
+    promote_atom(test_db, atom["id"], confirmed_by="tester")
 
     ctx = stock_memory_context("300308", db=test_db)
 
@@ -188,9 +245,117 @@ def test_stock_memory_context_route_does_not_update_usage_or_audit(test_db):
     audits = test_db.execute(text(
         "SELECT count(*) FROM audit_log_fts WHERE event_type='stock_memory.recall'"
     )).scalar()
+    l0_used = test_db.execute(
+        text("SELECT last_used_at FROM memory_atoms WHERE id = :id"),
+        {"id": atom["id"]},
+    ).scalar()
+    l0_audits = test_db.execute(text(
+        "SELECT count(*) FROM audit_log_fts WHERE event_type='l0_memory.recall'"
+    )).scalar()
     assert "供应链风险需要复核" in ctx["text"]
+    assert "L0 只读 context" in ctx["text"]
     assert used is None
     assert audits == 0
+    assert l0_used is None
+    assert l0_audits == 0
+
+
+def test_l0_memory_routes_promote_refute_and_validate_payload(test_db):
+    from fastapi import HTTPException
+
+    from backend.api.routes.memory import (
+        L0TrustPayload,
+        l0_memory_atom_promote,
+        l0_memory_atom_refute,
+    )
+    from backend.memory.l0_memory import create_memory_atom
+
+    promote_target = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="lesson",
+        summary="可晋升 L0 记忆",
+        source_type="test",
+        source_ref="route-promote",
+        trust_state="pending",
+    )
+    promoted = l0_memory_atom_promote(
+        promote_target["id"],
+        L0TrustPayload(confirmed_by="human"),
+        db=test_db,
+    )
+    assert promoted["trust_state"] == "trusted"
+
+    refute_target = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="risk",
+        summary="可否定 L0 记忆",
+        source_type="test",
+        source_ref="route-refute",
+        trust_state="pending",
+    )
+    refuted = l0_memory_atom_refute(
+        refute_target["id"],
+        L0TrustPayload(confirmed_by="human", reason="证据不支持"),
+        db=test_db,
+    )
+    assert refuted["trust_state"] == "refuted"
+    assert refuted["refutation_reason"] == "证据不支持"
+
+    with pytest.raises(HTTPException) as empty_confirm:
+        l0_memory_atom_promote(
+            refute_target["id"],
+            L0TrustPayload(confirmed_by=" "),
+            db=test_db,
+        )
+    assert empty_confirm.value.status_code == 400
+
+    with pytest.raises(HTTPException) as missing:
+        l0_memory_atom_promote(
+            99999,
+            L0TrustPayload(confirmed_by="human"),
+            db=test_db,
+        )
+    assert missing.value.status_code == 404
+
+
+def test_l0_memory_route_guards_reject_remote_even_with_write_allowlist(monkeypatch):
+    from fastapi import HTTPException
+
+    from backend.agent.http_guard import agent_write_guard
+    from backend.api.routes.memory import local_human_l0_gate
+
+    class FakeRequest:
+        def __init__(self, headers):
+            self.headers = headers
+
+    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
+    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", "l0_memory.promote")
+    request = FakeRequest({"x-stocksage-agent-api-key": "secret"})
+
+    agent_write_guard("l0_memory.promote")(request)
+    with pytest.raises(HTTPException) as exc:
+        local_human_l0_gate(request)
+    assert exc.value.status_code == 403
+
+
+def test_l0_memory_context_route_invalid_filters_return_400(test_db):
+    from fastapi import HTTPException
+
+    from backend.api.routes.memory import l0_memory_atoms, l0_memory_context
+
+    with pytest.raises(HTTPException) as bad_scope:
+        l0_memory_context(scope_type="unsupported", db=test_db)
+    assert bad_scope.value.status_code == 400
+
+    with pytest.raises(HTTPException) as bad_trust:
+        l0_memory_atoms(trust_state="invented", db=test_db)
+    assert bad_trust.value.status_code == 400
 
 
 def test_build_memory_context_marks_multiple_used_ids_with_bound_params(test_db):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import text
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -159,6 +160,9 @@ def test_no_direct_trusted_write_path(test_db):
         "create_memory_candidate must not expose source_trust as a parameter — "
         "this would allow callers to bypass the pending-only invariant"
     )
+    assert "memory_atom_id" not in sig.parameters, (
+        "create_memory_candidate must not let callers link or pre-trust L0 atoms"
+    )
 
 
 # ── get/list memory candidates ────────────────────────────────────────────────
@@ -214,6 +218,26 @@ def test_promote_memory_creates_stock_memory_item(test_db):
     assert result["stock_memory_item_id"] in ids
 
 
+def test_promote_memory_creates_trusted_l0_atom(test_db):
+    from backend.api.schemas import MemoryCandidateOut
+    from backend.memory.l0_memory import list_memory_atoms
+    from backend.research.review_loop import promote_memory
+
+    c = _cand(test_db, symbol="600519", memory_type="lesson", source_ref="lesson-ref")
+    result = promote_memory(test_db, c["id"], confirmed_by="human_reviewer")
+
+    assert result["memory_atom_id"] is not None
+    atoms = list_memory_atoms(test_db, scope_type="stock", scope_key="600519")
+    assert len(atoms) == 1
+    assert atoms[0]["id"] == result["memory_atom_id"]
+    assert atoms[0]["trust_state"] == "trusted"
+    assert atoms[0]["stock_memory_item_id"] == result["stock_memory_item_id"]
+    assert atoms[0]["review_case_id"] == result["review_case_id"]
+    serialized = MemoryCandidateOut(**result).model_dump()
+    assert serialized["memory_atom_id"] == result["memory_atom_id"]
+    assert serialized["stock_memory_item_id"] == result["stock_memory_item_id"]
+
+
 def test_promote_memory_raises_on_non_pending(test_db):
     from backend.research.review_loop import promote_memory
     c = _cand(test_db)
@@ -228,6 +252,8 @@ def test_double_promote_raises(test_db):
     promote_memory(test_db, c["id"], confirmed_by="human_reviewer")
     with pytest.raises(ValueError):
         promote_memory(test_db, c["id"], confirmed_by="human_reviewer")
+    rows = test_db.execute(text("SELECT count(*) FROM memory_atoms")).scalar()
+    assert rows == 1
 
 
 def test_promote_is_audited(test_db):
@@ -248,6 +274,37 @@ def test_reject_memory_candidate_moves_pending_to_rejected(test_db):
     result = reject_memory_candidate(test_db, c["id"], confirmed_by="human_reviewer")
     assert result["source_trust"] == "rejected"
     assert result["rejected_at"] is not None
+
+
+def test_reject_memory_candidate_creates_refuted_l0_atom_without_stock_memory(test_db):
+    from backend.api.schemas import MemoryCandidateOut
+    from backend.memory.l0_memory import list_memory_atoms
+    from backend.memory.stock_memory import list_stock_memories
+    from backend.research.review_loop import reject_memory_candidate
+
+    c = _cand(test_db, symbol="600519", memory_type="risk", source_ref="bad-risk")
+    result = reject_memory_candidate(
+        test_db,
+        c["id"],
+        confirmed_by="human_reviewer",
+        note="后续证据不支持",
+    )
+
+    assert result["memory_atom_id"] is not None
+    assert result["stock_memory_item_id"] is None
+    atoms = list_memory_atoms(
+        test_db,
+        scope_type="stock",
+        scope_key="600519",
+        trust_state="refuted",
+    )
+    assert len(atoms) == 1
+    assert atoms[0]["id"] == result["memory_atom_id"]
+    assert atoms[0]["refutation_reason"] == "后续证据不支持"
+    assert list_stock_memories(test_db, symbol="600519") == []
+    serialized = MemoryCandidateOut(**result).model_dump()
+    assert serialized["memory_atom_id"] == result["memory_atom_id"]
+    assert serialized["rejected_at"] == result["rejected_at"]
 
 
 def test_reject_memory_candidate_raises_on_non_pending(test_db):

@@ -61,6 +61,7 @@ def _cand_to_dict(row) -> dict:
     return {
         "id": row.id,
         "review_case_id": row.review_case_id,
+        "memory_atom_id": row.memory_atom_id,
         "stock_memory_item_id": row.stock_memory_item_id,
         "symbol": row.symbol,
         "summary": row.summary,
@@ -331,7 +332,33 @@ def promote_memory(db, candidate_id: int, *, confirmed_by: str) -> dict:
             "only 'pending' candidates can be promoted"
         )
 
-    # Materialise the candidate as a StockMemoryItem with status='active'
+    atom_source_ref = (
+        row.source_ref
+        or f"m37_candidate_{candidate_id}_{row.symbol}_{row.memory_type}"
+    )
+    from backend.memory.l0_memory import create_memory_atom, promote_atom
+
+    atom = create_memory_atom(
+        db,
+        scope_type="stock",
+        scope_key=row.symbol,
+        memory_type=row.memory_type,
+        summary=row.summary,
+        source_type="m37_promotion_candidate",
+        source_ref=f"l0:{atom_source_ref}",
+        trust_state="pending",
+        evidence={
+            "candidate_id": candidate_id,
+            "review_case_id": row.review_case_id,
+            "candidate_source_ref": row.source_ref,
+            "confirmed_by": confirmed_by,
+        },
+        importance=row.importance,
+        confidence=row.confidence,
+        review_case_id=row.review_case_id,
+    )
+
+    # Materialise the candidate as a legacy StockMemoryItem for compatibility.
     source_ref = (
         row.source_ref
         or f"m37_promotion_{candidate_id}_{row.symbol}_{row.memory_type}"
@@ -346,10 +373,34 @@ def promote_memory(db, candidate_id: int, *, confirmed_by: str) -> dict:
         importance=row.importance,
         confidence=row.confidence,
         status="active",
+        evidence={"memory_atom_id": atom["id"], "review_case_id": row.review_case_id},
     )
+    atom = create_memory_atom(
+        db,
+        scope_type="stock",
+        scope_key=row.symbol,
+        memory_type=row.memory_type,
+        summary=row.summary,
+        source_type="m37_promotion_candidate",
+        source_ref=f"l0:{atom_source_ref}",
+        trust_state="pending",
+        evidence={
+            "candidate_id": candidate_id,
+            "review_case_id": row.review_case_id,
+            "candidate_source_ref": row.source_ref,
+            "confirmed_by": confirmed_by,
+            "stock_memory_item_id": mem["id"],
+        },
+        importance=row.importance,
+        confidence=row.confidence,
+        review_case_id=row.review_case_id,
+        stock_memory_item_id=mem["id"],
+    )
+    atom = promote_atom(db, atom["id"], confirmed_by=confirmed_by)
 
     now = _utc_now()
     row.source_trust = "trusted"
+    row.memory_atom_id = atom["id"]
     row.stock_memory_item_id = mem["id"]
     row.promoted_at = now
     row.updated_at = now
@@ -360,7 +411,8 @@ def promote_memory(db, candidate_id: int, *, confirmed_by: str) -> dict:
         "memory_promotion.confirm",
         (
             f"candidate {candidate_id} promoted by {confirmed_by!r}; "
-            f"stock_memory_item_id={mem['id']} symbol={row.symbol}"
+            f"memory_atom_id={atom['id']} stock_memory_item_id={mem['id']} "
+            f"symbol={row.symbol}"
         ),
         related_symbol=row.symbol,
     )
@@ -398,8 +450,36 @@ def reject_memory_candidate(
             "only 'pending' candidates can be rejected"
         )
 
+    atom_source_ref = (
+        row.source_ref
+        or f"m37_rejected_{candidate_id}_{row.symbol}_{row.memory_type}"
+    )
+    from backend.memory.l0_memory import create_memory_atom, refute_atom
+
+    atom = create_memory_atom(
+        db,
+        scope_type="stock",
+        scope_key=row.symbol,
+        memory_type=row.memory_type,
+        summary=row.summary,
+        source_type="m37_rejected_candidate",
+        source_ref=f"l0:{atom_source_ref}",
+        trust_state="pending",
+        evidence={
+            "candidate_id": candidate_id,
+            "review_case_id": row.review_case_id,
+            "candidate_source_ref": row.source_ref,
+            "confirmed_by": confirmed_by,
+        },
+        importance=row.importance,
+        confidence=row.confidence,
+        review_case_id=row.review_case_id,
+    )
+    atom = refute_atom(db, atom["id"], confirmed_by=confirmed_by, reason=note)
+
     now = _utc_now()
     row.source_trust = "rejected"
+    row.memory_atom_id = atom["id"]
     row.rejected_at = now
     row.updated_at = now
     if note:

@@ -16,15 +16,22 @@ Editing raw `value` text is **not exposed** by design: it would break
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
+from backend.agent.security import agent_mode
 from backend.data.database import get_db
 from backend.memory.ai_memory import list_active
 from backend.memory.audit_log import audit_search, audit_write
+from backend.memory.l0_memory import (
+    build_l0_context,
+    list_memory_atoms,
+    promote_atom,
+    refute_atom,
+)
 from backend.memory.stock_memory import (
     archive_stock_memory,
     build_memory_context,
@@ -42,6 +49,15 @@ def _iso(value) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def local_human_l0_gate(request: Request) -> None:
+    """Allow L0 trust decisions only from local human-operated paths."""
+    if agent_mode() == "remote":
+        raise HTTPException(
+            status_code=403,
+            detail="L0 memory promote/refute is local human gated",
+        )
 
 
 @router.get("/overview")
@@ -122,6 +138,112 @@ def memory_layered(db: Session = Depends(get_db)) -> dict:
         ],
         "count": len(rows),
     }
+
+
+@router.get("/l0/context")
+def l0_memory_context(
+    scope_type: str | None = None,
+    scope_key: str | None = None,
+    q: str | None = None,
+    limit: int = Query(default=8, ge=1, le=50),
+    include_pending: bool = True,
+    include_legacy: bool = True,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Prompt-ready L0 context with trusted/pending/legacy separated."""
+    try:
+        return build_l0_context(
+            db,
+            scope_type=scope_type,
+            scope_key=scope_key,
+            query=q,
+            limit=limit,
+            include_pending=include_pending,
+            include_legacy=include_legacy,
+            record_usage=False,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/l0/atoms")
+def l0_memory_atoms(
+    scope_type: str | None = None,
+    scope_key: str | None = None,
+    trust_state: str | None = None,
+    q: str | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> dict:
+    """List L0 memory atoms."""
+    try:
+        rows = list_memory_atoms(
+            db,
+            scope_type=scope_type,
+            scope_key=scope_key,
+            trust_state=trust_state,
+            q=q,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"rows": rows, "count": len(rows)}
+
+
+class L0TrustPayload(BaseModel):
+    confirmed_by: str
+    reason: str | None = None
+
+
+@router.post(
+    "/l0/atoms/{atom_id}/promote",
+    dependencies=[
+        Depends(agent_write_guard("l0_memory.promote")),
+        Depends(local_human_l0_gate),
+    ],
+)
+def l0_memory_atom_promote(
+    atom_id: int,
+    payload: L0TrustPayload,
+    db: Session = Depends(get_db),
+) -> dict:
+    """HUMAN-GATED: promote a raw/pending/legacy atom to trusted."""
+    if not payload.confirmed_by.strip():
+        raise HTTPException(status_code=400, detail="confirmed_by must be non-empty")
+    try:
+        return promote_atom(db, atom_id, confirmed_by=payload.confirmed_by)
+    except ValueError as exc:
+        detail = str(exc)
+        status = 404 if "not found" in detail else 400
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+
+@router.post(
+    "/l0/atoms/{atom_id}/refute",
+    dependencies=[
+        Depends(agent_write_guard("l0_memory.refute")),
+        Depends(local_human_l0_gate),
+    ],
+)
+def l0_memory_atom_refute(
+    atom_id: int,
+    payload: L0TrustPayload,
+    db: Session = Depends(get_db),
+) -> dict:
+    """HUMAN-GATED: mark an L0 atom refuted."""
+    if not payload.confirmed_by.strip():
+        raise HTTPException(status_code=400, detail="confirmed_by must be non-empty")
+    try:
+        return refute_atom(
+            db,
+            atom_id,
+            confirmed_by=payload.confirmed_by,
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status = 404 if "not found" in detail else 400
+        raise HTTPException(status_code=status, detail=detail) from exc
 
 
 @router.get("/stock/{symbol}/context")

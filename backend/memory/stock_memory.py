@@ -418,6 +418,29 @@ def build_memory_context(
     """Build a compact prompt-ready memory context across project entry points."""
     record_usage = record_usage and not _SUPPRESS_USAGE_RECORDING.get()
     try:
+        from backend.memory.l0_memory import build_l0_context
+        l0_context = build_l0_context(
+            db,
+            scope_type="stock" if symbol else None,
+            scope_key=symbol,
+            query=query,
+            limit=limit,
+            include_pending=True,
+            include_legacy=False,
+            record_usage=record_usage,
+        )
+    except Exception:
+        l0_context = {
+            "text": "",
+            "trusted_memory": [],
+            "pending_memory": [],
+            "legacy_memory": [],
+            "scenario_summaries": [],
+            "profile_summaries": [],
+            "drilldown_refs": [],
+            "used_memory_atom_ids": [],
+        }
+    try:
         stock_rows = list_stock_memories(db, symbol=symbol, limit=max(limit * 3, 20))
     except OperationalError:
         stock_rows = []
@@ -431,6 +454,8 @@ def build_memory_context(
     parts: list[str] = []
     if ai_lines:
         parts.append("【用户偏好 / 项目规则 / 研究索引】\n" + "\n".join(ai_lines))
+    if l0_context.get("text"):
+        parts.append(l0_context["text"])
     if stock_lines:
         title = f"【{symbol} 股票长期记忆】" if symbol else "【股票长期记忆】"
         parts.append(title + "\n" + "\n".join(stock_lines))
@@ -468,6 +493,8 @@ def build_memory_context(
         "text": text_value,
         "used_stock_memory_ids": used_ids,
         "ai_memory_keys": ai_keys,
+        "used_memory_atom_ids": l0_context.get("used_memory_atom_ids", []),
+        "l0_context": l0_context,
     }
 
 

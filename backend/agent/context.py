@@ -16,6 +16,9 @@ DEFAULT_MEMORY_DIR = Path.home() / ".stock-sage" / "memory"
 _COUNT_TABLES = {
     "ai_memory",
     "stock_memory_items",
+    "memory_atoms",
+    "memory_scenarios",
+    "memory_profiles",
     "decision_memory_layered",
     "audit_log_fts",
     "chat_sessions",
@@ -125,6 +128,9 @@ def stock_sage_memory_snapshot(
         "database": {
             "ai_memory_count": _count(db, "ai_memory"),
             "stock_memory_items_count": _count(db, "stock_memory_items"),
+            "memory_atoms_count": _count(db, "memory_atoms"),
+            "memory_scenarios_count": _count(db, "memory_scenarios"),
+            "memory_profiles_count": _count(db, "memory_profiles"),
             "decision_memory_layered_count": _count(db, "decision_memory_layered"),
             "audit_log_count": _count(db, "audit_log_fts"),
             "chat_sessions_count": _count(db, "chat_sessions"),
@@ -306,6 +312,8 @@ def stock_sage_context(
             "text": "",
             "used_stock_memory_ids": [],
             "ai_memory_keys": [],
+            "used_memory_atom_ids": [],
+            "l0_context": {},
         }
     context = {
         "agent_mode": agent_mode(),
@@ -352,4 +360,6 @@ def stock_sage_memory_context(
             "text": "",
             "used_stock_memory_ids": [],
             "ai_memory_keys": [],
+            "used_memory_atom_ids": [],
+            "l0_context": {},
         }

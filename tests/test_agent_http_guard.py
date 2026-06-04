@@ -53,6 +53,8 @@ def test_sensitive_write_routes_are_registered_with_agent_guard():
         ("/ai/sessions", "POST"),
         ("/ai/sessions/{session_id}/archive", "POST"),
         ("/research/{symbol}/review", "POST"),
+        ("/memory/l0/atoms/{atom_id}/promote", "POST"),
+        ("/memory/l0/atoms/{atom_id}/refute", "POST"),
     }
     routes = {
         (route.path, method): route

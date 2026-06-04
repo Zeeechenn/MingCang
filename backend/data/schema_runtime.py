@@ -127,6 +127,81 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
             ON stock_memory_items(status, updated_at)
         """))
         conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS memory_atoms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_type TEXT,
+                scope_key TEXT,
+                memory_type TEXT,
+                summary TEXT NOT NULL,
+                evidence_json TEXT,
+                source_type TEXT,
+                source_ref TEXT,
+                trust_state TEXT DEFAULT 'raw',
+                importance INTEGER DEFAULT 3,
+                confidence REAL DEFAULT 0.5,
+                valid_from TEXT,
+                valid_to TEXT,
+                ttl_days INTEGER,
+                review_case_id INTEGER,
+                stock_memory_item_id INTEGER,
+                promoted_by TEXT,
+                refuted_by TEXT,
+                refutation_reason TEXT,
+                created_at DATETIME,
+                updated_at DATETIME,
+                last_used_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_memory_atoms_scope_trust
+            ON memory_atoms(scope_type, scope_key, trust_state)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_memory_atoms_source_ref
+            ON memory_atoms(source_ref)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_memory_atoms_review_case
+            ON memory_atoms(review_case_id)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS memory_scenarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope_type TEXT,
+                scope_key TEXT,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                atom_ids_json TEXT,
+                trust_state TEXT DEFAULT 'pending',
+                source_type TEXT DEFAULT 'manual',
+                source_ref TEXT,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_memory_scenarios_scope_trust
+            ON memory_scenarios(scope_type, scope_key, trust_state)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS memory_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_type TEXT,
+                profile_key TEXT,
+                summary TEXT NOT NULL,
+                atom_ids_json TEXT,
+                trust_state TEXT DEFAULT 'pending',
+                source_type TEXT DEFAULT 'manual',
+                source_ref TEXT,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_memory_profiles_type_trust
+            ON memory_profiles(profile_type, profile_key, trust_state)
+        """))
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS decision_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 run_id TEXT,
@@ -269,6 +344,15 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
                 created_at DATETIME
             )
         """))
+        candidate_cols = [
+            r[1] for r in conn.execute(
+                text("PRAGMA table_info(memory_promotion_candidates)")
+            ).fetchall()
+        ]
+        if candidate_cols and "memory_atom_id" not in candidate_cols:
+            conn.execute(text(
+                "ALTER TABLE memory_promotion_candidates ADD COLUMN memory_atom_id INTEGER"
+            ))
         conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created
             ON chat_messages(session_id, created_at)

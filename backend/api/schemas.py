@@ -479,7 +479,12 @@ class MemoryCandidateOut(BaseModel):
     source_ref: str | None = None
     note: str | None = None
     review_case_id: int | None = None
+    memory_atom_id: int | None = None
+    stock_memory_item_id: int | None = None
+    promoted_at: str | None = None
+    rejected_at: str | None = None
     created_at: str | None = None
+    updated_at: str | None = None
 
 
 class MemoryCandidateListOut(BaseModel):

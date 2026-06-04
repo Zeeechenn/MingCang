@@ -125,13 +125,13 @@ def test_stock_sage_memory_context_handles_uninitialized_database(tmp_path):
     finally:
         db.close()
 
-    assert context == {
-        "symbol": "300308",
-        "task_type": "research",
-        "text": "",
-        "used_stock_memory_ids": [],
-        "ai_memory_keys": [],
-    }
+    assert context["symbol"] == "300308"
+    assert context["task_type"] == "research"
+    assert context["text"] == ""
+    assert context["used_stock_memory_ids"] == []
+    assert context["ai_memory_keys"] == []
+    assert context["used_memory_atom_ids"] == []
+    assert "l0_context" in context
 
 
 def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_stocks):
