@@ -1,6 +1,7 @@
 # StockSage — 路线图（进行中与待做）
 
-> 已完成里程碑详情优先见 `CHANGELOG.md`。本文件只列当前未完成任务项（`[ ]`）、暂缓项和少量摘要指针。
+> 已完成里程碑详情优先见 `CHANGELOG.md`。本文件优先列当前未完成任务项（`[ ]`）、暂缓项和必要接手摘要；完成项只保留会影响后续执行边界的部分。
+> 排序按当前接手优先级和风险边界组织，不严格按 M 编号递增；例如 M44 直接承接 M43 后的 Atlas 合并基准。
 
 ---
 
@@ -242,6 +243,92 @@
 
 > 2026-06-04 M43 完成：`market.py` 从约 659 行降到 179 行，`api/routes/ai.py` 从约 657 行降到 344 行，`scheduler.py` 从约 858 行降到 352 行，`database.py` 从约 718 行降到 452 行。生产信号、provider 优先级、API URL/response、SSE 顺序、scheduler job id/时间表、`WEIGHT_QUANT=0.0` 均未改变。
 > 验证：ruff、mypy、759 个 backend tests、19 个 frontend node tests 通过；集成 `make verify` 到 Vite build 步骤时因沙盒无法写 `frontend/node_modules/.vite-temp` 报 `EPERM`，随后在正常文件权限下单独 rerun `npm --prefix frontend run build` 通过。
+
+---
+
+## M44 Atlas 合并与 L0-L4 主架构升级【active / Phase 0】🧭
+
+> 来源：2026-06-04 Atlas 合并规划。Atlas 不是主项目旁边的独立功能区，而是 `main` 的下一代架构候选；首个合并目标是工程安全落地，不是让新策略行为立刻影响正式信号。外部 `PLAN (2).md` 已被压缩进本节，后续 AI 以本节和 `STATUS.md` 为接手入口。
+>
+> 当前入口事实（执行前必须重新核验）：主仓计划先让 `codex/m43-architecture-boundaries` 合入 `main` 并建立 `pre-atlas-m43-baseline`；Atlas worktree 为 `/Users/zeeechenn/Documents/项目s/atlas` 的 `codex/atlas`；测试2保持 frozen baseline，不中途改口径。
+
+### M44.0 合并原则与已锁定决策
+
+- **工程合并 gate**：判断 Atlas 架构代码能否进入 `main`。合并当天必须生产行为等价、默认休眠、可回滚。
+- **投资效果 gate**：判断 Atlas 新行为能否影响正式信号、仓位、止损或未来自动交易；只看 shadow/test4 数据，不用工程合并结果替代投资证据。
+- 首次 Atlas 合并必须是 dormant merge：总闸默认关闭，例如 `ATLAS_ENABLED=false` / `atlas_research_enabled=false`；official signal、test2、test3、标的1、scheduler/postmarket 不经过 Atlas 新逻辑。
+- 分模块 flag 只能是二级开关，不能替代 Atlas 总闸；总闸也不能替代 migration、runtime schema、依赖、共享 helper 的单独 gate。
+- 首次合并只允许 additive / non-destructive migration：新增表、nullable 新列、非破坏性 index、idempotent runtime schema patch；禁止删除/重命名旧表旧列、重写 live 旧行、改变既有字段语义或加不兼容约束。
+- Atlas 不能用 tip 覆盖主线，只能在 M43 后的 `main` 上 rebase/重放增量；每次 `main` 有 test2、scheduler、database、official signal、M31/M41/M42/M43 相关非琐碎提交都要 re-sync。
+- `Gate-B` 保留给现有 Atlas/M40 prospective tracker；L4 命名为 Review / Promotion / Calibration。
+- 合并前范围只保留最小闭环：L0 最小 memory contract、L1/L2 case skeleton、一个只读 adapter/case view、memory promotion gate、Atlas 总休眠开关、行为等价验证和回滚 runbook。
+
+### M44.1 Phase 0：固定主线基准，先合 M43（P0 当前入口）
+
+目标：让 `main` 先拥有 M43 架构边界硬化，成为 Atlas rebase 的唯一真实基准。
+
+- [ ] 确认主仓当前分支为 `codex/m43-architecture-boundaries` 或等价 M43 分支，worktree 干净，且相对 `main` 只有 M43/文档相关提交。
+- [ ] 跑完整主仓 gate：`make verify`，并记录结果；若环境 cache 或 Vite temp 权限导致假失败，使用 `/private/tmp` cache 或正常文件权限复跑对应步骤。
+- [ ] 固定 `--end` 重跑 test2 replay 到 `/private/tmp`，要求与 `paper_trading/test2_ab_state.json` 零 diff；不要改 `paper_trading/test2_ab_state.json`。
+- [ ] 将 M43 合入 `main`，保留可追溯历史，不 push。
+- [ ] 合并后建立 `pre-atlas-m43-baseline` 或同义 tag/branch。
+- [ ] 合并后确认：production profile 仍是 `new_framework`，`WEIGHT_QUANT=0.0` 不变，test2 replay、test3 universe、标的1文件、official signal 行为不变。
+
+停止条件：`make verify` 失败、test2 JSON diff 非零、`main` 有未纳入判断的反向提交、或 M43 分支出现非 M43 范围改动时，先停下归因，不进入 Atlas rebase。
+
+### M44.2 Phase 1：Atlas rebase 到 M43/main
+
+目标：把 Atlas 从过期分支变成基于当前主线的架构候选。
+
+- [ ] 在 Atlas worktree 内 rebase/重放到 M43 后的 `main`，不让 Atlas 删除或覆盖 M31/M41/M42/M43 主线能力。
+- [ ] 明确保护 main-only 文件：cache policy、global data、market capabilities、price quality、M43 facade/jobs/architecture guard 等。
+- [ ] 重点处理冲突：项目文档、`backend/data/database.py`、`docs/ROADMAP.md`、API/schema、`pyproject.toml`、`uv.lock`。
+- [ ] 重做 Gate-A merge-safety；旧 `ATLAS_MERGE_SAFETY.md` 只能作历史参考。
+- [ ] 跑 `make verify`、migration focused tests、M43 reproduction focused tests；Gate-A 只表示可进入架构审查，不等于批准合并。
+
+### M44.3 Phase 2-3：定稿 L0-L4 contract，并优先完成 L0
+
+目标：先把“合并后主项目是什么”定死，再完成最小记忆/知识底座。
+
+| 层级 | 名称 | 职责 | 首次合并边界 |
+|---|---|---|---|
+| L0 | Memory / Knowledge Base | 长期知识、用户规则、历史教训、A老师方法、专题研究沉淀 | 最小 memory contract；legacy 默认 pending / legacy_import_pending |
+| L1 | Evidence Layer | 带来源、时间、PIT、质量状态的证据 | EvidenceCard / Dossier 只读映射 |
+| L2 | Thesis Layer | 研究命题、主题假设、失效条件、持有周期 | ResearchCase / Thesis skeleton |
+| L3 | Action / Signal / Position Layer | 入场、持有、仓位、止损、退出建议 | ActionProposal 只做 proposal/shadow，不接 official path |
+| L4 | Review / Promotion / Calibration Layer | 结果复盘、归因、校准、记忆晋升 | ReviewCase / PromotionGate；LLM 不得自动写 trusted memory |
+
+- [ ] L0 设计复审前不做不可逆 schema 决策。
+- [ ] 梳理 `stock_memory_items`、`decision_memory_layered`、research memory、A老师 skill、专题研究报告、ReviewCase candidates、用户明确要求记住的规则/偏好。
+- [ ] 定义 memory scope：stock、theme、sector、market/global、user preference、methodology/skill。
+- [ ] 定义 trust 状态：raw、pending、trusted、refuted、archived、legacy_import_pending。
+- [ ] ResearchCase 和 ActionProposal 召回 memory 时必须区分 trusted 与 pending；trusted 只走 human gate / ReviewCase promotion。
+
+### M44.4 Phase 4-5：最小 adapter 与 dormant merge
+
+目标：用一个最小 adapter 证明旧模块可进入新架构，然后把 Atlas 合入 `main` 但保持默认休眠。
+
+- [ ] 首个 adapter 优先选择 deep_research 或已有 dossier，只读接入 `ResearchCase` / `EvidenceCard` / memory candidate，不影响 official signal。
+- [ ] 实现 Atlas 总休眠开关；总闸关闭时新 routes/modules 返回 disabled/empty/manual-only 行为。
+- [ ] 合并前必须通过：final re-sync、final Gate-A、`make verify`、test2 replay zero diff、canonical parity、official signal parity smoke、scheduler/postmarket parity smoke、additive migration review、DB migration copy-smoke、dependency/lockfile shared-infra review、API route smoke、memory promotion gate smoke、architecture import guard、Atlas dormant flag smoke、`git diff --check`。
+- [ ] 行为等价标准：official signal、`WEIGHT_QUANT=0.0`、test2 replay、test3 口径、标的1、stop/take/position sizing、daily/postmarket 自动流程均不变；ActionProposal 只能 shadow/proposal，不自动执行。
+
+### M44.5 Phase 6：合并后启动 Atlas shadow/test4
+
+目标：用投资效果数据验证 Atlas 新行为，不污染测试2。
+
+- [ ] 测试2继续 frozen baseline：原规则、原状态、原 A/B 目标、原 dependency path；Atlas 合并后的普通 PR 也不得改变 test2 replay、runner 输入、退出/入场规则、position sizing、signal loading 或 state JSON 口径。
+- [ ] test4 指标、阈值、样本窗口、失败条件必须预注册；同窗口回放只能 diagnostic，不能作为 promotion proof。
+- [ ] 第一阶段可用 test2 universe / 日期窗口 / 价格数据 / 基础 signal，Atlas 只生成 shadow overlay。
+- [ ] 建议三臂：`test2_baseline`、`atlas_exit_overlay`、`atlas_entry_exit_overlay`。
+- [ ] 指标至少包括收益、回撤、卖飞率、误杀趋势率、重新入场质量、proposal 命中率、机会成本、额外回撤和尾部风险；proposal 命中率必须预定义 horizon、label source、判定规则和样本不足处理。
+
+### M44 回滚 runbook 摘要
+
+- 合并前打 `pre-atlas-m43-baseline` 或同义 tag/branch，记录 production profile、`WEIGHT_QUANT`、scheduler job ids、test2 state hash、schema digest、关键 production table row counts、lockfile hash、fixed-fixture official signal 输出。
+- Atlas merge 保留为可 revert 的 merge commit；不要 squash 成难以回滚的散乱提交。
+- 常规回滚优先 revert merge commit 或切回 baseline；SQLite copy 只作灾难恢复，不作为常规 rollback，避免丢失回滚窗口内新增 live 数据。
+- 触发回滚：schema drift、旧 production row 非预期重写、official signal drift、test2 canonical parity drift、scheduler/postmarket drift、trusted memory 非预期写入、总闸关闭时 production path 仍调用 Atlas 行为模块。
 
 ---
 
