@@ -131,12 +131,59 @@ Same-window replay is diagnostic only, never promotion proof.
 Only after Stage 2a and/or 2b pass **and** the user confirms. test4 never changes
 official signals by itself.
 
+## Stage 1 results (2026-06-05)
+
+Verdict per the locked matrix: **AMBER / INCONCLUSIVE** — but for a structural
+reason, not just small sample. No valid two-arm comparison could be formed.
+
+Run: `record→realize→report` at H∈{5,10,20}, 829 observations each, production
+read-only, obs DBs in `/private/tmp/test4_stage1/`. DQ clean
+(`dq_exclusion_rate=0`, `n_data_error=0`). Production DB mtime unchanged.
+
+| Horizon | recorded | realized | gate_pass (realized) | report verdict |
+|---|---|---|---|---|
+| 5d | 829 | 423 | **0** | ABORT / gate_pass_rate_too_low |
+| 10d | 829 | 130 | **0** | ABORT / gate_pass_rate_too_low |
+| 20d | 829 | 0 | — | INCONCLUSIVE / insufficient_sample |
+
+**Root cause (verified against obs DB):** the gate's pass set and its
+matured-return set are temporally disjoint. The 39 gate-pass signals all date
+2026-05-27→06-03 and are still *pending* (too recent for forward returns); the
+423 realized signals all date 2026-05-12→05-26 and are 100% gate-fail. So the
+realized pool has no pass arm → `gate_pass_rate=0` → ABORT.
+
+**Why disjoint:** the gate passes largely on research-artifact *presence*
+(`deep_research_present` in ~786/790 fail rows, plus `label_trusted`/
+`label_present`), which accumulates over time and is therefore confounded with
+recency. This is an operational-coverage gate, not a pure signal-quality gate.
+
+**Consequences:**
+- The atlas overlay's investment edge is currently **unmeasurable from history** —
+  not harmful, not helpful, just unmeasurable on this window.
+- A naive Stage 2a backfill would hit the same wall: a historical signal backfill
+  has **no `deep_research`/trusted-label artifacts**, so nothing would pass the
+  gate as currently defined.
+- Decision needed before more compute: either (A) define a backfillable
+  *quality-only* gate variant (no artifact-presence blockers) and test that
+  historically, or (B) treat this artifact-presence gate as a forward-only object
+  and start Stage 2b accrual, or (C) re-examine whether `deep_research_present`
+  belongs in an investment-effect gate at all.
+
+## Stage 1B results (2026-06-05)
+
+Backfill feasibility: **CHEAP**. `backfill_signals.py` default path
+(`use_llm_news=False`) is technical/price-only — no LLM, no network, qlib
+lookahead-guarded off. Dry-run: 2 symbols × 20 trading days = 40 inputs in 2.1s
+(0.0525s/point). Estimate (weekly sampling, `every_n_days=5`): 3yr×700 syms ≈
+1.5h, 5yr×900 syms ≈ 3.2h. Caveat from Stage 1: backfill is cheap to *run* but
+only useful once a backfillable gate variant is defined (see Stage 1 consequences).
+
 ## Status
 
 | Item | State |
 |---|---|
-| Pre-registration | locked at this commit |
-| Stage 1 | run pending (this commit authorizes the run) |
-| Stage 1B | run pending |
-| Stage 2a / 2b | not started |
+| Pre-registration | locked |
+| Stage 1 | complete — AMBER/INCONCLUSIVE (structural temporal confound) |
+| Stage 1B | complete — backfill cheap (~1.5–3h) but blocked on gate-variant definition |
+| Stage 2a / 2b | not started — pending gate-variant decision (A/B/C above) |
 | Promotion | not authorized |
