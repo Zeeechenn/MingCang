@@ -329,3 +329,99 @@ Rollback actions:
 - [ ] Do not restore pre-merge SQLite copy for routine rollback; preserve live rows created during rollback window.
 - [ ] Re-run health, official signal smoke, and test2 replay.
 - [ ] Record drift cause; do not re-merge before attribution.
+
+## Pre-Merge Rollback Snapshot (2026-06-05)
+
+> This snapshot is the rollback comparison baseline, captured pre-merge (Phase 5 readiness pack complete at `1f198f1`, before any user-approved merge). It is **not** a merge approval.
+> Rollback TARGET is `main` / `pre-atlas-m43-baseline` (`4882d49`).
+> Where `main` and the Atlas candidate differ, both are labeled.
+
+### Production Configuration (baseline = atlas-candidate; values identical)
+
+| Item | Value |
+|---|---|
+| production profile | `new_framework` |
+| `WEIGHT_QUANT` | `0.0` |
+| technical weight | `0.6` |
+| sentiment weight | `0.4` |
+| entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
+| Kronos | disabled for production |
+| official signal markets | `CN` only (HK/US observe-only) |
+
+### Test2 Frozen State
+
+| Item | Value |
+|---|---|
+| file | `paper_trading/test2_ab_state.json` |
+| SHA-256 | `7b9742389329cb77053ee481aabf67807ecd7340c846bd2c93524b947935f8aa` |
+
+### Dependency Lockfile Hashes
+
+| File | SHA-256 |
+|---|---|
+| `main` `uv.lock` (baseline) | `6e80908df0a7b9368e246a01600bf14b40af300976fc888eeccd08742a467668` |
+| Atlas `uv.lock` (atlas-candidate) | `fef3baff665a1f7999939e8b9929bdb393a3a5eb9d1db803864195fb19053931` |
+
+Delta: Atlas adds a `jsonschema>=4.0,<5.0` pin to `pyproject.toml` / `uv.lock`; all other entries are identical.
+
+### Schema Digest
+
+Stable hash of `SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY tbl_name, type, name` on the live production DB (`stock-sage.db`) as of 2026-06-05:
+
+```
+3c422e341c2538a067446b4e4b04041ead05442fd01745ff776b600abdf788ac
+```
+
+### Key Production Table Row Counts (main / pre-merge baseline)
+
+| Table | Row count |
+|---|---|
+| `positions` | 5 |
+| `signals` | 879 |
+| `stocks` (watchlist) | 718 |
+| `prices` | 856 241 |
+| `ai_memory` | 5 |
+| `stock_memory_items` | 633 |
+| `decision_memory_layered` | 89 |
+| `research_states` | 94 |
+| `market_snapshots` | 49 915 |
+| `financial_metrics` | 1 878 |
+| `index_prices` | 338 |
+| `long_term_labels` | 169 |
+| `sentiment_cache` | 1 240 |
+| `news` | 1 863 |
+| `pending_ai_actions` | 0 |
+
+Note: Atlas adds `memory_atoms`, `memory_scenarios`, `memory_profiles`, and `memory_promotion_candidates` tables (all empty at merge time); `forward_theses` does not yet exist in the pre-merge main DB.
+
+### Scheduler Job IDs
+
+Registered via `backend.scheduler.start()`:
+
+| Job ID | Schedule |
+|---|---|
+| `premarket` | configurable `schedule_premarket`, mon-fri |
+| `postmarket` | configurable `schedule_postmarket`, mon-fri |
+| `train_model` | Sat 09:00 |
+| `stoploss_check` | mon-fri 14:30 |
+| `daily_memory_backup` | daily 00:30 |
+| `daily_memory_expire` | daily 01:00 |
+| `weekly_longterm_monday` | conditional on `long_term_team_enabled` |
+| `weekly_longterm_friday` | conditional on `long_term_team_enabled` |
+| `weekly_long_term_reflect` | configurable `schedule_longterm_dow` |
+
+### Fixed-Fixture Official Signal Output Fingerprint
+
+Deterministic composite-score fixture (no LLM, no DB, fixed inputs: `WEIGHT_QUANT=0.0`, `technical=0.6`, `sentiment=0.4`, Kronos off):
+
+| Input (tech_score / sentiment / quant) | Composite |
+|---|---|
+| 70 / 0.6 / 0.0 | 66.0 |
+| 40 / 0.3 / 0.0 | 36.0 |
+| 90 / 0.8 / 0.0 | 86.0 |
+
+SHA-256 of fixture JSON: `54904c1fe3ea1e84ebf7a19566c134e60f52ca6806c07285847d847e304731ed`
+
+### Baseline Marker
+
+`pre-atlas-m43-baseline` tag -> commit `4882d49` (M43 merge into local `main`).

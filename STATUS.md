@@ -61,7 +61,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 | M41 A/HK/US Global Data/Research Buildout | complete | read-only three-market data facade, health ledger, normalization/PIT contracts, UX boundary, and CN-only production guardrails |
 | M42 qfq/hfq Price-Contamination Guard | complete | write-time jump guard, dry-run-first remediation CLI, 33 hermetic tests; legacy full-series hfq rows remain a separate data cleanup item |
 | M43 Architecture Boundary Hardening | complete | compatibility facades, behavior-characterization tests, and AST architecture guards are in place |
-| M44 Atlas Merge / L0-L4 Architecture | active: Phase 4 minimal dossier adapter review complete; L0 trust, recall, migration, memory-promotion guardrails, and read-only adapter wiring verified | run fresh final re-sync and Phase 5 parity pack before any direct merge |
+| M44 Atlas Merge / L0-L4 Architecture | active: Phase 5 readiness pack complete at `1f198f1`; L0 trust, recall, migration, memory-promotion guardrails, and read-only adapter wiring verified | Phase 5 readiness pack complete locally; awaiting user review / merge decision after confirming no `main` advance |
 
 For detailed sequencing, read `docs/ROADMAP.md`; for the Atlas/M44 detailed
 checklist, read `docs/ATLAS_MERGE.md`. For historical milestone details, read
