@@ -1,0 +1,388 @@
+"""Dry-run-first importer for M45 A-teacher-class thesis records.
+
+The importer writes only shadow research state when explicitly executed:
+
+- one ForwardThesis row per imported external judgment;
+- one L0 pending memory atom per imported judgment.
+
+It does not touch official signals, test2 state, scheduler jobs, positions,
+production weights, M29 artifacts, or trusted memory.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+
+from backend.config import settings
+
+FORBIDDEN_TRADING_FIELDS = {
+    "buy_score",
+    "composite_score",
+    "direction",
+    "entry_signal",
+    "position_size",
+    "price_target",
+    "recommendation",
+    "signal_score",
+    "stop_loss",
+    "take_profit",
+}
+
+SAFETY_FLAGS = {
+    "production_unchanged": True,
+    "calls_llm_or_api": False,
+    "touches_official_signal": False,
+    "touches_test2": False,
+    "touches_scheduler": False,
+    "writes_trusted_memory": False,
+}
+
+CALLER_MUTABLE_MEMORY_STATES = {"raw", "pending", "legacy_import_pending"}
+
+
+@dataclass(frozen=True)
+class ATeacherThesisInput:
+    statement: str
+    source: str
+    as_of: str
+    invalidation_conditions: list[str]
+    symbol: str | None = None
+    theme: str | None = None
+    horizon_date: str | None = None
+    follow_up_metrics: list[str] | None = None
+    review_cadence_days: int | None = None
+    next_review_date: str | None = None
+    source_ref: str | None = None
+    source_url: str | None = None
+    source_note: str | None = None
+    confidence_low: float | None = None
+    confidence_high: float | None = None
+
+    @property
+    def scope_type(self) -> str:
+        return "stock" if self.symbol else "theme"
+
+    @property
+    def scope_key(self) -> str:
+        return self.symbol or self.theme or ""
+
+
+def _as_list(value: Any, *, field: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError(f"{field} must be a list of strings")
+    return [item.strip() for item in value if item.strip()]
+
+
+def _required_str(raw: dict[str, Any], field: str) -> str:
+    value = raw.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} is required")
+    return value.strip()
+
+
+def _optional_str(raw: dict[str, Any], field: str) -> str | None:
+    value = raw.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a string")
+    value = value.strip()
+    return value or None
+
+
+def _optional_int(raw: dict[str, Any], field: str) -> int | None:
+    value = raw.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{field} must be a positive integer")
+    return value
+
+
+def _optional_float(raw: dict[str, Any], field: str) -> float | None:
+    value = raw.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, int | float):
+        raise ValueError(f"{field} must be a number")
+    return float(value)
+
+
+def _stable_source_ref(item: ATeacherThesisInput) -> str:
+    if item.source_ref:
+        return item.source_ref
+    digest_input = "|".join([
+        item.source,
+        item.as_of,
+        item.scope_type,
+        item.scope_key,
+        item.statement,
+        item.horizon_date or "",
+    ])
+    digest = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()[:16]
+    return f"m45:ateacher:{digest}"
+
+
+def normalize_item(raw: dict[str, Any]) -> ATeacherThesisInput:
+    if not isinstance(raw, dict):
+        raise ValueError("each thesis item must be an object")
+    forbidden = sorted(FORBIDDEN_TRADING_FIELDS.intersection(raw))
+    if forbidden:
+        raise ValueError(
+            "M45 import records external theses only; forbidden trading fields: "
+            + ", ".join(forbidden)
+        )
+
+    symbol = _optional_str(raw, "symbol")
+    theme = _optional_str(raw, "theme")
+    if not symbol and not theme:
+        raise ValueError("each thesis item requires symbol or theme")
+
+    invalidation_conditions = _as_list(
+        raw.get("invalidation_conditions"),
+        field="invalidation_conditions",
+    )
+    if not invalidation_conditions:
+        raise ValueError("invalidation_conditions must contain at least one item")
+
+    normalized = ATeacherThesisInput(
+        statement=_required_str(raw, "statement"),
+        source=_required_str(raw, "source"),
+        as_of=_required_str(raw, "as_of"),
+        invalidation_conditions=invalidation_conditions,
+        symbol=symbol,
+        theme=theme,
+        horizon_date=_optional_str(raw, "horizon_date"),
+        follow_up_metrics=_as_list(raw.get("follow_up_metrics"), field="follow_up_metrics"),
+        review_cadence_days=_optional_int(raw, "review_cadence_days"),
+        next_review_date=_optional_str(raw, "next_review_date"),
+        source_ref=_optional_str(raw, "source_ref"),
+        source_url=_optional_str(raw, "source_url"),
+        source_note=_optional_str(raw, "source_note"),
+        confidence_low=_optional_float(raw, "confidence_low"),
+        confidence_high=_optional_float(raw, "confidence_high"),
+    )
+    if normalized.review_cadence_days is None:
+        raise ValueError("review_cadence_days is required")
+    return normalized
+
+
+def load_items(path: Path) -> list[ATeacherThesisInput]:
+    payload = json.loads(path.expanduser().read_text(encoding="utf-8"))
+    if isinstance(payload, list):
+        raw_items = payload
+    elif isinstance(payload, dict):
+        raw_items = payload.get("items") or payload.get("theses")
+    else:
+        raw_items = None
+    if not isinstance(raw_items, list) or not raw_items:
+        raise ValueError("input must be a non-empty list or object with items/theses")
+    return [normalize_item(raw) for raw in raw_items]
+
+
+def _evidence_manifest(item: ATeacherThesisInput, source_ref: str) -> list[dict[str, str | None]]:
+    return [{
+        "kind": "ledger_snapshot",
+        "ref": source_ref,
+        "as_of": item.as_of,
+        "summary": f"{item.source}: {item.source_note or item.statement}",
+    }]
+
+
+def _forward_statement(item: ATeacherThesisInput) -> str:
+    if item.symbol or not item.theme:
+        return item.statement
+    return f"[theme:{item.theme}] {item.statement}"
+
+
+def _forward_thesis_args(item: ATeacherThesisInput, source_ref: str) -> dict[str, Any]:
+    return {
+        "statement": _forward_statement(item),
+        "horizon_date": item.horizon_date,
+        "confidence_low": item.confidence_low,
+        "confidence_high": item.confidence_high,
+        "invalidation_conditions": item.invalidation_conditions,
+        "follow_up_metrics": item.follow_up_metrics or [],
+        "evidence_manifest": _evidence_manifest(item, source_ref),
+        "next_review_date": item.next_review_date,
+        "review_cadence_days": item.review_cadence_days,
+        "symbol": item.symbol,
+        "status": "draft",
+    }
+
+
+def _memory_atom_args(item: ATeacherThesisInput, source_ref: str, thesis_id: int | None) -> dict[str, Any]:
+    evidence = {
+        "source": item.source,
+        "source_ref": source_ref,
+        "source_url": item.source_url,
+        "source_note": item.source_note,
+        "as_of": item.as_of,
+        "statement": item.statement,
+        "invalidation_conditions": item.invalidation_conditions,
+        "follow_up_metrics": item.follow_up_metrics or [],
+        "review_cadence_days": item.review_cadence_days,
+        "next_review_date": item.next_review_date,
+        "decision_owner": "human",
+        "forward_thesis_id": thesis_id,
+        "production_impact": "none",
+    }
+    return {
+        "scope_type": item.scope_type,
+        "scope_key": item.scope_key,
+        "memory_type": "imported_human_thesis",
+        "summary": item.statement,
+        "source_type": "a_teacher_import",
+        "source_ref": source_ref,
+        "trust_state": "pending",
+        "evidence": evidence,
+        "importance": 4,
+        "confidence": 0.5,
+        "valid_from": item.as_of,
+    }
+
+
+def _memory_trust_state_by_source_ref(db, source_ref: str) -> str | None:
+    from backend.memory import l0_memory
+
+    l0_memory._ensure_schema(db)
+    row = db.execute(
+        text("SELECT trust_state FROM memory_atoms WHERE source_ref = :source_ref LIMIT 1"),
+        {"source_ref": source_ref},
+    ).first()
+    return str(row.trust_state) if row is not None else None
+
+
+def _preflight_execute(db, items: list[ATeacherThesisInput]) -> None:
+    if not settings.forward_thesis_enabled:
+        raise ValueError("forward_thesis_enabled must be true before M45 import execute")
+    for item in items:
+        source_ref = _stable_source_ref(item)
+        trust_state = _memory_trust_state_by_source_ref(db, source_ref)
+        if trust_state is not None and trust_state not in CALLER_MUTABLE_MEMORY_STATES:
+            raise ValueError(
+                f"source_ref {source_ref!r} already has protected L0 trust_state "
+                f"{trust_state!r}; refusing partial import"
+            )
+
+
+def _ensure_manifest_contains_source(db, thesis: dict[str, Any], item: ATeacherThesisInput, source_ref: str) -> dict[str, Any]:
+    manifest = list(thesis.get("evidence_manifest") or [])
+    if any(entry.get("ref") == source_ref for entry in manifest if isinstance(entry, dict)):
+        return thesis
+
+    from backend.research.forward_thesis import attach_evidence_manifest
+
+    merged = [*manifest, *_evidence_manifest(item, source_ref)]
+    return attach_evidence_manifest(
+        db,
+        int(thesis["id"]),
+        manifest=merged,
+        as_of=item.as_of,
+    )
+
+
+def preview_import(items: list[ATeacherThesisInput]) -> dict[str, Any]:
+    planned: list[dict[str, Any]] = []
+    for item in items:
+        source_ref = _stable_source_ref(item)
+        planned.append({
+            "source_ref": source_ref,
+            "scope": {"type": item.scope_type, "key": item.scope_key},
+            "forward_thesis": _forward_thesis_args(item, source_ref),
+            "l0_memory_atom": _memory_atom_args(item, source_ref, thesis_id=None),
+        })
+    return {
+        "mode": "dry_run",
+        "execute": False,
+        "count": len(planned),
+        "safety": {**SAFETY_FLAGS, "writes_db": False},
+        "production_impact": "none",
+        "writes": [],
+        "planned": planned,
+    }
+
+
+def execute_import(db, items: list[ATeacherThesisInput], *, execute: bool = False) -> dict[str, Any]:
+    if not execute:
+        return preview_import(items)
+
+    from backend.memory.l0_memory import create_memory_atom
+    from backend.research.forward_thesis import create_forward_thesis
+
+    _preflight_execute(db, items)
+    writes: list[dict[str, Any]] = []
+    for item in items:
+        source_ref = _stable_source_ref(item)
+        thesis = create_forward_thesis(db, **_forward_thesis_args(item, source_ref))
+        thesis = _ensure_manifest_contains_source(db, thesis, item, source_ref)
+        atom = create_memory_atom(
+            db,
+            **_memory_atom_args(
+                item,
+                source_ref,
+                thesis_id=thesis.get("id") if thesis else None,
+            ),
+        )
+        writes.append({
+            "source_ref": source_ref,
+            "forward_thesis_id": thesis.get("id") if thesis else None,
+            "memory_atom_id": atom.get("id"),
+            "memory_trust_state": atom.get("trust_state"),
+            "scope": {"type": item.scope_type, "key": item.scope_key},
+        })
+
+    return {
+        "mode": "execute",
+        "execute": True,
+        "count": len(writes),
+        "safety": {**SAFETY_FLAGS, "writes_db": True},
+        "production_impact": "none",
+        "writes": writes,
+    }
+
+
+def _session_for_url(db_url: str):
+    connect_args = {"check_same_thread": False} if db_url.startswith("sqlite") else {}
+    engine = create_engine(db_url, connect_args=connect_args)
+    return sessionmaker(bind=engine)()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", required=True, type=Path, help="JSON file with items/theses")
+    parser.add_argument("--db-url", default=settings.database_url)
+    parser.add_argument("--execute", action="store_true", help="write ForwardThesis + L0 pending atoms")
+    parser.add_argument("--output", type=Path, help="optional JSON output path")
+    parser.add_argument("--pretty", action="store_true")
+    args = parser.parse_args(argv)
+
+    items = load_items(args.input)
+    if args.execute:
+        db = _session_for_url(args.db_url)
+        try:
+            result = execute_import(db, items, execute=True)
+        finally:
+            db.close()
+    else:
+        result = execute_import(None, items, execute=False)
+
+    rendered = json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None)
+    if args.output:
+        args.output.expanduser().write_text(rendered + "\n", encoding="utf-8")
+    else:
+        print(rendered)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
