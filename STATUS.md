@@ -55,7 +55,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 | Milestone | Status | Next action |
 |---|---|---|
-| M45 Research Positioning (amplifier-primary, source-gated) | active: tracked ROADMAP summary + local ADR 0001 + test4 | Use dry-run-first `backend.tools.m45_import_ateacher_theses` for A-teacher-class imports, then review before any `--execute`; imported rows stay draft/pending |
+| M45 Research Positioning (amplifier-primary, source-gated) | active: first direct-source MRVL import is draft/pending; falsification scoreboard tooling is in place | Continue source-fidelity review for remaining handoff seeds; record M45.2 events through dry-run-first `backend.tools.m45_falsification_scoreboard` |
 | M29 Alpha Reset / Forward Evidence Engine | routine read-only | wait for complete fresh forward coverage, then rerun readiness -> forward shadow -> ledger if explicitly revisiting old quant evidence |
 | M29.5 Quant Residual Attribution | first pass complete, non-promoting | continue only if fresh evidence clears gates |
 | M31 Product/Engineering Borrowings | complete | L1/L2/L3 policy, provider chains, dry-run rhythm commands (incl. weekend review), postmarket export with evidence cards + position review |

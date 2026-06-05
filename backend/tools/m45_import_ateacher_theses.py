@@ -200,6 +200,7 @@ def normalize_item(raw: dict[str, Any]) -> ATeacherThesisInput:
 
 def load_items(path: Path) -> list[ATeacherThesisInput]:
     payload = json.loads(path.expanduser().read_text(encoding="utf-8"))
+    raw_items: Any
     if isinstance(payload, list):
         raw_items = payload
     elif isinstance(payload, dict):

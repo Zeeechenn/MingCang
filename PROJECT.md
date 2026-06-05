@@ -115,6 +115,8 @@ backend/tools/m29_shadow_validation.py       M29.2/M29.3 只读预注册 shadow 
 backend/tools/m29_provenance_audit.py        M29.3 只读 price/artifact provenance audit
 backend/tools/m29_forward_readiness.py       M29.3 只读 forward shadow readiness guard
 backend/tools/m29_price_coverage_refresh.py  M29.3 close-confirmed price/provenance refresh（默认 dry-run，--execute 写 prices）
+backend/tools/m45_import_ateacher_theses.py  M45.1 A-teacher-class thesis import（dry-run-first；--execute 写 ForwardThesis draft + L0 pending）
+backend/tools/m45_falsification_scoreboard.py M45.2 放大器证伪记分牌（dry-run-first；--execute 写 ReviewCase / pending candidate）
 backend/tools/m31_cache_benchmark.py         M31 只读 L1/L2 cache latency benchmark（默认不触发 L3 远端）
 backend/tools/m41_probe_health_ledger.py     M41 只读 probe health ledger 聚合器（默认输出 /private/tmp，显式 --run-probes 才触网）
 backend/portfolio/combo_weights.py           组合候选权重分配

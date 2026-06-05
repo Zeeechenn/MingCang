@@ -36,18 +36,20 @@ Boundaries:
 - [x] Store the thesis layer through existing Atlas-safe surfaces: `ForwardThesis` for statement / invalidation / evidence manifest plus L0 pending atom for memory context.
 - [x] Prepared a local seed input and dry-run output under `/private/tmp/stocksage_m45_ateacher_seed_20260605*.json`; no DB writes were made.
 - [x] Add execute-time source fidelity guard: `--execute` requires `source_kind=direct_source`, `source_verified=true`, `source_verified_by`, explicit `source_ref`, and source locator; dry-run surfaces `source_fidelity.execute_blockers`.
-- [ ] Review the seed's source fidelity before execute: it is derived from local M45 handoff context, not a direct A-teacher transcript.
-- [ ] Execute import only after reviewing dry-run output; imported rows remain draft/pending and do not become trusted automatically.
+- [x] Reviewed and executed the first direct-source seed (`ateacher-20260603-connectivity-mrvl-direct`): `ForwardThesis` remains `draft`, L0 memory remains `pending`, and production signals / test2 / scheduler were not touched.
+- [ ] Continue source-fidelity review for the remaining handoff seed items before execute; they are derived from local M45 handoff context, not direct A-teacher transcript/source records.
+- [ ] Execute any later imports only after reviewing dry-run output; imported rows remain draft/pending and do not become trusted automatically.
 - [ ] Use `backend/research/thesis_ledger.py` only where its thinner `symbol/title/kill_conditions/status` shape is sufficient, or extend it deliberately after tests.
 - [ ] Ensure imports are idempotent and do not create trusted memory automatically.
 - [ ] A-teacher hook updates should become ledger entries, not markdown-only notes.
 
 ### M45.2 放大器证伪记分牌
 
+- [x] Add dry-run-first `backend.tools.m45_falsification_scoreboard`: execute writes ReviewCase rows and optional pending MemoryPromotionCandidate rows only; it does not promote trusted memory or touch official signals / decisions / positions.
 - [ ] Invalidation-catch ledger: when a held thesis breaks, record whether the alarm fired before loss materialized or was missed.
 - [ ] Defensive-value ledger: compare system-on/off drawdown and loss rate for the short-term risk lane; do not judge this lane by IC.
 - [ ] Track breadth hits separately: AI-surfaced, human-adopted theses that later work are slow secondary evidence.
-- [ ] Route review outcomes through Atlas L4 / ReviewCase so trusted promotion remains outcome-gated.
+- [x] Route review outcomes through ReviewCase / pending memory-candidate surfaces so trusted promotion remains outcome-gated.
 
 ### M45.3 模块三连分诊
 
