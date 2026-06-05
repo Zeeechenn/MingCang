@@ -37,8 +37,9 @@ Boundaries:
 - [x] Prepared a local seed input and dry-run output under `/private/tmp/stocksage_m45_ateacher_seed_20260605*.json`; no DB writes were made.
 - [x] Add execute-time source fidelity guard: `--execute` requires `source_kind=direct_source`, `source_verified=true`, `source_verified_by`, explicit `source_ref`, and source locator; dry-run surfaces `source_fidelity.execute_blockers`.
 - [x] Reviewed and executed the first direct-source seed (`ateacher-20260603-connectivity-mrvl-direct`): `ForwardThesis` remains `draft`, L0 memory remains `pending`, and production signals / test2 / scheduler were not touched.
-- [ ] Continue source-fidelity review for the remaining handoff seed items before execute; they are derived from local M45 handoff context, not direct A-teacher transcript/source records.
-- [ ] Execute any later imports only after reviewing dry-run output; imported rows remain draft/pending and do not become trusted automatically.
+- [x] Reviewed remaining local handoff seeds against `/Users/zeeechenn/Desktop/站在光里，未来已来.md`: `300308`, `300502`, and `603986` remain blocked because the direct local source supports sector themes but does not name those companies/symbols.
+- [x] Narrowed and executed the AVGO direct-source seed (`ateacher-20260603-connectivity-avgo-direct`) as a Broadcom networking / switching-chip / 1.6T DSP connectivity anchor only; `ForwardThesis` remains `draft`, L0 memory remains `pending`, and broader accelerator/backlog/custom-silicon wording was excluded.
+- [x] Execute later imports only after reviewing dry-run output; imported rows remain draft/pending and do not become trusted automatically.
 - [ ] Use `backend/research/thesis_ledger.py` only where its thinner `symbol/title/kill_conditions/status` shape is sufficient, or extend it deliberately after tests.
 - [ ] Ensure imports are idempotent and do not create trusted memory automatically.
 - [ ] A-teacher hook updates should become ledger entries, not markdown-only notes.
@@ -46,6 +47,8 @@ Boundaries:
 ### M45.2 放大器证伪记分牌
 
 - [x] Add dry-run-first `backend.tools.m45_falsification_scoreboard`: execute writes ReviewCase rows and optional pending MemoryPromotionCandidate rows only; it does not promote trusted memory or touch official signals / decisions / positions.
+- [x] Harden execute preflight: scoreboard execute now refuses missing `ForwardThesis` links or unverified / non-direct source inputs before writing ReviewCase rows.
+- [x] Recorded initial `not_due` baselines for the imported MRVL and narrowed AVGO theses after dry-run review; both write only ReviewCase rows and create no pending memory candidates.
 - [ ] Invalidation-catch ledger: when a held thesis breaks, record whether the alarm fired before loss materialized or was missed.
 - [ ] Defensive-value ledger: compare system-on/off drawdown and loss rate for the short-term risk lane; do not judge this lane by IC.
 - [ ] Track breadth hits separately: AI-surfaced, human-adopted theses that later work are slow secondary evidence.
@@ -53,15 +56,36 @@ Boundaries:
 
 ### M45.3 模块三连分诊
 
-- [ ] Classify existing modules into breadth / falsification / short-term risk.
-- [ ] Mark modules that fit none of those buckets as removal or quarantine candidates.
-- [ ] Treat A-teacher / jingqi / Piotroski skills as first-class import channels.
+- [x] Classify existing modules into breadth / falsification / short-term risk.
+- [x] For each kept module, record one primary lane only: breadth = source/import/context expansion; falsification = invalidation checks, review cases, and thesis break alarms; short-term risk = drawdown, stop/take, exposure, and defensive warning support.
+- [x] Mark modules that fit none of those buckets as removal or quarantine candidates.
+- [x] Quarantine anything that implies autonomous alpha promotion, official-signal mutation, test2 mutation, scheduler behavior drift, or production profile changes.
+- [x] Treat A-teacher / jingqi / Piotroski skills as first-class import channels.
+- [x] Keep triage as documentation/ownership mapping first; code removal or routing changes require a separate reviewed implementation task.
+
+Module matrix:
+
+| Module / surface | M45 lane | Decision | Boundary |
+|---|---|---|---|
+| `backend/research/dossier.py`, `deep_research.py`, `research/agents.py` | breadth | keep | Context and candidate expansion only; no official signal writes. |
+| `backend/agents/long_term/a_teacher_analyst.py`, `jingqi_analyst.py`, `piotroski_analyst.py` | breadth import channel | keep / reframe | First-class import channels that write `ForwardThesis(draft)` + L0 `pending` only after source/provenance checks. |
+| `backend/research/forward_thesis.py`, `review_loop.py`, `stress_test.py`, `backend/tools/m45_*` | falsification | keep | Canonical thesis storage, ReviewCase/outcome gate, and dry-run-first M45 tooling. |
+| `backend/tools/m29_*` | falsification | keep as non-promoting evidence | Old alpha evidence remains shadow/provenance input, not the roadmap center. |
+| `backend/decision/research_constraints.py`, `backend/agents/risk_manager.py` | short-term risk | keep | Consume only trusted/outcome-gated memory; risk warnings must not manufacture alpha. |
+| `backend/research/copilot.py` | breadth / short-term risk | keep shadow-only | Questions and risk prompts only; no official action path. |
+| `backend/agents/long_term/team.py` weighted `LongTermLabel` aggregation | quarantine_candidate | legacy display unless re-gated | Decision-coupled label voting must not directly constrain production without outcome gates. |
+| `backend/agents/researcher.py` debate path | quarantine_candidate | explicit stress/falsification mode only | Do not use as daily production decision coupling. |
+| `backend/research/thesis_ledger.py` | quarantine_candidate / thin falsification | use only when shape fits | Its thin `symbol/title/kill_conditions/status` shape is insufficient for richer imported thesis evidence without deliberate extension and tests. |
 
 ### M45.4 Stage 2b forward shadow（slow evidence path）
 
-- [ ] Pre-register test4 Stage 2b arms, metrics, failure conditions, sample window, and small-sample handling.
-- [ ] Use M45.1 theses as shadow objects. test2 stays frozen.
-- [ ] Promotion requires Stage 2b pass plus explicit user confirmation; test4 never changes official signals by itself.
+- [x] Pre-register test4 Stage 2b arms, metrics, failure conditions, sample window, and small-sample handling.
+- [x] Arms: baseline/no-thesis, imported-human-thesis shadow, falsification-warning on/off, short-term-risk lane on/off, and breadth-hit secondary tracking; evaluate each as non-promoting shadow evidence only.
+- [x] Metrics: invalidation catch rate, missed-break count, defensive drawdown/loss-rate delta, human-adopted breadth hit rate, review latency, and provenance/source-fidelity blockers.
+- [x] Failure conditions: unverifiable source lineage, sample too small to interpret, worse drawdown without earlier warning, stale review cadence, or any drift into official signals / test2 / scheduler / production profile.
+- [x] Small-sample handling: report counts and confidence qualitatively; do not promote from anecdotal wins, and require explicit user confirmation even after a Stage 2b pass.
+- [x] Use M45.1 theses as shadow objects. test2 stays frozen.
+- [x] Promotion requires Stage 2b pass plus explicit user confirmation; test4 never changes official signals by itself.
 
 ---
 

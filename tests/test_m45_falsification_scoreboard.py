@@ -58,6 +58,28 @@ def _protected_counts(db):
     }
 
 
+def _seed_forward_thesis(db, *, symbol="300308", source_ref="ateacher-2026-06-05-optical"):
+    from backend.research.forward_thesis import create_forward_thesis
+
+    return create_forward_thesis(
+        db,
+        symbol=symbol,
+        statement=f"{symbol} imported thesis",
+        horizon_date="2026-12-31",
+        status="draft",
+        evidence_manifest=[{
+            "kind": "ledger_snapshot",
+            "ref": source_ref,
+            "as_of": "2026-06-05",
+            "summary": "seeded direct-source thesis",
+        }],
+        invalidation_conditions=["source thesis is refuted"],
+        follow_up_metrics=["review outcome"],
+        next_review_date="2026-06-19",
+        review_cadence_days=14,
+    )
+
+
 def test_m45_falsification_scoreboard_dry_run_does_not_write(test_db):
     from backend.tools.m45_falsification_scoreboard import (
         execute_scoreboard,
@@ -99,6 +121,7 @@ def test_m45_falsification_scoreboard_execute_writes_review_case_only_for_core_r
         normalize_item,
     )
 
+    _seed_forward_thesis(test_db)
     test_db.add(Signal(
         symbol="300308",
         date="2026-06-05",
@@ -145,6 +168,7 @@ def test_m45_falsification_scoreboard_same_source_lane_as_of_is_idempotent_and_u
         normalize_item,
     )
 
+    _seed_forward_thesis(test_db)
     first = execute_scoreboard(test_db, [normalize_item(_item(result="miss"))], execute=True)
     second = execute_scoreboard(
         test_db,
@@ -174,6 +198,7 @@ def test_m45_falsification_scoreboard_candidate_summary_creates_only_pending_can
         normalize_item,
     )
 
+    _seed_forward_thesis(test_db)
     raw = _item(
         candidate_summary={
             "summary": "Falsification alarms should be reviewed before loss thresholds materialize.",
@@ -197,6 +222,34 @@ def test_m45_falsification_scoreboard_candidate_summary_creates_only_pending_can
     assert "m45-scoreboard-300308-2026-06-05-falsification" in candidate.source_ref
     assert test_db.query(MemoryAtom).count() == 0
     assert test_db.query(StockMemoryItem).count() == 0
+
+
+def test_m45_falsification_scoreboard_execute_requires_forward_thesis(test_db):
+    from backend.data.database import ReviewCase
+    from backend.tools.m45_falsification_scoreboard import (
+        execute_scoreboard,
+        normalize_item,
+    )
+
+    with pytest.raises(ValueError, match="forward_thesis_not_found"):
+        execute_scoreboard(test_db, [normalize_item(_item())], execute=True)
+
+    assert test_db.query(ReviewCase).count() == 0
+
+
+def test_m45_falsification_scoreboard_execute_requires_direct_verified_source(test_db):
+    from backend.data.database import ReviewCase
+    from backend.tools.m45_falsification_scoreboard import (
+        execute_scoreboard,
+        normalize_item,
+    )
+
+    _seed_forward_thesis(test_db)
+
+    with pytest.raises(ValueError, match="source_not_verified"):
+        execute_scoreboard(test_db, [normalize_item(_item(source_verified=False))], execute=True)
+
+    assert test_db.query(ReviewCase).count() == 0
 
 
 def test_m45_falsification_scoreboard_rejects_invalid_lane():

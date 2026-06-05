@@ -231,6 +231,19 @@ def _forward_lookup_refs(item: ScoreboardItem) -> set[str]:
     return {ref for ref in (item.thesis_ref, item.source_ref) if ref}
 
 
+def _source_fidelity_blockers(item: ScoreboardItem) -> list[str]:
+    blockers: list[str] = []
+    if not item.source_verified:
+        blockers.append("source_not_verified")
+    if item.source_kind != "direct_source":
+        blockers.append("source_kind_not_direct_source")
+    if not item.source_verified_by:
+        blockers.append("missing_source_verified_by")
+    if not item.source_url and not item.evidence_ref:
+        blockers.append("missing_source_locator")
+    return blockers
+
+
 def _find_forward_thesis(db, item: ScoreboardItem) -> dict[str, Any] | None:
     if db is None:
         return None
@@ -299,17 +312,28 @@ def _find_forward_thesis(db, item: ScoreboardItem) -> dict[str, Any] | None:
     return None
 
 
+def _execute_blockers(item: ScoreboardItem, forward_thesis: dict[str, Any] | None) -> list[dict[str, Any]]:
+    blockers = []
+    if forward_thesis is None:
+        blockers.append({
+            "scoreboard_key": _scoreboard_key(item),
+            "blocker": "forward_thesis_not_found",
+            "lookup_refs": sorted(_forward_lookup_refs(item)),
+        })
+    for blocker in _source_fidelity_blockers(item):
+        blockers.append({
+            "scoreboard_key": _scoreboard_key(item),
+            "blocker": blocker,
+        })
+    return blockers
+
+
 def preview_scoreboard(items: list[ScoreboardItem], db=None) -> dict[str, Any]:
     planned = []
     blockers = []
     for item in items:
         forward_thesis = _find_forward_thesis(db, item)
-        if forward_thesis is None:
-            blockers.append({
-                "scoreboard_key": _scoreboard_key(item),
-                "blocker": "forward_thesis_not_found",
-                "lookup_refs": sorted(_forward_lookup_refs(item)),
-            })
+        blockers.extend(_execute_blockers(item, forward_thesis))
         planned.append({
             "scoreboard_key": _scoreboard_key(item),
             "forward_thesis": forward_thesis,
@@ -399,12 +423,14 @@ def execute_scoreboard(db, items: list[ScoreboardItem], *, execute: bool = False
     blockers = []
     for item in items:
         forward_thesis = _find_forward_thesis(db, item)
-        if forward_thesis is None:
-            blockers.append({
-                "scoreboard_key": _scoreboard_key(item),
-                "blocker": "forward_thesis_not_found",
-                "lookup_refs": sorted(_forward_lookup_refs(item)),
-            })
+        blockers.extend(_execute_blockers(item, forward_thesis))
+    if blockers:
+        raise ValueError(
+            "scoreboard execute blockers: "
+            + ", ".join(str(blocker["blocker"]) for blocker in blockers)
+        )
+
+    for item in items:
         review = _upsert_review_case(db, item)
         candidate_id = None
         if item.candidate_summary is not None:
