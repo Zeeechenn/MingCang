@@ -24,7 +24,7 @@ maintenance. It does not place real trades or provide financial advice.
 | M41 | complete: read-only A/HK/US seven-layer data/research facade; HK/US official signals remain observe-only |
 | M42 | complete: qfq/hfq price-contamination write guard and dry-run-first remediation CLI |
 | M43 | complete: architecture boundary hardening for market data, runtime schema, AI chat routes, and scheduler jobs |
-| M44 / Atlas merge | active: Phase 3-min L0 memory contract complete; Atlas remains dormant architecture candidate until Phase 4 review and fresh Phase 5 parity gates pass |
+| M44 / Atlas merge | active: local Phase 5 readiness pack complete at `1f198f1`; Atlas remains dormant architecture candidate pending user review / merge decision after confirming no `main` advance |
 | remote agent mode | opt-in only; read-only by default |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
@@ -91,19 +91,21 @@ Focused adapter regression passed with `44 passed, 1 warning`; expanded
 M33/M37/M40/L0 regression passed with `159 passed, 1 warning`. Merge-day
 equivalence remains a Phase 5 parity-pack requirement, not a Phase 4 claim.
 
-M44 Phase 5 preflight note (2026-06-05): after the Phase 4 adapter wiring,
-read-only preflight checks showed local `main...HEAD = 0 / 33`; the only current
-sync blocker is the uncommitted Phase 4 adapter worktree. Full `make verify`
-passed with backend pytest `1048 passed, 5 skipped`, frontend node tests
-`19 passed`, and Vite build passed. Fixed-end test2 replay at
-`--end 2026-06-05` had zero raw JSON diff against the main
-`paper_trading/test2_ab_state.json`; official-signal and scheduler/postmarket
-focused smoke passed `24 passed, 1 warning`; DB copy-smoke on
-`/private/tmp/stocksage_m44_phase5_after_adapter_copy.db` passed `init_db()`,
-`PRAGMA integrity_check`, required Atlas table/column checks, and protected
-`stocks` / `signals` row-count stability. This is not the final Phase 5 gate:
-the same parity pack must rerun after the Phase 4 adapter changes are committed
-and after any final re-sync.
+M44 Phase 5 readiness note (2026-06-05): after commit `1f198f1`, local
+readiness checks showed `main...HEAD = 0 / 35`, `merge-base main HEAD =
+423bb1d9338b85467a5e96cf5c9a96df15dd641c`, `git diff --check main...HEAD`
+passed, and read-only `git merge-tree main HEAD` returned a synthetic tree with
+no conflict output. Full `make verify` passed with backend pytest
+`1049 passed, 5 skipped`, frontend node tests `19 passed`, and Vite build.
+Fixed-end test2 replay at `--end 2026-06-05` had zero raw JSON diff against the
+main `paper_trading/test2_ab_state.json`; DB copy-smoke on
+`/private/tmp/stocksage_m44_after_l0_gate_copy.db` passed `init_db()`,
+`PRAGMA integrity_check`, Atlas table/index checks, and protected `stocks` /
+`signals` row-count stability (`718` / `879`). `build_memory_context()` now
+keeps L0 memory dormant by default unless `ATLAS_ENABLED=true`, while explicit
+memory API context still opts into L0. This is a local merge-readiness package,
+not a merge; if `main` advances before user approval, rerun conflict checks and
+the parity pack.
 
 M31 completion note (2026-06-02): `backend.data.cache_policy` defines L1/L2/L3
 and the intraday zero-network contract; `/api/system/data-coverage` exposes

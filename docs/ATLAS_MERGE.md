@@ -6,7 +6,7 @@
 
 | Item | Status |
 |---|---|
-| Current phase | Phase 4 minimal dossier adapter review complete; next is a fresh Phase 5 parity pack before any direct merge decision |
+| Current phase | Phase 5 readiness pack complete locally at `1f198f1`; awaiting user review / merge decision after confirming no `main` advance |
 | Main baseline | Phase 0 completed locally; `main` includes M43 at merge commit `4882d49` |
 | Baseline marker | local tag `pre-atlas-m43-baseline` points to `4882d49` |
 | Atlas worktree | `/Users/zeeechenn/Documents/项目s/atlas` on `codex/atlas` |
@@ -27,7 +27,7 @@
 - `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` is the Atlas total dormant switch: it disables Atlas-only M33-M40 routes/features by default while preserving legacy research routes and all official signal, test2, scheduler, and postmarket behavior.
 - Module-level flags are secondary and cannot replace the total switch.
 - The dormant switch does not protect shared infra. Database migrations, runtime schema, dependency/lockfile changes, scheduler helpers, API helpers, and shared data-loading helpers need their own parity gates.
-- First merge allows only additive / non-destructive migration: new tables, nullable columns, non-destructive indexes, idempotent runtime schema patches. No dropping/renaming old tables or columns, no rewriting live old rows, no incompatible constraints on existing production tables.
+- First merge allows only additive / non-destructive migration: new tables, nullable columns, non-destructive indexes, idempotent runtime schema patches. No dropping/renaming old tables or columns, no rewriting live old rows, no incompatible constraints on existing production tables, except the user-approved `forward_theses` data-preserving rebuild recorded in Phase 5.
 - Do not use Atlas tip to overwrite `main`. Rebase/replay Atlas increments onto current `main` and preserve main-only M31/M41/M42/M43 capabilities.
 - `Gate-B` remains the Atlas/M40 prospective tracker name. L4 is Review / Promotion / Calibration, not Gate-B.
 
@@ -234,28 +234,35 @@ Migration decision:
   and duplicate normalized `forward_theses` keys must fail loudly before any live
   schema run.
 
-Preflight evidence after Phase 4 adapter wiring (not the final merge gate):
+Phase 5 readiness evidence at `1f198f1` (local only; not merged):
 
-- At the committed Phase 4 checkpoint `1898e23`, Atlas was based on local `main`
-  `423bb1d`; read-only divergence check showed `main...HEAD = 0 / 34` and the
-  worktree was clean. Any follow-up dormant-context patch must rerun the final
-  Phase 5 parity pack before merge.
-- Full `make verify` passed after the adapter wiring: ruff passed, mypy passed
-  on 204 source files, backend pytest `1048 passed, 5 skipped`, frontend node
-  tests `19 passed`, and Vite build passed.
+- Latest Atlas commit: `1f198f1 fix(atlas): keep l0 memory dormant by default`.
+- Read-only branch checks: Atlas worktree clean; `merge-base main HEAD` =
+  `423bb1d9338b85467a5e96cf5c9a96df15dd641c`; `main...HEAD = 0 / 35`.
+- Read-only merge simulation: `git merge-tree main HEAD` returned synthetic tree
+  `785b63b519f9d572242f86f19d28dace7c0ee0ad` with no conflict output.
+- `git diff --check main...HEAD` passed.
+- Focused L0 / route / runtime / postmarket tests after the dormant-context fix
+  passed with `161 passed, 1 warning`.
+- Full `make verify` passed: ruff passed, mypy passed on 204 source files,
+  backend pytest `1049 passed, 5 skipped`, frontend node tests `19 passed`, and
+  Vite build passed.
 - Test2 fixed-end replay used `--end 2026-06-05`; raw JSON diff against
   `/Users/zeeechenn/stock-sage/paper_trading/test2_ab_state.json` was zero.
-- Official-signal and scheduler/postmarket focused smoke passed:
-  `24 passed, 1 warning`.
-- Live DB copy-smoke used
-  `/private/tmp/stocksage_m44_phase5_after_adapter_copy.db`; `init_db()`
-  completed, `PRAGMA integrity_check` returned `ok`, Atlas memory/review tables
-  existed, `memory_promotion_candidates.memory_atom_id` existed, and protected
-  `stocks` / `signals` row counts remained `718` / `879`.
-- Dependency lock check passed with `uv lock --check`.
-- `git diff --check` passed and conflict-marker scan returned no matches.
-- This clears a preflight pass only. Final Phase 5 parity must be rerun after
-  the Phase 4 adapter changes are committed and after any actual final re-sync.
+- Live DB copy-smoke used `/private/tmp/stocksage_m44_after_l0_gate_copy.db`;
+  `init_db()` completed on the copy, `PRAGMA integrity_check` returned `ok`,
+  required Atlas tables and indexes existed, `memory_promotion_candidates.memory_atom_id`
+  existed, `forward_theses` normalized unique index existed, and protected
+  `stocks` / `signals` row counts stayed `718` / `879`.
+- Dormant-context fix: `build_memory_context()` now includes L0 memory by
+  default only when `settings.atlas_enabled=True`; explicit memory API context
+  still opts into L0 with `include_l0=True`.
+- This clears the local Phase 5 readiness pack for current `main` `423bb1d`,
+  but it is not a merge approval and not investment-effect promotion. Canonical
+  test2 parity, official-signal parity smoke, scheduler/postmarket smoke,
+  API/memory/dormant/import guards, and DB copy-smoke remain merge-day checks to
+  rerun before any user-approved merge. If `main` advances before merge,
+  recompute conflict checks and rerun the parity pack.
 
 Behavior equivalence:
 
