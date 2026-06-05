@@ -235,6 +235,40 @@ multi-regime → cross-sectional IC + ICIR of `composite_score` across
 non-overlapping folds + bucket monotonicity. Promotion bar unchanged
 (IC ≥ 0.04, ICIR ≥ 0.40, monotonic buckets, CI excluding 0).
 
+## Stage 2a results (2026-06-05) — FAIL (no positive cross-regime edge)
+
+Powered historical pilot: 90 symbols, 9,638 points, 2021-01-01→2025-12-31,
+biweekly, 52.7s. Score tested = `technical_result.score` (backfittable component;
+sentiment/quant = 0 historically). Independent re-verification (scipy) reproduced
+every number to 4 decimals → computation trusted.
+
+| Metric | H=5 | H=20 | Bar | Pass? |
+|---|---|---|---|---|
+| pooled Spearman IC | −0.030 | −0.017 | — | — |
+| mean per-date IC | −0.016 | −0.012 | ≥ 0.04 | **FAIL** |
+| ICIR | −0.10 | −0.07 | ≥ 0.40 | **FAIL** |
+| decile monotonicity | inverted | flat | monotone | **FAIL** |
+| bootstrap 95% CI (mean IC) | [−0.047, +0.018] | [−0.051, +0.022] | low > 0 | **FAIL** |
+| significance | t≈−1.0, p≈0.30 | t≈−0.7, p≈0.47 | — | ≈ noise |
+
+Per-year fold IC (H5 / H20): 2021 +0.013/−0.018, 2022 +0.020/−0.017,
+2023 −0.058/+0.003, 2024 −0.071/−0.030, 2025 −0.043/−0.034 → **sign reversal
+across regimes** (weakly positive 2021-22, negative 2023-25). Not regime-robust.
+
+This **refutes the Stage-1 preliminary +0.15** as single-window (late-May 2026)
+regime luck, exactly as flagged. The backfittable technical component has no
+measurable positive forward edge and is slightly negative / mean-reverting.
+
+Caveats: (1) tests the technical component only — not the full live composite
+(sentiment 40%) and **not** an isolated Atlas increment (the overlay gate is not
+backfittable). (2) Survivorship: universe = symbols with full 2021-25 coverage.
+(3) Per-symbol biweekly sampling staggers dates (median 2 names/date; 107 dense
+cross-sections) → the **pooled IC and per-year folds are the robust read; ICIR is
+noisier**. Conclusion (no positive edge) holds across all three. (4) Open
+question: whether `technical_result.score` is biased in backfill-only mode
+(sentiment/quant zeroed) — a cheap sanity check before strong claims about the
+production signal.
+
 ## Status
 
 | Item | State |
@@ -242,7 +276,7 @@ non-overlapping folds + bucket monotonicity. Promotion bar unchanged
 | Pre-registration | locked |
 | Stage 1 | complete — AMBER/INCONCLUSIVE (artifact-gate / binary-IC confound) |
 | Stage 1B | complete — backfill cheap (~1.5–3h) |
-| Route A | analysis complete — quality-only discriminator = continuous `composite_score`; preliminary IC +0.15 (low power) |
-| Stage 2a | proposed — backfill → composite_score IC/ICIR across folds (awaiting user go) |
-| Stage 2b | not started |
-| Promotion | not authorized |
+| Route A | analysis complete — discriminator = continuous technical/composite score |
+| Stage 2a | complete — **FAIL**: no positive cross-regime edge, regime sign-reversal, ≈ noise |
+| Stage 2b | not started — only remaining path to measure the Atlas overlay increment (forward shadow, slow) |
+| Promotion | not authorized — no historical evidence of edge in backfittable components |
