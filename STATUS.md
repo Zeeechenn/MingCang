@@ -61,7 +61,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 | M41 A/HK/US Global Data/Research Buildout | complete | read-only three-market data facade, health ledger, normalization/PIT contracts, UX boundary, and CN-only production guardrails |
 | M42 qfq/hfq Price-Contamination Guard | complete | write-time jump guard, dry-run-first remediation CLI, 33 hermetic tests; legacy full-series hfq rows remain a separate data cleanup item |
 | M43 Architecture Boundary Hardening | complete | compatibility facades, behavior-characterization tests, and AST architecture guards are in place |
-| M44 Atlas Merge / L0-L4 Architecture | active: Phase 3-min complete; L0 trust, recall, migration, and memory-promotion guardrails verified | run Phase 4 minimal adapter review, then fresh final re-sync and Phase 5 parity pack before any direct merge |
+| M44 Atlas Merge / L0-L4 Architecture | active: Phase 4 minimal dossier adapter review complete; L0 trust, recall, migration, memory-promotion guardrails, and read-only adapter wiring verified | run fresh final re-sync and Phase 5 parity pack before any direct merge |
 
 For detailed sequencing, read `docs/ROADMAP.md`; for the Atlas/M44 detailed
 checklist, read `docs/ATLAS_MERGE.md`. For historical milestone details, read
@@ -80,6 +80,30 @@ separate: complete legacy adapters/backfill and native ResearchCase /
 ActionProposal L0 wiring are not yet required for the minimal merge-safety
 slice. Atlas behavior must remain dormant until engineering parity gates pass;
 any investment-impact promotion requires later shadow/test4 evidence.
+
+M44 Phase 4 update (2026-06-05): the minimal adapter review is complete using
+the existing dossier as `dossier_readonly_v0`. The Atlas-only
+`/api/research/{symbol}/adapter-review` route is dormant-guarded and returns
+read-only L1 EvidenceCard-style mappings, an L2 ResearchCase, and an L0
+memory-candidate preview. It does not create candidates or promote trusted
+memory; promotion remains behind the existing M37/M40 local-human gate path.
+Focused adapter regression passed with `44 passed, 1 warning`; expanded
+M33/M37/M40/L0 regression passed with `159 passed, 1 warning`. Merge-day
+equivalence remains a Phase 5 parity-pack requirement, not a Phase 4 claim.
+
+M44 Phase 5 preflight note (2026-06-05): after the Phase 4 adapter wiring,
+read-only preflight checks showed local `main...HEAD = 0 / 33`; the only current
+sync blocker is the uncommitted Phase 4 adapter worktree. Full `make verify`
+passed with backend pytest `1048 passed, 5 skipped`, frontend node tests
+`19 passed`, and Vite build passed. Fixed-end test2 replay at
+`--end 2026-06-05` had zero raw JSON diff against the main
+`paper_trading/test2_ab_state.json`; official-signal and scheduler/postmarket
+focused smoke passed `24 passed, 1 warning`; DB copy-smoke on
+`/private/tmp/stocksage_m44_phase5_after_adapter_copy.db` passed `init_db()`,
+`PRAGMA integrity_check`, required Atlas table/column checks, and protected
+`stocks` / `signals` row-count stability. This is not the final Phase 5 gate:
+the same parity pack must rerun after the Phase 4 adapter changes are committed
+and after any final re-sync.
 
 M31 completion note (2026-06-02): `backend.data.cache_policy` defines L1/L2/L3
 and the intraday zero-network contract; `/api/system/data-coverage` exposes

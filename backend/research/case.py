@@ -168,3 +168,148 @@ def build_case(dossier: dict, as_of: str | None = None) -> dict:
         "ready": quality_gate["gate_pass"] and validity_card["card_pass"],
         "generated_at": datetime.utcnow().isoformat(),
     }
+
+
+def _case_as_of(dossier: dict, explicit_as_of: str | None = None) -> str | None:
+    if explicit_as_of:
+        return explicit_as_of
+    signal = dossier.get("latest_signal") or {}
+    if signal.get("date"):
+        return signal["date"]
+    evidence = dossier.get("evidence") or []
+    if evidence and evidence[0].get("as_of"):
+        return evidence[0]["as_of"]
+    return None
+
+
+def _compact_summary(value: Any, *, fallback: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, list) and value:
+        return "; ".join(str(item).strip() for item in value[:3] if str(item).strip()) or fallback
+    return fallback
+
+
+def build_dossier_evidence_cards(dossier: dict) -> list[dict]:
+    """Map one legacy dossier into read-only L1 evidence cards.
+
+    This adapter is intentionally pure: no DB access, no memory writes, no LLM
+    calls, and no official signal mutation.
+    """
+    symbol = dossier.get("symbol", "")
+    cards: list[dict[str, Any]] = []
+
+    for idx, evidence in enumerate(dossier.get("evidence") or []):
+        snapshot = evidence.get("input_snapshot") or {}
+        cards.append({
+            "kind": "decision_run_evidence",
+            "source_layer": "L1",
+            "source_type": evidence.get("run_type") or "decision_run",
+            "source_ref": evidence.get("run_id") or f"{symbol}:decision_run:{idx}",
+            "summary": _compact_summary(
+                evidence.get("recommendation"),
+                fallback="decision run evidence",
+            ),
+            "as_of": evidence.get("as_of"),
+            "pit_ok": bool(evidence.get("as_of")),
+            "provenance": {
+                "data_source": snapshot.get("data_source"),
+                "fetched_at": snapshot.get("fetched_at"),
+                "adjustment": snapshot.get("adjustment"),
+                "universe_hash": snapshot.get("universe_hash"),
+            },
+            "write_policy": "no_database_writes",
+            "signal_impact": "none",
+        })
+
+    label = dossier.get("long_term_label") or {}
+    if label:
+        cards.append({
+            "kind": "long_term_label",
+            "source_layer": "L1",
+            "source_type": "long_term_label",
+            "source_ref": f"{symbol}:long_term_label:{label.get('date') or 'active'}",
+            "summary": _compact_summary(label.get("key_findings"), fallback=label.get("label") or "long-term label"),
+            "as_of": label.get("date"),
+            "pit_ok": bool(label.get("date")),
+            "provenance": {
+                "quality": label.get("quality"),
+                "constraint_eligible": label.get("constraint_eligible"),
+                "expires_at": label.get("expires_at"),
+            },
+            "write_policy": "no_database_writes",
+            "signal_impact": "none",
+        })
+
+    for idx, row in enumerate(dossier.get("deep_research") or []):
+        evidence = row.get("evidence") or {}
+        cards.append({
+            "kind": "deep_research_pointer",
+            "source_layer": "L1",
+            "source_type": row.get("source_type") or "research_pointer",
+            "source_ref": row.get("source_ref") or f"{symbol}:deep_research:{idx}",
+            "summary": _compact_summary(row.get("summary"), fallback=evidence.get("topic") or "deep research pointer"),
+            "as_of": row.get("created_at") or evidence.get("as_of"),
+            "pit_ok": bool(row.get("created_at") or evidence.get("as_of")),
+            "provenance": {
+                "memory_type": row.get("memory_type"),
+                "topic": evidence.get("topic"),
+            },
+            "write_policy": "no_database_writes",
+            "signal_impact": "none",
+        })
+
+    return cards
+
+
+def build_dossier_adapter_review(dossier: dict, as_of: str | None = None) -> dict:
+    """Build the Phase 4 minimal read-only adapter review for one dossier.
+
+    The output proves the dossier adapter can supply:
+      L1 EvidenceCard-like rows,
+      L2 ResearchCase,
+      L0 memory-candidate preview.
+
+    The preview is not a write. Existing gated routes remain the only way to
+    create pending candidates or promote trusted memory.
+    """
+    resolved_as_of = _case_as_of(dossier, as_of)
+    research_case = build_case(dossier, as_of=resolved_as_of)
+    evidence_cards = build_dossier_evidence_cards(dossier)
+    symbol = dossier.get("symbol", "")
+    thesis = (dossier.get("research_state") or {}).get("thesis")
+    candidate_summary = _compact_summary(
+        thesis,
+        fallback=f"{symbol} dossier adapter review: {len(evidence_cards)} read-only evidence card(s)",
+    )
+    source_ref_as_of = resolved_as_of or "live"
+    candidate_preview = {
+        "symbol": symbol,
+        "summary": candidate_summary,
+        "memory_type": "thesis",
+        "importance": 3,
+        "confidence": 0.5,
+        "source_ref": f"atlas:dossier_readonly_v0:{symbol}:{source_ref_as_of}",
+        "note": "Phase 4 read-only dossier adapter preview; create route must keep source_trust=pending.",
+        "eligible_for_creation": bool(symbol and candidate_summary and evidence_cards),
+        "source_trust_after_create": "pending",
+    }
+    return {
+        "adapter": "dossier_readonly_v0",
+        "symbol": symbol,
+        "as_of": resolved_as_of,
+        "read_only": True,
+        "research_case": research_case,
+        "evidence_cards": evidence_cards,
+        "memory_candidate_preview": candidate_preview,
+        "promotion_gate": {
+            "candidate_create_route": "POST /api/research/memory-candidates",
+            "trusted_promotion_route": "POST /api/research/memory-candidates/{candidate_id}/promote",
+            "auto_promotes_trusted_memory": False,
+            "trusted_requires": [
+                "local_human_memory_gate",
+                "agent_write_guard:research.memory.promote",
+                "atlas_dormant_guard",
+            ],
+        },
+    }

@@ -227,6 +227,42 @@ class ResearchCaseOut(BaseModel):
     generated_at: str | None = None
 
 
+class EvidenceCardOut(BaseModel):
+    kind: str
+    source_layer: str = "L1"
+    source_type: str | None = None
+    source_ref: str | None = None
+    summary: str = ""
+    as_of: str | None = None
+    pit_ok: bool = False
+    provenance: dict = {}
+    write_policy: str = "no_database_writes"
+    signal_impact: str = "none"
+
+
+class MemoryCandidatePreviewOut(BaseModel):
+    symbol: str
+    summary: str
+    memory_type: str
+    importance: int = 3
+    confidence: float = 0.5
+    source_ref: str | None = None
+    note: str | None = None
+    eligible_for_creation: bool = False
+    source_trust_after_create: str = "pending"
+
+
+class DossierAdapterReviewOut(BaseModel):
+    adapter: str
+    symbol: str
+    as_of: str | None = None
+    read_only: bool = True
+    research_case: ResearchCaseOut
+    evidence_cards: list[EvidenceCardOut] = []
+    memory_candidate_preview: MemoryCandidatePreviewOut
+    promotion_gate: dict = {}
+
+
 class ResearchDossierOut(BaseModel):
     symbol: str
     stock: dict | None = None

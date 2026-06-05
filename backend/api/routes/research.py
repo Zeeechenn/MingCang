@@ -11,6 +11,7 @@ from backend.api.schemas import (
     CaseViewOut,
     DeepResearchRequest,
     DeepResearchResponse,
+    DossierAdapterReviewOut,
     ForwardEvidenceRequest,
     ForwardThesisConfidenceRequest,
     ForwardThesisCreateRequest,
@@ -94,6 +95,29 @@ def get_symbol_research_dossier(symbol: str, db: Session = Depends(get_db)):
     from backend.research.dossier import build_research_dossier
 
     return build_research_dossier(db, symbol)
+
+
+@router.get(
+    "/research/{symbol}/adapter-review",
+    response_model=DossierAdapterReviewOut,
+    dependencies=[Depends(atlas_dormant_guard)],
+)
+def get_symbol_adapter_review(
+    symbol: str,
+    as_of: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Return the Phase 4 minimal read-only dossier adapter review.
+
+    This endpoint maps the existing dossier into L1 evidence cards, an L2
+    ResearchCase, and an L0 memory-candidate preview. It does not create memory
+    candidates or promote trusted memory.
+    """
+    from backend.research.case import build_dossier_adapter_review
+    from backend.research.dossier import build_research_dossier
+
+    dossier = build_research_dossier(db, symbol)
+    return build_dossier_adapter_review(dossier, as_of=as_of)
 
 
 @router.post(

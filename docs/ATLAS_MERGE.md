@@ -6,7 +6,7 @@
 
 | Item | Status |
 |---|---|
-| Current phase | Phase 3-min L0 memory contract complete; next is Phase 4 minimal adapter review, then a fresh Phase 5 parity pack before any direct merge decision |
+| Current phase | Phase 4 minimal dossier adapter review complete; next is a fresh Phase 5 parity pack before any direct merge decision |
 | Main baseline | Phase 0 completed locally; `main` includes M43 at merge commit `4882d49` |
 | Baseline marker | local tag `pre-atlas-m43-baseline` points to `4882d49` |
 | Atlas worktree | `/Users/zeeechenn/Documents/项目s/atlas` on `codex/atlas` |
@@ -166,10 +166,10 @@ Evidence:
 
 Goal: prove one old module can enter the new architecture safely without migrating everything before merge.
 
-- [ ] Implement or wire one read-only `ResearchCase` / case view.
-- [ ] Implement one minimal `EvidenceCard` mapping.
-- [ ] Implement one memory candidate / promotion gate path.
-- [ ] Pick one adapter, preferably deep_research or existing dossier, because it can stay read-only and avoid official signal impact.
+- [x] Implement or wire one read-only `ResearchCase` / case view.
+- [x] Implement one minimal `EvidenceCard` mapping.
+- [x] Implement one memory candidate / promotion gate path.
+- [x] Pick one adapter, preferably deep_research or existing dossier, because it can stay read-only and avoid official signal impact.
 - [x] Confirm/wire `settings.atlas_enabled` as the Atlas total dormant switch; module-level flags remain secondary.
 - [x] With dormant switch off, Atlas HTTP/API routes return disabled, empty, or manual-only behavior; internal storage helpers remain importable for tests and explicit local tooling.
 
@@ -185,10 +185,23 @@ Deferred until after first merge:
 
 Acceptance:
 
-- [ ] Focused tests cover the minimal adapter.
+- [x] Focused tests cover the minimal adapter.
 - [ ] Unfinished modules have owners / migration notes.
 - [x] Atlas total switch off means Atlas-only routes/features are dormant and no official path impact is introduced.
 - [ ] Merge-day behavior remains equivalent.
+
+Evidence:
+
+- Phase 4 minimal adapter uses the existing dossier as `dossier_readonly_v0`.
+- `GET /api/research/{symbol}/adapter-review` is Atlas-only and dormant-guarded.
+- The adapter maps legacy dossier data into read-only L1 evidence-card rows,
+  an L2 `ResearchCase`, and an L0 memory-candidate preview. It does not create
+  memory candidates or promote trusted memory; promotion remains gated by the
+  existing local-human M37/M40 route path.
+- Focused adapter regression passed `44 passed, 1 warning`.
+- Expanded M33/M37/M40/L0 regression passed `159 passed, 1 warning`.
+- Full merge-day equivalence is intentionally not claimed here; it remains a
+  Phase 5 parity-pack requirement.
 
 ## Phase 5: Behavior-Equivalent Atlas Merge
 
@@ -211,6 +224,29 @@ Required gates before merge:
 - [ ] architecture import guard.
 - [ ] Atlas dormant flag smoke.
 - [ ] `git diff --check`.
+
+Preflight evidence after Phase 4 adapter wiring (not the final merge gate):
+
+- Current committed Atlas stack is based on local `main` `423bb1d`; read-only
+  divergence check showed `main...HEAD = 0 / 33`. The worktree still has the
+  uncommitted Phase 4 adapter files, so real final re-sync is blocked until
+  those changes are explicitly committed or otherwise handled.
+- Full `make verify` passed after the adapter wiring: ruff passed, mypy passed
+  on 204 source files, backend pytest `1048 passed, 5 skipped`, frontend node
+  tests `19 passed`, and Vite build passed.
+- Test2 fixed-end replay used `--end 2026-06-05`; raw JSON diff against
+  `/Users/zeeechenn/stock-sage/paper_trading/test2_ab_state.json` was zero.
+- Official-signal and scheduler/postmarket focused smoke passed:
+  `24 passed, 1 warning`.
+- Live DB copy-smoke used
+  `/private/tmp/stocksage_m44_phase5_after_adapter_copy.db`; `init_db()`
+  completed, `PRAGMA integrity_check` returned `ok`, Atlas memory/review tables
+  existed, `memory_promotion_candidates.memory_atom_id` existed, and protected
+  `stocks` / `signals` row counts remained `718` / `879`.
+- Dependency lock check passed with `uv lock --check`.
+- `git diff --check` passed and conflict-marker scan returned no matches.
+- This clears a preflight pass only. Final Phase 5 parity must be rerun after
+  the Phase 4 adapter changes are committed and after any actual final re-sync.
 
 Behavior equivalence:
 

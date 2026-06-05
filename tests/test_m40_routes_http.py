@@ -96,6 +96,10 @@ def test_atlas_total_switch_disables_new_routes_but_keeps_legacy_research_state(
     assert dossier_resp.status_code == 200, dossier_resp.text
     assert dossier_resp.json()["case"] is None
 
+    adapter_resp = client.get(f"/api/research/{_SYM}/adapter-review")
+    assert adapter_resp.status_code == 503
+    assert adapter_resp.json()["detail"] == "atlas feature is disabled"
+
 
 # ---------------------------------------------------------------------------
 # Thesis round-trip
@@ -614,3 +618,22 @@ def test_dossier_returns_200_with_top_level_keys(client):
     assert "symbol" in body
     assert "research_state" in body
     assert body["symbol"] == _SYM
+
+
+def test_adapter_review_returns_readonly_phase4_contract(client, http_db):
+    """GET /research/{symbol}/adapter-review returns the Phase 4 read-only adapter contract."""
+    from backend.data.database import Stock
+
+    http_db.add(Stock(symbol=_SYM, name="贵州茅台", market="CN", industry="食品饮料", active=True))
+    http_db.commit()
+
+    resp = client.get(f"/api/research/{_SYM}/adapter-review?as_of=2026-06-05")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert body["adapter"] == "dossier_readonly_v0"
+    assert body["symbol"] == _SYM
+    assert body["read_only"] is True
+    assert body["research_case"]["symbol"] == _SYM
+    assert body["memory_candidate_preview"]["source_trust_after_create"] == "pending"
+    assert body["promotion_gate"]["auto_promotes_trusted_memory"] is False

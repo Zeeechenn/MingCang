@@ -224,6 +224,38 @@ def test_build_case_as_of_forwarded():
     assert case["quality_gate"]["as_of"] == "2026-05-01"
 
 
+def test_dossier_evidence_cards_are_read_only_l1_mapping():
+    from backend.research.case import build_dossier_evidence_cards
+
+    cards = build_dossier_evidence_cards(_full_dossier())
+    kinds = {card["kind"] for card in cards}
+
+    assert "decision_run_evidence" in kinds
+    assert "long_term_label" in kinds
+    assert "deep_research_pointer" in kinds
+    assert all(card["source_layer"] == "L1" for card in cards)
+    assert all(card["write_policy"] == "no_database_writes" for card in cards)
+    assert all(card["signal_impact"] == "none" for card in cards)
+
+
+def test_dossier_adapter_review_wires_l1_l2_and_pending_l0_preview():
+    from backend.research.case import build_dossier_adapter_review
+
+    review = build_dossier_adapter_review(_full_dossier(), as_of="2026-06-05")
+
+    assert review["adapter"] == "dossier_readonly_v0"
+    assert review["read_only"] is True
+    assert review["research_case"]["as_of"] == "2026-06-05"
+    assert review["research_case"]["ready"] is True
+    assert review["evidence_cards"]
+    preview = review["memory_candidate_preview"]
+    assert preview["memory_type"] == "thesis"
+    assert preview["source_trust_after_create"] == "pending"
+    assert preview["eligible_for_creation"] is True
+    assert preview["source_ref"] == "atlas:dossier_readonly_v0:600519:2026-06-05"
+    assert review["promotion_gate"]["auto_promotes_trusted_memory"] is False
+
+
 # ── Pydantic schema backward-compatibility tests ───────────────────────────
 
 def test_research_dossier_out_case_field_optional():
