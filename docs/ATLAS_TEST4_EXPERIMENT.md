@@ -264,10 +264,11 @@ Caveats: (1) tests the technical component only — not the full live composite
 backfittable). (2) Survivorship: universe = symbols with full 2021-25 coverage.
 (3) Per-symbol biweekly sampling staggers dates (median 2 names/date; 107 dense
 cross-sections) → the **pooled IC and per-year folds are the robust read; ICIR is
-noisier**. Conclusion (no positive edge) holds across all three. (4) Open
-question: whether `technical_result.score` is biased in backfill-only mode
-(sentiment/quant zeroed) — a cheap sanity check before strong claims about the
-production signal.
+noisier**. Conclusion (no positive edge) holds across all three. (4) Backfill-scoring
+sanity check (2026-06-05): **RESOLVED** — `technical_score` is pure price-based
+(no sentiment/quant dependence) and the backfill reproduces the production-stored
+`technical_score` at Pearson 0.978 (39/43 within ±5; score std 29.75, well-spread).
+The negative result is real, not a backfill artifact.
 
 ## Status
 
