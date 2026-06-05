@@ -123,13 +123,46 @@ def test_build_memory_context_includes_l0_trusted_and_pending_sections(test_db):
         source_type="test",
     )
 
-    ctx = build_memory_context(test_db, symbol="300308", limit=8)
+    ctx = build_memory_context(test_db, symbol="300308", limit=8, include_l0=True)
 
     assert "L0 trusted thesis：订单兑现改善" in ctx["text"]
     assert "L0 pending risk：客户砍单" in ctx["text"]
     assert "旧股票记忆仍然保留" in ctx["text"]
     assert set(ctx["used_memory_atom_ids"]) == {trusted["id"], pending["id"]}
     assert ctx["l0_context"]["legacy_memory"] == []
+
+
+def test_build_memory_context_keeps_l0_dormant_by_default(test_db, monkeypatch):
+    from backend.config import settings
+    from backend.memory.l0_memory import create_memory_atom, promote_atom
+    from backend.memory.stock_memory import build_memory_context, create_stock_memory
+
+    monkeypatch.setattr(settings, "atlas_enabled", False)
+    atom = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="thesis",
+        summary="L0 dormant thesis should not enter production memory context",
+        source_type="test",
+        source_ref="stock-context-dormant",
+        trust_state="pending",
+    )
+    promote_atom(test_db, atom["id"], confirmed_by="tester")
+    create_stock_memory(
+        test_db,
+        symbol="300308",
+        memory_type="risk",
+        summary="旧股票记忆仍然保留",
+        source_type="test",
+    )
+
+    ctx = build_memory_context(test_db, symbol="300308", limit=8)
+
+    assert "L0 dormant thesis should not enter production memory context" not in ctx["text"]
+    assert "旧股票记忆仍然保留" in ctx["text"]
+    assert ctx["used_memory_atom_ids"] == []
+    assert ctx["l0_context"]["trusted_memory"] == []
 
 
 def test_build_memory_context_keeps_unrelated_global_preference_out_of_symbol_context(test_db):

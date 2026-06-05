@@ -406,6 +406,19 @@ def _ai_memory_context(db, *, symbol: str | None, query: str | None, limit: int)
     return lines, keys
 
 
+def _empty_l0_context() -> dict:
+    return {
+        "text": "",
+        "trusted_memory": [],
+        "pending_memory": [],
+        "legacy_memory": [],
+        "scenario_summaries": [],
+        "profile_summaries": [],
+        "drilldown_refs": [],
+        "used_memory_atom_ids": [],
+    }
+
+
 def build_memory_context(
     db,
     *,
@@ -414,32 +427,29 @@ def build_memory_context(
     task_type: str = "research",
     limit: int = 8,
     record_usage: bool = True,
+    include_l0: bool | None = None,
 ) -> dict:
     """Build a compact prompt-ready memory context across project entry points."""
     record_usage = record_usage and not _SUPPRESS_USAGE_RECORDING.get()
-    try:
-        from backend.memory.l0_memory import build_l0_context
-        l0_context = build_l0_context(
-            db,
-            scope_type="stock" if symbol else None,
-            scope_key=symbol,
-            query=query,
-            limit=limit,
-            include_pending=True,
-            include_legacy=False,
-            record_usage=record_usage,
-        )
-    except Exception:
-        l0_context = {
-            "text": "",
-            "trusted_memory": [],
-            "pending_memory": [],
-            "legacy_memory": [],
-            "scenario_summaries": [],
-            "profile_summaries": [],
-            "drilldown_refs": [],
-            "used_memory_atom_ids": [],
-        }
+    if include_l0 is None:
+        from backend.config import settings
+        include_l0 = settings.atlas_enabled
+    l0_context = _empty_l0_context()
+    if include_l0:
+        try:
+            from backend.memory.l0_memory import build_l0_context
+            l0_context = build_l0_context(
+                db,
+                scope_type="stock" if symbol else None,
+                scope_key=symbol,
+                query=query,
+                limit=limit,
+                include_pending=True,
+                include_legacy=False,
+                record_usage=record_usage,
+            )
+        except Exception:
+            l0_context = _empty_l0_context()
     try:
         stock_rows = list_stock_memories(db, symbol=symbol, limit=max(limit * 3, 20))
     except OperationalError:

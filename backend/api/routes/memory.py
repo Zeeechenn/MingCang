@@ -264,6 +264,7 @@ def stock_memory_context(
         task_type=task_type,
         limit=limit,
         record_usage=False,
+        include_l0=True,
     )
 
 

@@ -225,12 +225,21 @@ Required gates before merge:
 - [ ] Atlas dormant flag smoke.
 - [ ] `git diff --check`.
 
+Migration decision:
+
+- [x] User-approved exception on 2026-06-05: `forward_theses` may use the
+  existing data-preserving table rebuild to replace the legacy unique key with
+  the symbol-aware contract. This remains a migration exception, not a general
+  permission to drop or rename production tables. Merge-day copy-smoke must pass,
+  and duplicate normalized `forward_theses` keys must fail loudly before any live
+  schema run.
+
 Preflight evidence after Phase 4 adapter wiring (not the final merge gate):
 
-- Current committed Atlas stack is based on local `main` `423bb1d`; read-only
-  divergence check showed `main...HEAD = 0 / 33`. The worktree still has the
-  uncommitted Phase 4 adapter files, so real final re-sync is blocked until
-  those changes are explicitly committed or otherwise handled.
+- At the committed Phase 4 checkpoint `1898e23`, Atlas was based on local `main`
+  `423bb1d`; read-only divergence check showed `main...HEAD = 0 / 34` and the
+  worktree was clean. Any follow-up dormant-context patch must rerun the final
+  Phase 5 parity pack before merge.
 - Full `make verify` passed after the adapter wiring: ruff passed, mypy passed
   on 204 source files, backend pytest `1048 passed, 5 skipped`, frontend node
   tests `19 passed`, and Vite build passed.
