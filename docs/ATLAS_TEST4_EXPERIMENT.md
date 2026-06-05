@@ -178,12 +178,71 @@ lookahead-guarded off. Dry-run: 2 symbols × 20 trading days = 40 inputs in 2.1s
 1.5h, 5yr×900 syms ≈ 3.2h. Caveat from Stage 1: backfill is cheap to *run* but
 only useful once a backfillable gate variant is defined (see Stage 1 consequences).
 
+## Route A analysis (2026-06-05) — backfillable quality-only gate
+
+Read-only analysis of `backend/research/case.py` `_build_quality_gate` (9 checks)
+and `gate_b_recorder.py`. Two design flaws found, plus a clean fix.
+
+**Classification of the 9 gate checks:**
+
+| Check | Type | Backfill-reproducible? |
+|---|---|---|
+| `signal_present` | precondition | yes (trivial) |
+| `signal_fresh` | quality/validity (PIT, uses as_of) | yes |
+| `cutoff_ok` | structural PIT guard | yes |
+| `deep_research_present` | **operational artifact** (LLM research record) | **no** |
+| `copilot_present` | **operational artifact** | **no** |
+| `label_present` | **operational artifact** (labeling pipeline) | no (unless labels backfilled) |
+| `label_trusted` | **operational artifact** | no |
+| `no_pending_questions` | artifact-derived (copilot) | vacuously yes |
+| `source_coverage_ok` | provenance completeness | partial |
+
+**Flaw 1 — the gate discriminates only on artifact presence.** The binary
+pass/fail is driven by `deep_research_present` / `label_trusted`, which accumulate
+over time → confounded with recency, absent in any historical backfill. Stripping
+them leaves no quantitative quality factor → gate would pass ~everything
+(`gate_pass_rate > 0.80` → ABORT). So QualityGate v0 is a *research-completeness*
+gate, not a *signal-quality* gate.
+
+**Flaw 2 — IC is computed on the binary flag, not the score.** `report()` sets
+`gate_score = 1.0 if gate_pass_variant else 0.0` (recorder line 682). In the
+realized pool every row is gate-fail → the flag is constant → IC is null by
+construction. Meanwhile the continuous **`composite_score` is recorded on every
+observation and goes unused** for IC.
+
+**Proposed backfillable quality-only discriminator:** use the continuous
+`composite_score` (reproducible from a technical-only backfill, already recorded)
+as the discriminator — cross-sectional IC + bucket monotonicity vs
+`forward_return_net`. Keep `signal_fresh` / `cutoff_ok` as PIT/validity filters.
+Drop artifact-presence checks from the discriminator. This requires a small report
+change (IC on `composite_score`, not the binary flag); no change to `case.py`.
+
+**Preliminary read on existing Stage-1 realized data** (pooled Spearman, single
+~3.5-week regime — low power, NOT promotion evidence):
+
+| Horizon | n | IC(composite, fwd_net) | rough z | top-quintile mean fwd_net |
+|---|---|---|---|---|
+| 5d | 423 | **+0.151** | +3.1 | +4.7% (vs bottom quintiles negative) |
+| 10d | 130 | **+0.145** | +1.7 | +11.9% |
+
+Direction is positive and the top quintile clearly leads, IC well above the 0.04
+promotion bar — but this is one short regime, pooled (not date-neutral), and
+measures the **base signal score's** edge, not an isolated Atlas increment.
+Treat as "the test design is right and worth powering up," not as a verdict.
+
+**Updated Stage 2a target:** technical-only signal backfill over ≥3yr
+multi-regime → cross-sectional IC + ICIR of `composite_score` across
+non-overlapping folds + bucket monotonicity. Promotion bar unchanged
+(IC ≥ 0.04, ICIR ≥ 0.40, monotonic buckets, CI excluding 0).
+
 ## Status
 
 | Item | State |
 |---|---|
 | Pre-registration | locked |
-| Stage 1 | complete — AMBER/INCONCLUSIVE (structural temporal confound) |
-| Stage 1B | complete — backfill cheap (~1.5–3h) but blocked on gate-variant definition |
-| Stage 2a / 2b | not started — pending gate-variant decision (A/B/C above) |
+| Stage 1 | complete — AMBER/INCONCLUSIVE (artifact-gate / binary-IC confound) |
+| Stage 1B | complete — backfill cheap (~1.5–3h) |
+| Route A | analysis complete — quality-only discriminator = continuous `composite_score`; preliminary IC +0.15 (low power) |
+| Stage 2a | proposed — backfill → composite_score IC/ICIR across folds (awaiting user go) |
+| Stage 2b | not started |
 | Promotion | not authorized |
