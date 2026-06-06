@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     ifind_mcp_qps_limit: float = 1.0
     log_level: str = "INFO"
 
+    # CORS 允许来源（逗号分隔；默认仅 Vite dev server，保证 dev 行为不变）
+    cors_origins: str = "http://localhost:5173"
+
     # Signal weights (must sum to 1.0)
     # 阶段A Qlib 有效性硬验证结论：IC=0.0228 / ICIR=0.062 / 分层非单调 → Qlib 不合格
     # 默认改为「技术 60% + 情感 40%」，weight_quant 归零。
@@ -273,6 +276,11 @@ class Settings(BaseSettings):
     stocksage_agent_api_key: str = ""
     stocksage_agent_remote_write_enabled: bool = False
     stocksage_agent_remote_write_actions: str = ""
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse the comma-separated cors_origins into a clean list (split + strip + 去空)."""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @model_validator(mode="after")
     def _validate_runtime_invariants(self):

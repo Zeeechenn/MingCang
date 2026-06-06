@@ -38,7 +38,7 @@ app = FastAPI(title="MingCang API", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],   # Vite dev server
+    allow_origins=settings.cors_origins_list,   # env: CORS_ORIGINS（逗号分隔，默认 Vite dev server）
     allow_methods=["*"],
     allow_headers=["*"],
 )
