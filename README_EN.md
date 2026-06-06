@@ -8,12 +8,15 @@ The goal isn't a smarter "prediction AI." It's a **research operating system** f
 - **AI** handles breadth sweeps, falsification, and short-term risk discipline;
 - **the system** turns judgments and outcomes into memory that grows over time.
 
+[![Docs](https://img.shields.io/badge/%F0%9F%93%96_Docs-mingcang.docs-ffd400?labelColor=07070d)](https://zeeechenn.github.io/MingCang/)
 [![CI](https://github.com/Zeeechenn/MingCang/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/MingCang/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/Zeeechenn/MingCang?logo=github&color=success)](https://github.com/Zeeechenn/MingCang/releases)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
 ![Agent](https://img.shields.io/badge/agent--ready-Pi%20%7C%20Claude%20Code%20%7C%20Codex%20%7C%20Cursor-8957e5)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+
+**📖 Online docs**: <https://zeeechenn.github.io/MingCang/>
 
 **Language**: [简体中文](README.md) · [English](README_EN.md)
 

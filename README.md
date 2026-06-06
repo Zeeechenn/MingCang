@@ -8,12 +8,15 @@
 - **AI** 负责广度扫描、证伪和短期风险纪律；
 - **系统** 负责把判断和结果沉淀成一套会成长的记忆。
 
+[![文档](https://img.shields.io/badge/%F0%9F%93%96_文档-mingcang.docs-ffd400?labelColor=07070d)](https://zeeechenn.github.io/MingCang/)
 [![CI](https://github.com/Zeeechenn/MingCang/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/MingCang/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/Zeeechenn/MingCang?logo=github&color=success)](https://github.com/Zeeechenn/MingCang/releases)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
 ![Agent](https://img.shields.io/badge/agent--ready-Pi%20%7C%20Claude%20Code%20%7C%20Codex%20%7C%20Cursor-8957e5)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+
+**📖 在线文档**：<https://zeeechenn.github.io/MingCang/>
 
 **语言**：[简体中文](README.md) · [English](README_EN.md)
 
