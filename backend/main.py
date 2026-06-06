@@ -8,9 +8,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.routes import router
+from backend.config import settings
 from backend.data.database import init_db
+from backend.logging_config import configure_logging
 from backend.scheduler import start as scheduler_start
 from backend.scheduler import stop as scheduler_stop
+
+# 模块级最早配置中心化结构化日志，确保在 app 创建及后续 import 前生效。
+configure_logging(settings.log_level)
 
 logger = logging.getLogger(__name__)
 
