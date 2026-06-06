@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import json
 
-from paper_trading.test2_ab_models import PriceBar, Signal
+import pytest
+
+test2_ab_models = pytest.importorskip(
+    "paper_trading.test2_ab_models",
+    reason="paper_trading/test2 frozen baseline is local-only and not checked into CI",
+)
+PriceBar = test2_ab_models.PriceBar
+Signal = test2_ab_models.Signal
 
 
 def test_build_report_runs_signal_overlay_without_touching_test2_state(tmp_path):
