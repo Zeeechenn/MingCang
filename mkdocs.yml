@@ -2,8 +2,48 @@ site_name: MingCang Docs
 site_url: https://Zeeechenn.github.io/MingCang/
 site_description: Local-first stock research workbench documentation
 docs_dir: docs_public
+repo_url: https://github.com/Zeeechenn/MingCang
+repo_name: Zeeechenn/MingCang
 theme:
-  name: readthedocs
+  name: material
+  language: zh
+  font: false
+  favicon: assets/favicon.svg
+  icon:
+    logo: material/chart-timeline-variant
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: black
+      accent: teal
+extra_css:
+  - stylesheets/extra.css
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Zeeechenn/MingCang
 nav:
   - Home: index.md
   - Start Here:
