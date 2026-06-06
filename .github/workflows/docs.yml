@@ -35,6 +35,8 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Build docs
         run: mkdocs build --strict --site-dir site
