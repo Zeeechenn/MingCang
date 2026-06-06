@@ -22,9 +22,12 @@ Design rules:
 from __future__ import annotations
 
 import json
+import logging
 import statistics
 from datetime import UTC, datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from backend.config import settings
 from backend.memory.audit_log import audit_write
@@ -543,8 +546,14 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
                         related_scope="gate_b",
                     )
                     db.commit()
-            except ValueError:
-                pass
+            except ValueError as exc:
+                logger.warning(
+                    "realize_returns: malformed date for %s/%s, marking unrealizable: %s",
+                    obs.symbol, obs.signal_date, exc,
+                )
+                obs.forward_status = "unrealizable"
+                obs.updated_at = _utc_now()
+                db.commit()
         # else: no forward prices at all — leave pending
 
     return realized

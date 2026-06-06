@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from backend.data.database import ChatMessage, ChatSession
+
+logger = logging.getLogger(__name__)
 
 
 def _json(data) -> str:
@@ -87,7 +90,7 @@ def ensure_session(
         if row:
             return row
     row = ChatSession(
-        id=uuid4().hex,
+        id=session_id or uuid4().hex,
         title=title or "新对话",
         mode=mode,
         created_at=datetime.now(UTC).replace(tzinfo=None),
@@ -117,5 +120,9 @@ def save_message(
     try:
         from backend.memory.summarizer import summarize_if_needed
         summarize_if_needed(db, session.id)
-    except Exception:
-        pass  # 摘要失败不应阻塞写入
+    except Exception as exc:
+        logger.warning("summarize_if_needed failed for session %s: %s", session.id, exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass

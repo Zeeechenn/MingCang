@@ -288,13 +288,24 @@ def job_daily_memory_expire() -> None:
     return run_daily_memory_expire()
 
 
+def _parse_hhmm(value: str, name: str) -> tuple[int, int]:
+    """Parse a HH:MM schedule string, raising a clear error on bad format."""
+    try:
+        h, m = value.split(":")
+        return int(h), int(m)
+    except (ValueError, AttributeError) as exc:
+        raise ValueError(
+            f"Invalid schedule config {name}={value!r} — expected HH:MM format"
+        ) from exc
+
+
 def start() -> None:
     """Register all cron jobs and start the background scheduler."""
-    pre_h, pre_m = settings.schedule_premarket.split(":")
-    post_h, post_m = settings.schedule_postmarket.split(":")
-    long_mon_h, long_mon_m = settings.schedule_longterm_monday_time.split(":")
-    long_fri_h, long_fri_m = settings.schedule_longterm_friday_time.split(":")
-    reflect_h, reflect_m = settings.schedule_longterm_time.split(":")
+    pre_h, pre_m = _parse_hhmm(settings.schedule_premarket, "schedule_premarket")
+    post_h, post_m = _parse_hhmm(settings.schedule_postmarket, "schedule_postmarket")
+    long_mon_h, long_mon_m = _parse_hhmm(settings.schedule_longterm_monday_time, "schedule_longterm_monday_time")
+    long_fri_h, long_fri_m = _parse_hhmm(settings.schedule_longterm_friday_time, "schedule_longterm_friday_time")
+    reflect_h, reflect_m = _parse_hhmm(settings.schedule_longterm_time, "schedule_longterm_time")
 
     scheduler.add_job(job_premarket, CronTrigger(
         hour=int(pre_h), minute=int(pre_m), day_of_week="mon-fri",

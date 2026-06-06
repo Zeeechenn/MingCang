@@ -373,6 +373,14 @@ def list_memory_atoms(
             lower(coalesce(source_ref, '')) LIKE :q_like
         )""")
         params["q_like"] = f"%{q.lower()}%"
+    now_str = _utc_now().isoformat(timespec="seconds")
+    params["now_str"] = now_str
+    # Push validity filters into SQL so LIMIT is applied after exclusions.
+    clauses.append("(valid_from IS NULL OR valid_from <= :now_str)")
+    clauses.append("(valid_to IS NULL OR valid_to >= :now_str)")
+    clauses.append(
+        "(ttl_days IS NULL OR datetime(updated_at, '+' || ttl_days || ' days') >= :now_str)"
+    )
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     query = f"""
         SELECT *
@@ -382,13 +390,7 @@ def list_memory_atoms(
         LIMIT :limit
     """  # noqa: S608 - WHERE clauses are allowlisted literals plus bound params.
     rows = db.execute(text(query), params).all()
-    now = _utc_now()
-    atoms = []
-    for row in rows:
-        if not _active(row, now):
-            continue
-        atom = _row_to_atom(row)
-        atoms.append(atom)
+    atoms = [_row_to_atom(row) for row in rows]
     return sorted(
         atoms,
         key=lambda atom: (

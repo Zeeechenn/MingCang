@@ -263,7 +263,10 @@ def _persist_postmarket_stock(stock, analysis: dict, db) -> None:
     date_str = analysis["date"]
     result = analysis["result"]
     save_signal(stock.symbol, date_str, result, db)
-    save_decision(stock.symbol, date_str, result)
+    try:
+        save_decision(stock.symbol, date_str, result)
+    except Exception as exc:
+        logger.warning("save_decision failed for %s %s (best-effort): %s", stock.symbol, date_str, exc)
     if settings.layered_memory_enabled:
         save_decision_layered(stock.symbol, date_str, result, db=db)
 

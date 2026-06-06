@@ -172,16 +172,16 @@ def detect_action(message: str, db: Session) -> ActionCandidate | None:
             message,
             flags=re.I,
         )
-        if not qty_match or not cost_match:
-            return None
-        stock = db.query(Stock).filter(Stock.symbol == symbol).first()
-        return "position.add", {
-            "symbol": symbol,
-            "name": stock.name if stock else name_after_symbol(message, symbol),
-            "market": stock.market if stock else "CN",
-            "quantity": float(qty_match.group(1)),
-            "avg_cost": float(cost_match.group(1)),
-        }
+        if qty_match and cost_match:
+            stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+            return "position.add", {
+                "symbol": symbol,
+                "name": stock.name if stock else name_after_symbol(message, symbol),
+                "market": stock.market if stock else "CN",
+                "quantity": float(qty_match.group(1)),
+                "avg_cost": float(cost_match.group(1)),
+            }
+        # qty or cost missing — fall through to check other intent branches
 
     if any(
         word in message for word in ("添加自选", "加入自选", "关注", "重点跟踪")
