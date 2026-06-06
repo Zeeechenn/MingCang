@@ -40,9 +40,17 @@ Boundaries:
 - [x] Reviewed remaining local handoff seeds against `/Users/zeeechenn/Desktop/站在光里，未来已来.md`: `300308`, `300502`, and `603986` remain blocked because the direct local source supports sector themes but does not name those companies/symbols.
 - [x] Narrowed and executed the AVGO direct-source seed (`ateacher-20260603-connectivity-avgo-direct`) as a Broadcom networking / switching-chip / 1.6T DSP connectivity anchor only; `ForwardThesis` remains `draft`, L0 memory remains `pending`, and broader accelerator/backlog/custom-silicon wording was excluded.
 - [x] Execute later imports only after reviewing dry-run output; imported rows remain draft/pending and do not become trusted automatically.
-- [ ] Use `backend/research/thesis_ledger.py` only where its thinner `symbol/title/kill_conditions/status` shape is sufficient, or extend it deliberately after tests.
+- [x] Use `backend/research/thesis_ledger.py` only where its thinner `symbol/title/kill_conditions/status` shape is sufficient, or extend it deliberately after tests.
 - [x] Ensure imports are idempotent and do not create trusted memory automatically.
-- [ ] A-teacher hook updates should become ledger entries, not markdown-only notes.
+- [x] A-teacher hook updates should become ledger entries, not markdown-only notes.
+
+Implementation note: richer M45 imports continue to use `ForwardThesis(draft)`
+plus L0 `pending` as the canonical store. The thinner M35 `thesis_ledger.py`
+remains available only for simple `symbol/title/kill_conditions/status` cases
+or future tested extension. `backend.tools.m45_ateacher_hook_update` now adapts
+structured A-teacher hook updates into the same dry-run-first M45 importer so
+hook updates can become ledger entries without touching official signals,
+test2, scheduler jobs, production profile, or trusted memory.
 
 ### M45.2 放大器证伪记分牌
 
