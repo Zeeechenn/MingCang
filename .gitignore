@@ -41,6 +41,8 @@ docs/adr/*.md
 # Internal planning drafts already summarized in ROADMAP / CHANGELOG
 docs/MEMORY_SYSTEM_PLAN.md
 docs/FINANCIAL_SKILLS_ADAPTATION_PLAN.md
+docs/dev/MEMORY_SYSTEM_PLAN.md
+docs/dev/FINANCIAL_SKILLS_ADAPTATION_PLAN.md
 
 # Local Kronos experiments; upstream checkout/venv are not project artifacts
 vendor/kronos/

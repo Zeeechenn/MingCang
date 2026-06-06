@@ -144,7 +144,7 @@ Additional local checks run on 2026-06-04 after the architecture-contract review
 
 Review notes from the architecture and infra pass:
 
-- `docs/ATLAS.md` now records L0-L4 as the future main architecture, the current
+- `docs/dev/ATLAS.md` now records L0-L4 as the future main architecture, the current
   Researcher / Portfolio Manager / Execution Trader roles, the `ActionProposal`
   shadow/proposal boundary, and the Gate-B versus L4 naming boundary.
 - The dormant switch is documented as an HTTP/API and default-runtime contract.

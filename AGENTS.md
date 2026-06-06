@@ -84,7 +84,13 @@ needs them:
 | architecture, repository navigation, ownership boundaries | `PROJECT.md` |
 | onboarding, install, public copy, GitHub-facing docs | `README.md` |
 | planning, continuation, milestone sequencing, "what next" | `docs/ROADMAP.md` |
-| release notes, version history, historical verification | `CHANGELOG.md` |
+| release notes, version history, historical verification | `CHANGELOG.md` only when explicitly relevant |
+
+Do not preload `CHANGELOG.md`, `README_EN.md`, `docs/dev/*`, research reports,
+or historical experiment notes for routine coding, triage, or "what next"
+work. Follow links into those files only when the user asks for that history,
+when a current doc points to a specific older claim, or when preparing a
+release/audit answer.
 
 For MingCang trading, testing, review, or research decisions, prefer
 project-owned runtime truth over assistant-only chat memory:
@@ -172,7 +178,10 @@ Use existing durable docs:
 - `STATUS.md` for the current operational snapshot.
 - `docs/ROADMAP.md` for active or future milestone work using M-numbered
   sections.
-- `CHANGELOG.md` for completed milestone history.
+- `CHANGELOG.md` for completed milestone history, release notes, and historical
+  verification only.
+- `docs/dev/` for archived experiments, old plans, and maintainer-only deep
+  references that should not be part of default agent startup.
 
 ## Common Commands
 

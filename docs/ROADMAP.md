@@ -9,8 +9,8 @@
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
 | M46 用户可发现性与上手路径 | P1：0.3.1 可信度补丁已完成并通过完整 verify；子 agent 零背景试用发现入口分流、demo 前端、英文 README、功能地图仍需收口 | 先把 GitHub 首页做成极简分流器，再补任务型 `docs/USER_GUIDE.md` 与状态型 `docs/FEATURE_MAP.md` | 不把 README 变成大而全文档；不把维护者路线图当普通用户下一步 |
-| M45 研究定位落地 | 当前主线：amplifier-primary, source-gated；tracked docs below are self-contained, while local ADR 0001 stays git-ignored under `docs/adr/` for private follow-up | M45.1: 用 `backend.tools.m45_import_ateacher_theses` 先 dry-run A老师进口判断，再显式 `--execute` 落成 ForwardThesis + L0 pending atom | 不复活 quant、不改 production profile、不让未过门 alpha 影响真实决策 |
-| M44 Atlas 合并 | complete locally: dormant `--no-ff` merge landed on local `main` at `9820143`, `ATLAS_ENABLED=false`, not pushed | 保持 dormant；push / publish only after explicit user authorization | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因或 revert merge |
+| M45 研究定位落地 | 主体完成：source-gated importer、falsification scoreboard、模块分诊、Stage 2b shadow 预注册都已落地；后续只保留守门合同 | 后续导入仍先 dry-run + source fidelity review；Stage 2b 只做 non-promoting shadow | 不复活 quant、不改 production profile、不让未过门 alpha 影响真实决策 |
+| M44 Atlas 合并 | complete / dormant：`9820143` 已包含在 `origin/main`，`ATLAS_ENABLED=false` | 维持 dormant；任何启用或 Phase 3-full 都走单独任务 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
 | M29 Forward Evidence | routine read-only check；所有 alpha 证据仍 non-promoting，fresh forward coverage 尚未 ready | 只读跑 `backend.tools.m29_forward_readiness --db-url ...`；ready 后才追加 1d/3d/5d shadow + ledger | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
 | 后置/低优先 | M24.3 / M25 / M21.4 / M12 / M10.5 / M4 / M5 | 只在触发条件满足时启动 | 不从历史摘要推出新的生产行为 |
 
@@ -20,26 +20,16 @@
 
 Current fact pattern:
 
-- A0 baseline is recorded in `docs/dev/BASELINE_2026-06.md`; local recheck on 2026-06-06 passed `make verify` with ruff, mypy, 1101 backend tests, 19 frontend tests, Vite build, and ESLint summary.
-- 0.3.1 trust-patch scope is complete: MingCang naming/title cleanup, version surface consolidation for the frontend release badge, screenshot-backed README preview, `docs/WHY_NOT_AI_STOCK_PICKER.md`, `make demo`, and frontend lint summary inside `verify`.
-- Zero-background subagent review found the next product gap is not another feature: users still need a clearer "what do I do first?" path, a task manual, and a feature/status map.
+- 0.3.1 trust patch and onboarding fix are complete: A0 baseline, naming/version cleanup, screenshot-backed README preview, `docs/WHY_NOT_AI_STOCK_PICKER.md`, `make demo`, frontend lint summary in `verify`, `mingcang stock`, and bilingual no-key demo path.
+- Next product gap from zero-background review: users need a task manual and a capability/status map, not more features or a giant README.
 
-Decision:
+Decision: keep `README.md` / `README_EN.md` as thin GitHub routers; put task walkthroughs in `docs/USER_GUIDE.md`; put capability boundaries and key/provider needs in `docs/FEATURE_MAP.md`; keep architecture/roadmap as depth docs.
 
-- Do **not** start with one large exhaustive user manual.
-- Use a layered information architecture:
-  1. `README.md` / `README_EN.md` stay as a thin GitHub router: positioning, no-key demo, screenshot, 3 recommended paths, install, safety boundary, docs navigation.
-  2. `docs/USER_GUIDE.md` becomes the task manual: research one stock, daily scan, watchlist, long-term thesis, review/memory; each task states input, command, expected output, and next step.
-  3. `docs/FEATURE_MAP.md` becomes the capability/status map: Data / Signals / Research / Memory / Agent / UI, with default-enabled vs dormant, read-only vs mutating, production-signal impact, and required keys.
-  4. `docs/ARCHITECTURE.md` and `docs/ROADMAP.md` remain maintainer/agent depth docs, not the normal first-click user path.
+Open tasks:
 
-Immediate tasks:
-
-- [x] Keep demo entry honest: `make demo` seeds mock data and starts backend + frontend, with expected URLs documented.
-- [x] Make `mingcang stock <symbol>` a real launcher shortcut and keep raw `stock-context` CLI examples available.
-- [x] Mirror the no-key demo path into `README_EN.md`.
 - [ ] Enrich demo data so the first frontend screen does not look like an empty production database: add at least one latest signal / price row if it can be done without touching real data or production providers.
-- [ ] Create `docs/USER_GUIDE.md` with task-first sections and small expected-output snippets.
+- [x] Create initial `docs/USER_GUIDE.md` project manual draft: quick start, demo cases, feature inventory, frontend/backend guide, AI/data/memory/quant boundaries, and developer extension notes.
+- [ ] Review and finalize `docs/USER_GUIDE.md` after user feedback; add screenshots, expected-output snippets, and a 15-minute walkthrough.
 - [ ] Create `docs/FEATURE_MAP.md` with capability boundaries and key/provider requirements.
 - [ ] Slim README after the two docs exist: keep architecture in the lower half or link out when it distracts from first use.
 
@@ -51,117 +41,34 @@ Stop conditions:
 
 ---
 
-## M45 研究定位落地：放大器为主、源受门控【P1】
+## M45 研究定位落地：放大器为主、源受门控【complete / guardrails】
 
-Decision summary:
+Completed summary:
 
-- test4 Stage 1 / 2a in `docs/ATLAS_TEST4_EXPERIMENT.md` found no historical edge in the backtestable signal component: technical IC flat/negative, regime signs reversed, quant already `WEIGHT_QUANT=0.0`, and test2 remains too small for promotion evidence.
-- Offense / alpha should come from imported human judgment and the user's own filter / veto / sizing, not from manufacturing a price-pattern oracle.
-- AI's role is breadth, falsification, and short-term risk discipline. AI-surfaced alpha attempts and trusted-memory promotion must pass forward, outcome-gated falsification before influencing real decisions.
-- Atlas L0-L4 implements the loop: import -> record -> falsify -> review -> learn. M29 quant-alpha reset is now one unproven input, not the north star.
+- The direction is settled: 明仓是 human-judgment amplifier, not a price-pattern oracle. AI handles breadth, falsification, and short-term risk discipline; any alpha-like output must remain outcome-gated before it can influence real decisions.
+- `backend.tools.m45_import_ateacher_theses` is the canonical dry-run-first importer. Execute requires direct-source fidelity (`source_kind=direct_source`, verified source, explicit `source_ref`, locator) and writes only `ForwardThesis(draft)` plus L0 `pending`.
+- `backend.tools.m45_falsification_scoreboard` writes ReviewCase scoreboard events and optional pending promotion candidates; `not_due` rows never create promotion candidates.
+- Module ownership is triaged: dossier / deep research / long-term analyst channels are breadth; forward thesis / review loop / stress test / M45 tools are falsification; risk manager surfaces are short-term risk; weighted long-term-label voting remains legacy/quarantine unless re-gated.
+- Stage 2b is pre-registered as non-promoting shadow evidence: imported-human-thesis, falsification-warning, short-term-risk, and breadth-hit arms; small samples stay qualitative.
 
-Boundaries:
+Live contract for future work:
 
-- Keep Atlas dormant by default: `ATLAS_ENABLED=false`.
-- Do not change official signals, test2, scheduler, production profile, stops, sizing, or position state.
-- ADR 0001 remains local/private under `docs/adr/` and is intentionally git-ignored; tracked docs must carry enough context to stand alone.
-
-### M45.1 进口通道结构化（first action）
-
-- [x] Define and implement a dry-run-first import contract in `backend/tools/m45_import_ateacher_theses.py`: source, as_of, symbol/theme, statement, invalidation conditions, follow-up metrics, review cadence, decision_owner=`human`, trust=`pending`.
-- [x] Store the thesis layer through existing Atlas-safe surfaces: `ForwardThesis` for statement / invalidation / evidence manifest plus L0 pending atom for memory context.
-- [x] Prepared a local seed input and dry-run output under `/private/tmp/stocksage_m45_ateacher_seed_20260605*.json`; no DB writes were made.
-- [x] Add execute-time source fidelity guard: `--execute` requires `source_kind=direct_source`, `source_verified=true`, `source_verified_by`, explicit `source_ref`, and source locator; dry-run surfaces `source_fidelity.execute_blockers`.
-- [x] Reviewed and executed the first direct-source seed (`ateacher-20260603-connectivity-mrvl-direct`): `ForwardThesis` remains `draft`, L0 memory remains `pending`, and production signals / test2 / scheduler were not touched.
-- [x] Reviewed remaining local handoff seeds against `/Users/zeeechenn/Desktop/站在光里，未来已来.md`: `300308`, `300502`, and `603986` remain blocked because the direct local source supports sector themes but does not name those companies/symbols.
-- [x] Narrowed and executed the AVGO direct-source seed (`ateacher-20260603-connectivity-avgo-direct`) as a Broadcom networking / switching-chip / 1.6T DSP connectivity anchor only; `ForwardThesis` remains `draft`, L0 memory remains `pending`, and broader accelerator/backlog/custom-silicon wording was excluded.
-- [x] Execute later imports only after reviewing dry-run output; imported rows remain draft/pending and do not become trusted automatically.
-- [x] Use `backend/research/thesis_ledger.py` only where its thinner `symbol/title/kill_conditions/status` shape is sufficient, or extend it deliberately after tests.
-- [x] Ensure imports are idempotent and do not create trusted memory automatically.
-- [x] A-teacher hook updates should become ledger entries, not markdown-only notes.
-
-Implementation note: richer M45 imports continue to use `ForwardThesis(draft)`
-plus L0 `pending` as the canonical store. The thinner M35 `thesis_ledger.py`
-remains available only for simple `symbol/title/kill_conditions/status` cases
-or future tested extension. `backend.tools.m45_ateacher_hook_update` now adapts
-structured A-teacher hook updates into the same dry-run-first M45 importer so
-hook updates can become ledger entries without touching official signals,
-test2, scheduler jobs, production profile, or trusted memory.
-
-### M45.2 放大器证伪记分牌
-
-- [x] Add dry-run-first `backend.tools.m45_falsification_scoreboard`: execute writes ReviewCase rows and optional pending MemoryPromotionCandidate rows only; it does not promote trusted memory or touch official signals / decisions / positions.
-- [x] Harden execute preflight: scoreboard execute now refuses missing `ForwardThesis` links or unverified / non-direct source inputs before writing ReviewCase rows.
-- [x] Recorded initial `not_due` baselines for the imported MRVL and narrowed AVGO theses after dry-run review; both write only ReviewCase rows and create no pending memory candidates.
-- [x] Invalidation-catch ledger: when a held thesis breaks, record whether the alarm fired before loss materialized or was missed.
-- [x] Defensive-value ledger: compare system-on/off drawdown and loss rate for the short-term risk lane; do not judge this lane by IC.
-- [x] Track breadth hits separately: AI-surfaced, human-adopted theses that later work are slow secondary evidence.
-- [x] Route review outcomes through ReviewCase / pending memory-candidate surfaces so trusted promotion remains outcome-gated.
-
-Implementation note: `backend.tools.m45_falsification_scoreboard` now keeps
-M45 scoreboard events inside `ReviewCase.review_payload_json` as
-`m45_scoreboard_events`, keyed by `source_ref + lane + as_of`, while preserving
-`m45_scoreboard` as the latest event for backward-compatible readers. The
-`invalidation_catch`, `defensive_value`, and `breadth_hit` lanes require
-auditable payload fields for non-`not_due` rows; `not_due` rows cannot create
-memory promotion candidates.
-
-### M45.3 模块三连分诊
-
-- [x] Classify existing modules into breadth / falsification / short-term risk.
-- [x] For each kept module, record one primary lane only: breadth = source/import/context expansion; falsification = invalidation checks, review cases, and thesis break alarms; short-term risk = drawdown, stop/take, exposure, and defensive warning support.
-- [x] Mark modules that fit none of those buckets as removal or quarantine candidates.
-- [x] Quarantine anything that implies autonomous alpha promotion, official-signal mutation, test2 mutation, scheduler behavior drift, or production profile changes.
-- [x] Treat A-teacher / jingqi / Piotroski skills as first-class import channels.
-- [x] Keep triage as documentation/ownership mapping first; code removal or routing changes require a separate reviewed implementation task.
-
-Module matrix:
-
-| Module / surface | M45 lane | Decision | Boundary |
-|---|---|---|---|
-| `backend/research/dossier.py`, `deep_research.py`, `research/agents.py` | breadth | keep | Context and candidate expansion only; no official signal writes. |
-| `backend/agents/long_term/a_teacher_analyst.py`, `jingqi_analyst.py`, `piotroski_analyst.py` | breadth import channel | keep / reframe | First-class import channels that write `ForwardThesis(draft)` + L0 `pending` only after source/provenance checks. |
-| `backend/research/forward_thesis.py`, `review_loop.py`, `stress_test.py`, `backend/tools/m45_*` | falsification | keep | Canonical thesis storage, ReviewCase/outcome gate, and dry-run-first M45 tooling. |
-| `backend/tools/m29_*` | falsification | keep as non-promoting evidence | Old alpha evidence remains shadow/provenance input, not the roadmap center. |
-| `backend/decision/research_constraints.py`, `backend/agents/risk_manager.py` | short-term risk | keep | Consume only trusted/outcome-gated memory; risk warnings must not manufacture alpha. |
-| `backend/research/copilot.py` | breadth / short-term risk | keep shadow-only | Questions and risk prompts only; no official action path. |
-| `backend/agents/long_term/team.py` weighted `LongTermLabel` aggregation | quarantine_candidate | legacy display unless re-gated | Decision-coupled label voting must not directly constrain production without outcome gates. |
-| `backend/agents/researcher.py` debate path | quarantine_candidate | explicit stress/falsification mode only | Do not use as daily production decision coupling. |
-| `backend/research/thesis_ledger.py` | quarantine_candidate / thin falsification | use only when shape fits | Its thin `symbol/title/kill_conditions/status` shape is insufficient for richer imported thesis evidence without deliberate extension and tests. |
-
-### M45.4 Stage 2b forward shadow（slow evidence path）
-
-- [x] Pre-register test4 Stage 2b arms, metrics, failure conditions, sample window, and small-sample handling.
-- [x] Arms: baseline/no-thesis, imported-human-thesis shadow, falsification-warning on/off, short-term-risk lane on/off, and breadth-hit secondary tracking; evaluate each as non-promoting shadow evidence only.
-- [x] Metrics: invalidation catch rate, missed-break count, defensive drawdown/loss-rate delta, human-adopted breadth hit rate, review latency, and provenance/source-fidelity blockers.
-- [x] Failure conditions: unverifiable source lineage, sample too small to interpret, worse drawdown without earlier warning, stale review cadence, or any drift into official signals / test2 / scheduler / production profile.
-- [x] Small-sample handling: report counts and confidence qualitatively; do not promote from anecdotal wins, and require explicit user confirmation even after a Stage 2b pass.
-- [x] Use M45.1 theses as shadow objects. test2 stays frozen.
-- [x] Promotion requires Stage 2b pass plus explicit user confirmation; test4 never changes official signals by itself.
+- Later imports still require dry-run review before `--execute`; imported rows remain draft/pending and do not become trusted memory automatically.
+- Do not touch official signals, test2, scheduler jobs, production profile, stops, sizing, or position state from M45 tooling.
+- Promotion requires forward evidence plus explicit user confirmation; anecdotal wins are not enough.
+- ADR 0001 is local/git-ignored, so tracked docs and code comments must carry any conclusion future agents need.
 
 ---
 
-## M44 Atlas 合并与 L0-L4 主架构升级【complete locally / dormant】
+## M44 Atlas 合并与 L0-L4 主架构升级【complete / dormant】
 
 Current fact pattern:
 
-- Local `main` includes M43 baseline merge `4882d49` and dormant Atlas merge `9820143`.
-- Atlas remains off by default via `ATLAS_ENABLED=false` / `settings.atlas_enabled=False`.
-- Local `main` has not been pushed.
-- Full verification recorded for the readiness / merge package: `make verify`, test2 raw zero diff at `--end 2026-06-05`, DB copy-smoke, dormant-context guard, official-signal fixture, and `git diff --check`.
+- `origin/main` now contains dormant Atlas merge `9820143`; `ATLAS_ENABLED=false` / `settings.atlas_enabled=False`.
+- Historical readiness package covered `make verify`, test2 raw zero diff at `--end 2026-06-05`, DB copy-smoke, dormant-context guard, official-signal fixture, and `git diff --check`.
+- Keep M31/M41/M42/M43 behavior protected. Phase 3-full remains 后置: legacy adapters/backfill, A-teacher/long-term/topic reports, native ResearchCase / ActionProposal L0 wiring.
 
-Still-live boundaries:
-
-- Do not use Atlas behavior in official signals, test2/test3, 标的1, scheduler, postmarket, stop/take, sizing, or production scoring while dormant.
-- Shared-infra changes are not protected merely by the dormant flag. Database migrations, runtime schema, dependency/lockfile, scheduler helpers, API helpers, and data-loading helpers still need parity checks.
-- If user authorizes push or release, first rerun a lightweight publish gate: `git status`, branch divergence, `git diff --check`, focused dormant/official-signal/test2 smoke, and only then full `make verify` if release quality is needed.
-- Revert target remains `9820143` if Atlas merge causes behavior drift; `pre-atlas-m43-baseline` points to `4882d49`.
-
-Post-merge follow-up:
-
-- [ ] Keep M31/M41/M42/M43 mainline capabilities protected.
-- [ ] Phase 3-full remains 后置: full legacy adapters/backfill, A-teacher/long-term/topic reports, native ResearchCase / ActionProposal L0 wiring.
-- [ ] Push local `main` only after explicit user authorization.
+Still-live boundaries: no Atlas behavior in official signals, test2/test3, 标的1, scheduler, postmarket, stop/take, sizing, or production scoring while dormant. Shared-infra changes still need parity checks because the dormant flag does not protect database/runtime/dependency/API helper drift.
 
 ---
 
@@ -207,6 +114,9 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 
 Detailed history is intentionally not repeated here. Read `CHANGELOG.md` for:
 
+- M46 onboarding/demo clarity and user-discovery follow-up.
+- M45 source-gated research positioning, importer, scoreboard, and Stage 2b shadow preregistration.
+- M44 dormant Atlas L0-L4 merge.
 - M30 engineering quality convergence.
 - M31 cache / provider fallback / rhythm CLI / postmarket exports.
 - M41 read-only A/HK/US global data and research facade.

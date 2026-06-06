@@ -251,7 +251,7 @@ Scope:
 ### M42 — Price Adjustment-Basis Remediation (main side)
 
 Goal: fix the qfq/hfq price contamination that breaks any price-based evaluation
-(diagnosed in `docs/GATE_B_DQ_FINDINGS.md`: hfq rows for ~336–344 symbols on
+(diagnosed in `docs/dev/GATE_B_DQ_FINDINGS.md`: hfq rows for ~336–344 symbols on
 2026-05-25/26 written with `adjustment=NULL`, indistinguishable from qfq).
 Executed on `main` (production price data), as a branch off `main`; it is a
 prerequisite for M43.
@@ -282,7 +282,7 @@ Scope:
 - pick a price/quant-derived overlay (not live-state) testable over the full
   history via the test2 A/B + m27/m29 forward-shadow tooling;
 - point-in-time, non-overlapping folds, M38 survivorship correction;
-- pre-registered metrics + decision rule (mirror `docs/ATLAS_GATE_B_EXPERIMENT.md`);
+- pre-registered metrics + decision rule (mirror `docs/dev/ATLAS_GATE_B_EXPERIMENT.md`);
 - design only — no production wiring, no run, until reviewed.
 
 ---
