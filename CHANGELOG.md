@@ -6,16 +6,54 @@
 
 ---
 
-## [v0.3.0] MingCang rebrand and research-loop homepage（2026-06-06）
+## [v0.3.0] ATLAS L0–L4 architecture rebuild + MingCang rebrand（2026-06-06）
+
+> **Headline: the research model was rebuilt.** This release lands the ATLAS
+> L0–L4 case architecture on `main`, reframes the whole system around an
+> auditable import → falsify → review → memory loop, and rebrands StockSage to
+> MingCang — all with **zero production-signal drift**.
+
+### Architecture (the main story)
+- **Rebuilt the research model into ATLAS L0–L4.** Research, signal, position, and
+  review are now four linkable, auditable cases — `ResearchCase → SignalCase →
+  PositionCase → ReviewCase` — over five layers: L0 memory/KB, L1 evidence, L2
+  thesis, L3 signal/position, L4 review/promotion/calibration. Design and
+  milestone detail live in `docs/ATLAS.md`.
+- **Landed dormant with a behavior-equivalent merge.** The L0–L4 skeleton is
+  merged into `main` behind `ATLAS_ENABLED=false`; official signals, test2,
+  scheduler, postmarket, stops, sizing, and production scoring are byte-for-byte
+  unchanged while the architecture activates layer by layer as gates clear.
+- **Positioning shift: amplifier-primary, source-gated (M45).** Offense comes from
+  imported human judgment plus the user's filter/veto/sizing, not a manufactured
+  price oracle. Added the structured thesis-import channel (`ForwardThesis` draft
+  + L0 pending), the falsification scoreboard, and a breadth / falsification /
+  short-term-risk module triage.
+- **Effect: a big architecture change proven safe.** Verified via `make verify`,
+  test2 raw zero-diff at `--end 2026-06-05`, DB copy-smoke, dormant-context
+  guard, and the official-signal fixture — large architecture, zero behavior
+  drift.
 
 ### Changed
-- Public identity moved from StockSage to MingCang / 明仓 across the GitHub-facing README, English README, project index, package metadata, install path, and agent-facing project description.
-- README positioning now centers on the personal A-share research loop: import thesis, record evidence, falsify, review outcomes, and promote memory only after human confirmation.
-- The architecture diagram was redrawn as a clean white component map for inputs, local evidence core, SQLite/memory, agent tools, research UI, human decision, and safety gates.
+- Public identity moved from StockSage to MingCang / 明仓 across the README,
+  English README, project index, package metadata, install path, and
+  agent-facing project description.
+- The homepage was rewritten to state the project's purpose, vision, feature map,
+  and next-step roadmap, and to explain where single-stock vs. long-term research
+  live and how data + memory fuse through the loop.
+- The architecture diagram was redrawn to show the ATLAS L0–L4 four-case loop
+  (inputs → ResearchCase → SignalCase → PositionCase → ReviewCase →
+  outcome-gated memory) instead of a generic component map.
+- Documented the built-in `mingcang` Pi terminal shell as the default
+  ready-to-use entry point for non-developers.
 
 ### Decision
-- Legacy `stocksage`, `stock_sage_*`, `STOCKSAGE_AGENT_*`, and `~/.stock-sage` compatibility paths remain available during the transition; new public installs and docs should use MingCang naming.
-- This release is a public identity and architecture-facing release; it does not change production signal weights, quant/Kronos promotion status, trading automation boundaries, or HK/US read-only constraints.
+- Legacy `stocksage`, `stock_sage_*`, `STOCKSAGE_AGENT_*`, and `~/.stock-sage`
+  compatibility paths remain available during the transition; new public installs
+  and docs should use MingCang naming.
+- This release does **not** change production signal weights, quant/Kronos
+  promotion status (`WEIGHT_QUANT=0.0`), trading automation boundaries, or HK/US
+  read-only constraints. ATLAS stays dormant until M29 forward evidence and
+  explicit human confirmation promote it.
 
 ## [v0.2.3] M42 qfq/hfq price-contamination guard（2026-06-04）
 
