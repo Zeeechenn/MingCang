@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 from backend.agents.analyst import AnalystReport
 from backend.agents.director import assess, assessment_to_dict
-from backend.agents.pipeline import run_pipeline
+from backend.agents.pipeline import PipelineInputs, run_pipeline
 
 
 def _report(role: str, score: float, conf: float, findings: list[str]) -> AnalystReport:
@@ -138,12 +138,12 @@ def test_pipeline_includes_director_in_signal_dict():
     qlib_result = {"score": -50, "model": "lgbm"}
     sentiment_result = {"sentiment": 0.1, "impact": "short", "key_events": []}
 
-    decision = run_pipeline(
+    decision = run_pipeline(PipelineInputs(
         technical_result=technical_result,
         qlib_result=qlib_result,
         sentiment_result=sentiment_result,
         close=100.0, atr=2.0,
-    )
+    ))
 
     signal_dict = decision.to_signal_dict()
     assert "director" in signal_dict

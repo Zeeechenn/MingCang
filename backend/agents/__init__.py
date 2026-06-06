@@ -9,7 +9,7 @@
 
 Pipeline 通过 settings.multi_agent_enabled 控制；关闭时退化为原 aggregator 逻辑。
 """
-from backend.agents.pipeline import AgentDecision, run_pipeline
+from backend.agents.pipeline import AgentDecision, PipelineInputs, run_pipeline
 from backend.agents.portfolio_manager import (
     PortfolioAllocation,
     PortfolioCandidate,
@@ -22,6 +22,7 @@ from backend.agents.portfolio_manager import (
 
 __all__ = [
     "run_pipeline",
+    "PipelineInputs",
     "AgentDecision",
     "run_portfolio_manager",
     "PortfolioCandidate",

@@ -65,7 +65,7 @@ def test_build_research_context_merges_sections_and_reflection_lines():
 def test_run_pipeline_reuses_precomputed_reports_without_llm():
     reports = [_report(role) for role in ("technical", "quant", "sentiment", "news")]
 
-    decision = pipeline.run_pipeline(
+    decision = pipeline.run_pipeline(pipeline.PipelineInputs(
         technical_result={"score": 20.0},
         qlib_result={"score": 20.0, "model": "unit"},
         sentiment_result={"sentiment": 0.2, "key_events": ["event"]},
@@ -77,7 +77,7 @@ def test_run_pipeline_reuses_precomputed_reports_without_llm():
             "stop_loss_executable": False,
         },
         _precomputed_reports=reports,
-    )
+    ))
     signal = decision.to_signal_dict()
 
     assert signal["limit_status"] == "limit_down"

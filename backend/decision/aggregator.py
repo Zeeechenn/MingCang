@@ -320,7 +320,7 @@ def aggregate_v2(
     只在分歧时触发以控成本。
     M4.1 启用 multi_round_debate_enabled 时升级为 3 轮辩论。
     """
-    from backend.agents import run_pipeline
+    from backend.agents import PipelineInputs, run_pipeline
     from backend.agents.analyst import (
         news_analyst,
         quant_analyst,
@@ -387,7 +387,7 @@ def aggregate_v2(
                 reflection_context=reflection_context,
             ) or None
 
-    decision = run_pipeline(
+    decision = run_pipeline(PipelineInputs(
         technical_result=technical_result,
         qlib_result=quant_result_merged,
         sentiment_result=sentiment_result,
@@ -399,7 +399,7 @@ def aggregate_v2(
         long_term_label=long_term_label,
         _precomputed_reports=reports,  # M17.2 避免四路分析师重复计算
         research_context=research_context,
-    )
+    ))
 
     result = decision.to_signal_dict()
     result["rule_version"] = f"multi_agent_v2:{active_signal_weights().profile}"

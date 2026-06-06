@@ -24,6 +24,7 @@ dependencies = [
     "uvicorn[standard]>=0.29.0,<1.0.0",
     "pydantic-settings>=2.2.0,<3.0.0",
     "sqlalchemy>=2.0.0,<3.0.0",
+    "alembic>=1.13.0,<2.0.0",
     "requests>=2.31.0,<3.0.0",
     "akshare>=1.12.0,<2.0.0",
     "tushare>=1.2.26,<2.0.0",
@@ -41,6 +42,7 @@ dependencies = [
     "openai>=1.0.0,<3.0.0",
     "backtrader>=1.9.78.123,<2.0.0",
     "jsonschema>=4.0,<5.0",
+    "structlog>=24.0.0,<26.0.0",
 ]
 
 [project.optional-dependencies]

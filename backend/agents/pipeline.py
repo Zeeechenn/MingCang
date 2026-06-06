@@ -216,22 +216,29 @@ class AgentDecision:
         }
 
 
-def run_pipeline(
-    technical_result: dict,
-    qlib_result: dict,
-    sentiment_result: dict,
-    close: float,
-    atr: float,
-    regime: RegimeReport | None = None,
-    llm_arbitration: dict | None = None,
-    portfolio_drawdown_pct: float = 0.0,
-    limit_status: dict | None = None,
-    long_term_label=None,                 # LongTermLabel | None
-    _precomputed_reports: list[AnalystReport] | None = None,  # M17.2 避免重复计算
-    research_context: dict | None = None,
-) -> AgentDecision:
+@dataclass
+class PipelineInputs:
+    """run_pipeline 的输入聚合：用单一结构体替代原 12 个独立参数。
+
+    字段语义与原 run_pipeline 形参一一对应，默认值保持不变。
     """
-    主入口。调用方（aggregator）需准备：
+    technical_result: dict
+    qlib_result: dict
+    sentiment_result: dict
+    close: float
+    atr: float
+    regime: RegimeReport | None = None
+    llm_arbitration: dict | None = None
+    portfolio_drawdown_pct: float = 0.0
+    limit_status: dict | None = None
+    long_term_label: Any = None                 # LongTermLabel | None
+    _precomputed_reports: list[AnalystReport] | None = None  # M17.2 避免重复计算
+    research_context: dict | None = None
+
+
+def run_pipeline(inputs: PipelineInputs) -> AgentDecision:
+    """
+    主入口。调用方（aggregator）需准备 PipelineInputs：
       • technical_result: technical_score() 返回值
       • qlib_result:      qlib_score() 返回值
       • sentiment_result: analyze_news() 返回值
@@ -239,6 +246,19 @@ def run_pipeline(
       • llm_arbitration:  分歧时 _bull_bear_debate() 返回值（可选）
       • _precomputed_reports: 已计算好的 AnalystReport 列表（由 aggregate_v2 传入避免重复）
     """
+    technical_result = inputs.technical_result
+    qlib_result = inputs.qlib_result
+    sentiment_result = inputs.sentiment_result
+    close = inputs.close
+    atr = inputs.atr
+    regime = inputs.regime
+    llm_arbitration = inputs.llm_arbitration
+    portfolio_drawdown_pct = inputs.portfolio_drawdown_pct
+    limit_status = inputs.limit_status
+    long_term_label = inputs.long_term_label
+    _precomputed_reports = inputs._precomputed_reports
+    research_context = inputs.research_context
+
     trace: list[dict] = []
 
     # 1. Analysts（M17.2：如调用方已算好直接复用，避免四路分析师重复计算）

@@ -329,7 +329,7 @@ def test_pipeline_builds_research_context_from_sections_and_memory_text():
 
 def test_pipeline_passes_rounds_through():
     """run_pipeline 应把 rounds 写入 to_signal_dict 的 llm_arbitration"""
-    from backend.agents.pipeline import run_pipeline
+    from backend.agents.pipeline import PipelineInputs, run_pipeline
 
     arbitration_with_rounds = {
         "bull_points": ["技术信号强"],
@@ -350,13 +350,13 @@ def test_pipeline_passes_rounds_through():
     qlib_result = {"score": -20, "model": "lgbm"}
     sentiment_result = {"sentiment": 0.3, "impact": "short", "key_events": ["利好"]}
 
-    decision = run_pipeline(
+    decision = run_pipeline(PipelineInputs(
         technical_result=technical_result,
         qlib_result=qlib_result,
         sentiment_result=sentiment_result,
         close=100.0, atr=2.0,
         llm_arbitration=arbitration_with_rounds,
-    )
+    ))
 
     signal_dict = decision.to_signal_dict()
     rounds = signal_dict["llm_arbitration"].get("rounds")
