@@ -28,9 +28,9 @@ Decision: keep `README.md` / `README_EN.md` as thin GitHub routers; put task wal
 Open tasks:
 
 - [ ] Enrich demo data so the first frontend screen does not look like an empty production database: add at least one latest signal / price row if it can be done without touching real data or production providers.
-- [x] Create initial `docs/USER_GUIDE.md` project manual draft: quick start, demo cases, feature inventory, frontend/backend guide, AI/data/memory/quant boundaries, and developer extension notes.
-- [ ] Review and finalize `docs/USER_GUIDE.md` after user feedback; add screenshots, expected-output snippets, and a 15-minute walkthrough.
-- [ ] Create `docs/FEATURE_MAP.md` with capability boundaries and key/provider requirements.
+- [x] Rework public docs into docs-site shape under `docs_public/`: `index.md`, `USER_GUIDE.md`, `FEATURE_MAP.md`, `DEVELOPER_GUIDE.md`, `REFERENCE.md`, and `mkdocs.yml`.
+- [x] Create `docs_public/FEATURE_MAP.md` with per-feature explanations, entry points, status, side effects, signal impact, and key/provider requirements.
+- [ ] Review docs navigation after user feedback; add screenshots, expected-output snippets, and a 15-minute walkthrough.
 - [ ] Slim README after the two docs exist: keep architecture in the lower half or link out when it distracts from first use.
 
 Stop conditions:

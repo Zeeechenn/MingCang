@@ -22,6 +22,7 @@ htmlcov/
 .venv_kronos/
 node_modules/
 dist/
+site/
 .superpowers/
 .codegraph/
 *.egg-info/

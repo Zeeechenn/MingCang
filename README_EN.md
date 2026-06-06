@@ -245,6 +245,11 @@ Legacy `STOCKSAGE_AGENT_*` names are still read, but new deployments should use 
 
 | File | Contents |
 |---|---|
+| [docs_public/index.md](docs_public/index.md) | MingCang public docs home: navigation, shortest path, core capabilities |
+| [docs_public/USER_GUIDE.md](docs_public/USER_GUIDE.md) | User guide: demo, single-stock research, daily scan, long-term theses, review and memory |
+| [docs_public/FEATURE_MAP.md](docs_public/FEATURE_MAP.md) | Feature catalog: explanation, entry point, status, write/signal/key boundary for each feature |
+| [docs_public/DEVELOPER_GUIDE.md](docs_public/DEVELOPER_GUIDE.md) | Developer guide: pages, APIs, actions, research modules, quant modules |
+| [docs_public/REFERENCE.md](docs_public/REFERENCE.md) | Reference: CLI, API groups, config, key files |
 | [AGENTS.md](AGENTS.md) | Agent usage rules and safety boundaries |
 | [PROJECT.md](PROJECT.md) | Codebase navigation and key file index |
 | [STATUS.md](STATUS.md) | Current production state, signal weights, test entry points |

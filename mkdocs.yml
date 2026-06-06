@@ -1,0 +1,18 @@
+site_name: MingCang Docs
+site_url: https://Zeeechenn.github.io/MingCang/
+site_description: Local-first stock research workbench documentation
+docs_dir: docs_public
+theme:
+  name: readthedocs
+nav:
+  - Home: index.md
+  - Start Here:
+      - User Guide: USER_GUIDE.md
+      - Safety Boundary: WHY_NOT_AI_STOCK_PICKER.md
+  - Features:
+      - Feature Map: FEATURE_MAP.md
+      - Architecture: ARCHITECTURE.md
+  - Developer:
+      - Developer Guide: DEVELOPER_GUIDE.md
+  - Reference:
+      - Reference: REFERENCE.md

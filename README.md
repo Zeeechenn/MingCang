@@ -234,6 +234,11 @@ MINGCANG_AGENT_REMOTE_WRITE_ACTIONS=
 
 | 文件 | 内容 |
 |---|---|
+| [docs_public/index.md](docs_public/index.md) | 明仓公开文档首页：推荐导航、最短路径、核心能力 |
+| [docs_public/USER_GUIDE.md](docs_public/USER_GUIDE.md) | 使用指南：demo、单股研究、每日扫描、长期论题、复盘记忆 |
+| [docs_public/FEATURE_MAP.md](docs_public/FEATURE_MAP.md) | 功能目录：每个功能的说明、入口、状态、写入/信号/Key 边界 |
+| [docs_public/DEVELOPER_GUIDE.md](docs_public/DEVELOPER_GUIDE.md) | 后续开发指南：加页面、API、action、研究模块、量化模块 |
+| [docs_public/REFERENCE.md](docs_public/REFERENCE.md) | 参考手册：CLI、API、配置和关键文件 |
 | [AGENTS.md](AGENTS.md) | Agent 使用规则和安全边界 |
 | [PROJECT.md](PROJECT.md) | 代码库导航和关键文件索引 |
 | [STATUS.md](STATUS.md) | 当前生产状态、信号权重、测试入口 |
