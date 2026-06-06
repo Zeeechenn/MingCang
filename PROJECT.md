@@ -41,7 +41,7 @@ tracking.
 - M41: completed read-only A/HK/US global data/research facade.
 - M42: completed qfq/hfq contamination guard and dry-run remediation.
 - M43: completed architecture boundary hardening.
-- M44: completed dormant Atlas L0-L4 merge; `ATLAS_ENABLED=false`.
+- M44: completed dormant Atlas L0-L4 merge; Atlas/test4 Stage 2b signal-overlay shadow starter exists; `ATLAS_ENABLED=false`.
 - M45: completed amplifier-primary, source-gated research-positioning tools.
 - M46: active user discoverability and first-run documentation cleanup.
 
@@ -67,7 +67,7 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 | API routes | `backend/api/routes/`, `backend/api/schemas.py`, `backend/main.py` | FastAPI app and REST surfaces |
 | Scheduler jobs | `backend/scheduler.py`, `backend/jobs/` | premarket / intraday / postmarket / weekend workflows |
 | Agent bridge | `backend/agent/` | local CLI, action registry, MCP/tool context |
-| Analysis and backtests | `backend/analysis/`, `backend/backtest/`, `backend/tools/m29_*` | quant engine, statistics, forward-evidence tooling |
+| Analysis and backtests | `backend/analysis/`, `backend/backtest/`, `backend/tools/m29_*`, `backend/tools/atlas_test4_stage2b_shadow.py` | quant engine, statistics, forward-evidence tooling, Atlas/test4 non-promoting shadow starter |
 | M31/M41/M42/M45 tools | `backend/tools/m31_*`, `backend/tools/m41_*`, `backend/tools/m42_*`, `backend/tools/m45_*` | cache benchmark, probe health, qfq/hfq remediation, source-gated import/scoreboard |
 | Frontend | `frontend/src/pages/`, `frontend/src/components/` | dashboard pages and evidence/review components |
 | Public docs | `README.md`, `docs/WHY_NOT_AI_STOCK_PICKER.md`, `docs/assets/` | GitHub-facing product explanation and visuals |

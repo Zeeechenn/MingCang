@@ -10,7 +10,7 @@
 |---|---|---|---|
 | M46 用户可发现性与上手路径 | P1：0.3.1 可信度补丁已完成并通过完整 verify；子 agent 零背景试用发现入口分流、demo 前端、英文 README、功能地图仍需收口 | 先把 GitHub 首页做成极简分流器，再补任务型 `docs/USER_GUIDE.md` 与状态型 `docs/FEATURE_MAP.md` | 不把 README 变成大而全文档；不把维护者路线图当普通用户下一步 |
 | M45 研究定位落地 | 主体完成：source-gated importer、falsification scoreboard、模块分诊、Stage 2b shadow 预注册都已落地；后续只保留守门合同 | 后续导入仍先 dry-run + source fidelity review；Stage 2b 只做 non-promoting shadow | 不复活 quant、不改 production profile、不让未过门 alpha 影响真实决策 |
-| M44 Atlas 合并 | complete / dormant：`9820143` 已包含在 `origin/main`，`ATLAS_ENABLED=false` | 维持 dormant；任何启用或 Phase 3-full 都走单独任务 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
+| M44 Atlas 合并 | complete / dormant：`9820143` 已包含在 `origin/main`；Atlas/test4 Stage 2b signal-overlay shadow starter 已可用；`ATLAS_ENABLED=false` | 只用 `backend.tools.atlas_test4_stage2b_shadow` 做 non-promoting shadow accrual；exit overlay 另走单独任务 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
 | M29 Forward Evidence | routine read-only check；所有 alpha 证据仍 non-promoting，fresh forward coverage 尚未 ready | 只读跑 `backend.tools.m29_forward_readiness --db-url ...`；ready 后才追加 1d/3d/5d shadow + ledger | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
 | 后置/低优先 | M24.3 / M25 / M21.4 / M12 / M10.5 / M4 / M5 | 只在触发条件满足时启动 | 不从历史摘要推出新的生产行为 |
 
@@ -67,6 +67,11 @@ Current fact pattern:
 - `origin/main` now contains dormant Atlas merge `9820143`; `ATLAS_ENABLED=false` / `settings.atlas_enabled=False`.
 - Historical readiness package covered `make verify`, test2 raw zero diff at `--end 2026-06-05`, DB copy-smoke, dormant-context guard, official-signal fixture, and `git diff --check`.
 - Keep M31/M41/M42/M43 behavior protected. Phase 3-full remains 后置: legacy adapters/backfill, A-teacher/long-term/topic reports, native ResearchCase / ActionProposal L0 wiring.
+- Atlas/test4 Stage 2b has a signal-overlay shadow starter:
+  `backend.tools.atlas_test4_stage2b_shadow`. It emits non-promoting artifacts
+  under `/private/tmp` by default, leaves `ATLAS_ENABLED=false`, and does not
+  mutate `paper_trading/test2_ab_state.json`. Exit-overlay and entry+exit arms
+  are registered but not started.
 
 Still-live boundaries: no Atlas behavior in official signals, test2/test3, 标的1, scheduler, postmarket, stop/take, sizing, or production scoring while dormant. Shared-infra changes still need parity checks because the dormant flag does not protect database/runtime/dependency/API helper drift.
 

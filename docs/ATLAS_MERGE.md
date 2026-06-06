@@ -10,7 +10,7 @@
 | Item | Status |
 |---|---|
 | Local `main` | Contains M43 baseline merge `4882d49` and dormant Atlas merge `9820143` |
-| Remote | Not pushed; local `main` is ahead of `origin/main` |
+| Remote | `origin/main` contains dormant Atlas merge `9820143`; local `main` is aligned with `origin/main` as of the latest audit |
 | Atlas default | Dormant: `ATLAS_ENABLED=false` / `settings.atlas_enabled=False` |
 | Production profile | `new_framework`, `WEIGHT_QUANT=0.0`, technical/sentiment `0.6/0.4`, entry threshold `25.0`, Kronos off |
 | Official market boundary | CN-only official signals; HK/US remain observe-only research context |
@@ -28,6 +28,8 @@ Atlas entered local `main` as a dormant architecture upgrade:
 - Dormant route and context guards so Atlas-only behavior stays off unless explicitly enabled.
 
 The engineering merge does **not** promote Atlas investment behavior. Test4 / forward shadow is the separate investment-effect gate.
+M45 Stage 2b is a separate source-gated research-positioning shadow lane; the
+Atlas/test4 Stage 2b lane measures Atlas investment-effect only.
 
 ## Live Principles
 
@@ -71,7 +73,9 @@ Still pending, all dormant / shadow unless explicitly promoted:
 - Native ResearchCase / future ActionProposal recall to L0.
 - Full long-term research / A-teacher / deep_research / copilot / debate migration.
 - Full M29 ledger integration.
-- test4 Stage 2b forward shadow for investment effect.
+- Atlas/test4 Stage 2b forward shadow for investment effect: signal-overlay
+  starter exists via `backend.tools.atlas_test4_stage2b_shadow`; exit-overlay
+  and entry+exit arms remain registered but not started.
 
 ## Rollback Runbook
 

@@ -279,5 +279,37 @@ The negative result is real, not a backfill artifact.
 | Stage 1B | complete — backfill cheap (~1.5–3h) |
 | Route A | analysis complete — discriminator = continuous technical/composite score |
 | Stage 2a | complete — **FAIL**: no positive cross-regime edge, regime sign-reversal, ≈ noise |
-| Stage 2b | not started — only remaining path to measure the Atlas overlay increment (forward shadow, slow) |
+| Stage 2b | started — signal-overlay shadow starter exists; exit-overlay and entry+exit arms are registered but not started |
 | Promotion | not authorized — no historical evidence of edge in backfittable components |
+
+## Stage 2b starter (2026-06-07) — signal overlay only
+
+Tool: `backend.tools.atlas_test4_stage2b_shadow`.
+
+Current scope:
+
+- Reads the frozen test2 universe, production signals, and prices read-only.
+- Records Gate-B observations only into an isolated DB such as
+  `/private/tmp/atlas_test4_stage2b_gate_b.sqlite`.
+- Replays `test2_baseline` and `atlas_signal_overlay` as independent shadow
+  arms. The signal overlay admits only Gate-B `ready_variant` entries.
+- Registers `atlas_exit_overlay` and `atlas_entry_exit_overlay` as
+  `registered_not_started`; no thesis-invalidation exit backtest exists yet.
+- Emits JSON/Markdown artifacts under `/private/tmp` by default.
+
+Non-negotiable boundary: this starter is non-promoting. It keeps
+`ATLAS_ENABLED=false`, does not write the production DB, does not mutate
+`paper_trading/test2_ab_state.json`, and cannot authorize promotion. Promotion
+still requires a passing Stage 2 result plus explicit user confirmation.
+
+Initial smoke run (2026-06-07 Asia/Singapore; generated_at
+`2026-06-06T17:05:17+00:00`):
+
+- Command output artifacts:
+  `/private/tmp/atlas_test4_stage2b_shadow_smoke.json` and
+  `/private/tmp/atlas_test4_stage2b_shadow_smoke.md`.
+- Window: `2026-05-18` → `2026-06-05`.
+- `test2_baseline` was runnable; `atlas_signal_overlay` was runnable but had
+  `allowed=0`, `blocked=646` Gate-B rows.
+- Blocker added: `no_gate_ready_signal_overlay_entries`.
+- This is a harness/accrual checkpoint, not an investment-effect verdict.

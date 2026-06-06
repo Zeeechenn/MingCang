@@ -22,7 +22,7 @@ documented patch is `v0.3.1` trust/onboarding cleanup in `CHANGELOG.md`.
 | Kronos | disabled for production |
 | M46 | active: user discoverability, demo path, manual / feature-map work |
 | M45 | complete: source-gated research-positioning tools; future work is guardrail-only |
-| M44 / Atlas | complete and dormant: `9820143` is in `origin/main`; `ATLAS_ENABLED=false` |
+| M44 / Atlas | complete and dormant: `9820143` is in `origin/main`; Atlas/test4 Stage 2b signal-overlay shadow starter exists; `ATLAS_ENABLED=false` |
 | M29 | routine read-only: forward evidence and residual attribution remain non-promoting |
 | remote agent mode | opt-in only; read-only by default |
 
@@ -58,7 +58,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 | M45 research-positioning follow-up | Use dry-run-first importer / scoreboard only with direct source fidelity | Do not promote trusted memory, official signals, production profile, scheduler, test2, stops, sizing, or positions |
 | M29 forward evidence | Run readiness checks read-only before any shadow bundle | Stop if fresh coverage is incomplete or if a change would re-enable quant / Kronos / production scoring |
 | M32 hypothesis bridge | Start only after review data is thick enough | Output falsifiable theses, not Strong Buy labels |
-| M44 Atlas | Keep dormant unless a separate task explicitly enables more Atlas work | Stop on any official-signal / test2 / scheduler / shared-infra drift |
+| M44 Atlas | Use `backend.tools.atlas_test4_stage2b_shadow` only for non-promoting signal-overlay shadow accrual | Stop on any official-signal / test2 / scheduler / shared-infra drift |
 
 For detailed current sequencing, read `docs/ROADMAP.md`. For Atlas/M44 detail,
 read `docs/ATLAS_MERGE.md`. For older milestone history, read `CHANGELOG.md`
