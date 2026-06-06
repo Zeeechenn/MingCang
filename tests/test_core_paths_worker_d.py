@@ -76,6 +76,7 @@ def test_ai_confirm_action_auth_fails_for_pending_dynamic_action(test_db, monkey
 
 
 def test_system_status_happy_path_counts_core_tables(test_db, monkeypatch):
+    from backend.api.deps import get_settings
     from backend.api.routes.system import system_status
     from backend.data.database import FinancialMetric, LongTermLabel, Price
 
@@ -93,7 +94,7 @@ def test_system_status_happy_path_counts_core_tables(test_db, monkeypatch):
     ))
     test_db.commit()
 
-    payload = system_status(db=test_db)
+    payload = system_status(db=test_db, settings=get_settings())
 
     assert payload["latest_price_date"] == "2026-05-29"
     assert payload["financial_metrics_count"] == 1

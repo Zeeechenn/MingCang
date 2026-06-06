@@ -1,3 +1,6 @@
+import Card from './ui/Card'
+import Button from './ui/Button'
+
 function SentimentBar({ score }) {
   if (score == null) return null
   const pct = ((score + 1) / 2) * 100
@@ -29,21 +32,21 @@ function openNews(url) {
 export default function NewsSidebar({ news }) {
   if (!news) {
     return (
-      <div className="rounded-sm border border-stone-300 bg-[#faf6ec] p-4 text-center text-sm text-stone-500 dark:border-slate-700 dark:bg-[#1d232e] dark:text-slate-500">
+      <Card className="p-4 text-center text-sm text-stone-500 dark:text-slate-500">
         加载中…
-      </div>
+      </Card>
     )
   }
   if (news.length === 0) {
     return (
-      <div className="rounded-sm border border-stone-300 bg-[#faf6ec] p-4 text-center text-sm text-stone-500 dark:border-slate-700 dark:bg-[#1d232e] dark:text-slate-500">
+      <Card className="p-4 text-center text-sm text-stone-500 dark:text-slate-500">
         近期无相关新闻
-      </div>
+      </Card>
     )
   }
 
   return (
-    <div className="rounded-sm border border-stone-300 bg-[#faf6ec] p-4 dark:border-slate-700 dark:bg-[#1d232e]">
+    <Card className="p-4">
       <div className="mb-3 text-sm font-medium text-stone-950 dark:text-slate-300">近期新闻</div>
       <ul className="space-y-3 max-h-[calc(100vh-20rem)] overflow-y-auto pr-1">
         {news.map(item => (
@@ -62,19 +65,15 @@ export default function NewsSidebar({ news }) {
                 <span className="ml-2 text-xs text-stone-400 dark:text-slate-600">{item.published_at}</span>
               </div>
               {item.url && (
-                <button
-                  type="button"
-                  onClick={() => openNews(item.url)}
-                  className="shrink-0 rounded-sm border border-stone-300 bg-[#f3eddc] px-2 py-0.5 text-[10px] text-stone-600 hover:border-cyan-700 hover:text-cyan-700 dark:border-slate-700 dark:bg-[#161b25] dark:text-slate-500 dark:hover:border-cyan-400 dark:hover:text-cyan-300"
-                >
+                <Button onClick={() => openNews(item.url)} variant="secondary" size="sm">
                   打开
-                </button>
+                </Button>
               )}
             </div>
             <SentimentBar score={item.sentiment_score} />
           </li>
         ))}
       </ul>
-    </div>
+    </Card>
   )
 }

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/*.test.js src/components/*.test.js src/pages/*.test.js",
+    "test": "node --test src/*.test.js src/components/*.test.js src/store/*.test.js src/pages/*.test.js",
     "lint": "eslint .",
     "format:check": "prettier --check package.json eslint.config.js .prettierrc.json",
     "format": "prettier --write package.json eslint.config.js .prettierrc.json",
@@ -17,7 +17,8 @@
     "lightweight-charts": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.24.1"
+    "react-router-dom": "^6.24.1",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

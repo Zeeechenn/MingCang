@@ -10,7 +10,9 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
+from backend.api.deps import get_settings
 from backend.api.schemas import DataCoverageOut
+from backend.config import Settings
 from backend.data.database import (
     FinancialMetric,
     LongTermLabel,
@@ -158,9 +160,11 @@ def update_runtime_config(payload: dict):
 
 
 @router.get("/system/status")
-def system_status(db: Session = Depends(get_db)):
+def system_status(
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
     """Return database and long-term label status summary."""
-    from backend.config import settings
     from backend.llm import runtime_readiness
 
     latest_price_date = db.query(Price.date).order_by(Price.date.desc()).first()

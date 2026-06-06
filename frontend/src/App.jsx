@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router-dom'
 import WatchlistPage from './pages/WatchlistPage'
 import StockDetailPage from './pages/StockDetailPage'
@@ -6,6 +6,7 @@ import AdminPage from './pages/AdminPage'
 import ReviewsPage from './pages/ReviewsPage'
 import PositionsPage from './pages/PositionsPage'
 import ChatPage from './pages/ChatPage'
+import { useUiStore } from './store/uiStore'
 
 const NAV_ITEMS = [
   ['/', '脉冲', 'Pulse'],
@@ -64,28 +65,24 @@ function Navbar({ theme, onToggleTheme }) {
   )
 }
 
-const THEME_STORAGE_KEY = 'mingcang-theme'
-const LEGACY_THEME_STORAGE_KEY = 'stock-sage-theme'
-
 export default function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem(THEME_STORAGE_KEY) || localStorage.getItem(LEGACY_THEME_STORAGE_KEY) || 'dark')
+  const { theme, toggleTheme } = useUiStore()
 
+  // Sync theme class onto <html> whenever theme changes.
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     document.documentElement.dataset.theme = theme
-    localStorage.setItem(THEME_STORAGE_KEY, theme)
-    localStorage.removeItem(LEGACY_THEME_STORAGE_KEY)
   }, [theme])
 
   return (
     <BrowserRouter>
       <div className={theme === 'dark' ? 'dark' : ''}>
         <div className="min-h-screen bg-[#efe9dc] text-stone-950 dark:bg-[#161b25] dark:text-slate-100">
-          <Navbar theme={theme} onToggleTheme={() => setTheme((v) => (v === 'dark' ? 'light' : 'dark'))} />
+          <Navbar theme={theme} onToggleTheme={toggleTheme} />
           <main className="mx-auto max-w-[1500px] px-4 py-5 sm:px-5">
             <Routes>
               <Route path="/" element={<WatchlistPage />} />
-              <Route path="/stock/:symbol" element={<StockDetailPage theme={theme} />} />
+              <Route path="/stock/:symbol" element={<StockDetailPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/reviews" element={<ReviewsPage />} />
               <Route path="/positions" element={<PositionsPage />} />
