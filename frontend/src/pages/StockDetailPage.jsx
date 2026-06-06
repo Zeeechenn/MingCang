@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useUiStore } from '../store/uiStore'
 import {
   getLatestSignal,
   getPrices,
@@ -251,7 +252,8 @@ function SectionNotice({ status, label }) {
   return null
 }
 
-export default function StockDetailPage({ theme = 'dark' }) {
+export default function StockDetailPage() {
+  const { theme } = useUiStore()
   const { symbol } = useParams()
   const [signal, setSignal] = useState(null)
   const [dossier, setDossier] = useState(null)
