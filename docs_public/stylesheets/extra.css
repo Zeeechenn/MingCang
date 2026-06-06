@@ -16,8 +16,7 @@ body,
   letter-spacing: 0;
 }
 
-.md-header,
-.md-tabs {
+.md-header {
   background: #ffffff !important;
   color: #20242c !important;
   box-shadow: none !important;
@@ -27,22 +26,13 @@ body,
   border-bottom: 1px solid #e5e7eb !important;
 }
 
-.md-tabs {
-  border-bottom: 1px solid #e5e7eb !important;
-}
-
 .md-header__button,
 .md-header__title,
-.md-tabs__link,
 .md-source,
 .md-source__repository,
 .md-source__facts {
   color: #20242c !important;
   opacity: 1 !important;
-}
-
-.md-tabs__link--active {
-  color: #8a5b00 !important;
 }
 
 .md-header__topic {

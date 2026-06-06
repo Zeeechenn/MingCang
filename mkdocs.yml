@@ -1,4 +1,4 @@
-site_name: MingCang
+site_name: 明仓
 site_url: https://Zeeechenn.github.io/MingCang/
 site_description: Local-first stock research workbench documentation
 docs_dir: docs_public
@@ -11,7 +11,6 @@ theme:
     logo: material/chart-timeline-variant
     repo: fontawesome/brands/github
   features:
-    - navigation.tabs
     - navigation.sections
     - navigation.expand
     - navigation.top
@@ -42,14 +41,14 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/Zeeechenn/MingCang
 nav:
-  - Docs:
-      - Overview: index.md
-      - Getting Started: USER_GUIDE.md
-      - Safety Boundary: WHY_NOT_AI_STOCK_PICKER.md
-  - Features:
-      - Feature Map: FEATURE_MAP.md
-      - Architecture: ARCHITECTURE.md
-  - Reference:
-      - Reference: REFERENCE.md
-      - Developer Guide: DEVELOPER_GUIDE.md
+  - 文档:
+      - 概览: index.md
+      - 快速开始: USER_GUIDE.md
+      - 安全边界: WHY_NOT_AI_STOCK_PICKER.md
+  - 功能:
+      - 功能地图: FEATURE_MAP.md
+      - 架构: ARCHITECTURE.md
+  - 参考:
+      - 参考手册: REFERENCE.md
+      - 开发指南: DEVELOPER_GUIDE.md
   - GitHub: https://github.com/Zeeechenn/MingCang
