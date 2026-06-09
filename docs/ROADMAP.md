@@ -8,6 +8,7 @@
 
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
+| M46.5 正确性底线 | **P0，与 M46 并行**：先确认信任底线——证据未泄漏、前端数字不误导，再继续用户可见 polish | (1) lookahead 泄漏一次性审计：确认现存信号 / memory promotion 是否已被未来数据污染（先审计，不建工具）；(2) 关键金融数字显示测试：价格/盈亏/仓位/百分比/空值/复权 | 审计 blocked 项先冻结相关信号 / 暂停对应 memory promotion 再继续 demo；不把一次性审计当产品化任务 |
 | M46 用户可发现性与上手路径 | P1：0.3.1 可信度补丁已完成并通过完整 verify；子 agent 零背景试用发现入口分流、demo 前端、英文 README、功能地图仍需收口 | 先把 GitHub 首页做成极简分流器，再补任务型 `docs/USER_GUIDE.md` 与状态型 `docs/FEATURE_MAP.md` | 不把 README 变成大而全文档；不把维护者路线图当普通用户下一步 |
 | M45 研究定位落地 | 主体完成：source-gated importer、falsification scoreboard、模块分诊、Stage 2b shadow 预注册都已落地；后续只保留守门合同 | 后续导入仍先 dry-run + source fidelity review；Stage 2b 只做 non-promoting shadow | 不复活 quant、不改 production profile、不让未过门 alpha 影响真实决策 |
 | M44 Atlas 合并 | complete / dormant：`9820143` 已包含在 `origin/main`；Atlas/test4 Stage 2b signal-overlay shadow starter 已可用；`ATLAS_ENABLED=false` | 只用 `backend.tools.atlas_test4_stage2b_shadow` 做 non-promoting shadow accrual；exit overlay 另走单独任务 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
@@ -38,6 +39,116 @@ Stop conditions:
 - Do not expose personal trading records, real databases, provider keys, or local-only paths in public docs.
 - Do not let demo/sample data affect production DB, scheduler jobs, official signals, or memory promotion.
 - Do not move internal Mxx/Atlas/test2 planning into user-facing docs except as clearly marked maintainer context.
+
+---
+
+## M46.5 正确性底线：证据不泄漏、前端不误导【P0 / 与 M46 并行】
+
+Rationale: M46 improves discoverability (demo, screenshots, walkthrough). For a
+project whose value proposition is "evidence you can trust, no AI guessing", a
+lookahead leak or a wrong on-screen price/PnL is a foundation-level correctness
+defect. These two gates run in parallel with M46 and take precedence when they
+conflict.
+
+Open tasks:
+
+- [ ] Lookahead leakage one-time audit (audit first, do NOT build a tool):
+  answer the existing-data question — have past signals / memory-promotion
+  paths already been contaminated by future data? A one-off script/notebook is
+  fine; product-grade CLI is M47, not now.
+  - [ ] Check whether news / announcement timestamps post-date the signals they
+    influenced.
+  - [ ] Check whether qfq/hfq, restatement, earnings, or provider fallback fed
+    future data into backtest / review windows.
+  - [ ] Check whether any LLM summary used information dated after the signal day.
+  - [ ] Write the audit conclusion into a tracked doc (ADR 0001 is local /
+    git-ignored — do not rely on it as the only record).
+- [ ] Key financial-number display tests (frontend): price, percentage, position
+  size, PnL, date, null/empty, qfq/hfq display. Wrong display destroys trust as
+  surely as a leak; this is pulled out of M48 so it is not deferred behind the
+  TypeScript migration.
+
+Acceptance:
+
+- Audit produces a report that clearly separates pass / warning / blocked.
+- Any blocked finding freezes the related signal / pauses the matching memory
+  promotion BEFORE M46 demo work continues.
+- Key display components carry unit tests; a changed API number field surfaces
+  at the type or test layer.
+
+Stop conditions:
+
+- warning does not auto-affect production signals; blocked does not auto-trigger
+  memory promotion.
+- Do not promote the one-time audit into a productized feature here — that is M47.
+
+---
+
+## M47 数据与证据可信度：lookahead 常驻化 + 健康可见【planned / P1】
+
+Trigger: M46.5 audit口径 stable. Goal: turn the one-time leakage audit into a
+repeatable gate, and make data trust visible in the UI.
+
+Open tasks:
+
+- [ ] Integrate `mingcang evidence lookahead-check` as a standing CLI that
+  re-runs the M46.5 checks on demand and on sample/demo data.
+- [ ] Surface data coverage / provider fallback / freshness in the frontend so a
+  user can see WHY a signal is or isn't trustworthy.
+- [ ] Wire results into data coverage / FEATURE_MAP / review export.
+- [ ] Record an explicit open decision: do we ever re-activate the dormant
+  "brain" (quant weight, Kronos, Atlas, non-promoted alpha)? This round: NO
+  (consistent with non-promoting gates). But log it as a decision, not a default
+  drift. The M29 IC/ICIR/monotonic-bucket/fresh-sample gate is the reactivation
+  path if it ever happens.
+
+Acceptance:
+
+- lookahead-check runs on demo data and emits pass / warning / blocked.
+- warning does not affect production signal; blocked does not trigger promotion.
+- Reactivation decision is written down with its gate, not left implicit.
+
+---
+
+## M48 前端可靠性【planned / P1】
+
+WorkBuddy's frontend-weakness判断 still holds even with the TS / Zustand / UI
+primitive地基 in place. Key financial-number display tests已提前到 M46.5; M48
+carries the rest of frontend hardening.
+
+Open tasks:
+
+- [ ] Type API responses, covering signal / review / position / data coverage first.
+- [ ] Extend frontend tests from the current set toward critical user paths.
+- [ ] Migrate key pages to TS/TSX; do not attempt a single big-bang migration.
+- [ ] Consolidate SignalCard / EvidenceCard / ReviewTable / StatusBadge onto the
+  UI primitive library.
+
+Acceptance:
+
+- A changed API field surfaces at the type or test layer.
+- No horizontal overflow / hidden critical state on mobile.
+
+---
+
+## M49 工具入口与可观测性【planned / P2】
+
+Tools attic已开始 (`refactor(tools)` 归档零引用脚本)，但还需要系统治理。
+
+Open tasks:
+
+- [ ] Build a tools classification table: stable / maintenance / evidence / attic.
+- [ ] Give stable capabilities a unified CLI or doc entry.
+- [ ] Annotate historical Mxx scripts: still runnable? read-only? writes DB?
+- [ ] Pass `correlation_id` through key pipeline / API / export / memory-candidate
+  paths (structlog地基已有).
+- [ ] Continue converging runtime patch with Alembic migration discipline.
+
+Acceptance:
+
+- Every retained `backend/tools/` script has a purpose, read/write boundary, and
+  recommended entry point.
+- A single request / research run is traceable through logs.
 
 ---
 
