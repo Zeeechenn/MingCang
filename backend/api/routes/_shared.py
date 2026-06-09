@@ -48,4 +48,5 @@ def signal_to_schema(sig: Signal) -> SignalOut:
         technical_score=sig.technical_score,
         sentiment_score=sig.sentiment_score,
         llm_arbitration=arb,
+        rule_version=getattr(sig, "rule_version", None),
     )

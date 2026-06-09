@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Self
 from urllib.parse import unquote
 
 from pydantic import model_validator
@@ -283,7 +286,7 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @model_validator(mode="after")
-    def _validate_runtime_invariants(self):
+    def _validate_runtime_invariants(self) -> Self:
         for prefix in ("", "test1_"):
             values = [
                 getattr(self, f"{prefix}weight_quant"),

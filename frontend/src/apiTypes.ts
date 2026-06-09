@@ -21,6 +21,7 @@ export interface SignalOut {
   technical_score: number | null
   sentiment_score: number | null
   llm_arbitration: LLMArbitration | null
+  rule_version: string | null | undefined
 }
 
 export interface PositionOut {

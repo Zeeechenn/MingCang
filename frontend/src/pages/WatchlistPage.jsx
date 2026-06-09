@@ -330,34 +330,50 @@ function SignalTicker({ summary, watchlist }) {
   const signals = summary?.signals?.latest || watchlist.map((item) => item.latest_signal).filter(Boolean)
   return (
     <Section title="信号横条" eyebrow="最新横览">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {signals.slice(0, 8).map((sig) => {
-          const stock = watchlist.find((item) => item.symbol === sig.symbol)
-          return (
-            <Link key={`${sig.symbol}-${sig.date}`} to={`/stock/${sig.symbol}`} className="rounded-sm border border-stone-300 bg-[#f3eddc] p-3 hover:border-cyan-600 dark:border-slate-700 dark:bg-[#161b25] dark:hover:border-cyan-400">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-sm font-semibold text-stone-950 dark:text-slate-100">{stock?.name || sig.symbol}</div>
-                  <div className="mt-1 font-mono text-xs text-stone-500 dark:text-slate-400">{sig.symbol}</div>
+      {signals.length === 0 ? (
+        <div className="space-y-2 rounded-sm border border-dashed border-stone-300 p-5 dark:border-slate-700">
+          <p className="text-sm font-medium text-stone-700 dark:text-slate-200">
+            暂无信号数据
+          </p>
+          <p className="text-xs text-stone-500 dark:text-slate-400">
+            盘后信号由调度器在收盘后自动生成。你可以：
+          </p>
+          <ul className="space-y-1 text-xs text-stone-500 dark:text-slate-400">
+            <li>· 确认自选股池已添加标的（见下方自选股管理）</li>
+            <li>· 前往 <Link to="/admin" className="text-cyan-700 underline underline-offset-2 dark:text-cyan-300">配置页</Link> 检查调度器状态</li>
+            <li>· 前往 <Link to="/health" className="text-cyan-700 underline underline-offset-2 dark:text-cyan-300">数据健康页</Link> 确认数据源正常</li>
+          </ul>
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {signals.slice(0, 8).map((sig) => {
+            const stock = watchlist.find((item) => item.symbol === sig.symbol)
+            return (
+              <Link key={`${sig.symbol}-${sig.date}`} to={`/stock/${sig.symbol}`} className="rounded-sm border border-stone-300 bg-[#f3eddc] p-3 hover:border-cyan-600 dark:border-slate-700 dark:bg-[#161b25] dark:hover:border-cyan-400">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-stone-950 dark:text-slate-100">{stock?.name || sig.symbol}</div>
+                    <div className="mt-1 font-mono text-xs text-stone-500 dark:text-slate-400">{sig.symbol}</div>
+                  </div>
+                  <span className={`rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${recClass(sig.recommendation)}`}>{sig.recommendation}</span>
                 </div>
-                <span className={`rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${recClass(sig.recommendation)}`}>{sig.recommendation}</span>
-              </div>
-              <div className="mt-4 flex items-end justify-between">
-                <div className="font-mono text-2xl font-semibold text-stone-950 dark:text-slate-100">{formatSignedNumber(sig.composite_score, 1)}</div>
-                <MiniSpark score={sig.composite_score} />
-              </div>
-              {stock?.long_term_label?.label && (
-                <div className="mt-3 flex items-center justify-between border-t border-stone-300/80 pt-2 text-xs dark:border-slate-700">
-                  <span className="text-stone-500 dark:text-slate-400">长期标签</span>
-                  <span className={`rounded-sm border px-2 py-0.5 font-semibold ${longTermClass(stock.long_term_label.label)}`}>
-                    {stock.long_term_label.label}
-                  </span>
+                <div className="mt-4 flex items-end justify-between">
+                  <div className="font-mono text-2xl font-semibold text-stone-950 dark:text-slate-100">{formatSignedNumber(sig.composite_score, 1)}</div>
+                  <MiniSpark score={sig.composite_score} />
                 </div>
-              )}
-            </Link>
-          )
-        })}
-      </div>
+                {stock?.long_term_label?.label && (
+                  <div className="mt-3 flex items-center justify-between border-t border-stone-300/80 pt-2 text-xs dark:border-slate-700">
+                    <span className="text-stone-500 dark:text-slate-400">长期标签</span>
+                    <span className={`rounded-sm border px-2 py-0.5 font-semibold ${longTermClass(stock.long_term_label.label)}`}>
+                      {stock.long_term_label.label}
+                    </span>
+                  </div>
+                )}
+              </Link>
+            )
+          })}
+        </div>
+      )}
     </Section>
   )
 }
@@ -417,9 +433,21 @@ function WatchlistManage({ items, onRemove, onReload }) {
             </button>
           </div>
         ))}
-        {filtered.length === 0 && (
-          <div className="col-span-full rounded-sm border border-dashed border-stone-300 p-5 text-sm text-stone-500 dark:border-slate-700 dark:text-slate-400">
-            没有匹配的自选股
+        {filtered.length === 0 && items.length === 0 && (
+          <div className="col-span-full space-y-3 rounded-sm border border-dashed border-stone-300 p-5 dark:border-slate-700">
+            <p className="text-sm font-medium text-stone-700 dark:text-slate-200">
+              自选股池为空，先添加几只标的
+            </p>
+            <ul className="space-y-1 text-xs text-stone-500 dark:text-slate-400">
+              <li>· 点击右上角「添加标的」，输入股票代码或名称（支持 A 股 / 港股 / 美股）</li>
+              <li>· 或前往 <Link to="/chat" className="text-cyan-700 underline underline-offset-2 dark:text-cyan-300">AI 对话</Link>，说「添加自选 300308」快速导入</li>
+              <li>· 添加后系统会在下次收盘后自动生成信号</li>
+            </ul>
+          </div>
+        )}
+        {filtered.length === 0 && items.length > 0 && (
+          <div className="col-span-full rounded-sm border border-dashed border-stone-300 p-4 text-sm text-stone-500 dark:border-slate-700 dark:text-slate-400">
+            没有匹配的自选股，尝试清除筛选条件
           </div>
         )}
       </div>

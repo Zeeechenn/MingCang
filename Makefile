@@ -17,7 +17,7 @@ COVERAGE_FILE ?= /tmp/mingcang-coverage
 COVERAGE_XML ?= coverage.xml
 PIP_AUDIT_CACHE_DIR ?= /tmp/mingcang-pip-audit-cache
 
-.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-lint-summary frontend-format-check lint security dependency-audit fmt typecheck check verify demo dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
+.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-lint-summary frontend-format-check lint security dependency-audit fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
 
 help:
 	@echo "MingCang Makefile commands:"
@@ -40,6 +40,7 @@ help:
 	@echo "  check        lint + typecheck + test 一键全跑（PR 前用）"
 	@echo "  verify       后端/前端/构建全量验证（含 ESLint 汇总，不阻塞构建）"
 	@echo "  demo         种子演示数据库并启动后端 + 前端 demo（无需真实 API Key）"
+	@echo "  reproduce-evidence 离线打印 demo 闭环证据（无网络/无 API Key）"
 	@echo "  coverage-snapshot 输出当前数据覆盖快照"
 	@echo "  agent-setup  配置 MingCang 原生 Pi/agent 本地运行环境"
 	@echo "  agent        启动 MingCang 原生 Pi 研究型终端 agent"
@@ -134,6 +135,10 @@ demo:
 	sleep 2; \
 	echo "Starting frontend dev server..."; \
 	cd frontend && npm run dev -- --host 127.0.0.1
+
+reproduce-evidence:
+	DATABASE_URL=sqlite:///$(shell pwd)/examples/sample_db/mingcang_demo.db \
+		PYTHONPATH=. $(PYTHON) scripts/reproduce_evidence.py
 
 dev:
 	PYTHONPATH=. $(PYTHON) -m uvicorn backend.main:app --reload

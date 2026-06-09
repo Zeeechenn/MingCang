@@ -174,7 +174,7 @@ export default function ChatPage() {
           ))}
         </div>
       </div>
-      <section className={`${PANEL} grid min-h-[680px] min-w-[760px] grid-cols-[280px_minmax(0,1fr)] overflow-hidden`}>
+      <section className={`${PANEL} flex flex-col overflow-hidden lg:grid lg:min-h-[680px] lg:grid-cols-[280px_minmax(0,1fr)]`}>
         <aside className="border-r border-stone-300 dark:border-slate-700">
           <div className="flex items-center justify-between border-b border-stone-300 p-4 dark:border-slate-700">
             <div>
@@ -252,8 +252,21 @@ export default function ChatPage() {
                 )}
                 {row.pending_action && (
                   <div className="mt-3 rounded-sm border border-amber-500/40 bg-amber-500/10 p-3">
-                    <div className="font-mono text-xs text-amber-800 dark:text-amber-200">{row.pending_action.action}</div>
-                    <pre className="mt-2 whitespace-pre-wrap text-[11px] text-stone-600 dark:text-slate-300">{JSON.stringify(row.pending_action.payload, null, 2)}</pre>
+                    <div className="font-mono text-xs font-semibold text-amber-800 dark:text-amber-200">{row.pending_action.action}</div>
+                    {row.pending_action.payload && Object.keys(row.pending_action.payload).length > 0 && (
+                      <dl className="mt-2 space-y-1">
+                        {Object.entries(row.pending_action.payload).map(([k, v]) => (
+                          <div key={k} className="flex flex-wrap gap-x-2 text-[11px]">
+                            <dt className="font-semibold text-amber-700 dark:text-amber-300">{k}</dt>
+                            <dd className="text-stone-600 dark:text-slate-300">
+                              {v !== null && typeof v === 'object'
+                                ? <code className="rounded-sm bg-stone-200/60 px-1 dark:bg-slate-700/60">{JSON.stringify(v)}</code>
+                                : String(v)}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
                     <button onClick={() => confirm(row.pending_action.id)} className="mt-3 rounded-sm bg-cyan-700 px-3 py-1.5 text-xs font-semibold text-white">确认执行</button>
                   </div>
                 )}

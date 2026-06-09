@@ -69,4 +69,7 @@ nav:
   - 参考:
       - 参考手册: REFERENCE.md
       - 开发指南: DEVELOPER_GUIDE.md
+  - 证据与贡献:
+      - 证据与复现: EVIDENCE.md
+      - 贡献指南: CONTRIBUTING_GUIDE.md
   - GitHub: https://github.com/Zeeechenn/MingCang

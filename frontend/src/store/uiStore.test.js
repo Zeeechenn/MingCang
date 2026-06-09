@@ -54,3 +54,24 @@ test('uiStore setTheme removes legacy key', () => {
   useUiStore.getState().setTheme('dark')
   assert.equal(_storage.has('stock-sage-theme'), false)
 })
+
+test('uiStore wizardDismissed starts false when storage is empty', () => {
+  _storage.clear()
+  // Force-reset to simulate a fresh session (storage was empty at import time).
+  useUiStore.getState().resetWizard()
+  assert.equal(useUiStore.getState().wizardDismissed, false)
+})
+
+test('uiStore dismissWizard sets wizardDismissed to true and persists', () => {
+  useUiStore.getState().resetWizard()
+  useUiStore.getState().dismissWizard()
+  assert.equal(useUiStore.getState().wizardDismissed, true)
+  assert.equal(_storage.get('mingcang-wizard-dismissed'), '1')
+})
+
+test('uiStore resetWizard clears wizardDismissed and storage key', () => {
+  useUiStore.getState().dismissWizard()
+  useUiStore.getState().resetWizard()
+  assert.equal(useUiStore.getState().wizardDismissed, false)
+  assert.equal(_storage.has('mingcang-wizard-dismissed'), false)
+})

@@ -36,3 +36,85 @@
 > 这套闭环架构已经落地，但默认**休眠**——骨架先就位、生产信号零改动，等前向证据门控逐层通过后再激活。当前生产信号仍是技术 0.6 + 情感 0.4 + ATR 2.5 移动止损，量化层关闭（`WEIGHT_QUANT=0.0`）、等待证据。
 
 更多信号纪律说明见 [WHY_NOT_AI_STOCK_PICKER.md](WHY_NOT_AI_STOCK_PICKER.md)。
+
+---
+
+## Call-Relation Map
+
+This section traces how a user action in the frontend travels through every
+layer of the system, from the browser to the database and back.
+
+```
+Browser (React/Vite)
+    │  fetch('/api/...')          frontend/src/api.js createRequestClient
+    ▼
+FastAPI application              backend/main.py  app = FastAPI(...)
+    │  router                    backend/api/routes/__init__.py
+    ▼
+Route handlers                   backend/api/routes/{signals,stocks,research,...}.py
+    │  validate request schema   backend/api/schemas.py (Pydantic models)
+    │
+    ├── Data layer ─────────────────────────────────────────────────────────
+    │       Provider registry    backend/data/providers.py
+    │         register_daily_provider / fetch_daily_with_fallback
+    │       Market data          backend/data/market.py  (Tushare, TickFlow)
+    │       Fundamentals         backend/data/fundamentals.py
+    │       News / Sentiment     backend/data/news.py + backend/analysis/sentiment.py
+    │       Point-in-Time guard  backend/data/point_in_time.py
+    │       SQLAlchemy session   backend/data/session.py → SQLite (DATABASE_URL)
+    │
+    ├── Decision / Scoring layer ────────────────────────────────────────────
+    │       Signal aggregation   backend/decision/aggregator.py
+    │         active_signal_weights()  backend/config.py
+    │         technical score    backend/analysis/technical.py
+    │         sentiment score    backend/analysis/sentiment.py
+    │         quant score        backend/analysis/qlib_engine.py  (weight=0 in production)
+    │       Stop / take profit   backend/analysis/factors.py  calc_stop_take (ATR 2.5×)
+    │       Regime filter        backend/decision/signal_policy.py  + RSRS/diffusion
+    │       Decision harness     backend/decision/harness.py  (orchestrates above)
+    │
+    ├── Memory layer ────────────────────────────────────────────────────────
+    │       Layered memory       backend/decision/memory_layered.py
+    │         L0 stock memory    backend/memory/stock_memory.py
+    │         L0 AI memory       backend/memory/ai_memory.py
+    │         L0 research memory backend/memory/research_memory.py
+    │       Bias overrides       backend/memory/bias_override.py
+    │       Audit log            backend/memory/audit_log.py
+    │
+    ├── Research / Thesis layer ─────────────────────────────────────────────
+    │       Research copilot     backend/research/copilot.py
+    │       Deep research        backend/research/deep_research.py
+    │       ForwardThesis        backend/data/database.py  ForwardThesis table
+    │       ReviewCase / L4      backend/research/review_loop.py
+    │       MemoryPromotionCandidates  (human-gated; pending by default)
+    │
+    └── Agent / Tools layer ──────────────────────────────────────────────────
+            Agent CLI            backend/agent/cli.py
+              action <name>      backend/agent/action_registry.py  (dry-run / confirm)
+              tools              backend/tools/registry.py  (static governance list)
+            Security guard       backend/agent/security.py
+              local mode:        trusted (no key)
+              remote mode:       requires MINGCANG_AGENT_API_KEY + optional allowlist
+            MCP bridge           backend/agent/mcp_server.py  (stdio, opt-in)
+```
+
+### Key Design Decisions Visible in the Map
+
+**Provider fallback chain**: `fetch_daily_with_fallback` tries providers in
+priority order.  A custom provider can be injected at any priority without
+touching the rest of the chain.  See `examples/provider_plugin/` for a
+minimal example and `CONTRIBUTING_GUIDE.md` for full instructions.
+
+**Signal weights are config, not code**: `active_signal_weights()` reads
+`backend/config.py` (overridable via `.env`).  The current production values
+are `technical=0.6, sentiment=0.4, quant=0.0`.  The quant layer is
+architecturally wired in but its weight is zero; see `EVIDENCE.md` for why.
+
+**Memory is gated, not auto-trusted**: `MemoryPromotionCandidate` rows have
+`source_trust="pending"` by default.  They become active only after explicit
+human confirmation — there is no code path that promotes them automatically.
+
+**Agent actions follow dry-run / confirm**: the CLI runs any action in
+preview mode by default; `--confirm` is required to write.  Remote mode
+additionally requires an API key and optional action allowlist
+(`MINGCANG_AGENT_REMOTE_WRITE_ACTIONS`).

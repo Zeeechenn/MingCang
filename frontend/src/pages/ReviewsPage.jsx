@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ensureDailyReview, ensureLongTermReview, getLatestReviews, getReview, getReviews } from '../api'
 import { buildReviewHistory, parseMarkdownBlocks } from './reviewContent'
 
@@ -447,7 +448,13 @@ function ReviewCard({ title, item, action, busy }) {
         </button>
       </div>
       <div className="p-4 text-sm leading-relaxed text-stone-600 dark:text-slate-300">
-        {item?.summary || '进入页面后会按时间规则自动检查是否需要生成。'}
+        {item?.summary || (
+          <span>
+            尚未生成复盘。点击「立即检查」让系统判断是否需要生成，或前往{' '}
+            <Link to="/" className="text-cyan-700 underline underline-offset-2 dark:text-cyan-300">脉冲页</Link>
+            {' '}确认自选股池已有标的后再试。
+          </span>
+        )}
         {metrics.length > 0 && (
           <div className="mt-4 grid grid-cols-3 gap-3">
             {metrics.map(([label, value]) => (
@@ -558,7 +565,10 @@ export default function ReviewsPage() {
           </div>
           {detailBusy && <span className="text-xs text-stone-500 dark:text-slate-400">加载中...</span>}
         </div>
-        <MarkdownReview content={selected?.content} empty="点击上方复盘历史后，会在这里展示当天完整复盘报告。" />
+        <MarkdownReview
+          content={selected?.content}
+          empty="点击上方复盘历史条目，可在这里展示当天完整复盘报告。示例数据已预置供参考，真实复盘生成后会自动替换。"
+        />
       </section>
     </div>
   )

@@ -169,6 +169,19 @@ export default function SignalCard({ signal }: { signal?: SignalOut | null }) {
           </StatusBadge>
         </div>
       )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {(signal.sentiment_score != null || signal.llm_arbitration != null) ? (
+          <StatusBadge status="info">受 LLM 影响</StatusBadge>
+        ) : (
+          <StatusBadge status="neutral">纯规则</StatusBadge>
+        )}
+        {signal.rule_version && (
+          <span className="text-[10px] text-gray-600 font-mono">
+            规则版本 {signal.rule_version}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

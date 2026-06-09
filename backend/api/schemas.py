@@ -36,6 +36,7 @@ class SignalOut(BaseModel):
     technical_score: float | None = None
     sentiment_score: float | None = None
     llm_arbitration: LLMArbitration | None = None
+    rule_version: str | None = None
 
     model_config = {"from_attributes": True}
 

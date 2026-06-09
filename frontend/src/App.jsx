@@ -6,6 +6,8 @@ import AdminPage from './pages/AdminPage'
 import ReviewsPage from './pages/ReviewsPage'
 import PositionsPage from './pages/PositionsPage'
 import ChatPage from './pages/ChatPage'
+import DataHealthPage from './pages/DataHealthPage'
+import FirstRunWizard from './components/FirstRunWizard'
 import { useUiStore } from './store/uiStore'
 
 const NAV_ITEMS = [
@@ -13,6 +15,7 @@ const NAV_ITEMS = [
   ['/reviews', '复盘', 'Review'],
   ['/positions', '持仓', 'Position'],
   ['/chat', '聊天', 'AI'],
+  ['/health', '数据', 'Data'],
   ['/admin', '配置', 'Config'],
 ]
 
@@ -87,8 +90,10 @@ export default function App() {
               <Route path="/reviews" element={<ReviewsPage />} />
               <Route path="/positions" element={<PositionsPage />} />
               <Route path="/chat" element={<ChatPage />} />
+              <Route path="/health" element={<DataHealthPage />} />
             </Routes>
           </main>
+          <FirstRunWizard />
         </div>
       </div>
     </BrowserRouter>
