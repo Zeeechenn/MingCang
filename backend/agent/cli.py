@@ -200,6 +200,17 @@ def _command_actions(args: argparse.Namespace) -> dict:
     return {"actions": list_action_definitions()}
 
 
+def _command_tools(args: argparse.Namespace) -> dict:
+    _read_guard(args)
+    from backend.tools.registry import missing_retained_tools, tools_registry_payload
+
+    payload = tools_registry_payload(args.category)
+    payload["coverage"] = {
+        "missing_retained_tools": sorted(missing_retained_tools()),
+    }
+    return payload
+
+
 def _workflow_payload(args: argparse.Namespace, phase: str) -> dict:
     _read_guard(args)
     workflows = {
@@ -371,6 +382,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="list registered local agent actions",
     )
     actions.set_defaults(handler=_command_actions)
+
+
+    tools = subparsers.add_parser(
+        "tools",
+        help="list retained backend tool classifications and boundaries",
+    )
+    tools.add_argument(
+        "--category",
+        choices=["stable", "maintenance", "evidence", "attic"],
+        help="optional M49 tool category filter",
+    )
+    tools.set_defaults(handler=_command_tools)
 
     premarket = subparsers.add_parser(
         "premarket",

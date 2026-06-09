@@ -72,13 +72,12 @@ def _check(
 
 
 def _signal_data_timestamp_after_signal_day(db) -> dict[str, Any]:
-    rows = [
-        row
-        for row in db.query(Signal).all()
-        if _date_part(row.data_timestamp)
-        and _date_part(row.date)
-        and _date_part(row.data_timestamp) > _date_part(row.date)
-    ]
+    rows = []
+    for row in db.query(Signal).all():
+        data_day = _date_part(row.data_timestamp)
+        signal_day = _date_part(row.date)
+        if data_day is not None and signal_day is not None and data_day > signal_day:
+            rows.append(row)
     return _check(
         name="signal_data_timestamp_after_signal_day",
         status="blocked" if rows else "pass",
@@ -284,13 +283,12 @@ def _review_case_references_future_signal(db) -> dict[str, Any]:
 
 
 def _review_case_created_before_as_of(db) -> dict[str, Any]:
-    rows = [
-        row
-        for row in db.query(ReviewCase).all()
-        if _date_part(row.created_at)
-        and _date_part(row.as_of)
-        and _date_part(row.created_at) < _date_part(row.as_of)
-    ]
+    rows = []
+    for row in db.query(ReviewCase).all():
+        created_day = _date_part(row.created_at)
+        as_of_day = _date_part(row.as_of)
+        if created_day is not None and as_of_day is not None and created_day < as_of_day:
+            rows.append(row)
     return _check(
         name="review_case_created_before_as_of",
         status="warning" if rows else "pass",

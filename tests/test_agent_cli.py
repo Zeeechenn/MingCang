@@ -116,6 +116,54 @@ def test_agent_cli_actions_lists_registered_actions(tmp_path):
     assert "long_term.run" in names
 
 
+def test_agent_cli_tools_lists_registry_with_boundaries(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    db_url = f"sqlite:///{tmp_path / f'tools-{uuid.uuid4().hex}.db'}"
+
+    result = _run_cli(repo, db_url, "tools", "--pretty")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert set(payload["categories"]) == {"stable", "maintenance", "evidence", "attic"}
+
+    tools = {item["module"]: item for item in payload["tools"]}
+    expected_modules = {
+        f"backend.tools.{path.stem}"
+        for path in (repo / "backend" / "tools").glob("*.py")
+        if path.name not in {"__init__.py", "registry.py"}
+    }
+    expected_modules.update(
+        f"backend.tools.attic.{path.stem}"
+        for path in (repo / "backend" / "tools" / "attic").glob("*.py")
+        if path.name != "__init__.py"
+    )
+    assert set(tools) == expected_modules
+
+    for module in (
+        "backend.tools.coverage_snapshot",
+        "backend.tools.m45_import_ateacher_theses",
+        "backend.tools.atlas_test4_stage2b_shadow",
+        "backend.tools.attic.backfill_and_run",
+    ):
+        assert module in tools
+        assert tools[module]["purpose"]
+        assert tools[module]["read_write_boundary"]
+        assert tools[module]["recommended_entrypoint"]
+
+    assert tools["backend.tools.coverage_snapshot"]["category"] == "stable"
+    assert tools["backend.tools.m45_import_ateacher_theses"]["category"] == "maintenance"
+    assert tools["backend.tools.atlas_test4_stage2b_shadow"]["category"] == "evidence"
+    assert tools["backend.tools.attic.backfill_and_run"]["category"] == "attic"
+    assert tools["backend.tools.attic.backfill_and_run"]["still_runnable"] is False
+
+    filtered = _run_cli(repo, db_url, "tools", "--category", "evidence")
+    assert filtered.returncode == 0, filtered.stderr
+    filtered_payload = json.loads(filtered.stdout)
+    assert filtered_payload["category"] == "evidence"
+    assert filtered_payload["tools"]
+    assert {item["category"] for item in filtered_payload["tools"]} == {"evidence"}
+
+
 def test_agent_cli_read_context_commands_do_not_record_stock_memory_usage(tmp_path):
     from backend.memory.stock_memory import create_stock_memory
 

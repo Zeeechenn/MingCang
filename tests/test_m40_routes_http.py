@@ -9,6 +9,8 @@ StaticPool. The real stock-sage.db is never touched.
 """
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -99,6 +101,22 @@ def test_atlas_total_switch_disables_new_routes_but_keeps_legacy_research_state(
     adapter_resp = client.get(f"/api/research/{_SYM}/adapter-review")
     assert adapter_resp.status_code == 503
     assert adapter_resp.json()["detail"] == "atlas feature is disabled"
+
+
+def test_http_responses_echo_correlation_id(client):
+    resp = client.get(f"/api/research/{_SYM}", headers={"X-Correlation-ID": "m49-http-trace"})
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["x-correlation-id"] == "m49-http-trace"
+
+
+def test_http_responses_generate_uuid_correlation_id(client):
+    resp = client.get("/health")
+
+    assert resp.status_code == 200, resp.text
+    correlation_id = resp.headers["x-correlation-id"]
+    assert correlation_id
+    UUID(correlation_id)
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +464,21 @@ def test_memory_candidate_create_and_get_http(client):
     get_resp = client.get(f"/api/research/memory-candidates/{cid}")
     assert get_resp.status_code == 200, get_resp.text
     assert get_resp.json()["id"] == cid
+
+
+def test_memory_candidate_create_audit_includes_correlation_id(client, http_db):
+    from backend.memory.audit_log import audit_search
+
+    post_resp = client.post(
+        "/api/research/memory-candidates",
+        headers={"X-Correlation-ID": "m49-memory-trace"},
+        json={"symbol": _SYM, "summary": "Traceable pending lesson", "memory_type": "risk"},
+    )
+
+    assert post_resp.status_code == 200, post_resp.text
+    assert post_resp.headers["x-correlation-id"] == "m49-memory-trace"
+    hits = audit_search(http_db, "m49-memory-trace")
+    assert any(hit["event_type"] == "review_loop.create_memory_candidate" for hit in hits)
 
 
 def test_memory_candidate_list_http(client):

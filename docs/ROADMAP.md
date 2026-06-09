@@ -159,24 +159,29 @@ Acceptance:
 
 ---
 
-## M49 工具入口与可观测性【planned / P2】
+## M49 工具入口与可观测性【complete / P2】
 
 Tools attic已开始 (`refactor(tools)` 归档零引用脚本)，但还需要系统治理。
 
 Open tasks:
 
-- [ ] Build a tools classification table: stable / maintenance / evidence / attic.
-- [ ] Give stable capabilities a unified CLI or doc entry.
-- [ ] Annotate historical Mxx scripts: still runnable? read-only? writes DB?
-- [ ] Pass `correlation_id` through key pipeline / API / export / memory-candidate
-  paths (structlog地基已有).
-- [ ] Continue converging runtime patch with Alembic migration discipline.
+- [x] Build a tools classification table: stable / maintenance / evidence / attic (`backend.tools.registry`).
+- [x] Give stable capabilities a unified CLI or doc entry (`python3 -m backend.agent.cli tools`).
+- [x] Annotate historical Mxx scripts: still runnable? read-only? writes DB?
+- [x] Pass `correlation_id` through key API / export / memory-candidate paths (structlog地基已有).
+- [x] Continue converging runtime patch with Alembic migration discipline: M49 added no schema/runtime patch; future DB changes stay Alembic-first.
 
 Acceptance:
 
 - Every retained `backend/tools/` script has a purpose, read/write boundary, and
   recommended entry point.
 - A single request / research run is traceable through logs.
+
+Completion notes:
+
+- `backend.tools.registry` is the M49 tool registry; `mingcang tools --pretty` exposes it to local agents/operators, with optional `--category stable|maintenance|evidence|attic`.
+- API requests now bind/echo `X-Correlation-ID`; exports preserve it in response headers, postmarket HTML includes it in report metadata, and memory-candidate creation writes it into the audit trail when present.
+- No signal, scheduler, production profile, or memory promotion behavior changed.
 
 ---
 

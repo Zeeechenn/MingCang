@@ -1,10 +1,9 @@
 def test_demo_seed_populates_first_screen_data(monkeypatch, test_db):
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
-    from scripts import demo_seed
-
     from backend.api.routes.dashboard import dashboard_summary
     from backend.api.routes.watchlist import get_watchlist
     from backend.data.database import IndexPrice, Position, Price, Signal
+    from scripts import demo_seed
 
     demo_seed._upsert_stocks(test_db)
     demo_seed._upsert_demo_market_rows(test_db)

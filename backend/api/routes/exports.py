@@ -21,6 +21,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.data.database import Position, Price, ReviewRun, Signal, Stock, get_db
+from backend.observability import correlation_headers, get_correlation_id
 
 router = APIRouter()
 
@@ -40,7 +41,10 @@ def _csv_response(rows: list[dict], columns: list[tuple[str, str]], filename: st
     return Response(
         content=data,
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            **correlation_headers(),
+        },
     )
 
 
@@ -183,7 +187,12 @@ def _daily_provider_chain(snapshot: dict, market: str = "CN") -> str:
         .get(market, {})
         .get("daily", [])
     )
-    names = [item.get("name") for item in chain if isinstance(item, dict) and item.get("name")]
+    names = []
+    for item in chain:
+        if isinstance(item, dict):
+            name = item.get("name")
+            if name:
+                names.append(str(name))
     return " > ".join(names)
 
 
@@ -250,6 +259,7 @@ def _postmarket_review_html(db: Session, day: str) -> str:
     data_trust = _data_trust_html(db)
     rule_version_text = ", ".join(rule_versions)
     profile_text = str(weights.profile or "unknown")
+    correlation_id = get_correlation_id() or "none"
 
     return f"""<!doctype html>
 <html>
@@ -281,6 +291,7 @@ def _postmarket_review_html(db: Session, day: str) -> str:
       <li><strong>rule/profile version:</strong> {html.escape(rule_version_text)} / {html.escape(profile_text)}</li>
       <li><strong>rule_version:</strong> {html.escape(rule_version_text)}</li>
       <li><strong>profile_version:</strong> {html.escape(profile_text)}</li>
+      <li><strong>correlation_id:</strong> {html.escape(correlation_id)}</li>
     </ul>
   </section>
   <section>
@@ -336,12 +347,18 @@ def export_postmarket_review_html(
         return Response(
             content=body,
             media_type="application/msword",
-            headers={"Content-Disposition": f'attachment; filename="postmarket-review-{day}.doc"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="postmarket-review-{day}.doc"',
+                **correlation_headers(),
+            },
         )
     return Response(
         content=body,
         media_type="text/html; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="postmarket-review-{day}.html"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="postmarket-review-{day}.html"',
+            **correlation_headers(),
+        },
     )
 
 

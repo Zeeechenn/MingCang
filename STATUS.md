@@ -8,8 +8,9 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.3.0`; the latest
-documented patch is `v0.3.1` trust/onboarding cleanup in `CHANGELOG.md`.
+Current release surface: package/API/frontend versions are `0.3.2`; the latest
+documented patch is `v0.3.2` reliability and observability cleanup in
+`CHANGELOG.md`.
 
 ## Current State
 
@@ -57,7 +58,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 | Workstream | First action | Stop condition |
 |---|---|---|
-| M49 tooling observability | Classify backend tools into stable / maintenance / evidence / attic and add purpose/read-write boundaries | Do not change signal behavior, scheduler behavior, or memory write policy while documenting tools |
+| M49 tooling observability | complete: retained backend tools classified with purpose/read-write boundaries; `mingcang tools` JSON entry added; request/export/memory-candidate correlation IDs wired | No signal behavior, scheduler behavior, production profile, or memory promotion policy changed |
 | M45 research-positioning follow-up | Use dry-run-first importer / scoreboard only with direct source fidelity | Do not promote trusted memory, official signals, production profile, scheduler, test2, stops, sizing, or positions |
 | M29 forward evidence | Run readiness checks read-only before any shadow bundle | Stop if fresh coverage is incomplete or if a change would re-enable quant / Kronos / production scoring |
 | M32 hypothesis bridge | Start only after review data is thick enough | Output falsifiable theses, not Strong Buy labels |
@@ -79,9 +80,10 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate after the onboarding/demo cleanup on 2026-06-06:
-ruff passed, mypy passed, backend pytest `1101 passed, 5 skipped`, frontend
-node tests `19 passed`, Vite build passed, and ESLint summary passed.
+Last full recorded gate for v0.3.2 on 2026-06-09:
+ruff passed, mypy passed, backend pytest `1115 passed, 5 skipped`, frontend
+node tests `30 passed`, Vite build passed, and ESLint summary reported
+`0 errors / 1 warning` in advisory mode.
 
 For release-quality work, treat `make verify` as the canonical gate.
 

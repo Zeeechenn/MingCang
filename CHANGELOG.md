@@ -6,6 +6,37 @@
 
 ---
 
+## [v0.3.2] Reliability, traceability, and release hygiene（2026-06-09）
+
+> **补地基，不改信号。** 这一版把 v0.3.1 之后的工程地基、证据可信度、
+> 前端可靠性和工具治理收口到公开 release。生产信号零漂移：`WEIGHT_QUANT=0.0`、
+> Kronos off、技术/情绪权重与 ATR 规则保持不变。
+
+### Added
+- GitHub Pages 文档站与公开 docs 入口，README / repo About 可直接跳到在线文档。
+- P0/P1/P2 工程地基：Alembic baseline + reconciliation 迁移、runtime index 迁移、
+  FastAPI 依赖注入边界、CORS 环境变量化、structlog 统一日志、Zustand 与渐进式
+  TypeScript 前端脚手架。
+- M46/M46.5/M47/M48：no-key demo 首屏路径、lookahead one-time audit、
+  evidence trust CLI/API/export visibility、前端关键数值格式化测试、Signal/Evidence
+  TSX 可靠性切片与 `StatusBadge` UI primitive。
+- M49 tools registry：`python3 -m backend.agent.cli tools` 暴露 retained tools 的
+  stable / maintenance / evidence / attic 分类、用途、读写边界与推荐入口。
+- API/export/memory-candidate correlation id：`X-Correlation-ID` 在请求、导出响应、
+  盘后 HTML metadata 与 memory-candidate audit log 中可追踪。
+
+### Changed
+- package/API/frontend 版本源统一到 `0.3.2`。
+- `make verify` 继续作为发布质量门槛；前端 lint summary 保持 advisory，不阻塞构建。
+- M46-M49 文档状态收口为 complete，明确无信号、scheduler、production profile 或 memory
+  promotion 行为变更。
+
+### Fixed
+- CI/local verify 兼容本地 paper-trading baseline 与 uv lock / ruff backend lint。
+- 修正已提交栈里的 EOF whitespace blocker，确保 `git diff --check origin/main..HEAD` 通过。
+
+---
+
 ## [v0.3.1] 可信度补丁 / Trust patch（2026-06-06）
 
 > **收口，不加新能力。** 这一版只做产品化收口：清理命名/版本不一致、补一条「必定成功」的

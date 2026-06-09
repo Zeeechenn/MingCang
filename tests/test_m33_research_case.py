@@ -127,7 +127,7 @@ def test_quality_gate_empty_dossier_fails():
 def test_quality_gate_full_dossier_passes():
     from backend.research.case import _build_quality_gate
     d = _full_dossier()
-    gate = _build_quality_gate(d)
+    gate = _build_quality_gate(d, as_of="2026-06-01")
     assert gate["gate_pass"] is True
     assert gate["blockers"] == []
 
@@ -200,7 +200,7 @@ def test_validity_card_missing_universe_hash():
 def test_build_case_structure():
     from backend.research.case import build_case
     d = _full_dossier()
-    case = build_case(d)
+    case = build_case(d, as_of="2026-06-01")
     assert case["symbol"] == "600519"
     assert "quality_gate" in case
     assert "validity_card" in case

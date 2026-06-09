@@ -20,6 +20,7 @@ from typing import Any
 
 from backend.memory.audit_log import audit_write
 from backend.memory.stock_memory import MEMORY_TYPES
+from backend.observability import get_correlation_id
 
 CANDIDATE_TRUST_VALUES = {"pending", "trusted", "rejected"}
 
@@ -254,10 +255,12 @@ def create_memory_candidate(
     )
     db.add(row)
     db.flush()
+    correlation_id = get_correlation_id()
+    trace_suffix = f" correlation_id={correlation_id}" if correlation_id else ""
     audit_write(
         db,
         "review_loop.create_memory_candidate",
-        f"candidate created symbol={symbol} type={memory_type} trust=pending",
+        f"candidate created symbol={symbol} type={memory_type} trust=pending{trace_suffix}",
         related_symbol=symbol,
     )
     db.commit()

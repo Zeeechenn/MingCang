@@ -72,6 +72,34 @@ def test_export_coverage_csv_returns_csv_headers(test_db):
     assert "daily_provider_chain_CN" in body
 
 
+def test_export_responses_echo_correlation_id(test_db):
+    client = _client_for_db(test_db)
+    try:
+        resp = client.get(
+            "/api/export/signals.csv?limit=5",
+            headers={"X-Correlation-ID": "m49-export-trace"},
+        )
+    finally:
+        _clear_client_override()
+    assert resp.status_code == 200
+    assert resp.headers["x-correlation-id"] == "m49-export-trace"
+
+
+def test_postmarket_review_html_includes_correlation_id(test_db):
+    client = _client_for_db(test_db)
+    try:
+        resp = client.get(
+            "/api/export/postmarket-review.html?as_of=2026-05-21",
+            headers={"X-Correlation-ID": "m49-report-trace"},
+        )
+    finally:
+        _clear_client_override()
+    assert resp.status_code == 200
+    assert resp.headers["x-correlation-id"] == "m49-report-trace"
+    assert "correlation_id" in resp.text
+    assert "m49-report-trace" in resp.text
+
+
 def test_export_postmarket_review_html_includes_versions_and_disclaimer(test_db):
     from backend.data.database import ReviewRun, Signal, Stock
 
