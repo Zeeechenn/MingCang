@@ -1,14 +1,61 @@
-import { getDataTrustSummary, getPortfolioActionSummary } from './evidenceSummary'
+import type { DataCoverageOut, DecisionRunOut, ResearchStateOut } from '../apiTypes'
 import { formatDate, formatPrice, formatScore } from '../financialNumbers'
+import { getDataTrustSummary, getPortfolioActionSummary } from './evidenceSummary'
+import StatusBadge from './ui/StatusBadge'
 
-export default function EvidenceCard({ evidence = [], research, coverage }) {
+interface ScoreBreakdown {
+  quant?: number | null
+  technical?: number | null
+  sentiment?: number | null
+}
+
+interface AgentOutputs {
+  breakdown?: ScoreBreakdown
+  llm_arbitration?: {
+    rationale?: string | null
+  }
+}
+
+interface FinalAction {
+  stop_loss?: number | null
+  take_profit?: number | null
+  position_pct?: number | null
+  trader_position_pct?: number | null
+  risk_position_pct?: number | null
+  allocation_rationale?: string | null
+  portfolio_decision?: {
+    action?: string | null
+    rationale?: string | null
+  }
+}
+
+interface RiskDecision {
+  limit_status?: string | null
+}
+
+interface LastReview {
+  attribution?: string[]
+}
+
+interface EvidenceCardProps {
+  evidence?: DecisionRunOut[]
+  research?: ResearchStateOut | null
+  coverage?: DataCoverageOut | null
+}
+
+export default function EvidenceCard({
+  evidence = [],
+  research,
+  coverage,
+}: EvidenceCardProps) {
   const latest = evidence[0]
-  const risk = latest?.risk_decision || {}
-  const agents = latest?.agent_outputs || {}
-  const finalAction = latest?.final_action || {}
+  const risk = (latest?.risk_decision || {}) as RiskDecision
+  const agents = (latest?.agent_outputs || {}) as AgentOutputs
+  const finalAction = (latest?.final_action || {}) as FinalAction
   const portfolioAction = getPortfolioActionSummary(finalAction)
   const dataTrust = getDataTrustSummary(coverage || {}, latest?.symbol)
   const stockCoverage = dataTrust.stock
+  const lastReview = research?.last_review as LastReview | null | undefined
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
@@ -21,9 +68,9 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
         <div className="rounded border border-gray-800 bg-gray-950 p-3">
           <div className="text-xs text-gray-500 mb-1">研究状态</div>
           <div className="text-sm text-gray-200">{research.last_signal_summary}</div>
-          {research.last_review?.attribution?.length > 0 && (
+          {Array.isArray(lastReview?.attribution) && lastReview.attribution.length > 0 && (
             <div className="mt-2 text-xs text-gray-400">
-              复盘：{research.last_review.attribution.join(' / ')}
+              复盘：{lastReview.attribution.join(' / ')}
             </div>
           )}
         </div>
@@ -70,10 +117,10 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
         </div>
       )}
 
-      {latest?.agent_outputs?.llm_arbitration?.rationale && (
+      {agents.llm_arbitration?.rationale && (
         <div className="rounded border border-gray-800 bg-gray-950 p-3 text-sm text-gray-300">
           <div className="text-xs text-gray-500 mb-1">辩论结论</div>
-          {latest.agent_outputs.llm_arbitration.rationale}
+          {agents.llm_arbitration.rationale}
         </div>
       )}
 
@@ -81,15 +128,15 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
         <div className="rounded border border-gray-800 bg-gray-950 p-3">
           <div className="flex items-center justify-between gap-3 mb-2">
             <div className="text-xs text-gray-500">数据覆盖</div>
-            <div className={`text-xs font-semibold ${dataTrust.toneClass}`}>
+            <StatusBadge status={dataTrust.status === 'pass' ? 'pass' : 'warning'}>
               可信度：{dataTrust.label}
-            </div>
+            </StatusBadge>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-gray-300">
-            <div>股票：{coverage.summary.active_stocks ?? '-'}</div>
-            <div>2年价格：{coverage.summary.two_year_price_covered ?? '-'}</div>
-            <div>财报：{coverage.summary.financial_covered ?? '-'}</div>
-            <div>24h新闻：{coverage.summary.news_24h_covered ?? '-'}</div>
+            <div>股票：{String(coverage.summary.active_stocks ?? '-')}</div>
+            <div>2年价格：{String(coverage.summary.two_year_price_covered ?? '-')}</div>
+            <div>财报：{String(coverage.summary.financial_covered ?? '-')}</div>
+            <div>24h新闻：{String(coverage.summary.news_24h_covered ?? '-')}</div>
           </div>
           <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-500">
             <div>最新价格日：{formatDate(dataTrust.latestPriceDate)}</div>

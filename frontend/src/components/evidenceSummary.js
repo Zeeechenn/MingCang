@@ -14,6 +14,9 @@ export function getPortfolioActionSummary(finalAction = {}) {
   }
 }
 
+/**
+ * @param {Record<string, any>} coverage
+ */
 function dataTrustStatus(coverage = {}) {
   const warnings = Array.isArray(coverage.warnings) ? coverage.warnings : []
   const checks = coverage.checks || {}
@@ -22,6 +25,10 @@ function dataTrustStatus(coverage = {}) {
   return 'pass'
 }
 
+/**
+ * @param {Record<string, any>} coverage
+ * @param {string} market
+ */
 function dailyProviderNames(coverage = {}, market = 'CN') {
   const chains = coverage.provider_fallback_chains?.chains_by_market
     || coverage.summary?.provider_fallback_chains?.chains_by_market
@@ -32,6 +39,10 @@ function dailyProviderNames(coverage = {}, market = 'CN') {
     .filter(Boolean)
 }
 
+/**
+ * @param {Record<string, any>} coverage
+ * @param {string | null | undefined} symbol
+ */
 export function getDataTrustSummary(coverage = {}, symbol = null) {
   const stocks = Array.isArray(coverage.stocks) ? coverage.stocks : []
   const stock = symbol ? stocks.find((row) => row.symbol === symbol) || null : null

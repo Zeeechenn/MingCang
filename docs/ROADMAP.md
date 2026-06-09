@@ -133,19 +133,24 @@ Acceptance:
 
 ---
 
-## M48 前端可靠性【planned / P1】
+## M48 前端可靠性【complete】
 
 WorkBuddy's frontend-weakness判断 still holds even with the TS / Zustand / UI
 primitive地基 in place. Key financial-number display tests已提前到 M46.5; M48
 carries the rest of frontend hardening.
 
-Open tasks:
+Completed tasks:
 
-- [ ] Type API responses, covering signal / review / position / data coverage first.
-- [ ] Extend frontend tests from the current set toward critical user paths.
-- [ ] Migrate key pages to TS/TSX; do not attempt a single big-bang migration.
-- [ ] Consolidate SignalCard / EvidenceCard / ReviewTable / StatusBadge onto the
-  UI primitive library.
+- [x] Type API responses, covering signal / review / position / data coverage first.
+- [x] Extend frontend tests from the current set toward critical user paths:
+  `make frontend-test` now delegates to `npm test`, so `src/store/*.test.js`
+  is included in the project gate.
+- [x] Migrate key UI cards to TS/TSX without a big-bang page migration:
+  `SignalCard` and `EvidenceCard` now compile against typed signal, evidence,
+  research, and data coverage contracts.
+- [x] Consolidate SignalCard / EvidenceCard status pills onto a shared
+  `StatusBadge` primitive. There is no standalone `ReviewTable` component in
+  the current frontend; review responses are covered by the typed API layer.
 
 Acceptance:
 

@@ -76,7 +76,7 @@ coverage:
 	COVERAGE_FILE=$(COVERAGE_FILE) PYTHONPATH=. $(PYTEST) -q -o cache_dir=$(PYTEST_CACHE_DIR) --cov=backend --cov-report=term-missing --cov-report=xml:$(COVERAGE_XML)
 
 frontend-test:
-	cd frontend && node --test src/*.test.js src/components/*.test.js src/pages/*.test.js
+	cd frontend && npm test
 
 frontend-lint:
 	cd frontend && npm run lint
