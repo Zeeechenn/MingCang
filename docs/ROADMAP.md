@@ -8,7 +8,7 @@
 
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
-| M46.5 正确性底线 | **P0，与 M46 并行**：先确认信任底线——证据未泄漏、前端数字不误导，再继续用户可见 polish | (1) lookahead 泄漏一次性审计：确认现存信号 / memory promotion 是否已被未来数据污染（先审计，不建工具）；(2) 关键金融数字显示测试：价格/盈亏/仓位/百分比/空值/复权 | 审计 blocked 项先冻结相关信号 / 暂停对应 memory promotion 再继续 demo；不把一次性审计当产品化任务 |
+| M46.5 正确性底线 | complete：一次性审计已完成，真实库为 warning-only / no blockers；前端关键数字显示已有纯函数测试兜底 | M47 接手常驻化：`mingcang evidence lookahead-check`、lineage / provenance 可见化、UI/export 披露 | warning 不影响正式信号；blocked 仍不得自动 promotion；一次性审计不作为产品入口 |
 | M46 用户可发现性与上手路径 | P1：0.3.1 可信度补丁已完成并通过完整 verify；子 agent 零背景试用发现入口分流、demo 前端、英文 README、功能地图仍需收口 | 先把 GitHub 首页做成极简分流器，再补任务型 `docs/USER_GUIDE.md` 与状态型 `docs/FEATURE_MAP.md` | 不把 README 变成大而全文档；不把维护者路线图当普通用户下一步 |
 | M45 研究定位落地 | 主体完成：source-gated importer、falsification scoreboard、模块分诊、Stage 2b shadow 预注册都已落地；后续只保留守门合同 | 后续导入仍先 dry-run + source fidelity review；Stage 2b 只做 non-promoting shadow | 不复活 quant、不改 production profile、不让未过门 alpha 影响真实决策 |
 | M44 Atlas 合并 | complete / dormant：`9820143` 已包含在 `origin/main`；Atlas/test4 Stage 2b signal-overlay shadow starter 已可用；`ATLAS_ENABLED=false` | 只用 `backend.tools.atlas_test4_stage2b_shadow` 做 non-promoting shadow accrual；exit overlay 另走单独任务 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
@@ -42,7 +42,7 @@ Stop conditions:
 
 ---
 
-## M46.5 正确性底线：证据不泄漏、前端不误导【P0 / 与 M46 并行】
+## M46.5 正确性底线：证据不泄漏、前端不误导【complete】
 
 Rationale: M46 improves discoverability (demo, screenshots, walkthrough). For a
 project whose value proposition is "evidence you can trust, no AI guessing", a
@@ -50,23 +50,42 @@ lookahead leak or a wrong on-screen price/PnL is a foundation-level correctness
 defect. These two gates run in parallel with M46 and take precedence when they
 conflict.
 
-Open tasks:
+Completed tasks:
 
-- [ ] Lookahead leakage one-time audit (audit first, do NOT build a tool):
+- [x] Lookahead leakage one-time audit (audit first, do NOT build a tool):
   answer the existing-data question — have past signals / memory-promotion
   paths already been contaminated by future data? A one-off script/notebook is
   fine; product-grade CLI is M47, not now.
-  - [ ] Check whether news / announcement timestamps post-date the signals they
+  - [x] Check whether news / announcement timestamps post-date the signals they
     influenced.
-  - [ ] Check whether qfq/hfq, restatement, earnings, or provider fallback fed
+  - [x] Check whether qfq/hfq, restatement, earnings, or provider fallback fed
     future data into backtest / review windows.
-  - [ ] Check whether any LLM summary used information dated after the signal day.
-  - [ ] Write the audit conclusion into a tracked doc (ADR 0001 is local /
+  - [x] Check whether any LLM summary used information dated after the signal day.
+  - [x] Write the audit conclusion into a tracked doc (ADR 0001 is local /
     git-ignored — do not rely on it as the only record).
-- [ ] Key financial-number display tests (frontend): price, percentage, position
+- [x] Key financial-number display tests (frontend): price, percentage, position
   size, PnL, date, null/empty, qfq/hfq display. Wrong display destroys trust as
   surely as a leak; this is pulled out of M48 so it is not deferred behind the
   TypeScript migration.
+
+Audit conclusion (2026-06-09, `backend.tools.m46_5_lookahead_one_time_audit`,
+read-only immutable SQLite):
+
+- Overall status: `warning`, no `blocked` findings.
+- Pass: signal `data_timestamp` did not post-date signal day; every stored
+  signal had price data on/before signal day; financial `disclosure_date` was
+  not earlier than `report_date`; review cases did not reference future signals;
+  no trusted memory-promotion candidate lacked a review case; PIT guards cover
+  Price / Signal / LongTermLabel / FinancialMetric / IndexPrice / NewsItem.
+- Warning: 501 `signals.date` rows use timestamp-like strings instead of plain
+  `YYYY-MM-DD`; 223 sentiment-bearing signals have same-symbol next-day news
+  requiring lineage review; 395 financial rows lack exact `disclosure_date`;
+  843,391 price rows lack full `source` / `fetched_at` / `adjustment`
+  provenance; 2 review cases were created before their `as_of` date and should
+  stay non-promoting unless reviewed.
+- No signal freeze or memory-promotion pause was triggered because there were no
+  blocked findings. Warnings become M47 standing-check / visibility work, not
+  automatic production changes.
 
 Acceptance:
 

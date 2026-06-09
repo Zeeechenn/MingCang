@@ -1,3 +1,5 @@
+import { formatDate, formatPrice } from '../financialNumbers'
+
 const REC_STYLE = {
   '可小仓试错': { badge: 'bg-red-500', text: 'text-red-300' },
   '可关注': { badge: 'bg-orange-400', text: 'text-orange-300' },
@@ -121,7 +123,7 @@ export default function SignalCard({ signal }) {
           </span>
           <span className="ml-2 text-xs text-gray-400">置信度 {signal.confidence}</span>
         </div>
-        <span className="text-xs text-gray-500">{signal.date}</span>
+        <span className="text-xs text-gray-500">{formatDate(signal.date)}</span>
       </div>
 
       <ScoreGauge score={signal.composite_score} />
@@ -130,11 +132,11 @@ export default function SignalCard({ signal }) {
         <div className="mt-4 grid grid-cols-2 gap-3 text-center">
           <div className="bg-gray-800 rounded-lg p-2">
             <div className="text-xs text-gray-400">止损</div>
-            <div className="text-green-400 font-mono font-bold">{signal.stop_loss.toFixed(2)}</div>
+            <div className="text-green-400 font-mono font-bold">{formatPrice(signal.stop_loss)}</div>
           </div>
           <div className="bg-gray-800 rounded-lg p-2">
             <div className="text-xs text-gray-400">止盈</div>
-            <div className="text-red-400 font-mono font-bold">{signal.take_profit?.toFixed(2) ?? '—'}</div>
+            <div className="text-red-400 font-mono font-bold">{formatPrice(signal.take_profit)}</div>
           </div>
         </div>
       )}

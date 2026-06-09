@@ -1,9 +1,5 @@
 import { getPortfolioActionSummary } from './evidenceSummary'
-
-function fmtScore(value) {
-  if (value === null || value === undefined) return '-'
-  return Number(value).toFixed(1)
-}
+import { formatDate, formatPrice, formatScore } from '../financialNumbers'
 
 export default function EvidenceCard({ evidence = [], research, coverage }) {
   const latest = evidence[0]
@@ -17,7 +13,7 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-200">决策证据链</h2>
-        <span className="text-xs text-gray-500">{latest?.as_of || '暂无记录'}</span>
+        <span className="text-xs text-gray-500">{latest ? formatDate(latest.as_of) : '暂无记录'}</span>
       </div>
 
       {research?.last_signal_summary && (
@@ -40,15 +36,15 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
             <div className="text-xs text-gray-500">规则版本</div>
             <div className="text-sm text-gray-200 mt-1">{latest.rule_version || '-'}</div>
             <div className="text-xs text-gray-500 mt-2">综合分</div>
-            <div className="text-lg font-semibold text-blue-300">{fmtScore(latest.composite_score)}</div>
+            <div className="text-lg font-semibold text-blue-300">{formatScore(latest.composite_score)}</div>
           </div>
 
           <div className="rounded border border-gray-800 bg-gray-950 p-3">
             <div className="text-xs text-gray-500">三路拆解</div>
             <div className="mt-2 space-y-1 text-sm text-gray-300">
-              <div>量化：{fmtScore(agents.breakdown?.quant)}</div>
-              <div>技术：{fmtScore(agents.breakdown?.technical)}</div>
-              <div>情感：{fmtScore(agents.breakdown?.sentiment)}</div>
+              <div>量化：{formatScore(agents.breakdown?.quant)}</div>
+              <div>技术：{formatScore(agents.breakdown?.technical)}</div>
+              <div>情感：{formatScore(agents.breakdown?.sentiment)}</div>
             </div>
           </div>
 
@@ -56,8 +52,8 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
             <div className="text-xs text-gray-500">风控与动作</div>
             <div className="mt-2 space-y-1 text-sm text-gray-300">
               <div>状态：{risk.limit_status || 'normal'}</div>
-              <div>止损：{finalAction.stop_loss ?? '-'}</div>
-              <div>止盈：{finalAction.take_profit ?? '-'}</div>
+              <div>止损：{formatPrice(finalAction.stop_loss)}</div>
+              <div>止盈：{formatPrice(finalAction.take_profit)}</div>
               <div>仓位：{portfolioAction.finalPosition}</div>
               {portfolioAction.traderPosition && (
                 <div className="text-xs text-gray-500">交易员：{portfolioAction.traderPosition}</div>
@@ -91,7 +87,7 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
           </div>
           {stockCoverage && (
             <div className="mt-2 text-xs text-gray-500">
-              当前标的：价格 {stockCoverage.price_rows} 行，最新 {stockCoverage.latest_price_date || '-'}，财报 {stockCoverage.latest_financial_report || '-'}
+              当前标的：价格 {stockCoverage.price_rows} 行，最新 {formatDate(stockCoverage.latest_price_date)}，财报 {formatDate(stockCoverage.latest_financial_report)}
             </div>
           )}
         </div>

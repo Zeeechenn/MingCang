@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getDashboardSummary, getWatchlist, addStock, removeStock, searchStocks } from '../api'
+import {
+  formatDate,
+  formatMoney,
+  formatPrice,
+  formatSignedNumber,
+  formatSignedPercent,
+} from '../financialNumbers'
 import { filterWatchlistItems } from './watchlistFilters'
 import { APP_VERSION } from '../version'
 
@@ -24,22 +31,6 @@ const RELEASE_ITEMS = [
   ['M30', '多空证据账本'],
   ['Quant', '生产继续关闭'],
 ]
-
-function signed(value, digits = 1) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return '-'
-  const n = Number(value)
-  return `${n > 0 ? '+' : ''}${n.toFixed(digits)}`
-}
-
-function pct(value, digits = 2) {
-  if (value === null || value === undefined) return '-'
-  return `${signed(value, digits)}%`
-}
-
-function money(value) {
-  if (value === null || value === undefined) return '-'
-  return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
-}
 
 function recClass(rec) {
   return REC_STYLE[rec] || 'border-slate-400/40 bg-slate-500/10 text-slate-600 dark:text-slate-300'
@@ -111,7 +102,7 @@ function ScoreArc({ score }) {
         <div>
           <div className={LABEL}>综合评分</div>
           <div className="mt-1 font-mono text-6xl font-semibold tracking-tight text-stone-950 dark:text-slate-50">
-            {signed(clamped, 1)}
+            {formatSignedNumber(clamped, 1)}
           </div>
         </div>
         <div className="pb-2 text-right">
@@ -160,7 +151,7 @@ function TodayCall({ summary, watchlist }) {
             </div>
             <div className="text-right">
               <div className={LABEL}>信号日期</div>
-              <div className="mt-2 font-mono text-sm text-stone-700 dark:text-slate-200">{signal?.date || '-'}</div>
+              <div className="mt-2 font-mono text-sm text-stone-700 dark:text-slate-200">{formatDate(signal?.date)}</div>
             </div>
           </div>
         </div>
@@ -169,13 +160,13 @@ function TodayCall({ summary, watchlist }) {
           <ScoreArc score={signal?.composite_score} />
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
-              <Metric label="量化" value={signed(signal?.quant_score, 1)} tone="cyan" />
-              <Metric label="技术" value={signed(signal?.technical_score, 1)} tone="cyan" />
-              <Metric label="情感" value={signed(signal?.sentiment_score, 2)} tone="amber" />
+              <Metric label="量化" value={formatSignedNumber(signal?.quant_score, 1)} tone="cyan" />
+              <Metric label="技术" value={formatSignedNumber(signal?.technical_score, 1)} tone="cyan" />
+              <Metric label="情感" value={formatSignedNumber(signal?.sentiment_score, 2)} tone="amber" />
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <Metric label="止损" value={signal?.stop_loss ? signal.stop_loss.toFixed(2) : '-'} tone="green" />
-              <Metric label="止盈" value={signal?.take_profit ? signal.take_profit.toFixed(2) : '-'} tone="red" />
+              <Metric label="止损" value={formatPrice(signal?.stop_loss)} tone="green" />
+              <Metric label="止盈" value={formatPrice(signal?.take_profit)} tone="red" />
               <Metric label="置信度" value={signal?.confidence || '-'} />
             </div>
             <blockquote className="border-l-2 border-cyan-600/70 pl-4 font-serif text-lg italic leading-relaxed text-stone-800 dark:text-slate-100">
@@ -251,16 +242,16 @@ function ActivityLedger({ summary, watchlist = [] }) {
   ])
   const items = [
     ...signals.slice(0, 5).map((sig) => ({
-      time: sig.date,
+      time: formatDate(sig.date),
       kind: '信号',
       headline: `${nameBySymbol.get(sig.symbol) || sig.symbol} ${sig.recommendation}`,
-      detail: `综合分 ${signed(sig.composite_score, 1)} · 技术 ${signed(sig.technical_score, 1)} · 情感 ${signed(sig.sentiment_score, 2)}`,
+      detail: `综合分 ${formatSignedNumber(sig.composite_score, 1)} · 技术 ${formatSignedNumber(sig.technical_score, 1)} · 情感 ${formatSignedNumber(sig.sentiment_score, 2)}`,
     })),
     ...holdings.slice(0, 3).map((h) => ({
       time: h.entry_date,
       kind: '持仓',
-      headline: `${h.name || h.symbol} ${pct(h.pnl_pct)}`,
-      detail: `止损 ${h.stop_loss} · 止盈 ${h.take_profit}`,
+      headline: `${h.name || h.symbol} ${formatSignedPercent(h.pnl_pct)}`,
+      detail: `止损 ${formatPrice(h.stop_loss)} · 止盈 ${formatPrice(h.take_profit)}`,
     })),
   ]
   return (
@@ -289,8 +280,8 @@ function PositionOverview({ summary }) {
       <div className="grid gap-4 lg:grid-cols-[0.8fr_1fr]">
         <div className="grid grid-cols-3 gap-2">
           <Metric label="持仓数" value={positions.count ?? 0} tone="cyan" />
-          <Metric label="总市值" value={money(positions.market_value)} />
-          <Metric label="总盈亏" value={pct(positions.pnl_pct)} tone={(positions.pnl || 0) >= 0 ? 'red' : 'green'} />
+          <Metric label="总市值" value={formatMoney(positions.market_value)} />
+          <Metric label="总盈亏" value={formatSignedPercent(positions.pnl_pct)} tone={(positions.pnl || 0) >= 0 ? 'red' : 'green'} />
         </div>
         {items.length === 0 ? (
           <div className="rounded-sm border border-dashed border-stone-300 p-5 text-sm text-stone-500 dark:border-slate-700 dark:text-slate-400">
@@ -305,7 +296,7 @@ function PositionOverview({ summary }) {
                     <div className="text-sm font-semibold text-stone-950 dark:text-slate-100">{item.name}</div>
                     <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{item.symbol}</div>
                   </div>
-                  <div className={`font-mono text-sm font-semibold ${(item.pnl || 0) >= 0 ? 'text-red-700 dark:text-red-200' : 'text-emerald-700 dark:text-emerald-200'}`}>{pct(item.pnl_pct)}</div>
+                  <div className={`font-mono text-sm font-semibold ${(item.pnl || 0) >= 0 ? 'text-red-700 dark:text-red-200' : 'text-emerald-700 dark:text-emerald-200'}`}>{formatSignedPercent(item.pnl_pct)}</div>
                 </div>
               </Link>
             ))}
@@ -322,9 +313,9 @@ function MarketOverview({ summary }) {
     <Section title="大盘情况" eyebrow="Market">
       {market.available ? (
         <div className="grid grid-cols-3 gap-2">
-          <Metric label={market.name || '沪深300'} value={money(market.close)} />
-          <Metric label="涨跌幅" value={pct(market.change_pct)} tone={(market.change_pct || 0) >= 0 ? 'red' : 'green'} />
-          <Metric label="日期" value={market.date || '-'} tone="cyan" />
+          <Metric label={market.name || '沪深300'} value={formatMoney(market.close)} />
+          <Metric label="涨跌幅" value={formatSignedPercent(market.change_pct)} tone={(market.change_pct || 0) >= 0 ? 'red' : 'green'} />
+          <Metric label="日期" value={formatDate(market.date)} tone="cyan" />
         </div>
       ) : (
         <div className="rounded-sm border border-dashed border-stone-300 p-5 text-sm text-stone-500 dark:border-slate-700 dark:text-slate-400">
@@ -352,7 +343,7 @@ function SignalTicker({ summary, watchlist }) {
                 <span className={`rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${recClass(sig.recommendation)}`}>{sig.recommendation}</span>
               </div>
               <div className="mt-4 flex items-end justify-between">
-                <div className="font-mono text-2xl font-semibold text-stone-950 dark:text-slate-100">{signed(sig.composite_score, 1)}</div>
+                <div className="font-mono text-2xl font-semibold text-stone-950 dark:text-slate-100">{formatSignedNumber(sig.composite_score, 1)}</div>
                 <MiniSpark score={sig.composite_score} />
               </div>
               {stock?.long_term_label?.label && (

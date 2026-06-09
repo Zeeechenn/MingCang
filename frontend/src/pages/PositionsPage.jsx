@@ -1,25 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { closePosition, createPosition, deleteClosedPosition, getPositions, searchStocks } from '../api'
+import {
+  formatDate,
+  formatMoney,
+  formatPositionSize,
+  formatPrice,
+  formatSignedMoney,
+  formatSignedPercent,
+} from '../financialNumbers'
 
 const PANEL = 'rounded-sm border border-stone-300/80 bg-[#faf6ec] dark:border-slate-700 dark:bg-[#1d232e]'
 const LABEL = 'text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-500 dark:text-slate-400'
-
-function money(value) {
-  if (value === null || value === undefined) return '-'
-  return Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
-}
-
-function signedPct(value) {
-  if (value === null || value === undefined) return '-'
-  const n = Number(value)
-  return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`
-}
-
-function signedMoney(value) {
-  if (value === null || value === undefined) return '-'
-  const n = Number(value)
-  return `${n > 0 ? '+' : ''}${money(n)}`
-}
 
 const MARKET_CURRENCY = { CN: 'CNY', HK: 'HKD', US: 'USD' }
 
@@ -216,8 +207,8 @@ export default function PositionsPage() {
             <h1 className="mt-1 text-2xl font-semibold text-stone-950 dark:text-slate-50">持仓设置</h1>
         </div>
         <div className="grid gap-1 text-right text-xs text-stone-500 dark:text-slate-400 sm:grid-cols-2 sm:gap-3">
-          <div>CN 市值 <span className="font-mono text-stone-800 dark:text-slate-100">{money(cnTotal.market)} CNY</span></div>
-          <div>CN 浮盈 <PnlText value={cnTotal.pnl}>{signedMoney(cnTotal.pnl)} / {signedPct(cnPct)}</PnlText></div>
+          <div>CN 市值 <span className="font-mono text-stone-800 dark:text-slate-100">{formatMoney(cnTotal.market)} CNY</span></div>
+          <div>CN 浮盈 <PnlText value={cnTotal.pnl}>{formatSignedMoney(cnTotal.pnl)} / {formatSignedPercent(cnPct)}</PnlText></div>
         </div>
       </div>
       {markets.length > 0 && (
@@ -229,7 +220,7 @@ export default function PositionsPage() {
               <div key={market} className="rounded-sm border border-stone-300 bg-[#fffaf0] p-2 dark:border-slate-700 dark:bg-[#161b25]">
                 <div className={LABEL}>{market} · {currencyFor(market)}</div>
                 <div className="mt-1 font-mono text-stone-800 dark:text-slate-100">
-                  市值 {money(total.market)} · <PnlText value={total.pnl}>{signedMoney(total.pnl)} / {signedPct(pct)}</PnlText>
+                  市值 {formatMoney(total.market)} · <PnlText value={total.pnl}>{formatSignedMoney(total.pnl)} / {formatSignedPercent(pct)}</PnlText>
                 </div>
               </div>
             )
@@ -255,10 +246,10 @@ export default function PositionsPage() {
               <div className="font-semibold text-stone-950 dark:text-slate-100">{item.name}</div>
               <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{item.symbol} · {item.market} · {currencyFor(item.market)}</div>
             </div>
-            <span className="font-mono">{money(item.quantity)}</span>
-            <span className="font-mono">{money(item.avg_cost)}</span>
-            <span className="font-mono">{money(item.latest_price)}</span>
-            <PnlText value={item.pnl}>{signedMoney(item.pnl)} / {signedPct(item.pnl_pct)}</PnlText>
+            <span className="font-mono">{formatPositionSize(item.quantity)}</span>
+            <span className="font-mono">{formatPrice(item.avg_cost)}</span>
+            <span className="font-mono">{formatPrice(item.latest_price)}</span>
+            <PnlText value={item.pnl}>{formatSignedMoney(item.pnl)} / {formatSignedPercent(item.pnl_pct)}</PnlText>
             <ClosePositionButton item={item} onClosed={load} />
           </div>
         ))}
@@ -269,7 +260,7 @@ export default function PositionsPage() {
             <div className={LABEL}>Closed Positions</div>
             <h2 className="mt-1 text-sm font-semibold text-stone-950 dark:text-slate-100">平仓记录</h2>
           </div>
-          <PnlText value={realized}>已实现 {signedMoney(realized)}</PnlText>
+          <PnlText value={realized}>已实现 {formatSignedMoney(realized)}</PnlText>
         </div>
         {closedPositions.length === 0 ? (
           <div className="p-6 text-sm text-stone-500 dark:text-slate-400">暂无平仓记录</div>
@@ -279,13 +270,13 @@ export default function PositionsPage() {
               <div key={item.id} className="grid gap-3 p-4 text-sm md:grid-cols-[1.1fr_0.8fr_0.8fr_0.8fr_0.8fr]">
                 <div>
                   <div className="font-semibold text-stone-950 dark:text-slate-100">{item.name}</div>
-                  <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{item.symbol} · {item.opened_at} → {item.closed_at || '-'}</div>
+                  <div className="font-mono text-xs text-stone-500 dark:text-slate-400">{item.symbol} · {formatDate(item.opened_at)} → {formatDate(item.closed_at)}</div>
                 </div>
-                <span className="font-mono">数量 {money(item.quantity)}</span>
-                <span className="font-mono">成本 {money(item.avg_cost)}</span>
-                <span className="font-mono">平仓 {money(item.close_price)}</span>
+                <span className="font-mono">数量 {formatPositionSize(item.quantity)}</span>
+                <span className="font-mono">成本 {formatPrice(item.avg_cost)}</span>
+                <span className="font-mono">平仓 {formatPrice(item.close_price)}</span>
                 <div className="flex flex-wrap items-center justify-between gap-2 md:justify-end">
-                  <PnlText value={item.realized_pnl}>{signedMoney(item.realized_pnl)} / {signedPct(item.realized_pnl_pct)}</PnlText>
+                  <PnlText value={item.realized_pnl}>{formatSignedMoney(item.realized_pnl)} / {formatSignedPercent(item.realized_pnl_pct)}</PnlText>
                   <button
                     onClick={async () => {
                       if (!window.confirm(`永久删除 ${item.symbol} 的平仓记录？`)) return
