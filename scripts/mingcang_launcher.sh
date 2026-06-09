@@ -55,6 +55,9 @@ case "$command_name" in
     fi
     PYTHONPATH=. "$PYTHON_BIN" -m backend.agent.cli stock-context "$@" --pretty
     ;;
+  evidence)
+    PYTHONPATH=. "$PYTHON_BIN" -m backend.agent.cli evidence "$@" --pretty
+    ;;
   premarket|intraday|postmarket|weekend)
     PYTHONPATH=. "$PYTHON_BIN" -m backend.agent.cli "$command_name" --pretty "$@"
     ;;
@@ -78,6 +81,8 @@ Usage:
   mingcang memory      Read the project memory snapshot
   mingcang stock 300308
                         Read one stock's signal/news/label/copilot context
+  mingcang evidence lookahead-check
+                        Run the standing read-only lookahead trust check
   mingcang premarket   Show the premarket workflow contract (dry-run)
   mingcang intraday    Show the intraday local-cache workflow contract (dry-run)
   mingcang postmarket  Show the postmarket review/export workflow contract (dry-run)

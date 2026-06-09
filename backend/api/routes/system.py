@@ -190,10 +190,10 @@ def system_status(
 
 @router.get("/system/data-coverage", response_model=DataCoverageOut)
 def data_coverage(db: Session = Depends(get_db)):
-    """Return data coverage and provider reliability report."""
-    from backend.data.quality import build_data_coverage_report
+    """Return point-in-time data coverage, freshness, and trust warnings."""
+    from backend.data.quality import build_data_coverage_snapshot
 
-    return build_data_coverage_report(db)
+    return build_data_coverage_snapshot(db)
 
 
 @router.get("/system/external-data-sources")

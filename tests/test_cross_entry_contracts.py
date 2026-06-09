@@ -36,7 +36,19 @@ STOCK_CONTEXT_KEYS = {
     "layered_memory",
     "memory_context",
 }
-WEB_DATA_COVERAGE_KEYS = {"summary", "provider_health", "stocks"}
+WEB_DATA_COVERAGE_KEYS = {
+    "generated_at",
+    "summary",
+    "checks",
+    "warnings",
+    "provider_health",
+    "freshness_contract",
+    "intraday_zero_network_policy",
+    "provider_fallback_chains",
+    "market_capability_catalog",
+    "cache_policy",
+    "stocks",
+}
 WEB_HEALTH_KEYS = {
     "healthy",
     "db_ok",
@@ -139,6 +151,9 @@ def test_web_system_contracts_keep_monitoring_fields(test_db, sample_stocks):
     assert {"active_stocks", "price_covered", "financial_covered", "news_24h_covered"} <= set(
         coverage["summary"]
     )
+    assert {"price_coverage_ok", "two_year_price_coverage_ok"} <= set(coverage["checks"])
+    assert isinstance(coverage["warnings"], list)
+    assert "daily_price" in coverage["freshness_contract"]
     assert coverage["stocks"][0].keys() >= {
         "symbol",
         "name",

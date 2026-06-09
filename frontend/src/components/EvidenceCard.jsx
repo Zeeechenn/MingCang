@@ -1,4 +1,4 @@
-import { getPortfolioActionSummary } from './evidenceSummary'
+import { getDataTrustSummary, getPortfolioActionSummary } from './evidenceSummary'
 import { formatDate, formatPrice, formatScore } from '../financialNumbers'
 
 export default function EvidenceCard({ evidence = [], research, coverage }) {
@@ -7,7 +7,8 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
   const agents = latest?.agent_outputs || {}
   const finalAction = latest?.final_action || {}
   const portfolioAction = getPortfolioActionSummary(finalAction)
-  const stockCoverage = coverage?.stocks?.find((row) => row.symbol === latest?.symbol) || null
+  const dataTrust = getDataTrustSummary(coverage || {}, latest?.symbol)
+  const stockCoverage = dataTrust.stock
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
@@ -78,13 +79,26 @@ export default function EvidenceCard({ evidence = [], research, coverage }) {
 
       {coverage?.summary && (
         <div className="rounded border border-gray-800 bg-gray-950 p-3">
-          <div className="text-xs text-gray-500 mb-2">数据覆盖</div>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="text-xs text-gray-500">数据覆盖</div>
+            <div className={`text-xs font-semibold ${dataTrust.toneClass}`}>
+              可信度：{dataTrust.label}
+            </div>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-gray-300">
             <div>股票：{coverage.summary.active_stocks ?? '-'}</div>
             <div>2年价格：{coverage.summary.two_year_price_covered ?? '-'}</div>
             <div>财报：{coverage.summary.financial_covered ?? '-'}</div>
             <div>24h新闻：{coverage.summary.news_24h_covered ?? '-'}</div>
           </div>
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-500">
+            <div>最新价格日：{formatDate(dataTrust.latestPriceDate)}</div>
+            <div>日线链：{dataTrust.providerChain.join(' → ') || '-'}</div>
+            <div>警告：{dataTrust.warningCount ? dataTrust.warningCodes.join(' / ') : 'none'}</div>
+          </div>
+          {dataTrust.freshnessPolicy && (
+            <div className="mt-2 text-xs text-gray-500">新鲜度策略：{dataTrust.freshnessPolicy}</div>
+          )}
           {stockCoverage && (
             <div className="mt-2 text-xs text-gray-500">
               当前标的：价格 {stockCoverage.price_rows} 行，最新 {formatDate(stockCoverage.latest_price_date)}，财报 {formatDate(stockCoverage.latest_financial_report)}

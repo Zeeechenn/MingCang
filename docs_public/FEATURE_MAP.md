@@ -116,6 +116,7 @@
 | 行情数据 | 读取和缓存 A 股价格，用于图表、技术信号和回测。 | `backend/data/market.py`, `/api/prices/{symbol}` | 常用 | 写 prices；影响信号。 |
 | Provider Registry | 管理 provider 顺序、fallback 和 metadata。 | `backend/data/providers.py` | 常用/维护者 | 影响数据来源。 |
 | 数据覆盖 | 展示价格、新闻、provider、新鲜度和覆盖率。 | `/api/system/data-coverage` | 常用/只读 | 不写入。 |
+| Evidence Lookahead Check | 常驻反穿越 / 证据可信度检查，区分 pass、warning、blocked。 | `mingcang evidence lookahead-check` | 维护者/只读 | 不写入、不调用 LLM/API；warning 只披露，blocked 不自动 promotion。 |
 | 外部数据源目录 | 显示可选外部源和可达性探针。 | `/api/system/external-data-sources` | 只读/维护者 | 探针可能触网。 |
 | 新闻抓取 | 抓取股票相关新闻并入库。 | `backend/data/news.py`, `/api/news/{symbol}` | 常用/需 Key 或 provider | 写 news；情绪会影响信号。 |
 | 新闻审计 | 给新闻来源、标题、时效和质量打审计标签。 | `backend/data/news_audit.py` | 常用/维护者 | 影响新闻可信度。 |
@@ -195,7 +196,7 @@
 | 信号 CSV | 导出 signals。 | `/api/export/signals.csv` | 常用 | 只读导出。 |
 | 持仓 CSV | 导出 positions。 | `/api/export/positions.csv` | 常用 | 只读导出。 |
 | 复盘 CSV | 导出 reviews。 | `/api/export/reviews.csv` | 常用 | 只读导出。 |
-| 覆盖率 CSV | 导出 coverage。 | `/api/export/coverage.csv` | 常用 | 只读导出。 |
+| 覆盖率 CSV | 导出 coverage、warning count、warning codes 和 CN 日线 fallback 链。 | `/api/export/coverage.csv` | 常用 | 只读导出。 |
 
 ## 12. Scheduler 和工作流
 

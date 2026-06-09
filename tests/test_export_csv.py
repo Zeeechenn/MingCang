@@ -67,6 +67,9 @@ def test_export_coverage_csv_returns_csv_headers(test_db):
     assert "coverage.csv" in resp.headers["content-disposition"]
     body = resp.text.lstrip("﻿")
     assert "snapshot_at" in body
+    assert "coverage_status" in body
+    assert "warning_count" in body
+    assert "daily_provider_chain_CN" in body
 
 
 def test_export_postmarket_review_html_includes_versions_and_disclaimer(test_db):
@@ -103,6 +106,8 @@ def test_export_postmarket_review_html_includes_versions_and_disclaimer(test_db)
     assert "postmarket-review-2026-05-21.html" in resp.headers["content-disposition"]
     assert "研究复盘，非投资建议、非价格预测" in resp.text
     assert "rule/profile version" in resp.text
+    assert "数据可信度" in resp.text
+    assert "coverage_status" in resp.text
     assert "multi_agent_v2:new_framework" in resp.text
     assert "profile_version" in resp.text
     assert "new_framework" in resp.text

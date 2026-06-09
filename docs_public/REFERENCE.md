@@ -61,6 +61,12 @@
 | Model | `/api/model/status`, `/api/model/train` |
 | Skills | `/api/skills/*` |
 
+## 3.1 Maintainer CLI
+
+| Command | Purpose |
+|---|---|
+| `mingcang evidence lookahead-check` | Run the standing read-only lookahead trust check. It writes no DB rows, calls no LLM/API provider, and reports pass / warning / blocked without changing official signals. |
+
 ## 4. Important Config
 
 | Config | 默认 | 说明 |

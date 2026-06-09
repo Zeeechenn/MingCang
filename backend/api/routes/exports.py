@@ -168,6 +168,43 @@ def _position_review_html(db: Session, day: str) -> str:
     return "\n".join(parts)
 
 
+def _coverage_status(snapshot: dict) -> str:
+    warnings = snapshot.get("warnings") or []
+    checks = snapshot.get("checks") or {}
+    if warnings or any(value is False for value in checks.values()):
+        return "warning"
+    return "pass"
+
+
+def _daily_provider_chain(snapshot: dict, market: str = "CN") -> str:
+    chain = (
+        snapshot.get("provider_fallback_chains", {})
+        .get("chains_by_market", {})
+        .get(market, {})
+        .get("daily", [])
+    )
+    names = [item.get("name") for item in chain if isinstance(item, dict) and item.get("name")]
+    return " > ".join(names)
+
+
+def _data_trust_html(db: Session) -> str:
+    from backend.data.quality import build_data_coverage_snapshot
+
+    snapshot = build_data_coverage_snapshot(db)
+    summary = snapshot.get("summary", {})
+    warnings = snapshot.get("warnings") or []
+    warning_text = ", ".join(str(item.get("code", "")) for item in warnings if item.get("code")) or "none"
+    return (
+        "<ul class=\"meta\">"
+        f"<li><strong>coverage_status:</strong> {html.escape(_coverage_status(snapshot))}</li>"
+        f"<li><strong>latest_price_date:</strong> {html.escape(str(summary.get('latest_price_date') or ''))}</li>"
+        f"<li><strong>warning_count:</strong> {len(warnings)}</li>"
+        f"<li><strong>warnings:</strong> {html.escape(warning_text)}</li>"
+        f"<li><strong>CN daily provider chain:</strong> {html.escape(_daily_provider_chain(snapshot) or 'unavailable')}</li>"
+        "</ul>"
+    )
+
+
 def _postmarket_review_html(db: Session, day: str) -> str:
     signals = (
         db.query(Signal)
@@ -210,6 +247,7 @@ def _postmarket_review_html(db: Session, day: str) -> str:
     signal_table = "\n".join(rows) if rows else '<tr><td colspan="8">当日没有信号。</td></tr>'
     evidence_cards = _evidence_cards_html(signals, names)
     position_review = _position_review_html(db, day)
+    data_trust = _data_trust_html(db)
     rule_version_text = ", ".join(rule_versions)
     profile_text = str(weights.profile or "unknown")
 
@@ -248,6 +286,10 @@ def _postmarket_review_html(db: Session, day: str) -> str:
   <section>
     <h2>摘要</h2>
     <p>{html.escape(summary)}</p>
+  </section>
+  <section>
+    <h2>数据可信度</h2>
+    {data_trust}
   </section>
   <section>
     <h2>当日信号</h2>
@@ -430,15 +472,26 @@ def export_coverage_csv(db: Session = Depends(get_db)) -> Response:
 
     snapshot = build_data_coverage_snapshot(db)
     summary = snapshot.get("summary", {})
+    warnings = snapshot.get("warnings") or []
+    warning_codes = ",".join(str(item.get("code")) for item in warnings if item.get("code"))
+    freshness_contract = snapshot.get("freshness_contract", {})
+    daily_freshness = freshness_contract.get("daily_price", {})
+    intraday_policy = snapshot.get("intraday_zero_network_policy", {})
     snapshot_at = snapshot.get("generated_at") or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
     rows = [
         {"metric": "snapshot_at", "value": snapshot_at},
+        {"metric": "coverage_status", "value": _coverage_status(snapshot)},
+        {"metric": "warning_count", "value": len(warnings)},
+        {"metric": "warning_codes", "value": warning_codes},
         {"metric": "active_stocks", "value": summary.get("active_stocks", "")},
         {"metric": "price_covered", "value": summary.get("price_covered", "")},
         {"metric": "two_year_price_covered", "value": summary.get("two_year_price_covered", "")},
         {"metric": "financial_covered", "value": summary.get("financial_covered", "")},
         {"metric": "news_24h_covered", "value": summary.get("news_24h_covered", "")},
         {"metric": "latest_price_date", "value": summary.get("latest_price_date", "")},
+        {"metric": "daily_provider_chain_CN", "value": _daily_provider_chain(snapshot)},
+        {"metric": "freshness_contract_daily_price", "value": daily_freshness.get("intraday_policy", "")},
+        {"metric": "intraday_remote_fetch_allowed", "value": intraday_policy.get("remote_fetch_allowed", "")},
         {"metric": "signals_count", "value": summary.get("signals_count", "")},
         {"metric": "signals_first_date", "value": summary.get("signals_first_date", "")},
         {"metric": "signals_latest_date", "value": summary.get("signals_latest_date", "")},

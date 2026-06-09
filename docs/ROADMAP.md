@@ -103,23 +103,27 @@ Stop conditions:
 
 ---
 
-## M47 数据与证据可信度：lookahead 常驻化 + 健康可见【planned / P1】
+## M47 数据与证据可信度：lookahead 常驻化 + 健康可见【complete】
 
 Trigger: M46.5 audit口径 stable. Goal: turn the one-time leakage audit into a
 repeatable gate, and make data trust visible in the UI.
 
-Open tasks:
+Completed tasks:
 
-- [ ] Integrate `mingcang evidence lookahead-check` as a standing CLI that
+- [x] Integrate `mingcang evidence lookahead-check` as a standing CLI that
   re-runs the M46.5 checks on demand and on sample/demo data.
-- [ ] Surface data coverage / provider fallback / freshness in the frontend so a
+- [x] Surface data coverage / provider fallback / freshness in the frontend so a
   user can see WHY a signal is or isn't trustworthy.
-- [ ] Wire results into data coverage / FEATURE_MAP / review export.
-- [ ] Record an explicit open decision: do we ever re-activate the dormant
+- [x] Wire results into data coverage / FEATURE_MAP / review export.
+- [x] Record an explicit open decision: do we ever re-activate the dormant
   "brain" (quant weight, Kronos, Atlas, non-promoted alpha)? This round: NO
   (consistent with non-promoting gates). But log it as a decision, not a default
   drift. The M29 IC/ICIR/monotonic-bucket/fresh-sample gate is the reactivation
   path if it ever happens.
+
+Decision recorded: no dormant-brain reactivation in M47. Quant weight, Kronos,
+Atlas overlays, and non-promoted alpha remain dormant / shadow-only until the
+M29 promotion gate passes and the user explicitly confirms the reactivation.
 
 Acceptance:
 

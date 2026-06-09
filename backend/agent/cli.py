@@ -156,6 +156,18 @@ def _command_global_data(args: argparse.Namespace) -> dict:
     )
 
 
+def _command_evidence_lookahead_check(args: argparse.Namespace) -> dict:
+    _read_guard(args)
+    from backend.evidence.lookahead import run_lookahead_check_for_database_url
+
+    return _with_read_only_memory_usage(
+        lambda: run_lookahead_check_for_database_url(
+            as_of=args.as_of,
+            demo_mode=args.demo,
+        )
+    )
+
+
 def _command_action(args: argparse.Namespace) -> dict:
     from backend.agent.action_registry import get_action_definition
 
@@ -331,6 +343,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="quote/kline/fundamentals/filings/options/capital_flow/tools_fallback",
     )
     global_data.set_defaults(handler=_command_global_data)
+
+    evidence = subparsers.add_parser(
+        "evidence",
+        help="read evidence trust checks",
+    )
+    evidence_subparsers = evidence.add_subparsers(dest="evidence_command", required=True)
+    lookahead = evidence_subparsers.add_parser(
+        "lookahead-check",
+        help="run the standing read-only lookahead trust check",
+    )
+    lookahead.add_argument("--as-of", help="optional YYYY-MM-DD evidence date")
+    lookahead.add_argument("--demo", action="store_true", help="mark this check as running against demo/sample data")
+    lookahead.set_defaults(handler=_command_evidence_lookahead_check)
 
     action = subparsers.add_parser(
         "action",

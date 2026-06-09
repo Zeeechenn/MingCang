@@ -22,6 +22,7 @@ documented patch is `v0.3.1` trust/onboarding cleanup in `CHANGELOG.md`.
 | Kronos | disabled for production |
 | M46.5 | complete: one-time lookahead audit found warning-only gaps, no blockers; frontend key-number display tests added |
 | M46 | complete: docs_public router/manual/feature map + no-key demo first-screen data |
+| M47 | complete: `mingcang evidence lookahead-check` productized; coverage snapshot warnings/freshness/provider chain visible in API, UI, and export |
 | M45 | complete: source-gated research-positioning tools; future work is guardrail-only |
 | M44 / Atlas | complete and dormant: `9820143` is in `origin/main`; Atlas/test4 Stage 2b signal-overlay shadow starter exists; `ATLAS_ENABLED=false` |
 | M29 | routine read-only: forward evidence and residual attribution remain non-promoting |
@@ -55,7 +56,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 | Workstream | First action | Stop condition |
 |---|---|---|
-| M47 evidence trust | Productize the M46.5 audit as `mingcang evidence lookahead-check` and surface data trust/freshness in UI/export/docs | Keep warnings disclosure-only; blocked checks must not auto-promote or auto-change official signals |
+| M48 frontend reliability | Type first API responses and migrate critical cards/pages in small slices | A changed signal/review/position/coverage field should surface at type or test layer; no big-bang migration |
 | M45 research-positioning follow-up | Use dry-run-first importer / scoreboard only with direct source fidelity | Do not promote trusted memory, official signals, production profile, scheduler, test2, stops, sizing, or positions |
 | M29 forward evidence | Run readiness checks read-only before any shadow bundle | Stop if fresh coverage is incomplete or if a change would re-enable quant / Kronos / production scoring |
 | M32 hypothesis bridge | Start only after review data is thick enough | Output falsifiable theses, not Strong Buy labels |
