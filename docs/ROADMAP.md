@@ -9,7 +9,7 @@
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
 | M46.5 正确性底线 | complete：一次性审计已完成，真实库为 warning-only / no blockers；前端关键数字显示已有纯函数测试兜底 | M47 接手常驻化：`mingcang evidence lookahead-check`、lineage / provenance 可见化、UI/export 披露 | warning 不影响正式信号；blocked 仍不得自动 promotion；一次性审计不作为产品入口 |
-| M46 用户可发现性与上手路径 | P1：0.3.1 可信度补丁已完成并通过完整 verify；子 agent 零背景试用发现入口分流、demo 前端、英文 README、功能地图仍需收口 | 先把 GitHub 首页做成极简分流器，再补任务型 `docs/USER_GUIDE.md` 与状态型 `docs/FEATURE_MAP.md` | 不把 README 变成大而全文档；不把维护者路线图当普通用户下一步 |
+| M46 用户可发现性与上手路径 | complete：README 保持极简分流器，`docs_public` 已有任务手册 / 功能地图 / walkthrough，demo 首屏有信号、行情和示例持仓 | 后续只按用户反馈补截图或微调导航 | 不把 README 变成大而全文档；不把维护者路线图当普通用户下一步 |
 | M45 研究定位落地 | 主体完成：source-gated importer、falsification scoreboard、模块分诊、Stage 2b shadow 预注册都已落地；后续只保留守门合同 | 后续导入仍先 dry-run + source fidelity review；Stage 2b 只做 non-promoting shadow | 不复活 quant、不改 production profile、不让未过门 alpha 影响真实决策 |
 | M44 Atlas 合并 | complete / dormant：`9820143` 已包含在 `origin/main`；Atlas/test4 Stage 2b signal-overlay shadow starter 已可用；`ATLAS_ENABLED=false` | 只用 `backend.tools.atlas_test4_stage2b_shadow` 做 non-promoting shadow accrual；exit overlay 另走单独任务 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
 | M29 Forward Evidence | routine read-only check；所有 alpha 证据仍 non-promoting，fresh forward coverage 尚未 ready | 只读跑 `backend.tools.m29_forward_readiness --db-url ...`；ready 后才追加 1d/3d/5d shadow + ledger | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
@@ -17,7 +17,7 @@
 
 ---
 
-## M46 用户可发现性与上手路径【P1】
+## M46 用户可发现性与上手路径【complete】
 
 Current fact pattern:
 
@@ -26,13 +26,13 @@ Current fact pattern:
 
 Decision: keep `README.md` / `README_EN.md` as thin GitHub routers; put task walkthroughs in `docs/USER_GUIDE.md`; put capability boundaries and key/provider needs in `docs/FEATURE_MAP.md`; keep architecture/roadmap as depth docs.
 
-Open tasks:
+Completed tasks:
 
-- [ ] Enrich demo data so the first frontend screen does not look like an empty production database: add at least one latest signal / price row if it can be done without touching real data or production providers.
+- [x] Enrich demo data so the first frontend screen does not look like an empty production database: demo seed now adds sample prices, latest signals, CSI 300 rows, and one demo position without touching real data or production providers.
 - [x] Rework public docs into docs-site shape under `docs_public/`: `index.md`, `USER_GUIDE.md`, `FEATURE_MAP.md`, `DEVELOPER_GUIDE.md`, `REFERENCE.md`, and `mkdocs.yml`.
 - [x] Create `docs_public/FEATURE_MAP.md` with per-feature explanations, entry points, status, side effects, signal impact, and key/provider requirements.
-- [ ] Review docs navigation after user feedback; add screenshots, expected-output snippets, and a 15-minute walkthrough.
-- [ ] Slim README after the two docs exist: keep architecture in the lower half or link out when it distracts from first use.
+- [x] Review docs navigation after user feedback; add screenshots, expected-output snippets, and a 15-minute walkthrough.
+- [x] Slim README after the two docs exist: README stays as a thin GitHub router and links deeper user/developer docs.
 
 Stop conditions:
 

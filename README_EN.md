@@ -46,7 +46,7 @@ cd MingCang
 make demo        # seed mock data, then start backend + frontend
 ```
 
-Open <http://127.0.0.1:5173>. The first screen shows 3 sample stocks; the demo database also includes one Zhongji Innolight long-term thesis, one review case, and one pending memory-promotion candidate for the full loop that the user guide will walk through. The backend health check is at <http://127.0.0.1:8000/health>. Press `Ctrl+C` to stop the demo.
+Open <http://127.0.0.1:5173>. The first screen shows 3 sample stocks, latest signals, a CSI 300 sample market row, and one Zhongji Innolight demo position. The demo database also includes one Zhongji Innolight long-term thesis, one review case, and one pending memory-promotion candidate for the full loop in the [User Guide](docs_public/USER_GUIDE.md). The backend health check is at <http://127.0.0.1:8000/health>. Press `Ctrl+C` to stop the demo.
 
 ![MingCang frontend preview: watchlist pulse page](docs/assets/screenshot-watchlist.png)
 

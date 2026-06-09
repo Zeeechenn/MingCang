@@ -15,7 +15,7 @@
 
 | 功能 | 功能说明 | 入口 | 状态 | 写入/信号/Key |
 |---|---|---|---|---|
-| Demo 启动 | 创建示例数据库并启动后端与前端，让用户不用配置 key 就能体验产品。 | `make demo`, `mingcang demo` | 常用 | 写 demo DB；不影响真实信号；不需要 key。 |
+| Demo 启动 | 创建示例数据库并启动后端与前端，让用户不用配置 key 就能体验首页信号、行情、示例持仓、复盘和记忆候选。 | `make demo`, `mingcang demo` | 常用 | 写 demo DB；不影响真实信号；不需要 key。 |
 | 安装脚本 | 安装命令行入口和本地运行环境。 | `scripts/install.sh` | 常用 | 写本机环境；不写交易数据。 |
 | 开发启动 | 启动 FastAPI 后端和 Vite 前端。 | `make dev`, `cd frontend && npm run dev` | 维护者 | 本地服务；不改信号。 |
 | 健康检查 | 检查 DB、agent mode、watchlist、positions、memory 摘要是否可读。 | `mingcang doctor`, `backend.agent.cli health` | 常用/只读 | 不写入；不需要 key。 |
