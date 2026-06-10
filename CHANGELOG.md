@@ -6,15 +6,18 @@
 
 ---
 
-## [Unreleased] M50 research source-gate follow-up（local）
+## [v0.3.4] Research source-gate hardening（2026-06-10）
 
 ### Added
 - `ai_supply_chain` template now preserves `chain_layers`, `source_tier`,
   `substitute_risk`, and `source_freshness` while keeping
   `observe_only=True`, `signal_impact=none`, and `not_a_buy_score=True`.
-- M45 importer / hook-update / falsification-scoreboard source gates now carry
+- Research-positioning importer / hook-update / falsification-scoreboard source gates now carry
   `source_tier` and `evidence_level`, and execute mode refuses social-only
   evidence or `needs_check` evidence.
+
+### Changed
+- Package, API, frontend, and lockfile version surfaces now align on `0.3.4`.
 
 ### Safety
 - No official signal, scheduler, test2, position, production-weight, or trusted

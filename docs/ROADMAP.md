@@ -8,9 +8,10 @@
 
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
-| M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 local done：SKILL/spec/Serenity/ResearchReportGate + `ai_supply_chain` source-tier fields + M45 importer/scoreboard source gate 均已落地；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
+| M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 complete/released：SKILL/spec/Serenity/ResearchReportGate + `ai_supply_chain` source-tier fields + research-positioning importer/scoreboard source gate 均已落地；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
 | M29 Forward Evidence | active / blocked for now：2026-06-09 只读 readiness 显示 `ready_to_run_forward_shadow=false`；100 标的完整覆盖只到 2026-06-02，1d/3d/5d 既有 forward artifacts 缺失 | 先只读/preview 诊断覆盖和 baseline artifact 缺口；ready 后才追加 1d/3d/5d shadow + ledger | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
-| v0.3.3 / 0.4-1.0 收尾 | complete：首次启动引导、数据健康页、per-signal rule/provenance 展示、离线复现证据、provider 插件示例、API contract、CI/dependency 硬门禁已落地；`main == origin/main`，HEAD 为 `v0.3.3` | 后续先做 M29 evidence ops 或用户反馈驱动的文档/界面微调；不要从 0.3.3 产品化收尾推出新信号行为 | 不改 production profile、不复活 quant/Kronos/Atlas、不把 demo/community 入口接到真实决策 |
+| v0.3.4 research source-gate hardening | complete：ResearchReportGate / Serenity foundation、`ai_supply_chain` source-tier metadata、research-positioning importer/scoreboard execute guards 已发布；`main == origin/main` | 后续只在明确需要时补下一批质量门或前端 evidence card | 不改 production profile、不把 source-tier metadata 接到真实决策 |
+| v0.3.3 / 0.4-1.0 收尾 | complete：首次启动引导、数据健康页、per-signal rule/provenance 展示、离线复现证据、provider 插件示例、API contract、CI/dependency 硬门禁已落地；release tag 为 `v0.3.3` | 后续先做 M29 evidence ops 或用户反馈驱动的文档/界面微调；不要从 0.3.3 产品化收尾推出新信号行为 | 不改 production profile、不复活 quant/Kronos/Atlas、不把 demo/community 入口接到真实决策 |
 | M49 工具入口与可观测性 | complete：tools registry、`mingcang tools`、historical tools read/write 边界、correlation id 链路已落地 | 后续只按实际维护需要补 registry 或入口说明 | 不改变 signal、scheduler、production profile、memory promotion 行为 |
 | M46-M48 可信/可发现/前端可靠性 | complete：M46 demo/docs_public，M46.5 warning-only/no-blocker 审计与关键数字测试，M47 standing lookahead/data trust visibility，M48 TS/API/status primitive 基线均已收口 | 后续只按用户反馈补截图、说明或小型可靠性测试 | warning 不影响正式信号；blocked 仍不得自动 promotion；不把 README 变成大而全文档 |
 | M45 研究定位落地 | 主体完成：source-gated importer、falsification scoreboard、模块分诊、Stage 2b shadow 预注册都已落地；后续只保留守门合同 | 后续导入仍先 dry-run + source fidelity review；Stage 2b 只做 non-promoting shadow | 不复活 quant、不改 production profile、不让未过门 alpha 影响真实决策 |
@@ -19,7 +20,7 @@
 
 ---
 
-## M50 Serenity 瓶颈研究 skill + UZI 强制报告门【Phase 0-3 local done / next batch optional / non-promoting】
+## M50 Serenity 瓶颈研究 skill + UZI 强制报告门【Phase 0-3 released / next batch optional / non-promoting】
 
 Goal: 补两块研究方法真空 —— Serenity 风格供应链瓶颈拆解 + 证据分层纪律（借鉴 A老师"SKILL.md + 结构化 LLM 输出"的工程模式，但**不接入长期标签聚合**），以及 UZI 风格的**输出侧强制报告门**（检查不过的报告物理上写不出）。两者配套：Serenity 产检查项，Gate 负责强制执行。全程 observe-only / source-gated / non-promoting。来源是两份外部 skill 学习报告（Serenity 系列 S1–S8 + UZI）。
 
@@ -95,6 +96,7 @@ Detailed history is intentionally not repeated here. Read `CHANGELOG.md` for:
 
 - M46 onboarding/demo clarity and user-discovery follow-up.
 - M46.5–M48 correctness floor (lookahead one-time audit + key-number display tests), standing `lookahead-check` + data-trust visibility, and frontend TS/API/primitive reliability.
+- v0.3.4 research source-gate hardening.
 - v0.3.3 productization, reproducible evidence, community entry, and stability hardening.
 - M49 tools registry / observability.
 - M45 source-gated research positioning, importer, scoreboard, and Stage 2b shadow preregistration.

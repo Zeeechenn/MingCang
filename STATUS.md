@@ -8,9 +8,9 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.3.3`; the latest
-documented patch is `v0.3.3` productization, reproducible-evidence, community
-entry, and stability hardening in `CHANGELOG.md`.
+Current release surface: package/API/frontend versions are `0.3.4`; the latest
+documented patch is `v0.3.4` research source-gate hardening in
+`CHANGELOG.md`.
 
 ## Current State
 
@@ -21,7 +21,8 @@ entry, and stability hardening in `CHANGELOG.md`.
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
-| M50 | local complete through Phase 3: Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and M45 importer/scoreboard source gates; non-promoting |
+| v0.3.4 | complete: non-promoting Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and research-positioning importer/scoreboard source gates |
+| M50 | complete/released through Phase 3: Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and research-positioning importer/scoreboard source gates; non-promoting |
 | v0.3.3 | complete: first-run wizard, data health page, per-signal provenance, reproducible evidence path, community provider example, API contract, and stricter CI/dependency gates |
 | M49 | complete: retained backend tools classified with purpose/read-write boundaries; `mingcang tools` JSON entry added; request/export/memory-candidate correlation IDs wired |
 | M46.5 | complete: one-time lookahead audit found warning-only gaps, no blockers; frontend key-number display tests added |
@@ -61,7 +62,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 | Workstream | First action | Stop condition |
 |---|---|---|
-| M50 research gate follow-up | Phase 0-3 is locally complete; only start next-batch quality gates or frontend evidence cards when explicitly scoped | Do not connect Serenity, source tiers, or importer metadata to official signals, labels, scheduler, test2, positions, or production weights |
+| M50 research gate follow-up | Phase 0-3 is complete/released; only start next-batch quality gates or frontend evidence cards when explicitly scoped | Do not connect Serenity, source tiers, or importer metadata to official signals, labels, scheduler, test2, positions, or production weights |
 | M29 forward evidence ops | First fix or diagnose readiness blockers: full 100-symbol coverage after 2026-06-02 and recognizable 1d/3d/5d baseline artifacts are missing | Stop if fresh coverage is incomplete, artifacts are partial, or a change would re-enable quant / Kronos / production scoring |
 | M45 research-positioning follow-up | Use dry-run-first importer / scoreboard only with direct source fidelity | Do not promote trusted memory, official signals, production profile, scheduler, test2, stops, sizing, or positions |
 | M32 hypothesis bridge | Start only after review data is thick enough; current local DB has only a small seed set (`review_cases=2`, `forward_theses=2` as of 2026-06-09) | Output falsifiable theses, not Strong Buy labels |
@@ -83,10 +84,10 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate for v0.3.3 on 2026-06-09:
-ruff passed, mypy passed, backend pytest `1115 passed, 5 skipped`, frontend
-node tests `33 passed`, Vite build passed, followed by the `v0.3.3`
-lock/docs-public CI fix at HEAD.
+Last full recorded gate for v0.3.4 on 2026-06-10:
+ruff passed, mypy passed, backend pytest `1200 passed, 5 skipped`, frontend
+node tests `33 passed`, Vite build passed, followed by a green GitHub CI run
+on `main`.
 
 For release-quality work, treat `make verify` as the canonical gate.
 

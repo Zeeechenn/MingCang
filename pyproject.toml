@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mingcang"
-version = "0.3.3"
+version = "0.3.4"
 description = "明仓 / MingCang：个人 A 股研究循环工作台——进口假设、证伪、归因、记忆更新"
 readme = "README.md"
 requires-python = ">=3.11"
