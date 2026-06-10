@@ -104,10 +104,14 @@ class TestResearchPriorityBand:
     """F10: ResearchPriorityBand StrEnum collects all band values."""
 
     def test_enum_values_exist(self):
+        assert [band.value for band in ResearchPriorityBand] == [
+            "够查",
+            "暂缓",
+            "证据不足",
+        ]
         assert ResearchPriorityBand.insufficient.value == "证据不足"
         assert ResearchPriorityBand.sufficient.value == "够查"
-        assert ResearchPriorityBand.watchlist.value == "观察"
-        assert ResearchPriorityBand.high_priority.value == "高优先"
+        assert ResearchPriorityBand.watchlist.value == "暂缓"
 
     def test_insufficient_equals_bare_string(self):
         """StrEnum: enum value must compare equal to its string literal."""

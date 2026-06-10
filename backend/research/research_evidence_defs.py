@@ -35,9 +35,8 @@ class ResearchPriorityBand(StrEnum):
     """
 
     sufficient = "够查"          # Evidence sufficient to proceed with research
-    watchlist = "观察"           # Borderline — add to watchlist, revisit later
+    watchlist = "暂缓"           # Borderline — add to watchlist, revisit later
     insufficient = "证据不足"    # Evidence too thin to support a research memo
-    high_priority = "高优先"     # Strong chokepoint signal, prioritise immediately
 
 
 # Strength order: primary > official > filing > ir > industry > social_lead
