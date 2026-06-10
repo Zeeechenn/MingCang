@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.research.research_evidence_defs import SourceTier
+
 SCHEMA_VERSION = "ai_supply_chain.v1"
 TEMPLATE_NAME = "ai_supply_chain"
 SIGNAL_IMPACT_NONE = "none"
@@ -32,6 +34,10 @@ CHAIN_FIELDS = (
     "profit_pool",
     "pricing_gap",
 )
+SOURCE_TIER_VALUES = {tier.value for tier in SourceTier}
+SOURCE_TIER_ALIASES = {
+    "social": SourceTier.social_lead.value,
+}
 
 
 def _as_str(value: Any) -> str:
@@ -59,6 +65,75 @@ def _unique_strings(values: Any) -> list[str]:
     return result
 
 
+def _normalize_source_tier(value: Any, *, field: str = "source_tier") -> str | None:
+    text = _as_str(value).lower()
+    if not text:
+        return None
+    text = SOURCE_TIER_ALIASES.get(text, text)
+    if text not in SOURCE_TIER_VALUES:
+        raise ValueError(
+            f"{field} must be one of {sorted(SOURCE_TIER_VALUES)}; got {value!r}"
+        )
+    return text
+
+
+def _normalize_optional_bool(raw: dict[str, Any], field: str) -> bool | None:
+    value = raw.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ValueError(f"chain_layers.{field} must be a boolean")
+    return value
+
+
+def _normalize_chain_layers(layers: Any) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for raw in _as_list(layers):
+        if not isinstance(raw, dict):
+            continue
+        layer = _as_str(raw.get("layer"))
+        if not layer:
+            continue
+        item: dict[str, Any] = {"layer": layer}
+        for field in ("forced_demand", "size_mismatch", "no_substitute"):
+            value = _normalize_optional_bool(raw, field)
+            if value is not None:
+                item[field] = value
+        outside_voice = _as_str(raw.get("outside_voice"))
+        if outside_voice:
+            item["outside_voice"] = outside_voice
+        evidence = _as_str(raw.get("evidence"))
+        if evidence:
+            item["evidence"] = evidence
+        linked_symbols = _unique_strings(raw.get("linked_symbols"))
+        if linked_symbols:
+            item["linked_symbols"] = linked_symbols
+        source_tier = _normalize_source_tier(raw.get("source_tier"), field="chain_layers.source_tier")
+        if source_tier:
+            item["source_tier"] = source_tier
+        normalized.append(item)
+    return normalized
+
+
+def _normalize_source_freshness(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("source_freshness must be an object")
+    normalized: dict[str, Any] = {}
+    for field in ("as_of", "latest_source_date", "status", "notes"):
+        text = _as_str(value.get(field))
+        if text:
+            normalized[field] = text
+    for field in ("max_source_age_days", "stale_source_count"):
+        if value.get(field) is None:
+            continue
+        if not isinstance(value[field], int) or value[field] < 0:
+            raise ValueError(f"source_freshness.{field} must be a non-negative integer")
+        normalized[field] = value[field]
+    return normalized
+
+
 def _ensure_no_forbidden_keys(value: Any, *, path: str = "template_payload") -> None:
     if isinstance(value, dict):
         for key, nested in value.items():
@@ -82,6 +157,10 @@ def _normalize_evidence_cards(cards: Any) -> list[dict[str, Any]]:
         normalized.append({
             "claim": claim,
             "source": _as_str(raw.get("source")) or None,
+            "source_tier": _normalize_source_tier(
+                raw.get("source_tier"),
+                field="evidence_cards.source_tier",
+            ),
             "source_date": _as_str(raw.get("source_date")) or None,
             "status": _as_str(raw.get("status")) or "unverified",
             "gap": _as_str(raw.get("gap")) or None,
@@ -129,6 +208,10 @@ def normalize_ai_supply_chain_payload(payload: dict[str, Any] | None) -> dict[st
         "signal_impact": SIGNAL_IMPACT_NONE,
         "not_a_buy_score": True,
         "chain": chain,
+        "chain_layers": _normalize_chain_layers(raw.get("chain_layers")),
+        "source_tier": _normalize_source_tier(raw.get("source_tier")),
+        "substitute_risk": _as_str(raw.get("substitute_risk")) or None,
+        "source_freshness": _normalize_source_freshness(raw.get("source_freshness")),
         "catalysts": {
             "30d": _unique_strings(catalysts.get("30d") or raw.get("catalysts_30d")),
             "90d": _unique_strings(catalysts.get("90d") or raw.get("catalysts_90d")),
@@ -166,6 +249,7 @@ def forward_thesis_fields_from_payload(payload: dict[str, Any]) -> dict[str, lis
             "ref": card.get("source") or card.get("claim"),
             "as_of": card.get("source_date"),
             "summary": card.get("claim"),
+            "source_tier": card.get("source_tier") or payload.get("source_tier"),
         })
     return {
         "evidence_manifest": manifest,

@@ -20,6 +20,8 @@ def _item(**overrides):
         "source_ref": "m45-scoreboard-300308-2026-06-05-falsification",
         "source_url": "local://m45/falsification-scoreboard/2026-06-05",
         "source_kind": "direct_source",
+        "source_tier": "filing",
+        "evidence_level": "verified",
         "source_verified": True,
         "source_verified_by": "tester",
         "thesis_ref": "ateacher-2026-06-05-optical",
@@ -321,6 +323,51 @@ def test_m45_falsification_scoreboard_execute_requires_direct_source_kind(test_d
 
     with pytest.raises(ValueError, match="source_kind_not_direct_source"):
         execute_scoreboard(test_db, [normalize_item(_item(source_kind="handoff_context"))], execute=True)
+
+    assert test_db.query(ReviewCase).count() == 0
+
+
+def test_m45_falsification_scoreboard_execute_rejects_derived_summary_source_kind(test_db):
+    from backend.data.database import ReviewCase
+    from backend.tools.m45_falsification_scoreboard import (
+        execute_scoreboard,
+        normalize_item,
+    )
+
+    _seed_forward_thesis(test_db)
+
+    with pytest.raises(ValueError, match="source_kind_not_direct_source"):
+        execute_scoreboard(test_db, [normalize_item(_item(source_kind="derived_summary"))], execute=True)
+
+    assert test_db.query(ReviewCase).count() == 0
+
+
+def test_m45_falsification_scoreboard_execute_rejects_social_only_source_tier(test_db):
+    from backend.data.database import ReviewCase
+    from backend.tools.m45_falsification_scoreboard import (
+        execute_scoreboard,
+        normalize_item,
+    )
+
+    _seed_forward_thesis(test_db)
+
+    with pytest.raises(ValueError, match="source_tier_social_only"):
+        execute_scoreboard(test_db, [normalize_item(_item(source_tier="social_lead"))], execute=True)
+
+    assert test_db.query(ReviewCase).count() == 0
+
+
+def test_m45_falsification_scoreboard_execute_rejects_needs_check_evidence_level(test_db):
+    from backend.data.database import ReviewCase
+    from backend.tools.m45_falsification_scoreboard import (
+        execute_scoreboard,
+        normalize_item,
+    )
+
+    _seed_forward_thesis(test_db)
+
+    with pytest.raises(ValueError, match="evidence_level_needs_check"):
+        execute_scoreboard(test_db, [normalize_item(_item(evidence_level="needs_check"))], execute=True)
 
     assert test_db.query(ReviewCase).count() == 0
 

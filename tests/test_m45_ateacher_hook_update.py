@@ -11,6 +11,8 @@ def _hook_update(**overrides):
         "source_ref": "ateacher-hook-2026-06-06-mrvl-connectivity",
         "source_url": "local://a-teacher/hook/2026-06-06",
         "source_kind": "direct_source",
+        "source_tier": "filing",
+        "evidence_level": "verified",
         "source_verified": True,
         "source_verified_by": "tester",
         "as_of": "2026-06-06",
@@ -81,3 +83,21 @@ def test_m45_ateacher_hook_update_rejects_trading_fields():
 
     with pytest.raises(ValueError, match="forbidden trading fields"):
         normalize_hook_update(_hook_update(price_target=88.0))
+
+
+def test_m45_ateacher_hook_update_execute_inherits_source_gate(test_db):
+    import pytest
+
+    from backend.data.database import ForwardThesis
+    from backend.memory.l0_memory import list_memory_atoms
+    from backend.tools.m45_ateacher_hook_update import execute_hook_updates, normalize_hook_update
+
+    with pytest.raises(ValueError, match="evidence_level_needs_check"):
+        execute_hook_updates(
+            test_db,
+            [normalize_hook_update(_hook_update(evidence_level="needs_check"))],
+            execute=True,
+        )
+
+    assert test_db.query(ForwardThesis).count() == 0
+    assert list_memory_atoms(test_db, include_archived=True) == []

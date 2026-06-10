@@ -21,6 +21,7 @@ entry, and stability hardening in `CHANGELOG.md`.
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
+| M50 | local complete through Phase 3: Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and M45 importer/scoreboard source gates; non-promoting |
 | v0.3.3 | complete: first-run wizard, data health page, per-signal provenance, reproducible evidence path, community provider example, API contract, and stricter CI/dependency gates |
 | M49 | complete: retained backend tools classified with purpose/read-write boundaries; `mingcang tools` JSON entry added; request/export/memory-candidate correlation IDs wired |
 | M46.5 | complete: one-time lookahead audit found warning-only gaps, no blockers; frontend key-number display tests added |
@@ -60,7 +61,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 | Workstream | First action | Stop condition |
 |---|---|---|
-| post-v0.3.3 status sync | complete this doc/router calibration and keep future handoffs anchored on `v0.3.3` truth | Do not invent new production behavior from completed productization work |
+| M50 research gate follow-up | Phase 0-3 is locally complete; only start next-batch quality gates or frontend evidence cards when explicitly scoped | Do not connect Serenity, source tiers, or importer metadata to official signals, labels, scheduler, test2, positions, or production weights |
 | M29 forward evidence ops | First fix or diagnose readiness blockers: full 100-symbol coverage after 2026-06-02 and recognizable 1d/3d/5d baseline artifacts are missing | Stop if fresh coverage is incomplete, artifacts are partial, or a change would re-enable quant / Kronos / production scoring |
 | M45 research-positioning follow-up | Use dry-run-first importer / scoreboard only with direct source fidelity | Do not promote trusted memory, official signals, production profile, scheduler, test2, stops, sizing, or positions |
 | M32 hypothesis bridge | Start only after review data is thick enough; current local DB has only a small seed set (`review_cases=2`, `forward_theses=2` as of 2026-06-09) | Output falsifiable theses, not Strong Buy labels |

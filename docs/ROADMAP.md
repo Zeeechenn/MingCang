@@ -8,7 +8,7 @@
 
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
-| M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-1 done：SKILL.md + spec + 共享定义 + Serenity 结构化器（默认关）+ ResearchReportGate + deep_research 写前挂点 + 测试均已落地（50 M50 测试 green；structlog 未装故全量 verify 待补环境）。**Phase 2 next** | 下一步：Phase 2 扩 ai_supply_chain 模板（chain_layers/source_tier/substitute_risk/source_freshness）→ Phase 3 M45 importer source gate 增强 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
+| M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 local done：SKILL/spec/Serenity/ResearchReportGate + `ai_supply_chain` source-tier fields + M45 importer/scoreboard source gate 均已落地；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
 | M29 Forward Evidence | active / blocked for now：2026-06-09 只读 readiness 显示 `ready_to_run_forward_shadow=false`；100 标的完整覆盖只到 2026-06-02，1d/3d/5d 既有 forward artifacts 缺失 | 先只读/preview 诊断覆盖和 baseline artifact 缺口；ready 后才追加 1d/3d/5d shadow + ledger | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
 | v0.3.3 / 0.4-1.0 收尾 | complete：首次启动引导、数据健康页、per-signal rule/provenance 展示、离线复现证据、provider 插件示例、API contract、CI/dependency 硬门禁已落地；`main == origin/main`，HEAD 为 `v0.3.3` | 后续先做 M29 evidence ops 或用户反馈驱动的文档/界面微调；不要从 0.3.3 产品化收尾推出新信号行为 | 不改 production profile、不复活 quant/Kronos/Atlas、不把 demo/community 入口接到真实决策 |
 | M49 工具入口与可观测性 | complete：tools registry、`mingcang tools`、historical tools read/write 边界、correlation id 链路已落地 | 后续只按实际维护需要补 registry 或入口说明 | 不改变 signal、scheduler、production profile、memory promotion 行为 |
@@ -19,7 +19,7 @@
 
 ---
 
-## M50 Serenity 瓶颈研究 skill + UZI 强制报告门【Phase 0-1 done / Phase 2 next / non-promoting】
+## M50 Serenity 瓶颈研究 skill + UZI 强制报告门【Phase 0-3 local done / next batch optional / non-promoting】
 
 Goal: 补两块研究方法真空 —— Serenity 风格供应链瓶颈拆解 + 证据分层纪律（借鉴 A老师"SKILL.md + 结构化 LLM 输出"的工程模式，但**不接入长期标签聚合**），以及 UZI 风格的**输出侧强制报告门**（检查不过的报告物理上写不出）。两者配套：Serenity 产检查项，Gate 负责强制执行。全程 observe-only / source-gated / non-promoting。来源是两份外部 skill 学习报告（Serenity 系列 S1–S8 + UZI）。
 
@@ -36,8 +36,8 @@ Phases:
 0. ✅ done — 纯文档/prompt，零代码：`serenity-chokepoint/SKILL.md`（瓶颈分层 / quick filter 分层 / source tier / A股 source playbook / 贝叶斯追踪 / 反方先行 QA）+ Gate 检查清单 spec + 共享定义；固态电池主题人工试跑通过（证据/叙事/风险分清、零买卖语气、媒体-only 判 blocked）。
 1. ✅ done — 独立 Serenity 结构化器（flag 默认 False，不写 DB，不接 LongTermTeam）+ `research_evidence_defs.py` + `research_report_gate.py` + `deep_research` 写前挂点；50 M50 测试 green（schema 不生成 score/vote、Gate blocked 不落盘、聚合隔离均覆盖）。
    - ✅ Phase 1 收尾 done：① 数据覆盖最终定为 **warning（永不 blocked）**——gate 接真实 prices/financials，纯主题(symbols=[])不罚，理由见 spec §3；② blocked 报告经新增 `DeepResearchReport.gate_status` 字段区分（不靠 path.exists）。70 M50 测试 green、lint/mypy clean。
-2. 扩 `ai_supply_chain_template.py`：加 `chain_layers` / `source_tier` / `substitute_risk` / `source_freshness`；新合法字段**不得进** `FORBIDDEN_TEMPLATE_KEYS`；`observe_only/signal_impact/not_a_buy_score` 仍不可覆盖。
-3. M45 importer 现有 source gate **增强（非重写）**：加 `source_tier`（execute 不能只有 social）、`evidence_level != needs_check`；`source_kind=derived_summary`/`handoff_context` 仍只能 dry-run。
+2. ✅ done — 扩 `ai_supply_chain_template.py`：加 `chain_layers` / `source_tier` / `substitute_risk` / `source_freshness`；新合法字段**不得进** `FORBIDDEN_TEMPLATE_KEYS`；`observe_only/signal_impact/not_a_buy_score` 仍不可覆盖。
+3. ✅ done — M45 importer 现有 source gate **增强（非重写）**：加 `source_tier`（execute 不能只有 social）、`evidence_level != needs_check`；`source_kind=derived_summary`/`handoff_context` 仍只能 dry-run。`m45_ateacher_hook_update` 继承 importer gate；`m45_falsification_scoreboard` 同步相同 source-tier / evidence-level guard，避免 M45 旁路漂移。
 
 Not in this batch: research_priority 数字分（用档位防漂移）、TradingAgents 多 agent/checkpoint（重、撞 dormant Atlas、ReviewCase 已覆盖闭环）、QuantDinger action scope 细分（audit 字段加厚/可复现快照留 P2 顺手）、UZI 评委团人格、前端 evidence cards（P2）、Buffett 质量门（P1 下一批，做时须与 piotroski 交叉引用防双重扣分）。
 

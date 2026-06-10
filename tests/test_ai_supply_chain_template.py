@@ -44,6 +44,85 @@ def test_ai_supply_chain_template_normalizes_payload():
     assert result["evidence_cards"][0]["linked_symbols"] == ["300308"]
 
 
+def test_ai_supply_chain_template_normalizes_m50_phase2_fields():
+    from backend.research.ai_supply_chain_template import normalize_ai_supply_chain_payload
+
+    result = normalize_ai_supply_chain_payload({
+        **_payload(),
+        "source_tier": "filing",
+        "substitute_risk": "HBM capacity can be substituted by inventory drawdown",
+        "source_freshness": {
+            "latest_source_date": "2026-06-01",
+            "max_source_age_days": 30,
+            "status": "fresh",
+        },
+        "chain_layers": [{
+            "layer": "HBM supply",
+            "forced_demand": True,
+            "size_mismatch": True,
+            "no_substitute": False,
+            "outside_voice": "company call",
+            "linked_symbols": ["300308"],
+        }],
+        "evidence_cards": [{
+            "claim": "HBM 供需继续紧张",
+            "source": "company_call",
+            "source_tier": "primary",
+            "source_date": "2026-06-01",
+            "linked_symbols": ["300308"],
+        }],
+    })
+
+    assert result["source_tier"] == "filing"
+    assert result["substitute_risk"] == "HBM capacity can be substituted by inventory drawdown"
+    assert result["source_freshness"] == {
+        "latest_source_date": "2026-06-01",
+        "max_source_age_days": 30,
+        "status": "fresh",
+    }
+    assert result["chain_layers"] == [{
+        "layer": "HBM supply",
+        "forced_demand": True,
+        "size_mismatch": True,
+        "no_substitute": False,
+        "outside_voice": "company call",
+        "linked_symbols": ["300308"],
+    }]
+    assert result["evidence_cards"][0]["source_tier"] == "primary"
+
+
+def test_ai_supply_chain_template_rejects_unknown_source_tier():
+    from backend.research.ai_supply_chain_template import normalize_ai_supply_chain_payload
+
+    with pytest.raises(ValueError, match="source_tier"):
+        normalize_ai_supply_chain_payload({**_payload(), "source_tier": "broker_note"})
+
+
+def test_ai_supply_chain_template_safety_flags_cannot_be_overridden():
+    from backend.research.ai_supply_chain_template import normalize_ai_supply_chain_payload
+
+    result = normalize_ai_supply_chain_payload({
+        **_payload(),
+        "observe_only": False,
+        "signal_impact": "buy",
+        "not_a_buy_score": False,
+    })
+
+    assert result["observe_only"] is True
+    assert result["signal_impact"] == "none"
+    assert result["not_a_buy_score"] is True
+
+
+def test_ai_supply_chain_template_rejects_scoring_fields_inside_new_fields():
+    from backend.research.ai_supply_chain_template import normalize_ai_supply_chain_payload
+
+    with pytest.raises(ValueError, match="chain_layers.*position_pct"):
+        normalize_ai_supply_chain_payload({
+            **_payload(),
+            "chain_layers": [{"layer": "HBM", "position_pct": 0.2}],
+        })
+
+
 def test_ai_supply_chain_template_rejects_scoring_fields():
     from backend.research.ai_supply_chain_template import normalize_ai_supply_chain_payload
 

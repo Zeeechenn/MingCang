@@ -17,6 +17,8 @@ def _item(**overrides):
         "source_ref": "ateacher-2026-06-05-optical",
         "source_url": "local://a-teacher/2026-06-05",
         "source_kind": "direct_source",
+        "source_tier": "filing",
+        "evidence_level": "verified",
         "source_verified": True,
         "source_verified_by": "tester",
         "as_of": "2026-06-05",
@@ -47,6 +49,8 @@ def test_m45_ateacher_import_dry_run_does_not_write(test_db):
     assert result["count"] == 1
     assert result["planned"][0]["source_fidelity"] == {
         "source_kind": "direct_source",
+        "source_tier": "filing",
+        "evidence_level": "verified",
         "source_verified": True,
         "source_verified_by": "tester",
         "source_verified_at": None,
@@ -183,6 +187,8 @@ def test_m45_ateacher_import_dry_run_flags_unverified_source(test_db):
     assert result["safety"]["writes_db"] is False
     assert result["planned"][0]["source_fidelity"] == {
         "source_kind": "direct_source",
+        "source_tier": "filing",
+        "evidence_level": "verified",
         "source_verified": False,
         "source_verified_by": "tester",
         "source_verified_at": None,
@@ -221,6 +227,78 @@ def test_m45_ateacher_import_execute_requires_direct_source_kind(test_db):
         execute_import(
             test_db,
             [normalize_item(_item(source_kind="handoff_context"))],
+            execute=True,
+        )
+
+    assert test_db.query(ForwardThesis).count() == 0
+    assert list_memory_atoms(test_db, include_archived=True) == []
+
+
+def test_m45_ateacher_import_execute_rejects_derived_summary_source_kind(test_db):
+    import pytest
+
+    from backend.data.database import ForwardThesis
+    from backend.memory.l0_memory import list_memory_atoms
+    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+
+    with pytest.raises(ValueError, match="source_kind_not_direct_source"):
+        execute_import(
+            test_db,
+            [normalize_item(_item(source_kind="derived_summary"))],
+            execute=True,
+        )
+
+    assert test_db.query(ForwardThesis).count() == 0
+    assert list_memory_atoms(test_db, include_archived=True) == []
+
+
+def test_m45_ateacher_import_execute_rejects_social_only_source_tier(test_db):
+    import pytest
+
+    from backend.data.database import ForwardThesis
+    from backend.memory.l0_memory import list_memory_atoms
+    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+
+    with pytest.raises(ValueError, match="source_tier_social_only"):
+        execute_import(
+            test_db,
+            [normalize_item(_item(source_tier="social_lead"))],
+            execute=True,
+        )
+
+    assert test_db.query(ForwardThesis).count() == 0
+    assert list_memory_atoms(test_db, include_archived=True) == []
+
+
+def test_m45_ateacher_import_execute_rejects_needs_check_evidence_level(test_db):
+    import pytest
+
+    from backend.data.database import ForwardThesis
+    from backend.memory.l0_memory import list_memory_atoms
+    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+
+    with pytest.raises(ValueError, match="evidence_level_needs_check"):
+        execute_import(
+            test_db,
+            [normalize_item(_item(evidence_level="needs_check"))],
+            execute=True,
+        )
+
+    assert test_db.query(ForwardThesis).count() == 0
+    assert list_memory_atoms(test_db, include_archived=True) == []
+
+
+def test_m45_ateacher_import_execute_requires_source_tier(test_db):
+    import pytest
+
+    from backend.data.database import ForwardThesis
+    from backend.memory.l0_memory import list_memory_atoms
+    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+
+    with pytest.raises(ValueError, match="missing_source_tier"):
+        execute_import(
+            test_db,
+            [normalize_item(_item(source_tier=None))],
             execute=True,
         )
 

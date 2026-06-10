@@ -6,6 +6,22 @@
 
 ---
 
+## [Unreleased] M50 research source-gate follow-up（local）
+
+### Added
+- `ai_supply_chain` template now preserves `chain_layers`, `source_tier`,
+  `substitute_risk`, and `source_freshness` while keeping
+  `observe_only=True`, `signal_impact=none`, and `not_a_buy_score=True`.
+- M45 importer / hook-update / falsification-scoreboard source gates now carry
+  `source_tier` and `evidence_level`, and execute mode refuses social-only
+  evidence or `needs_check` evidence.
+
+### Safety
+- No official signal, scheduler, test2, position, production-weight, or trusted
+  memory behavior was changed; the new fields remain non-promoting metadata.
+
+---
+
 ## [v0.3.3] 产品化收尾 + 证据可复现 + 稳定性硬化（2026-06-09）
 
 > **收尾 0.4–1.0 计划遗留项,不改信号。** 把产品化、可复现证据、社区入口和

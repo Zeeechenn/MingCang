@@ -21,6 +21,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.config import settings
+from backend.research.research_evidence_defs import SourceTier
 
 LANES = {
     "falsification",
@@ -70,6 +71,8 @@ SAFETY_FLAGS = {
 
 DEFAULT_JSON_OUTPUT = Path("/private/tmp/stocksage_m45_falsification_scoreboard.json")
 DEFAULT_MARKDOWN_OUTPUT = Path("/private/tmp/stocksage_m45_falsification_scoreboard.md")
+SOURCE_TIER_VALUES = {tier.value for tier in SourceTier}
+SOURCE_TIER_ALIASES = {"social": SourceTier.social_lead.value}
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,8 @@ class ScoreboardItem:
     evidence_ref: str | None = None
     source_url: str | None = None
     source_kind: str | None = None
+    source_tier: str | None = None
+    evidence_level: str | None = None
     source_verified: bool = False
     source_verified_by: str | None = None
     review_payload: dict[str, Any] | None = None
@@ -126,6 +131,16 @@ def _optional_bool(raw: dict[str, Any], field: str) -> bool:
     if not isinstance(value, bool):
         raise ValueError(f"{field} must be a boolean")
     return value
+
+
+def _optional_source_tier(raw: dict[str, Any]) -> str | None:
+    value = _optional_str(raw, "source_tier")
+    if value is None:
+        return None
+    normalized = SOURCE_TIER_ALIASES.get(value.lower(), value.lower())
+    if normalized not in SOURCE_TIER_VALUES:
+        raise ValueError(f"source_tier must be one of {sorted(SOURCE_TIER_VALUES)}")
+    return normalized
 
 
 def _candidate_summary(raw: Any) -> ScoreboardCandidateSummary | None:
@@ -206,6 +221,8 @@ def normalize_item(raw: dict[str, Any]) -> ScoreboardItem:
         evidence_ref=_optional_str(raw, "evidence_ref"),
         source_url=_optional_str(raw, "source_url"),
         source_kind=_optional_str(raw, "source_kind"),
+        source_tier=_optional_source_tier(raw),
+        evidence_level=_optional_str(raw, "evidence_level"),
         source_verified=_optional_bool(raw, "source_verified"),
         source_verified_by=_optional_str(raw, "source_verified_by"),
         review_payload=review_payload,
@@ -235,6 +252,8 @@ def _scoreboard_payload(item: ScoreboardItem) -> dict[str, Any]:
         "evidence_ref": item.evidence_ref,
         "source_url": item.source_url,
         "source_kind": item.source_kind,
+        "source_tier": item.source_tier,
+        "evidence_level": item.evidence_level,
         "source_verified": item.source_verified,
         "source_verified_by": item.source_verified_by,
         "lane": item.lane,
@@ -311,6 +330,12 @@ def _source_fidelity_blockers(item: ScoreboardItem) -> list[str]:
         blockers.append("source_not_verified")
     if item.source_kind != "direct_source":
         blockers.append("source_kind_not_direct_source")
+    if not item.source_tier:
+        blockers.append("missing_source_tier")
+    elif item.source_tier == SourceTier.social_lead.value:
+        blockers.append("source_tier_social_only")
+    if item.evidence_level == "needs_check":
+        blockers.append("evidence_level_needs_check")
     if not item.source_verified_by:
         blockers.append("missing_source_verified_by")
     if not item.source_url and not item.evidence_ref:

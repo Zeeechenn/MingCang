@@ -556,14 +556,16 @@ def test_global_data_context_blocks_cn_price_without_provenance(test_db):
 
 
 def test_global_data_context_blocks_mixed_recent_adjustments(test_db):
-    from datetime import datetime
+    from datetime import date, datetime, timedelta
 
     from backend.data.database import Price
     from backend.data.global_data import build_global_data_context
+    latest_day = date.today().isoformat()
+    previous_day = (date.today() - timedelta(days=1)).isoformat()
 
     test_db.add(Price(
         symbol="300308",
-        date="2026-06-01",
+        date=previous_day,
         open=1100,
         high=1120,
         low=1090,
@@ -575,7 +577,7 @@ def test_global_data_context_blocks_mixed_recent_adjustments(test_db):
     ))
     test_db.add(Price(
         symbol="300308",
-        date="2026-06-02",
+        date=latest_day,
         open=1130,
         high=1200,
         low=1120,
