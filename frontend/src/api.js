@@ -337,3 +337,29 @@ export const patchStockMemory = (id, payload) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+
+// ── ATLAS 研究账本(后端 atlas_enabled 休眠门控;关闭时返回 503,由 live.js 落回演示) ──
+
+export const getMemoryCandidates = () => request('/research/memory-candidates')
+
+export const promoteMemoryCandidate = (id, confirmedBy = 'web_user') =>
+  request(`/research/memory-candidates/${id}/promote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed_by: confirmedBy }),
+  })
+
+export const rejectMemoryCandidate = (id, confirmedBy = 'web_user', note = null) =>
+  request(`/research/memory-candidates/${id}/reject`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed_by: confirmedBy, note }),
+  })
+
+export const getForwardTheses = (symbol) => request(`/research/${symbol}/forward-theses`)
+
+export const getTheses = (symbol) => request(`/research/${symbol}/theses`)
+
+export const getCaseView = (symbol) => request(`/research/${symbol}/case-view`)
+
+export const getReviewCases = (symbol) => request(`/research/${symbol}/review-cases`)

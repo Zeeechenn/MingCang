@@ -6,6 +6,30 @@
 
 ---
 
+## [v0.4.0] Frontend glass-shell refresh（2026-06-11）
+
+### Added
+- Replaced the old Tailwind/react-router frontend with a high-fidelity glass-shell
+  UI covering terminal, pulse, stock dossier, reports, chat, positions, health,
+  and admin routes.
+- Added live/demo data fallback: the UI shows local backend data when `/api` is
+  reachable and falls back to bundled demo data when the backend is unavailable.
+- Added frontend ATLAS ledger surfaces for forward theses, thesis ledger, memory
+  candidates, and case loop views; backend `ATLAS_ENABLED=false` dormancy gates
+  still control real access.
+
+### Changed
+- Package, API, frontend, and lockfile version surfaces now align on `0.4.0`.
+- Frontend CI entrypoint now keeps `npm test` available as a Vite build gate for
+  the prototype-style frontend, preserving the existing GitHub workflow order.
+
+### Safety
+- No official signal, scheduler, test2, position, production-weight, or trusted
+  memory behavior was changed. ATLAS data remains controlled by the existing
+  backend dormant guard.
+
+---
+
 ## [v0.3.4] Research source-gate hardening（2026-06-10）
 
 ### Added

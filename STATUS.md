@@ -8,8 +8,8 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.3.4`; the latest
-documented patch is `v0.3.4` research source-gate hardening in
+Current release surface: package/API/frontend versions are `0.4.0`; the latest
+documented release is `v0.4.0` frontend glass-shell refresh in
 `CHANGELOG.md`.
 
 ## Current State
@@ -21,6 +21,7 @@ documented patch is `v0.3.4` research source-gate hardening in
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
+| v0.4.0 | complete: frontend glass-shell refresh with live/demo data fallback and ATLAS ledger surfaces kept behind existing dormant backend gates |
 | v0.3.4 | complete: non-promoting Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and research-positioning importer/scoreboard source gates |
 | M50 | complete/released through Phase 3: Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and research-positioning importer/scoreboard source gates; non-promoting |
 | v0.3.3 | complete: first-run wizard, data health page, per-signal provenance, reproducible evidence path, community provider example, API contract, and stricter CI/dependency gates |
@@ -84,10 +85,10 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate for v0.3.4 on 2026-06-10:
-ruff passed, mypy passed, backend pytest `1200 passed, 5 skipped`, frontend
-node tests `33 passed`, Vite build passed, followed by a green GitHub CI run
-on `main`.
+Last full recorded gate for v0.4.0 on 2026-06-11:
+ruff passed, mypy passed, backend pytest, frontend Vite test/build, and
+frontend lint-summary build passed locally. GitHub CI should be checked after
+push before treating the release as remote-green.
 
 For release-quality work, treat `make verify` as the canonical gate.
 
