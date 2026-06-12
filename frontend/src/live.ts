@@ -94,7 +94,7 @@ function normEval(e) {
     hit_rate: e.win_rate ?? (rets.length ? +(100 * hit / rets.length).toFixed(1) : 0),
     avg_gain: +avg(gains).toFixed(2), avg_loss: +avg(losses).toFixed(2),
     best: fmtR(bestR), worst: fmtR(worstR),
-    note: `近 ${e.days} 日共 ${e.total_signals ?? recs.length} 条信号,可评估 ${e.evaluated ?? rets.length} 条。`,
+    note: `近 ${e.days} 日共 ${e.total_signals ?? recs.length} 条信号，可评估 ${e.evaluated ?? rets.length} 条。`,
   };
 }
 
@@ -446,7 +446,7 @@ export async function startLive() {
     memoryItems: Dd.MEMORY.items.slice(),
     sessions: chatSessions || s.sessions,
   }));
-  window.toast && window.toast('已连接本地后端,数据为实时数据');
+  window.toast && window.toast('已连接本地后端，数据为实时数据');
 }
 
 // ---------- 个股懒取 ----------

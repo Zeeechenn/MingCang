@@ -147,7 +147,7 @@ function LongTermPanel({ stock }: any) {
   const label = stock.long_term_label;
   function review() {
     setBusy(true);
-    setTimeout(() => { setBusy(false); setNotice('最新信号复盘已完成:归因已写入研究状态,1 条记忆候选待确认。'); toast('复盘完成,产生 1 条记忆候选'); }, 1400);
+    setTimeout(() => { setBusy(false); setNotice('最新信号复盘已完成:归因已写入研究状态，1 条记忆候选待确认。'); toast('复盘完成，产生 1 条记忆候选'); }, 1400);
   }
   return (
     <Card eyebrow="长期标签 / 信号复盘" title="长期标签如何约束短线动作" tour="long-term"
@@ -160,7 +160,7 @@ function LongTermPanel({ stock }: any) {
               <div className="row" style={{ marginTop: 9, flexWrap: 'wrap', gap: 6 }}>
                 <Badge tone={ltTone(label.label)}>{label.label}</Badge>
                 <Badge tone={label.constraint_eligible ? 'badge-accent' : 'badge-warn'}>
-                  {label.constraint_eligible ? '已通过质量门,可约束官方动作' : '证据不足,仅展示不约束'}
+                  {label.constraint_eligible ? '已通过质量门，可约束官方动作' : '证据不足，仅展示不约束'}
                 </Badge>
                 <span className={`t-num ${pnlClass(label.score)}`} style={{ fontSize: 14, fontWeight: 650 }}>{fmt.signed(label.score)}</span>
               </div>
@@ -230,7 +230,7 @@ function CopilotCard({ symbol }: any) {
     setTimeout(() => { setBusy(false); setRefreshed(true); toast('副驾驶影子意见已刷新(LLM 调用 ¥0.06)'); }, 1600);
   }
   return (
-    <Card eyebrow="LLM 副驾驶 · 影子轨" title="副驾驶影子意见,不覆盖官方" tour="copilot"
+    <Card eyebrow="LLM 副驾驶 · 影子轨" title="副驾驶影子意见，不覆盖官方" tour="copilot"
       right={<button className="btn btn-sm" disabled={busy} onClick={refresh}>{busy ? '生成中…' : refreshed ? '重新生成' : '刷新副驾驶'}</button>}>
       <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
         <Badge tone={toneMap[c.stanceTone]}>影子立场:{c.stance}</Badge>
@@ -313,7 +313,7 @@ function EvalPanel({ symbol }: any) {
           <span className="t-faint">最差:</span> <span className="down t-num">{ev.worst}</span>
         </div>
       </div>
-      <p className="t-faint" style={{ margin: '10px 0 0', fontSize: 12 }}>{ev.note} 历史表现不代表未来,仅用于理解信号偏差。</p>
+      <p className="t-faint" style={{ margin: '10px 0 0', fontSize: 12 }}>{ev.note} 历史表现不代表未来，仅用于理解信号偏差。</p>
     </Card>
   );
 }
@@ -368,7 +368,7 @@ function AnalysisPanel({ symbol }: any) {
     <Card eyebrow="Analysis" title="裁决摘要" tour="analysis">
       <Markdown text={text} />
       <p className="t-faint" style={{ margin: '12px 0 0', fontSize: 11.5, lineHeight: 1.55 }}>
-        分析为研究记录,综合官方信号、证据链与新闻情绪整理,不构成投资建议。
+        分析为研究记录，综合官方信号、证据链与新闻情绪整理，不构成投资建议。
       </p>
     </Card>
   );
@@ -541,7 +541,7 @@ function StockPoolCard({ eyebrow, title, items, defaultCount = 8, extraRight = n
       {f.bar}
       {items.length === 0 ? (empty || <div className="empty">暂无标的。</div>) : (
         <PoolShell items={applyPoolSort(f.filtered, sort)} defaultCount={defaultCount} unit="只" cardMin={220}
-          empty={<div className="empty">没有匹配的标的,试试清除筛选条件。</div>}
+          empty={<div className="empty">没有匹配的标的，试试清除筛选条件。</div>}
           renderCard={(s) => <StockTile key={s.symbol} s={s} />}
           renderRow={(s) => <StockRow key={s.symbol} s={s} />} />
       )}
@@ -569,14 +569,14 @@ export function StocksPage() {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="Stocks" title="个股案卷"
-        desc="搜索任意 A股 / 港股 / 美股,进入个股案卷查看裁决、证据链、来源审计、复盘记忆与 observe-only 边界。"
+        desc="搜索任意 A股 / 港股 / 美股，进入个股案卷查看裁决、证据链、来源审计、复盘记忆与 observe-only 边界。"
         right={<RefreshButton label="刷新行情" toastMsg="自选与候选池行情已刷新" />} />
       <Card className="pop pop-1">
         <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
           <div className="stocks-search">
             <McIcon name="search" size={18} style={{ color: 'var(--ink-3)' }} />
             <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
-              placeholder="搜索代码或名称,如 300308 / 中际旭创 / 立讯精密"
+              placeholder="搜索代码或名称，如 300308 / 中际旭创 / 立讯精密"
               onKeyDown={(e) => { if (e.key === 'Enter' && filtered[0]) navigate(`/stock/${filtered[0].symbol}`); }} />
           </div>
           <Seg value={market} options={[['all', '全部'], ['CN', 'A股'], ['HK', '港股'], ['US', '美股']]} onChange={setMarket} />
@@ -592,7 +592,7 @@ export function StocksPage() {
           <StockPoolCard eyebrow="关注池" title="自选股" className="pop pop-1"
             items={watchFiltered} defaultCount={8}
             extraRight={<button className="btn btn-sm" onClick={() => navigate('/pulse')}>在今日裁决页管理</button>}
-            empty={<div className="empty">研究池为空。前往今日裁决页添加,或直接搜索标的研究。</div>} />
+            empty={<div className="empty">研究池为空。前往今日裁决页添加，或直接搜索标的研究。</div>} />
           {otherFiltered.length > 0 && (
             <StockPoolCard eyebrow="候选" title="可研究标的" className="pop pop-2"
               items={otherFiltered} defaultCount={8} />
@@ -619,7 +619,7 @@ export function StockPage({ symbol }: any) {
       </Card>
       {!signal && (
         <div className="empty pop pop-1">
-          <b>该标的暂无正式信号。</b>{stock.market !== 'CN' ? ' 港股 / 美股为 observe-only,数据仅用于观察,不进入 CN 官方信号。' : ' 等待下次盘后决策运行。'}
+          <b>该标的暂无正式信号。</b>{stock.market !== 'CN' ? ' 港股 / 美股为 observe-only，数据仅用于观察，不进入 CN 官方信号。' : ' 等待下次盘后决策运行。'}
         </div>
       )}
       <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 14 }} data-grid="stock-cols">

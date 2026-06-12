@@ -8,8 +8,8 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.4.2`; the latest
-documented release is `v0.4.2` frontend TypeScript and visibility hardening in
+Current release surface: package/API/frontend versions are `0.4.3`; the latest
+documented release is `v0.4.3` frontend punctuation and M29 evidence baseline in
 `CHANGELOG.md`.
 
 ## Current State
@@ -21,6 +21,7 @@ documented release is `v0.4.2` frontend TypeScript and visibility hardening in
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
+| v0.4.3 | complete: frontend Chinese punctuation normalization, M29 forward baseline status recorded, release surfaces aligned |
 | v0.4.2 | complete: frontend TypeScript module migration, CI coverage gate, Dependabot, and threat-model documentation |
 | v0.4.1 | complete: favicon restored with the new glass-shell palette, GitHub homepage screenshot refreshed, release notes bilingualized |
 | v0.4.0 | complete: frontend glass-shell refresh with live/demo data fallback and ATLAS ledger surfaces kept behind existing dormant backend gates |
@@ -34,7 +35,7 @@ documented release is `v0.4.2` frontend TypeScript and visibility hardening in
 | M48 | complete: first API response types added; SignalCard/EvidenceCard migrated to TSX; StatusBadge primitive and full frontend-test gate wired |
 | M45 | complete: source-gated research-positioning tools; future work is guardrail-only |
 | M44 / Atlas | complete and dormant: `9820143` is in `origin/main`; Atlas/test4 Stage 2b signal-overlay shadow starter exists; `ATLAS_ENABLED=false` |
-| M29 | routine read-only: forward evidence and residual attribution remain non-promoting |
+| M29 | baseline 1d/3d/5d forward artifacts created 2026-06-12; positive delta 9/11 + 8/10 + 8/10 windows; non-promoting; next: extend window after 06-12 price coverage available |
 | remote agent mode | opt-in only; read-only by default |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
@@ -66,7 +67,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 | Workstream | First action | Stop condition |
 |---|---|---|
 | M50 research gate follow-up | Phase 0-3 is complete/released; only start next-batch quality gates or frontend evidence cards when explicitly scoped | Do not connect Serenity, source tiers, or importer metadata to official signals, labels, scheduler, test2, positions, or production weights |
-| M29 forward evidence ops | First fix or diagnose readiness blockers: full 100-symbol coverage after 2026-06-02 and recognizable 1d/3d/5d baseline artifacts are missing | Stop if fresh coverage is incomplete, artifacts are partial, or a change would re-enable quant / Kronos / production scoring |
+| M29 forward evidence ops | Re-run readiness after 2026-06-12+ price coverage arrives, then extend the next 1d/3d/5d shadow window | Stop if fresh coverage is incomplete, artifacts are partial, or a change would re-enable quant / Kronos / production scoring |
 | M45 research-positioning follow-up | Use dry-run-first importer / scoreboard only with direct source fidelity | Do not promote trusted memory, official signals, production profile, scheduler, test2, stops, sizing, or positions |
 | M32 hypothesis bridge | Start only after review data is thick enough; current local DB has only a small seed set (`review_cases=2`, `forward_theses=2` as of 2026-06-09) | Output falsifiable theses, not Strong Buy labels |
 | M44 Atlas | Use `backend.tools.atlas_test4_stage2b_shadow` only for non-promoting signal-overlay shadow accrual | Stop on any official-signal / test2 / scheduler / shared-infra drift |
@@ -87,7 +88,7 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate for v0.4.2 on 2026-06-12:
+Last full recorded gate for v0.4.3 on 2026-06-12:
 `make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 RUFF_CACHE_DIR=/private/tmp/mingcang_ruff_cache
 MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache` passed locally: ruff passed,

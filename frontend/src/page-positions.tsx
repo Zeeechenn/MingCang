@@ -20,7 +20,7 @@ function PositionForm() {
   function submit(e) {
     e.preventDefault();
     if (!q.trim() || !qty || !cost) return;
-    const done = () => { toast(`已记录持仓 ${name || q}(仅记录,不会真实下单)`); setQ(''); setName(''); setQty(''); setCost(''); setPicked(false); };
+    const done = () => { toast(`已记录持仓 ${name || q}(仅记录，不会真实下单)`); setQ(''); setName(''); setQty(''); setCost(''); setPicked(false); };
     window.MC_LIVE.createPosition({ symbol: q.trim(), name: name.trim() || q.trim(), market, quantity: Number(qty), avg_cost: Number(cost) })
       .then(done)
       .catch((err) => {
@@ -44,7 +44,7 @@ function PositionForm() {
       <div className="spread" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div className="t-eyebrow">添加持仓</div>
-          <div className="t-faint" style={{ fontSize: 12, marginTop: 2 }}>记录你的真实或模拟持仓 · 明仓不接券商,确认后只写数据库</div>
+          <div className="t-faint" style={{ fontSize: 12, marginTop: 2 }}>记录你的真实或模拟持仓 · 明仓不接券商，确认后只写数据库</div>
         </div>
       </div>
       <div className="grid" style={{ gridTemplateColumns: 'minmax(150px, 1.2fr) minmax(120px, 1fr) 88px 100px 110px auto', gap: 8, marginTop: 12, alignItems: 'start' }} data-grid="pos-form">
@@ -80,7 +80,7 @@ function CloseButton({ item }: any) {
     const p = Number(price);
     if (!p) return;
     window.MC_LIVE.closePosition(item.id, { close_price: p })
-      .then(() => toast(`已平仓 ${item.name},盈亏记入已实现`))
+      .then(() => toast(`已平仓 ${item.name}，盈亏记入已实现`))
       .catch((err) => {
         if (!err || !err.demo) { toast(`平仓失败:${err?.message || '后端错误'}`); return; }
         MCStore.set((st) => ({
@@ -90,7 +90,7 @@ function CloseButton({ item }: any) {
             realized_pnl_pct: +(((p - x.avg_cost) / x.avg_cost) * 100).toFixed(2),
           } : x),
         }));
-        toast(`已平仓 ${item.name},盈亏记入已实现`);
+        toast(`已平仓 ${item.name}，盈亏记入已实现`);
       });
   }
   if (!open) return <button className="btn btn-sm" onClick={() => { setOpen(true); setPrice(String(item.latest_price)); }}>平仓</button>;
@@ -124,7 +124,7 @@ export function PositionsPage() {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="Portfolio Discipline" title="持仓纪律"
-        desc="记录持仓、成本、浮动盈亏与规则上限。明仓只做纪律提醒和案卷留痕,不接券商、不自动交易。"
+        desc="记录持仓、成本、浮动盈亏与规则上限。明仓只做纪律提醒和案卷留痕，不接券商、不自动交易。"
         right={<RefreshButton label="刷新行情" toastMsg="持仓最新价已刷新 · 浮动盈亏已更新" />} />
       <div className="grid pop" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
         {Object.keys(totals).sort().map((m) => {
@@ -173,7 +173,7 @@ export function PositionsPage() {
       <Card eyebrow="Open Positions" title="当前持仓与纪律线" className="pop pop-2" pad={false} tour="open-positions">
         {open.length === 0 ? (
           <div className="card-body">
-            <div className="empty"><b>暂无持仓。</b>可通过上方表单记录,或在 <a className="link" onClick={() => navigate('/chat')}>AI 对话</a>里说「添加持仓 300308 100股 成本150」。</div>
+            <div className="empty"><b>暂无持仓。</b>可通过上方表单记录，或在 <a className="link" onClick={() => navigate('/chat')}>AI 对话</a>里说「添加持仓 300308 100股 成本150」。</div>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }} className="scroll-thin">

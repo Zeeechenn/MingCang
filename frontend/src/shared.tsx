@@ -175,7 +175,7 @@ export function PriceChart({ symbol, signal }: any) {
     return () => ro.disconnect();
   }, []);
   if (!prices.length) {
-    return <div className="empty">暂无价格数据。盘前同步任务运行后,这里会显示 120 日主图。</div>;
+    return <div className="empty">暂无价格数据。盘前同步任务运行后，这里会显示 120 日主图。</div>;
   }
   const H = 300, padL = 8, padR = 56, padT = 16, padB = 54, volH = 38;
   const iw = Math.max(100, w - padL - padR);

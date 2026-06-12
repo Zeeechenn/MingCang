@@ -206,7 +206,7 @@ function App() {
       </main>
 
       <footer style={{ textAlign: 'center', padding: '0 20px 36px', fontSize: 11.5, color: 'var(--ink-3)' }}>
-        明仓 MingCang · 本地优先的 A股研究决策系统 · 证据门控 / 复盘案卷 / 本地记忆 · 输出为研究记录,不构成投资建议
+        明仓 MingCang · 本地优先的 A股研究决策系统 · 证据门控 / 复盘案卷 / 本地记忆 · 输出为研究记录，不构成投资建议
       </footer>
 
       {wizardOpen && <FirstRunWizard onDone={() => setWizardOpen(false)} onStartTour={() => setTourOpen(true)} />}

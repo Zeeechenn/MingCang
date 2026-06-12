@@ -6,6 +6,27 @@
 
 ---
 
+## [v0.4.3] Frontend punctuation and M29 evidence baseline / 前端标点与 M29 证据基线（2026-06-12）
+
+### Fixed / 修复
+- Normalized user-visible Chinese frontend copy to use Chinese commas instead of
+  ASCII commas.
+- 将前端用户可见中文文案中的英文逗号统一改为中文逗号。
+
+### Changed / 变更
+- Recorded the M29 1d / 3d / 5d forward baseline artifacts and current
+  non-promoting evidence-ops state in `STATUS.md` and `docs/ROADMAP.md`.
+- 在 `STATUS.md` 和 `docs/ROADMAP.md` 记录 M29 1d / 3d / 5d forward baseline
+  artifacts 及当前 non-promoting evidence ops 状态。
+- Aligned package, API, frontend, runtime-demo, and lockfile version surfaces on
+  `0.4.3`.
+- 将 package / API / frontend / 演示运行时 / lockfile 版本面统一到 `0.4.3`。
+
+### Safety / 安全边界
+- No official signal, scheduler, test2, position, production-weight, database,
+  or trusted-memory behavior was changed.
+- 不改官方信号、scheduler、test2、仓位、生产权重、数据库或 trusted memory 行为。
+
 ## [v0.4.2] Frontend TypeScript and visibility hardening / 前端 TypeScript 与可见性加固（2026-06-12）
 
 ### Added / 新增

@@ -109,10 +109,10 @@ function CopilotOrchestrationPanel({ mode, onModeChange, debateRounds, onDebateR
       id: 'general',
       title: '通用助手',
       badge: '快问快答',
-      summary: '处理临时问题,只给可确认建议。',
+      summary: '处理临时问题，只给可确认建议。',
       bestFor: '问个股怎么看、查证据、加自选/小动作',
       output: '即时回答 + 待确认动作',
-      impact: '不重写长期标签,确认后才进入案卷',
+      impact: '不重写长期标签，确认后才进入案卷',
       current: '当前会走:证据检索、skills 编排、多轮辩论、待确认动作。',
     },
     {
@@ -221,17 +221,17 @@ function buildResearchRunReply(rounds) {
 - 个股案卷:读取裁决、价格、持仓、历史复盘
 - 辩论总监:生成多空议题并控制辩论轮数
 - 风险经理:只做降级、拦截、仓位约束
-- 记忆召回:只读取 trusted memory,不自动写入
+- 记忆召回:只读取 trusted memory，不自动写入
 
 ### LLM 辩论摘要
 ${roundText}
 
 ### 对个股研究的影响
-- 更新 **副驾驶影子意见**,但不覆盖官方裁决
-- 生成新的证伪问题,进入个股案卷
-- 若需要写入记忆,只形成候选,等待人工确认
+- 更新 **副驾驶影子意见**，但不覆盖官方裁决
+- 生成新的证伪问题，进入个股案卷
+- 若需要写入记忆，只形成候选，等待人工确认
 
-**结论:** 300308 趋势与产业景气仍强,但估值和拥挤度要求维持小仓纪律;不建议追高加仓。`;
+**结论:** 300308 趋势与产业景气仍强，但估值和拥挤度要求维持小仓纪律;不建议追高加仓。`;
 }
 
 export function ChatPage() {
@@ -377,7 +377,7 @@ export function ChatPage() {
     setBusy(true);
     const D = window.MC_DATA;
     const script = mode === 'long_term_team'
-      ? { reply: '## 长期研究团队 · 运行结果\n\n已对 **300308 中际旭创** 完成慢变量复核:\n\n| 分析师 | 结论 | 分数 |\n|---|---|---|\n| 质量(Piotroski) | 盈利质量高位稳定 | 86 |\n| 景气 | AI 光模块仍强,边际变钝 | 91 |\n| 资金流(QFII) | 未见一致减仓 | 中性 |\n| 风险经理 | 估值分位 85%+,约束仓位 | ⚠ |\n\n**长期标签:值得持有(+72.5),有效至 2026-06-22。** 标签已通过质量门,可约束官方动作。', resources: ['long_term/300308', 'fundamentals', 'qfii_holdings'] }
+      ? { reply: '## 长期研究团队 · 运行结果\n\n已对 **300308 中际旭创** 完成慢变量复核:\n\n| 分析师 | 结论 | 分数 |\n|---|---|---|\n| 质量(Piotroski) | 盈利质量高位稳定 | 86 |\n| 景气 | AI 光模块仍强，边际变钝 | 91 |\n| 资金流(QFII) | 未见一致减仓 | 中性 |\n| 风险经理 | 估值分位 85%+，约束仓位 | ⚠ |\n\n**长期标签:值得持有(+72.5)，有效至 2026-06-22。** 标签已通过质量门，可约束官方动作。', resources: ['long_term/300308', 'fundamentals', 'qfii_holdings'] }
       : (/研究|分析|怎么看/i.test(text)
         ? { reply: buildResearchRunReply(debateRounds), resources: ['skill:source_audit', 'skill:stock_dossier', 'skill:debate_director', 'skill:risk_manager', 'memory/context'] }
         : (D.CHAT_SCRIPTS.find((s) => s.match.test(text)) || { reply: D.CHAT_FALLBACK, resources: [] }));
@@ -450,7 +450,7 @@ export function ChatPage() {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="Research Copilot" title="研究副驾驶"
-        desc="副驾驶不是普通聊天窗口,而是一条可调度的研究运行链:检索证据、调用 skills、组织多轮辩论,再把影子结论落到个股案卷。" />
+        desc="副驾驶不是普通聊天窗口，而是一条可调度的研究运行链:检索证据、调用 skills、组织多轮辩论，再把影子结论落到个股案卷。" />
 
       <section className="glass pop" style={{ display: 'grid', gridTemplateColumns: '264px minmax(0, 1fr) 330px', minHeight: 680, overflow: 'hidden' }} data-grid="chat-cols" data-tour="chat-shell">
         <aside style={{ borderRight: '1px solid var(--hairline-soft)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -529,7 +529,7 @@ export function ChatPage() {
             <div className="row" style={{ gap: 8 }}>
               <input className="field" style={{ flex: 1, borderRadius: 999, padding: '10px 16px' }} value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={mode === 'long_term_team' ? '输入:研究 300308' : '向明仓提问,或下达项目操作'} />
+                placeholder={mode === 'long_term_team' ? '输入:研究 300308' : '向明仓提问，或下达项目操作'} />
               <button className="btn btn-primary" disabled={busy || !input.trim()} type="submit" style={{ padding: '9px 20px' }}>{busy ? '思考中…' : '发送'}</button>
             </div>
           </form>

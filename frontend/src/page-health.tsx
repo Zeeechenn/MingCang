@@ -12,7 +12,7 @@ export function HealthPage() {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="Sources · Read Only" title="来源健康"
-        desc="展示 CN / HK / US 数据包络、提供商回退链、新鲜度策略、反穿越检查和告警。本页只读,不触发任何数据拉取。"
+        desc="展示 CN / HK / US 数据包络、提供商回退链、新鲜度策略、反穿越检查和告警。本页只读，不触发任何数据拉取。"
         right={<div className="row" style={{ gap: 10 }}>
           <RefreshButton label="重新检查" busyLabel="检查中…" toastMsg="已重新检查数据覆盖与新鲜度(只读探测)" />
           <Badge tone={C.status === 'pass' && allPass ? 'badge-down' : 'badge-warn'}>{C.status === 'pass' ? '整体通过' : '需复核'}</Badge>
@@ -21,9 +21,9 @@ export function HealthPage() {
       <div className="grid pop" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
         {[
           ['CN 官方信号', 'A 股生产裁决', '盘后增量 + PIT 校验', 'badge-down'],
-          ['HK / US 研究', 'observe-only', '可读案卷,不进入官方信号', 'badge-dim'],
+          ['HK / US 研究', 'observe-only', '可读案卷，不进入官方信号', 'badge-dim'],
           ['反穿越', 'standing check', '证据时间戳早于信号时间', 'badge-accent'],
-          ['远端调用', '默认关闭', '本地缓存优先,L3 才补充', 'badge-warn'],
+          ['远端调用', '默认关闭', '本地缓存优先，L3 才补充', 'badge-warn'],
         ].map(([label, value, sub, tone]) => (
           <div key={label} className="glass" style={{ padding: '14px 18px' }}>
             <div className="spread" style={{ gap: 8 }}>
@@ -82,7 +82,7 @@ export function HealthPage() {
         <Card eyebrow="Warnings" title="当前来源告警" className="pop pop-1"
           right={C.warnings.length > 0 && <Badge tone="badge-warn">{C.warnings.length} 条</Badge>}>
           {C.warnings.length === 0 ? (
-            <div className="empty">暂无数据警告,所有检查均通过。</div>
+            <div className="empty">暂无数据警告，所有检查均通过。</div>
           ) : (
             <div className="grid" style={{ gap: 8 }}>
               {C.warnings.map((w, i) => (

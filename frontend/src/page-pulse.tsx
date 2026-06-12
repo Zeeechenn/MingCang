@@ -25,7 +25,7 @@ function ReleaseStrip() {
         <div style={{ minWidth: 240, flex: 1 }}>
           <div className="t-eyebrow">当前发布</div>
           <div style={{ marginTop: 3, fontSize: 13.5, fontWeight: 550 }}>
-            v{SYS.version} 案例闭环架构落地,多空证据账本持续沉淀,量化生产待下一轮评审开放。
+            v{SYS.version} 前端中文标点统一，M29 前向证据基线已记录，量化生产仍保持关闭。
           </div>
         </div>
         <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -53,7 +53,7 @@ function TodayCall({ watchlist }: any) {
   if (!top) {
     return (
       <Card eyebrow="今日裁决案卷" title="暂无信号" className="pop pop-1">
-        <div className="empty"><b>自选池还没有信号。</b> 添加自选标的后,系统会在下次收盘后自动生成信号。</div>
+        <div className="empty"><b>自选池还没有信号。</b> 添加自选标的后，系统会在下次收盘后自动生成信号。</div>
       </Card>
     );
   }
@@ -171,7 +171,7 @@ function PositionsOverview({ positions }: any) {
       </div>
       {open.length === 0 ? (
         <div className="empty" style={{ marginTop: 10 }}>
-          暂无持仓数据。可以进入<a className="link" onClick={() => navigate('/positions')}>持仓页</a>,或在 <a className="link" onClick={() => navigate('/chat')}>AI 对话</a>里说「添加持仓 300308 100股 成本150」。
+          暂无持仓数据。可以进入<a className="link" onClick={() => navigate('/positions')}>持仓页</a>，或在 <a className="link" onClick={() => navigate('/chat')}>AI 对话</a>里说「添加持仓 300308 100股 成本150」。
         </div>
       ) : (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8, marginTop: 10 }}>
@@ -339,7 +339,7 @@ function SignalGrid({ watchlist }: any) {
         </div>
       ) : (
         <PoolShell items={sorted} defaultCount={8} unit="只" cardMin={218}
-          empty={<div className="empty">没有匹配的信号,试试清除筛选条件。</div>}
+          empty={<div className="empty">没有匹配的信号，试试清除筛选条件。</div>}
           renderCard={(w) => <SignalCardTile key={w.symbol} w={w} />}
           renderRow={(w) => <SignalRowTile key={w.symbol} w={w} />} />
       )}
@@ -355,7 +355,7 @@ function AddStockForm({ onAdd }: any) {
   if (!open) return <button className="btn btn-sm btn-primary" onClick={() => setOpen(true)} data-tour="add-stock">＋ 添加标的</button>;
   return (
     <div className="row" style={{ position: 'relative', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>
-      <input className="field" autoFocus style={{ width: 168 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="代码或名称,如 002475" />
+      <input className="field" autoFocus style={{ width: 168 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="代码或名称，如 002475" />
       <select className="field" style={{ width: 76 }} value={market} onChange={(e) => setMarket(e.target.value)}>
         <option value="CN">A股</option><option value="HK">港股</option><option value="US">美股</option>
       </select>
@@ -384,7 +384,7 @@ function WatchlistManage({ watchlist }: any) {
   function add(s) {
     if (MCStore.get().watchlist.some((w) => w.symbol === s.symbol)) { toast('该标的已在自选池'); return; }
     window.MC_LIVE.addWatch(s.symbol, s.name, s.market)
-      .then(() => toast(`已添加 ${s.name},下次收盘后生成信号`))
+      .then(() => toast(`已添加 ${s.name}，下次收盘后生成信号`))
       .catch((e) => {
         if (!e || !e.demo) { toast(`添加失败:${e?.message || '后端错误'}`); return; }
         MCStore.set((st) => ({ watchlist: [...st.watchlist, { ...s, industry: '待标注', latest_signal: null, observe: s.market !== 'CN' }] }));
@@ -414,14 +414,14 @@ function WatchlistManage({ watchlist }: any) {
       {f.bar}
       {watchlist.length === 0 ? (
         <div className="empty">
-          <b>自选股池为空,先添加几只标的。</b><br />
-          · 点击右上角「添加标的」,输入股票代码或名称(支持 A股 / 港股 / 美股)<br />
-          · 或前往 <a className="link" onClick={() => navigate('/chat')}>AI 对话</a>,说「添加自选 300308」快速导入<br />
+          <b>自选股池为空，先添加几只标的。</b><br />
+          · 点击右上角「添加标的」，输入股票代码或名称(支持 A股 / 港股 / 美股)<br />
+          · 或前往 <a className="link" onClick={() => navigate('/chat')}>AI 对话</a>，说「添加自选 300308」快速导入<br />
           · 添加后系统会在下次收盘后自动生成信号
         </div>
       ) : (
         <PoolShell items={applyPoolSort(filtered, sort)} defaultCount={9} unit="只" cardMin={225}
-          empty={<div className="empty">没有匹配的自选股,尝试清除筛选条件。</div>}
+          empty={<div className="empty">没有匹配的自选股，尝试清除筛选条件。</div>}
           renderCard={(w) => (
             <div key={w.symbol} className="glass-inset spread" style={{ padding: '10px 13px' }}>
               <a style={{ minWidth: 0, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(`/stock/${w.symbol}`)}>
@@ -512,7 +512,7 @@ export function PulsePage() {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="今日态势" title="今日持仓裁决"
-        desc="从信号、反方、长期标签、风险经理到最终仓位,一屏看清为什么是这只、为什么只能这个仓位。"
+        desc="从信号、反方、长期标签、风险经理到最终仓位，一屏看清为什么是这只、为什么只能这个仓位。"
         right={<div className="row" style={{ gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <RefreshButton toastMsg="已同步盘后快照 · 行情与信号已刷新" />
           <MarketHeaderWidget />

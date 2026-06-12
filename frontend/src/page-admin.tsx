@@ -49,7 +49,7 @@ function DecisionSection({ cfg, set }: any) {
       <SettingRow label="入场阈值" hint="综合分超过该阈值才可进入「可小仓试错」">
         <NumSlider value={cfg.entry_threshold} onChange={(v) => set({ entry_threshold: v })} min={0} max={60} />
       </SettingRow>
-      <SettingRow label="研究总监最低置信度" hint="低于该置信度的裁决只展示,不给动作建议">
+      <SettingRow label="研究总监最低置信度" hint="低于该置信度的裁决只展示，不给动作建议">
         <NumSlider value={cfg.director_min_confidence} onChange={(v) => set({ director_min_confidence: v })} min={0} max={100} unit="%" />
       </SettingRow>
       <SettingRow label="信号权重" hint={`技术 ${cfg.weights.technical}% + 情感 ${cfg.weights.sentiment}% + 量化 ${cfg.weights.quant}%(量化休眠) · 合计 ${wsum}%`}>
@@ -78,16 +78,16 @@ function PortfolioSection({ cfg, set }: any) {
       <SettingRow label="单股仓位上限" hint="任何单一标的不超过总资产的该比例">
         <NumSlider value={cfg.max_stock_pct} onChange={(v) => set({ max_stock_pct: v })} min={1} max={50} unit="%" />
       </SettingRow>
-      <SettingRow label="行业仓位上限" hint="同一行业集中度限制,同板块持仓合并计算">
+      <SettingRow label="行业仓位上限" hint="同一行业集中度限制，同板块持仓合并计算">
         <NumSlider value={cfg.max_sector_pct} onChange={(v) => set({ max_sector_pct: v })} min={5} max={80} unit="%" />
       </SettingRow>
-      <SettingRow label="总权益上限" hint="股票总仓位上限,余下保留现金">
+      <SettingRow label="总权益上限" hint="股票总仓位上限，余下保留现金">
         <NumSlider value={cfg.max_total_pct} onChange={(v) => set({ max_total_pct: v })} min={10} max={100} unit="%" />
       </SettingRow>
       <SettingRow label="新信号试错仓" hint="新信号默认映射的初始小仓位">
         <NumSlider value={cfg.new_signal_trial_pct} onChange={(v) => set({ new_signal_trial_pct: v })} min={1} max={20} unit="%" />
       </SettingRow>
-      <SettingRow label="ATR 移动止损" hint="用 trailing ATR 保护趋势浮盈;触发时提醒,不自动卖出">
+      <SettingRow label="ATR 移动止损" hint="用 trailing ATR 保护趋势浮盈;触发时提醒，不自动卖出">
         <Toggle on={cfg.trailing_stop} onChange={(v) => set({ trailing_stop: v })} label="移动止损" />
       </SettingRow>
     </div>
@@ -100,14 +100,14 @@ function AgentsSection({ cfg, set }: any) {
   const [running, setRunning] = useAState('');
   function run(kind, label) {
     setRunning(kind);
-    setTimeout(() => { setRunning(''); toast(`${label}已完成(演示):结果写入研究状态,不覆盖官方信号`); }, 1800);
+    setTimeout(() => { setRunning(''); toast(`${label}已完成(演示):结果写入研究状态，不覆盖官方信号`); }, 1800);
   }
   return (
     <div>
-      <SettingRow label="多空辩论(Multi-Agent)" hint="bull/bear 多轮观点与裁定,LLM 成本计入预算">
+      <SettingRow label="多空辩论(Multi-Agent)" hint="bull/bear 多轮观点与裁定，LLM 成本计入预算">
         <Toggle on={cfg.multi_agent} onChange={(v) => set({ multi_agent: v })} label="多空辩论" />
       </SettingRow>
-      <SettingRow label="风险经理" hint="从风险角度二次拦截信号;只能做减法,不能制造 alpha">
+      <SettingRow label="风险经理" hint="从风险角度二次拦截信号;只能做减法，不能制造 alpha">
         <Toggle on={cfg.risk_manager} onChange={(v) => set({ risk_manager: v })} label="风险经理" />
       </SettingRow>
       <SettingRow label="长期研究团队" hint="质量 / 景气 / 资金流分析师聚合慢变量标签">
@@ -116,14 +116,14 @@ function AgentsSection({ cfg, set }: any) {
       <SettingRow label="长期标签约束官方动作" hint="通过质量门的长期标签可压缩短线仓位上限">
         <Toggle on={cfg.long_term_constraints} onChange={(v) => set({ long_term_constraints: v })} label="长期约束" />
       </SettingRow>
-      <SettingRow label="LLM Provider" hint="local_cli 模式无需 API Key,使用本地 agent">
+      <SettingRow label="LLM Provider" hint="local_cli 模式无需 API Key，使用本地 agent">
         <Seg value={cfg.llm_provider} options={[['local_cli', 'local_cli'], ['anthropic', 'anthropic'], ['openai', 'openai 兼容']]} onChange={(v) => set({ llm_provider: v })} />
       </SettingRow>
       <div className="glass-inset" style={{ padding: 14, marginTop: 14 }}>
         <div className="t-eyebrow">手动触发(需确认 · 会调用 LLM / 搜索)</div>
         <div className="row" style={{ marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
-          <input className="field" style={{ flex: 1, minWidth: 170 }} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="深度研究主题,如:AI 光模块供需" />
-          <input className="field" style={{ width: 150 }} value={symbols} onChange={(e) => setSymbols(e.target.value)} placeholder="标的,逗号分隔" />
+          <input className="field" style={{ flex: 1, minWidth: 170 }} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="深度研究主题，如:AI 光模块供需" />
+          <input className="field" style={{ width: 150 }} value={symbols} onChange={(e) => setSymbols(e.target.value)} placeholder="标的，逗号分隔" />
           <button className="btn btn-sm" disabled={!topic || running === 'deep'} onClick={() => run('deep', '深度研究')}>{running === 'deep' ? '研究中…' : '运行深度研究'}</button>
           <button className="btn btn-sm" disabled={running === 'lt'} onClick={() => run('lt', '长期研究团队')}>{running === 'lt' ? '运行中…' : '运行长期团队'}</button>
         </div>
@@ -135,11 +135,11 @@ function AgentsSection({ cfg, set }: any) {
 
 function ActionRegistryPanel() {
   const actions = [
-    ['watchlist.add', 'medium', 'confirm', '研究池', '新增观察标的,不会生成买入信号'],
-    ['position.add', 'high', 'confirm', '持仓账本', '只记录持仓,不接券商、不下单'],
+    ['watchlist.add', 'medium', 'confirm', '研究池', '新增观察标的，不会生成买入信号'],
+    ['position.add', 'high', 'confirm', '持仓账本', '只记录持仓，不接券商、不下单'],
     ['research.deep.run', 'medium', 'confirm', '研究状态', '输出 observe-only 深研案卷'],
     ['memory.candidate.write', 'medium', 'gate', '记忆候选', '需要来源门控和人工确认'],
-    ['config.update', 'high', 'confirm', '运行时配置', '仅保存草稿,下次裁决生效'],
+    ['config.update', 'high', 'confirm', '运行时配置', '仅保存草稿，下次裁决生效'],
   ];
   const T = window.MC_DATA.TOOLS_REGISTRY;
   return (
@@ -147,7 +147,7 @@ function ActionRegistryPanel() {
       <div className="spread" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div className="t-eyebrow">Action Registry · 待确认动作</div>
-          <div className="t-faint" style={{ fontSize: 12, marginTop: 3 }}>所有写入型动作先形成 pending action,确认前不写数据库。</div>
+          <div className="t-faint" style={{ fontSize: 12, marginTop: 3 }}>所有写入型动作先形成 pending action，确认前不写数据库。</div>
         </div>
         <Badge tone="badge-dim">{T.counts.stable + T.counts.maintenance + T.counts.evidence + T.counts.attic} tools indexed</Badge>
       </div>
@@ -181,10 +181,10 @@ function DataSection({ cfg, set }: any) {
       <SettingRow label="Anspire 新闻窗口" hint="严格新闻抓取的回看天数(需 ANSPIRE_API_KEY)">
         <NumSlider value={cfg.anspire_days} onChange={(v) => set({ anspire_days: v })} min={1} max={7} unit="天" />
       </SettingRow>
-      <SettingRow label="Anspire 单次最多入库" hint={`最多返回 ${cfg.anspire_max_results} 条,质量分 ≥ ${cfg.anspire_min_score} 的最多入库 ${cfg.anspire_max_add} 条`}>
+      <SettingRow label="Anspire 单次最多入库" hint={`最多返回 ${cfg.anspire_max_results} 条，质量分 ≥ ${cfg.anspire_min_score} 的最多入库 ${cfg.anspire_max_add} 条`}>
         <NumSlider value={cfg.anspire_max_add} onChange={(v) => set({ anspire_max_add: v })} min={0} max={5} unit="条" />
       </SettingRow>
-      <SettingRow label="Anspire 最低质量分" hint="低于该分数的新闻不入库,只留审计痕迹">
+      <SettingRow label="Anspire 最低质量分" hint="低于该分数的新闻不入库，只留审计痕迹">
         <NumSlider value={cfg.anspire_min_score} onChange={(v) => set({ anspire_min_score: v })} min={50} max={100} />
       </SettingRow>
     </div>
@@ -220,7 +220,7 @@ function ScheduleSection({ cfg, set }: any) {
         ))}
       </div>
       <div className="glass-inset" style={{ padding: 13, marginTop: 10, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)' }}>
-        工作流契约:盘前同步数据 / 检查覆盖,盘中只读缓存 / 止损观察,盘后全市场信号 / 复盘 / 导出 / 记忆候选,周末长期标签 / 周度反思。所有写入型 job 默认 dry-run 或 pending confirmation。
+        工作流契约:盘前同步数据 / 检查覆盖，盘中只读缓存 / 止损观察，盘后全市场信号 / 复盘 / 导出 / 记忆候选，周末长期标签 / 周度反思。所有写入型 job 默认 dry-run 或 pending confirmation。
       </div>
     </div>
   );
@@ -238,11 +238,11 @@ function RiskSection({ cfg, set }: any) {
               <Badge tone={cfg.kill_switch ? 'badge-up' : 'badge-down'}>{cfg.kill_switch ? '已触发' : '未触发'}</Badge>
             </div>
             <div className="t-dim" style={{ fontSize: 12.5, marginTop: 4, maxWidth: 460, lineHeight: 1.55 }}>
-              触发后阻断所有调度任务与风险动作(信号生成、自动写入),只保留只读查询。用于异常行情或数据污染时的紧急保护。
+              触发后阻断所有调度任务与风险动作(信号生成、自动写入)，只保留只读查询。用于异常行情或数据污染时的紧急保护。
             </div>
           </div>
           {cfg.kill_switch ? (
-            <button className="btn btn-primary" onClick={() => { set({ kill_switch: false }); toast('熔断已复位,系统恢复正常'); }}>复位熔断</button>
+            <button className="btn btn-primary" onClick={() => { set({ kill_switch: false }); toast('熔断已复位，系统恢复正常'); }}>复位熔断</button>
           ) : confirming ? (
             <div className="row" style={{ gap: 6 }}>
               <button className="btn btn-danger" style={{ borderColor: 'var(--up)', color: 'var(--up)' }} onClick={() => { set({ kill_switch: true }); setConfirming(false); toast('熔断已触发:调度与写入已阻断', 'warn'); }}>确认触发</button>
@@ -306,11 +306,11 @@ function MemorySectionPanel() {
                     <React.Fragment>
                       <button className="btn btn-sm btn-danger" onClick={() => {
                         window.MC_LIVE.memoryDelete(m.id)
-                          .then(() => toast('记忆已删除,审计日志保留'))
+                          .then(() => toast('记忆已删除，审计日志保留'))
                           .catch((e) => {
                             if (!e || !e.demo) { toast(`删除失败:${e?.message || '后端错误'}`); return; }
                             MCStore.set((st) => ({ memoryItems: st.memoryItems.filter((x) => x.id !== m.id) }));
-                            toast('记忆已删除,审计日志保留(演示)');
+                            toast('记忆已删除，审计日志保留(演示)');
                           });
                       }}>确认</button>
                       <button className="btn btn-sm btn-quiet" onClick={() => setConfirmDel(null)}>取消</button>
@@ -396,7 +396,7 @@ function AdminSidebar() {
             <div key={k} className="spread"><span className="t-faint">{k}</span><span style={{ fontWeight: 570 }}>{v}</span></div>
           ))}
         </div>
-        <button className="btn btn-sm" style={{ marginTop: 12, width: '100%' }} onClick={() => toast('量化生产关闭中,训练入口仅维护者可用(演示)')}>触发模型训练</button>
+        <button className="btn btn-sm" style={{ marginTop: 12, width: '100%' }} onClick={() => toast('量化生产关闭中，训练入口仅维护者可用(演示)')}>触发模型训练</button>
       </div>
       <div className="glass" style={{ padding: '14px 16px' }}>
         <div className="t-eyebrow">导出</div>
@@ -448,30 +448,30 @@ function ApiKeySection({ cfg }: any) {
   const [configured, setConfigured] = useAState({ tavily: true });
   function save(id) {
     setConfigured((c) => ({ ...c, [id]: true }));
-    toast('凭证已加密保存到本地 .env(演示);不进 Git,不上云');
+    toast('凭证已加密保存到本地 .env(演示);不进 Git，不上云');
   }
   const llmLocal = cfg.llm_provider === 'local_cli';
   const llmEnv = cfg.llm_provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : cfg.llm_provider === 'openai' ? 'OPENAI_API_KEY' : 'AI_PROVIDER=local_cli';
   const groups = [
     { label: '模型 LLM', keys: [
       { id: 'llm', name: `LLM Provider · ${cfg.llm_provider}`, env: llmEnv, disabled: llmLocal, tail: '7a2c',
-        hint: llmLocal ? '当前 local_cli,走本机已登录的本地 CLI,无需云端 Key。在「LLM 与 Agent」可切换 provider。'
-          : (cfg.llm_provider === 'openai' ? 'OpenAI 兼容(DeepSeek / Moonshot / 通义 / Azure);可另配 OPENAI_BASE_URL。' : '云端模型凭证,用于新闻情绪、多空辩论、研究副驾驶与 AI 对话。'),
+        hint: llmLocal ? '当前 local_cli，走本机已登录的本地 CLI，无需云端 Key。在「LLM 与 Agent」可切换 provider。'
+          : (cfg.llm_provider === 'openai' ? 'OpenAI 兼容(DeepSeek / Moonshot / 通义 / Azure);可另配 OPENAI_BASE_URL。' : '云端模型凭证，用于新闻情绪、多空辩论、研究副驾驶与 AI 对话。'),
         placeholder: '粘贴 API Key' },
     ] },
     { label: '行情数据源', keys: [
       { id: 'tushare', name: 'Tushare 前复权行情', env: 'TUSHARE_TOKEN', tail: 'c5e1',
-        hint: '可选前复权日线 fallback,默认关闭(TUSHARE_QFQ_ENABLED);影响价格口径。', placeholder: 'token…' },
+        hint: '可选前复权日线 fallback，默认关闭(TUSHARE_QFQ_ENABLED);影响价格口径。', placeholder: 'token…' },
       { id: 'tickflow', name: 'TickFlow 行情', env: 'TICKFLOW_API_KEY', tail: '9e44',
-        hint: '可选 CN 日线优先源(forward_additive 复权),默认关闭;启用后作首选源。', placeholder: '粘贴 API Key' },
+        hint: '可选 CN 日线优先源(forward_additive 复权)，默认关闭;启用后作首选源。', placeholder: '粘贴 API Key' },
       { id: 'ifind', name: 'iFinD MCP · observe-only', env: 'IFIND_MCP_TOKEN', tail: '2b70',
-        hint: '同花顺 iFinD MCP 探针,默认关闭,observe-only,不接入生产行情拉取。', placeholder: 'token…' },
+        hint: '同花顺 iFinD MCP 探针，默认关闭，observe-only，不接入生产行情拉取。', placeholder: 'token…' },
     ] },
     { label: '新闻与搜索', keys: [
       { id: 'tavily', name: 'Tavily 实时搜索', env: 'TAVILY_API_KEY', tail: 'b91f',
         hint: 'DB 新闻不足阈值时补充实时搜索(可能触网和花费)。', placeholder: 'tvly-…' },
       { id: 'anspire', name: 'Anspire 严格新闻', env: 'ANSPIRE_API_KEY', tail: '4d80',
-        hint: '深度研究与严格新闻抓取使用,带质量分门控入库。', placeholder: 'ans-…' },
+        hint: '深度研究与严格新闻抓取使用，带质量分门控入库。', placeholder: 'ans-…' },
     ] },
     { label: '推送与远程访问', keys: [
       { id: 'bark', name: 'Bark iOS 推送', env: 'BARK_KEY', tail: 'a7f3',
@@ -483,7 +483,7 @@ function ApiKeySection({ cfg }: any) {
   return (
     <div>
       <div className="glass-inset" style={{ padding: '12px 15px', marginBottom: 4, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)' }}>
-        <b style={{ color: 'var(--ink)' }}>本地优先</b> · 所有凭证只写入本机 <code style={{ fontFamily: 'var(--font-mono)' }}>.env</code>,不进 Git、不上云。Demo 模式不需要任何 Key。
+        <b style={{ color: 'var(--ink)' }}>本地优先</b> · 所有凭证只写入本机 <code style={{ fontFamily: 'var(--font-mono)' }}>.env</code>，不进 Git、不上云。Demo 模式不需要任何 Key。
       </div>
       {groups.map((g) => (
         <div key={g.label} style={{ marginTop: 16 }}>
@@ -521,15 +521,15 @@ export function AdminPage() {
   }
   const idx = ADMIN_SECTIONS.findIndex(([id]) => id === active);
   const copy = {
-    decision: '控制裁决分如何计算,以及哪些信号可以进入可小仓试错。',
+    decision: '控制裁决分如何计算，以及哪些信号可以进入可小仓试错。',
     portfolio: '集中展示仓位、止损止盈和退出保护的纪律参数。',
     agents: '控制多空辩论、仲裁置信度、研究类 agent 和待确认动作注册。',
-    apikey: '配置 LLM、新闻、数据与推送凭证。本地优先,只写本机 .env。',
-    data: '检查价格、财报、新闻覆盖率,保留本地优先和来源门控策略。',
+    apikey: '配置 LLM、新闻、数据与推送凭证。本地优先，只写本机 .env。',
+    data: '检查价格、财报、新闻覆盖率，保留本地优先和来源门控策略。',
     schedule: '展示盘前、盘中、盘后、周末四段工作流和写入边界。',
     risk: '集中管理会阻断调度或跳过交易建议的保护性开关。',
     memory: '查看活跃记忆、确认候选升级、删除与召回审计日志。',
-    llmcost: '每次 LLM 调用的 token 估算和 CNY 成本,按 bucket 分桶。',
+    llmcost: '每次 LLM 调用的 token 估算和 CNY 成本，按 bucket 分桶。',
   }[active];
 
   const body = {

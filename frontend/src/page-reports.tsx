@@ -69,7 +69,7 @@ export function DebateReport({ debate }: any) {
             <span style={{ color: 'var(--accent-ink)', fontWeight: 650, marginRight: 6 }}>议题</span>{debate.director.debate_topic}
           </p>
         ) : (
-          <p className="t-dim" style={{ margin: '9px 0 0', fontSize: 13 }}>未达辩论阈值,研究员快速达成共识,不下达议题。</p>
+          <p className="t-dim" style={{ margin: '9px 0 0', fontSize: 13 }}>未达辩论阈值，研究员快速达成共识，不下达议题。</p>
         )}
         {debate.director.quality_notes && debate.director.quality_notes.length > 0 && (
           <div className="row" style={{ gap: 6, marginTop: 9, flexWrap: 'wrap' }}>
@@ -80,7 +80,7 @@ export function DebateReport({ debate }: any) {
 
       {/* 三轮辩论 */}
       {quick ? (
-        <div className="empty">{debate.fallback_reason || '四路方向一致,跳过辩论。'}</div>
+        <div className="empty">{debate.fallback_reason || '四路方向一致，跳过辩论。'}</div>
       ) : (
         <div className="grid" style={{ gap: 10 }}>
           <div className="t-eyebrow">三轮辩论记录</div>
@@ -183,7 +183,7 @@ export function DebateReport({ debate }: any) {
       </div>
 
       <p className="t-faint" style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55 }}>
-        多空辩论为研究参考(影子轨),用于暴露分歧;不进入正式信号,不自动下单。
+        多空辩论为研究参考(影子轨)，用于暴露分歧;不进入正式信号，不自动下单。
       </p>
     </div>
   );
@@ -319,7 +319,7 @@ export function DeepResearchReport({ report }: any) {
         <Markdown text={report.content} />
       </div>
       <p className="t-faint" style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55 }}>
-        深度研究为 observe-only;warning 报告携带告警输出,不自动影响生产信号,不自动促进记忆。
+        深度研究为 observe-only;warning 报告携带告警输出，不自动影响生产信号，不自动促进记忆。
       </p>
     </div>
   );
@@ -385,7 +385,7 @@ export function ForwardThesisReport({ thesis }: any) {
         <span className="t-faint" style={{ fontSize: 12 }}>下次复盘 <b style={{ color: 'var(--ink-2)' }}>{thesis.next_review}</b></span>
       </div>
       <p className="t-faint" style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55 }}>
-        论题只作论据,不直接抬高买入分;只有结果兑现、复盘通过,才升级为可信记忆。
+        论题只作论据，不直接抬高买入分;只有结果兑现、复盘通过，才升级为可信记忆。
       </p>
     </div>
   );
@@ -420,7 +420,7 @@ function buildReportIndex() {
     out.push({
       id: `debate-${sym}`, type: 'debate', title: `${d.name} 多空辩论`, target: `${d.name} ${sym}`,
       date: d.date, status: demoTag + (d.used_llm ? `${d.round_count} 轮 · 用 LLM` : '快速共识'),
-      summary: r3 ? r3.rationale : (d.fallback_reason || '四路方向一致,快速共识。'),
+      summary: r3 ? r3.rationale : (d.fallback_reason || '四路方向一致，快速共识。'),
       payload: d,
     });
   });
@@ -453,7 +453,7 @@ function buildReportIndex() {
 }
 
 function ReportReader({ entry }: any) {
-  if (!entry) return <div className="empty">从左侧选择一份报告,这里显示完整内容。</div>;
+  if (!entry) return <div className="empty">从左侧选择一份报告，这里显示完整内容。</div>;
   if (entry.type === 'debate') return <DebateReport debate={entry.payload} />;
   if (entry.type === 'deep_research') return <DeepResearchReport report={entry.payload} />;
   if (entry.type === 'forward_thesis') return <ForwardThesisReport thesis={entry.payload} />;
@@ -579,7 +579,7 @@ function ReviewsWorkspace() {
       .catch((e) => {
         setBusy('');
         if (!e || !e.demo) { toast(`复盘检查失败:${e?.message || '后端错误'}`); return; }
-        toast(kind === 'daily' ? '今日复盘已是最新(2026-06-09),无需重新生成' : '本周长期复盘已是最新(2026-W24)');
+        toast(kind === 'daily' ? '今日复盘已是最新(2026-06-09)，无需重新生成' : '本周长期复盘已是最新(2026-W24)');
       });
   }
 
@@ -628,7 +628,7 @@ function ReviewsWorkspace() {
             </div>
           }>
           {selected ? <Markdown text={selected.content || selected.summary || ''} /> : (
-            <div className="empty">点击左侧复盘历史条目,这里会展示完整复盘报告。</div>
+            <div className="empty">点击左侧复盘历史条目，这里会展示完整复盘报告。</div>
           )}
         </Card>
       </div>
@@ -667,7 +667,7 @@ function MemoryWorkspace() {
             <div className="grid" style={{ gap: 10 }}>
               {M.queue.length === 0 && (
                 <div className="empty">
-                  暂无待确认候选。{atlasLive ? '复盘或研究运行产生记忆候选后,会进入这里等待人工升级。' : ''}
+                  暂无待确认候选。{atlasLive ? '复盘或研究运行产生记忆候选后，会进入这里等待人工升级。' : ''}
                 </div>
               )}
               {M.queue.map((q) => (
@@ -679,7 +679,7 @@ function MemoryWorkspace() {
                       <span className="t-num t-faint" style={{ fontSize: 11.5 }}>{q.source}</span>
                     </div>
                     <div className="row" style={{ gap: 6 }}>
-                      <button className="btn btn-sm" onClick={() => toast('已预览升级影响(演示),真实升级需要人工确认')}>预览</button>
+                      <button className="btn btn-sm" onClick={() => toast('已预览升级影响(演示)，真实升级需要人工确认')}>预览</button>
                       <button className="btn btn-sm btn-primary" onClick={() => candidateAct('promote', q)}>确认升级</button>
                       <button className="btn btn-sm btn-quiet btn-danger" onClick={() => candidateAct('reject', q)}>反驳</button>
                     </div>
@@ -738,7 +738,7 @@ function MemoryWorkspace() {
               <div>1. AI 输出只可生成候选。</div>
               <div>2. ReviewCase 或结果证据必须可回看。</div>
               <div>3. 用户确认后才 trusted。</div>
-              <div>4. 被证伪的旧记忆保留 audit,避免重复犯错。</div>
+              <div>4. 被证伪的旧记忆保留 audit，避免重复犯错。</div>
             </div>
           </div>
         </div>
@@ -766,7 +766,7 @@ export function ReportsPage() {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="Replay Dossier" title="复盘案卷"
-        desc="把证据来源、复盘记录和记忆沉淀放在同一个案卷里:先看材料从哪来,再看复盘怎么判,最后看哪些经验可以进入长期记忆。" />
+        desc="把证据来源、复盘记录和记忆沉淀放在同一个案卷里:先看材料从哪来，再看复盘怎么判，最后看哪些经验可以进入长期记忆。" />
 
       <div className="grid pop" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
         {summary.map(([label, value, sub]) => (
