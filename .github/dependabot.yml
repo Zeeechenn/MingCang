@@ -38,7 +38,9 @@ updates:
     ignore:
       - dependency-name: "actions/upload-pages-artifact"
         versions:
+          - "v5"
           - "5.x"
       - dependency-name: "actions/deploy-pages"
         versions:
+          - "v5"
           - "5.x"
