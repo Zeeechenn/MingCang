@@ -859,7 +859,7 @@ export const MC_DATA: any = (function () {
   };
 
   const SYSTEM = {
-    version: '0.4.1', release: [['v0.4.1', '双语发布'], ['Logo', '新版配色'], ['截图', '今日裁决'], ['Quant', '生产关闭']],
+    version: '0.4.2', release: [['v0.4.2', 'TS 模块'], ['CI', '覆盖率门'], ['依赖', '自动更新'], ['Quant', '生产关闭']],
     market_overview: { available: true, name: '沪深300', close: 4082.35, change_pct: 0.42, date: '2026-06-09',
       indices: [
         { name: '上证指数', close: 3421.56, change_pct: 0.38 },

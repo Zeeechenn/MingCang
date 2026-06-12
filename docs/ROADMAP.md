@@ -10,6 +10,7 @@
 |---|---|---|---|
 | M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 complete/released：SKILL/spec/Serenity/ResearchReportGate + `ai_supply_chain` source-tier fields + research-positioning importer/scoreboard source gate 均已落地；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
 | M29 Forward Evidence | active / blocked for now：2026-06-09 只读 readiness 显示 `ready_to_run_forward_shadow=false`；100 标的完整覆盖只到 2026-06-02，1d/3d/5d 既有 forward artifacts 缺失 | 先只读/preview 诊断覆盖和 baseline artifact 缺口；ready 后才追加 1d/3d/5d shadow + ledger | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
+| v0.4.2 frontend TypeScript / visibility hardening | complete：前端迁移到 TypeScript/TSX + 真实 ES module imports；CI 覆盖率门、Dependabot 和威胁模型说明已发布；生产信号零漂移 | 推送后只跟进 CI 或前端类型/构建反馈 | 不改 official signal/仓位/scheduler/test2；不启用 quant/Kronos/Atlas |
 | v0.4.1 public-surface polish | complete：恢复旧版折线 favicon 语义并匹配新前端配色；GitHub 首页截图刷新；GitHub release notes 统一中英文双版本 | 后续只跟进 CI 或公开页面显示问题 | 不改 official signal/仓位/scheduler/test2 |
 | v0.4.0 frontend glass-shell refresh | complete：高保真玻璃拟态前端替换旧 Tailwind 页面，live/demo 数据回落与 ATLAS 账本界面接线已发布；生产信号零漂移 | 推送后只跟进 CI 或用户反馈的 UI/接线小修 | 不改 official signal/仓位/scheduler/test2；ATLAS 后端门控仍默认休眠 |
 | v0.3.4 research source-gate hardening | complete：ResearchReportGate / Serenity foundation、`ai_supply_chain` source-tier metadata、research-positioning importer/scoreboard execute guards 已发布；`main == origin/main` | 后续只在明确需要时补下一批质量门或前端 evidence card | 不改 production profile、不把 source-tier metadata 接到真实决策 |
@@ -98,6 +99,7 @@ Detailed history is intentionally not repeated here. Read `CHANGELOG.md` for:
 
 - M46 onboarding/demo clarity and user-discovery follow-up.
 - M46.5–M48 correctness floor (lookahead one-time audit + key-number display tests), standing `lookahead-check` + data-trust visibility, and frontend TS/API/primitive reliability.
+- v0.4.2 frontend TypeScript module migration and visibility hardening.
 - v0.4.1 public-surface polish.
 - v0.4.0 frontend glass-shell refresh.
 - v0.3.4 research source-gate hardening.

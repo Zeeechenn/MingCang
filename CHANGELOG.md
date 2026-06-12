@@ -6,6 +6,31 @@
 
 ---
 
+## [v0.4.2] Frontend TypeScript and visibility hardening / 前端 TypeScript 与可见性加固（2026-06-12）
+
+### Added / 新增
+- Added a coverage floor to CI, Dependabot configuration, and an explicit
+  local-first threat model.
+- 增加 CI 覆盖率下限、Dependabot 配置和 local-first 威胁模型说明。
+
+### Changed / 变更
+- Migrated the frontend source modules to TypeScript/TSX with real ES module
+  imports while keeping runtime compatibility exports.
+- 将前端源码迁移到 TypeScript/TSX 和真实 ES module imports，同时保留运行时兼容导出。
+- Pinned React type packages to the React 18 runtime line and refreshed stale
+  frontend module comments after the migration.
+- 将 React 类型包固定到 React 18 运行时系列，并修正迁移后的陈旧前端模块注释。
+- Aligned package, API, frontend, runtime-demo, and lockfile version surfaces on
+  `0.4.2`.
+- 将 package / API / frontend / 演示运行时 / lockfile 版本面统一到 `0.4.2`。
+
+### Safety / 安全边界
+- No official signal, scheduler, test2, position, production-weight, database,
+  or trusted-memory behavior was changed.
+- 不改官方信号、scheduler、test2、仓位、生产权重、数据库或 trusted memory 行为。
+
+---
+
 ## [v0.4.1] Public-surface polish / 公开展示面修补（2026-06-11）
 
 ### Added / 新增

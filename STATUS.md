@@ -8,8 +8,8 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.4.1`; the latest
-documented release is `v0.4.1` public-surface polish in
+Current release surface: package/API/frontend versions are `0.4.2`; the latest
+documented release is `v0.4.2` frontend TypeScript and visibility hardening in
 `CHANGELOG.md`.
 
 ## Current State
@@ -21,6 +21,7 @@ documented release is `v0.4.1` public-surface polish in
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
+| v0.4.2 | complete: frontend TypeScript module migration, CI coverage gate, Dependabot, and threat-model documentation |
 | v0.4.1 | complete: favicon restored with the new glass-shell palette, GitHub homepage screenshot refreshed, release notes bilingualized |
 | v0.4.0 | complete: frontend glass-shell refresh with live/demo data fallback and ATLAS ledger surfaces kept behind existing dormant backend gates |
 | v0.3.4 | complete: non-promoting Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and research-positioning importer/scoreboard source gates |
@@ -86,12 +87,13 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate for v0.4.1 on 2026-06-12:
-`make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'` passed
-locally: ruff passed, mypy passed, backend pytest reported 1200 passed / 5
-skipped, frontend Vite test/build passed, and frontend lint-summary build
-passed. GitHub CI should still be checked after push before treating the
-release as remote-green.
+Last full recorded gate for v0.4.2 on 2026-06-12:
+`make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
+RUFF_CACHE_DIR=/private/tmp/mingcang_ruff_cache
+MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache` passed locally: ruff passed,
+mypy passed, backend pytest reported 1200 passed / 5 skipped, frontend
+typecheck/Vite test/build passed, and frontend lint-summary passed. GitHub CI
+should still be checked after push before treating the release as remote-green.
 
 For release-quality work, treat `make verify` as the canonical gate.
 
