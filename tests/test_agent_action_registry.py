@@ -67,15 +67,37 @@ def test_remote_write_requires_action_allowlist():
     from backend.agent.security import AgentSecurityError, require_agent_access
 
     env = {
-        "STOCKSAGE_AGENT_MODE": "remote",
-        "STOCKSAGE_AGENT_API_KEY": "secret",
-        "STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED": "true",
-        "STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS": "watchlist.add",
+        "MINGCANG_AGENT_MODE": "remote",
+        "MINGCANG_AGENT_API_KEY": "secret",
+        "MINGCANG_AGENT_REMOTE_WRITE_ENABLED": "true",
+        "MINGCANG_AGENT_REMOTE_WRITE_ACTIONS": "watchlist.add",
     }
 
     require_agent_access("write", env=env, api_key="secret", action="watchlist.add")
     with pytest.raises(AgentSecurityError):
         require_agent_access("write", env=env, api_key="secret", action="config.update")
+
+
+def test_legacy_agent_env_is_ignored():
+    from backend.agent.security import AgentSecurityError, agent_mode, require_agent_access
+
+    legacy_prefix = "STOCK" + "SAGE" + "_AGENT_"
+    env = {
+        legacy_prefix + "MODE": "remote",
+        legacy_prefix + "API_KEY": "secret",
+        legacy_prefix + "REMOTE_WRITE_ENABLED": "true",
+        legacy_prefix + "REMOTE_WRITE_ACTIONS": "watchlist.add",
+    }
+
+    assert agent_mode(env) == "local"
+    require_agent_access("write", env=env, api_key=None, action="watchlist.add")
+    with pytest.raises(AgentSecurityError):
+        require_agent_access(
+            "write",
+            env={"MINGCANG_AGENT_MODE": "remote", legacy_prefix + "API_KEY": "secret"},
+            api_key="secret",
+            action="watchlist.add",
+        )
 
 
 def test_agent_security_reads_settings_when_env_not_in_os(monkeypatch):
@@ -87,16 +109,12 @@ def test_agent_security_reads_settings_when_env_not_in_os(monkeypatch):
         "MINGCANG_AGENT_API_KEY",
         "MINGCANG_AGENT_REMOTE_WRITE_ENABLED",
         "MINGCANG_AGENT_REMOTE_WRITE_ACTIONS",
-        "STOCKSAGE_AGENT_MODE",
-        "STOCKSAGE_AGENT_API_KEY",
-        "STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED",
-        "STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS",
     ):
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setattr(settings, "stocksage_agent_mode", "remote")
-    monkeypatch.setattr(settings, "stocksage_agent_api_key", "secret")
-    monkeypatch.setattr(settings, "stocksage_agent_remote_write_enabled", True)
-    monkeypatch.setattr(settings, "stocksage_agent_remote_write_actions", "watchlist.add")
+    monkeypatch.setattr(settings, "mingcang_agent_mode", "remote")
+    monkeypatch.setattr(settings, "mingcang_agent_api_key", "secret")
+    monkeypatch.setattr(settings, "mingcang_agent_remote_write_enabled", True)
+    monkeypatch.setattr(settings, "mingcang_agent_remote_write_actions", "watchlist.add")
 
     assert agent_mode() == "remote"
     require_agent_access("write", api_key="secret", action="watchlist.add")
@@ -106,31 +124,39 @@ def test_agent_security_reads_settings_when_env_not_in_os(monkeypatch):
         require_agent_access("write", action="watchlist.add")
 
 
-def test_agent_security_reads_mingcang_settings_when_env_not_in_os(monkeypatch):
-    from backend.agent.security import AgentSecurityError, agent_mode, require_agent_access
-    from backend.config import settings
+def test_agent_security_ignores_legacy_settings_names(monkeypatch):
+    from backend.agent.security import agent_mode, require_agent_access
+    from backend.config import Settings, settings
 
+    legacy_env_prefix = "STOCK" + "SAGE" + "_AGENT_"
     for key in (
         "MINGCANG_AGENT_MODE",
         "MINGCANG_AGENT_API_KEY",
         "MINGCANG_AGENT_REMOTE_WRITE_ENABLED",
         "MINGCANG_AGENT_REMOTE_WRITE_ACTIONS",
-        "STOCKSAGE_AGENT_MODE",
-        "STOCKSAGE_AGENT_API_KEY",
-        "STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED",
-        "STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS",
+        legacy_env_prefix + "MODE",
+        legacy_env_prefix + "API_KEY",
+        legacy_env_prefix + "REMOTE_WRITE_ENABLED",
+        legacy_env_prefix + "REMOTE_WRITE_ACTIONS",
     ):
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.setattr(settings, "mingcang_agent_mode", "remote")
-    monkeypatch.setattr(settings, "mingcang_agent_api_key", "secret")
-    monkeypatch.setattr(settings, "mingcang_agent_remote_write_enabled", True)
-    monkeypatch.setattr(settings, "mingcang_agent_remote_write_actions", "watchlist.add")
-    monkeypatch.setattr(settings, "stocksage_agent_mode", "")
+    monkeypatch.setattr(settings, "mingcang_agent_mode", "local")
+    monkeypatch.setattr(settings, "mingcang_agent_api_key", "")
+    monkeypatch.setattr(settings, "mingcang_agent_remote_write_enabled", False)
+    monkeypatch.setattr(settings, "mingcang_agent_remote_write_actions", "")
 
-    assert agent_mode() == "remote"
-    require_agent_access("write", api_key="secret", action="watchlist.add")
-    with pytest.raises(AgentSecurityError):
-        require_agent_access("write", api_key="wrong", action="watchlist.add")
+    legacy_prefix = "stock" + "sage" + "_agent_"
+    for field in (
+        legacy_prefix + "mode",
+        legacy_prefix + "api_key",
+        legacy_prefix + "remote_write_enabled",
+        legacy_prefix + "remote_write_actions",
+    ):
+        assert field not in Settings.model_fields
+        assert not hasattr(settings, field)
+
+    assert agent_mode() == "local"
+    require_agent_access("write")
 
 
 def test_execute_action_validates_payload_before_handler(test_db):
@@ -267,7 +293,7 @@ def test_execute_action_enforces_allowed_modes(monkeypatch, test_db):
     from backend.agent import action_registry
     from backend.agent.action_registry import ActionDefinition, execute_registered_action
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
     monkeypatch.setitem(
         action_registry._ACTIONS,
         "local.only",

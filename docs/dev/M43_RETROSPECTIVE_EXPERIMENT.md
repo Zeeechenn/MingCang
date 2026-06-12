@@ -197,7 +197,7 @@ M43.2 reproduction script, `scripts/m43_2_amihud_ic.py`, covering all three
 frozen single-factor candidates:
 
 ```bash
-python3 scripts/m43_2_amihud_ic.py --factor all --db-path ~/.stock-sage/m43_work.db
+python3 scripts/m43_2_amihud_ic.py --factor all --db-path ~/.mingcang/m43_work.db
 ```
 
 For single-factor checks, pass `--factor amihud_20`,

@@ -201,7 +201,7 @@ class TestSerenityProjectRootPath:
             "_PROJECT_ROOT must not be home directory (parents[3] was wrong for backend/research/)"
         )
         # parents[2] from backend/research/serenity_chokepoint.py => repo root
-        # Verify it points to stock-sage repo root (has AGENTS.md or backend/ subdir)
+        # Verify it points to MingCang repo root (has AGENTS.md or backend/ subdir)
         assert (_PROJECT_ROOT / "backend").is_dir(), (
             f"_PROJECT_ROOT={_PROJECT_ROOT} does not contain 'backend/' — parents[2] may be wrong"
         )

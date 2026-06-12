@@ -5,10 +5,6 @@ from backend.agent.context import (
     mingcang_memory_context,
     mingcang_memory_snapshot,
     mingcang_stock_context,
-    stock_sage_context,
-    stock_sage_memory_context,
-    stock_sage_memory_snapshot,
-    stock_sage_stock_context,
 )
 from backend.agent.security import AgentSecurityError, require_agent_access
 
@@ -19,8 +15,4 @@ __all__ = [
     "mingcang_memory_context",
     "mingcang_memory_snapshot",
     "mingcang_stock_context",
-    "stock_sage_context",
-    "stock_sage_memory_context",
-    "stock_sage_memory_snapshot",
-    "stock_sage_stock_context",
 ]

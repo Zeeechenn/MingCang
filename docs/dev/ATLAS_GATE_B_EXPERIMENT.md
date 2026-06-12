@@ -43,7 +43,7 @@ a later, sampled experiment.**
    `latest_signal()` (no as_of filter); both leak the present. See §5.
 
 ## 4. Data & windows (frozen)
-- **Source:** production `stock-sage.db` (signals, long_term_labels, prices,
+- **Source:** production `mingcang.db` (signals, long_term_labels, prices,
   decision_runs), mounted **READ-ONLY** (`DATABASE_URL` override). *(Operational
   prerequisite — see §10; the atlas worktree DB has only sentiment_cache.)*
 - **Eval window:** 2025-11-01 → 2026-04-30 (6 months); 2026-05+ left unseen.
@@ -129,7 +129,7 @@ with date ≤ `W_start`:
   default off. Soft penalty avoids the over-strictness failure mode.
 
 ## 10. Operational prerequisites & open decisions (need user input)
-1. **Read-only access to production `stock-sage.db`** (it lives in the protected
+1. **Read-only access to production `mingcang.db`** (it lives in the protected
    main checkout; the atlas DB lacks signals/labels). The experiment only READS
    it. Confirm this is acceptable, or provide a copy/snapshot.
 2. **`copilot_present` exclusion** for the experiment gate variant — confirm.

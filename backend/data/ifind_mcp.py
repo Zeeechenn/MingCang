@@ -88,7 +88,7 @@ class IfindMcpClient:
             mcp_id,
             {
                 "jsonrpc": "2.0",
-                "id": "stocksage-ifind",
+                "id": "mingcang-ifind",
                 "method": "tools/call",
                 "params": {"name": name, "arguments": arguments},
             },

@@ -227,7 +227,7 @@ def test_m31_cache_benchmark_defaults_to_no_network_no_persistent_db_writes(tmp_
     assert str(benchmark.DEFAULT_JSON_OUTPUT).startswith("/private/tmp/")
     assert str(benchmark.DEFAULT_MARKDOWN_OUTPUT).startswith("/private/tmp/")
     assert payload["safety"]["network_calls_attempted"] is False
-    assert payload["safety"]["stock_sage_db_writes_attempted"] is False
+    assert payload["safety"]["mingcang_db_writes_attempted"] is False
     assert {row["layer"] for row in payload["layers"]} == {"L1", "L2", "L3"}
     l3 = [row for row in payload["layers"] if row["layer"] == "L3"][0]
     assert l3["measured"] is False

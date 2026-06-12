@@ -34,7 +34,7 @@ def test_m31_cache_benchmark_is_read_only_and_keeps_l3_unmeasured(test_db):
     report = run_benchmark(iterations=2, symbol="300308", session_factory=lambda: test_db)
 
     assert report["safety"]["network_calls_attempted"] is False
-    assert report["safety"]["stock_sage_db_writes_attempted"] is False
+    assert report["safety"]["mingcang_db_writes_attempted"] is False
     assert report["cache_policy"]["workflow_policies"]["intraday"]["allowed_layers"] == ["L1", "L2"]
     l3 = [row for row in report["layers"] if row["layer"] == "L3"][0]
     assert l3["measured"] is False

@@ -455,9 +455,9 @@ def test_m40_write_route_rejects_remote_without_key(monkeypatch, module, path, m
     router = importlib.import_module(module).router
     guards = _route_guards(router, path, method)
     assert guards, f"{path} is missing its agent write guard"
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
     with pytest.raises(HTTPException) as exc:
         guards[0](_FakeRequest())
     assert exc.value.status_code == 401
@@ -467,22 +467,22 @@ def test_m40_write_route_rejects_remote_without_key(monkeypatch, module, path, m
 def test_m40_write_route_honors_action_allowlist(monkeypatch, module, path, method, action):
     router = importlib.import_module(module).router
     guards = _route_guards(router, path, method)
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", "watchlist.add")
-    headers = {"x-stocksage-agent-api-key": "secret"}
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", "watchlist.add")
+    headers = {"x-mingcang-agent-api-key": "secret"}
     with pytest.raises(HTTPException) as exc:
         guards[0](_FakeRequest(headers))
     assert exc.value.status_code == 403
     # Route's own action should be accepted
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", action)
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", action)
     guards[0](_FakeRequest(headers))
 
 
 @pytest.mark.parametrize("module,path,method,action", _GUARDED_M40_ROUTES)
 def test_m40_write_route_passes_in_local_mode(monkeypatch, module, path, method, action):
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "local")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "local")
     router = importlib.import_module(module).router
     guards = _route_guards(router, path, method)
     guards[0](_FakeRequest())
@@ -501,16 +501,16 @@ def test_m40_memory_trust_routes_have_standard_write_guard(monkeypatch, module, 
     )
     assert write_guard is not None, f"{path} is missing agent_write_guard"
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
-    headers = {"x-stocksage-agent-api-key": "secret"}
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", "watchlist.add")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
+    headers = {"x-mingcang-agent-api-key": "secret"}
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", "watchlist.add")
     with pytest.raises(HTTPException) as exc:
         write_guard(_FakeRequest(headers))
     assert exc.value.status_code == 403
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", action)
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", action)
     write_guard(_FakeRequest(headers))
 
 
@@ -519,11 +519,11 @@ def test_m40_memory_trust_routes_reject_remote_even_with_allowlist(monkeypatch, 
     router = importlib.import_module(module).router
     guards = _route_guards(router, path, method)
     assert guards, f"{path} is missing its local human memory gate"
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", "research.memory.promote,research.memory.reject")
-    headers = {"x-stocksage-agent-api-key": "secret"}
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", "research.memory.promote,research.memory.reject")
+    headers = {"x-mingcang-agent-api-key": "secret"}
     with pytest.raises(HTTPException) as exc:
         guards[0](_FakeRequest(headers))
     assert exc.value.status_code == 403
@@ -531,7 +531,7 @@ def test_m40_memory_trust_routes_reject_remote_even_with_allowlist(monkeypatch, 
 
 @pytest.mark.parametrize("module,path,method", _LOCAL_HUMAN_M40_ROUTES)
 def test_m40_memory_trust_routes_pass_in_local_mode(monkeypatch, module, path, method):
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "local")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "local")
     router = importlib.import_module(module).router
     guards = _route_guards(router, path, method)
     guards[0](_FakeRequest())

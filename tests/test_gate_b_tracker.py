@@ -457,7 +457,7 @@ class TestReport:
 def test_source_dest_split_writes_only_to_dest(test_db):
     """record_observations(dest, source_db=src) reads signals/prices from src and
     writes observations ONLY to dest — the production-read / isolated-write split
-    the scheduled CLI relies on (so production stock-sage.db is never written)."""
+    the scheduled CLI relies on (so production mingcang.db is never written)."""
     from sqlalchemy import create_engine, text
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool

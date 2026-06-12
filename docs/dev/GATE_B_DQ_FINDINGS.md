@@ -1,6 +1,6 @@
 # Gate-B Data-Quality Finding: qfq/hfq price contamination
 
-**Status:** diagnosed (read-only, on a copy of production `stock-sage.db`).
+**Status:** diagnosed (read-only, on a copy of production `mingcang.db`).
 The Gate-B tracker is now robust to it; the underlying price data still needs
 remediation on the production side (main owns price quality).
 

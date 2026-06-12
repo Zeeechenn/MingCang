@@ -61,7 +61,7 @@ def test_backfill_dry_run_does_not_call_llm_or_write(tmp_path):
     plan_path = tmp_path / "plan.json"
     export_path = tmp_path / "missing.json"
     _write_plan(plan_path, export_path)
-    db_path = tmp_path / "stocksage.sqlite"
+    db_path = tmp_path / "mingcang.sqlite"
     with sqlite3.connect(db_path) as con:
         con.execute("CREATE TABLE sentiment_cache (cache_key TEXT PRIMARY KEY)")
 
@@ -111,7 +111,7 @@ def test_backfill_execute_inserts_and_writes_rollback_manifest(tmp_path):
     plan_path = tmp_path / "plan.json"
     export_path = tmp_path / "missing.json"
     _write_plan(plan_path, export_path)
-    db_path = tmp_path / "stocksage.sqlite"
+    db_path = tmp_path / "mingcang.sqlite"
     with sqlite3.connect(db_path) as con:
         con.execute(
             "CREATE TABLE sentiment_cache ("
@@ -154,7 +154,7 @@ def test_backfill_execute_aborts_empty_sentiment_without_write(tmp_path):
     plan_path = tmp_path / "plan.json"
     export_path = tmp_path / "missing.json"
     _write_plan(plan_path, export_path)
-    db_path = tmp_path / "stocksage.sqlite"
+    db_path = tmp_path / "mingcang.sqlite"
     with sqlite3.connect(db_path) as con:
         con.execute(
             "CREATE TABLE sentiment_cache ("
@@ -189,7 +189,7 @@ def test_backfill_execute_skips_existing_without_overwrite(tmp_path):
     plan_path = tmp_path / "plan.json"
     export_path = tmp_path / "missing.json"
     key_a, hash_a = _write_plan(plan_path, export_path)
-    db_path = tmp_path / "stocksage.sqlite"
+    db_path = tmp_path / "mingcang.sqlite"
     with sqlite3.connect(db_path) as con:
         con.execute(
             "CREATE TABLE sentiment_cache ("

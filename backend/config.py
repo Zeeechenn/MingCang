@@ -11,15 +11,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).parent.parent
 _MINGCANG_DB_PATH = BASE_DIR / "mingcang.db"
-_LEGACY_STOCKSAGE_DB_PATH = BASE_DIR / "stock-sage.db"
 
 
 def _default_database_url() -> str:
-    """Prefer the MingCang DB name while keeping existing local checkouts usable."""
-    path = _MINGCANG_DB_PATH
-    if not path.exists() and _LEGACY_STOCKSAGE_DB_PATH.exists():
-        path = _LEGACY_STOCKSAGE_DB_PATH
-    return f"sqlite:///{path}"
+    """Return the default local MingCang SQLite database URL."""
+    return f"sqlite:///{_MINGCANG_DB_PATH}"
 
 
 def sqlite_path_from_url(database_url: str) -> Path | None:
@@ -34,7 +30,7 @@ def sqlite_path_from_url(database_url: str) -> Path | None:
 
 
 def default_sqlite_path() -> Path:
-    """Resolve the configured SQLite DB path using the MingCang legacy fallback."""
+    """Resolve the configured SQLite DB path using the MingCang default."""
     path = sqlite_path_from_url(settings.database_url)
     if path is not None:
         return path
@@ -277,12 +273,6 @@ class Settings(BaseSettings):
     mingcang_agent_api_key: str = ""
     mingcang_agent_remote_write_enabled: bool = False
     mingcang_agent_remote_write_actions: str = ""
-
-    # Legacy StockSage (前身 StockSage) names remain accepted during the MingCang transition.
-    stocksage_agent_mode: str = ""
-    stocksage_agent_api_key: str = ""
-    stocksage_agent_remote_write_enabled: bool = False
-    stocksage_agent_remote_write_actions: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:

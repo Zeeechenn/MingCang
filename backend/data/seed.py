@@ -22,8 +22,6 @@ def _seed_default_memory() -> None:
 def _should_migrate_local_memory() -> bool:
     """Only ingest home-directory layered memory when explicitly requested."""
     flag = os.environ.get("MINGCANG_MIGRATE_LOCAL_MEMORY")
-    if flag is None:
-        flag = os.environ.get("STOCKSAGE_MIGRATE_LOCAL_MEMORY")
     if flag is not None:
         return flag.strip().lower() in {"1", "true", "yes"}
     return False

@@ -128,8 +128,6 @@ python3 -m backend.agent.cli premarket --pretty
 python3 -m backend.agent.cli stock-context 000001 --pretty
 ```
 
-> Migration: the legacy `stocksage` command, `stock_sage_*` MCP tools, and `STOCKSAGE_AGENT_*` env vars remain available during transition. New installs should use `mingcang`.
-
 ---
 
 ## Usage guide
@@ -214,8 +212,6 @@ Core MCP tools:
 | `mingcang_memory_snapshot` | Layered memory, audit log, promotion pipeline state |
 | `mingcang_health` | Database, dependency, permission health check |
 
-Legacy `stock_sage_*` tool names remain compatibility aliases.
-
 ---
 
 ## Configuration
@@ -238,7 +234,7 @@ MINGCANG_AGENT_REMOTE_WRITE_ENABLED=false
 MINGCANG_AGENT_REMOTE_WRITE_ACTIONS=
 ```
 
-Legacy `STOCKSAGE_AGENT_*` names are still read, but new deployments should use `MINGCANG_AGENT_*`. Keep `.env`, databases, personal trading records, and real keys out of Git.
+Keep `.env`, databases, personal trading records, and real keys out of Git.
 
 </details>
 
@@ -263,16 +259,14 @@ Legacy `STOCKSAGE_AGENT_*` names are still read, but new deployments should use 
 
 ---
 
-## From StockSage to MingCang
+## MingCang Naming
 
-The project was formerly **StockSage**; from 0.3.0 it's officially **MingCang / 明仓**. This is more than a rename:
+As of 0.5.0, public docs, the Pi terminal, installer, launcher, MCP tool examples, and remote-agent configuration use **MingCang / 明仓** naming consistently. The transition compatibility entrypoints have been removed; new installs and local launch flows use `mingcang`.
 
 - The whole research model was rebuilt into a case-based research-to-decision loop (research → signal → position → review → memory);
 - Positioning shifted to "amplify human judgment, gated by forward evidence," adding thesis-import channels and a falsification scoreboard;
 - A ready-to-use `mingcang` Pi terminal shell was added to lower the barrier to entry;
 - A/HK/US read-only global data was expanded, with stronger data-quality and price-adjustment guards.
-
-Legacy `stocksage`, `stock_sage_*`, and `STOCKSAGE_AGENT_*` paths remain available during the transition.
 
 ---
 

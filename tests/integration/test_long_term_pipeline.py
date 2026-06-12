@@ -236,7 +236,7 @@ def test_mirror_json_skipped_by_default(test_db, tmp_path, monkeypatch):
     """默认不应写入用户 Home 目录镜像文件。"""
     from backend.agents.long_term import storage
 
-    home_mirror = tmp_path / "home" / ".stock-sage" / "long_term_labels.json"
+    home_mirror = tmp_path / "home" / ".mingcang" / "long_term_labels.json"
     monkeypatch.setattr(storage, "MIRROR_PATH", None)
     monkeypatch.setattr(storage.settings, "long_term_label_mirror_path", "")
 

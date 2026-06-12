@@ -5,7 +5,7 @@ is validated (the existing test_m40_research_routes.py calls route functions
 directly and bypasses that validation layer — this file closes that gap).
 
 All tests are hermetic: each uses a fresh sqlite:///:memory: engine with
-StaticPool. The real stock-sage.db is never touched.
+StaticPool. The real mingcang.db is never touched.
 """
 from __future__ import annotations
 

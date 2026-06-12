@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="${MINGCANG_REPO_URL:-${STOCKSAGE_REPO_URL:-https://github.com/Zeeechenn/MingCang.git}}"
-APP_DIR="${MINGCANG_APP_DIR:-${STOCKSAGE_APP_DIR:-$HOME/.mingcang/app}}"
-BIN_DIR="${MINGCANG_BIN_DIR:-${STOCKSAGE_BIN_DIR:-$HOME/.local/bin}}"
+REPO_URL="${MINGCANG_REPO_URL:-https://github.com/Zeeechenn/MingCang.git}"
+APP_DIR="${MINGCANG_APP_DIR:-$HOME/.mingcang/app}"
+BIN_DIR="${MINGCANG_BIN_DIR:-$HOME/.local/bin}"
 LAUNCHER="$BIN_DIR/mingcang"
-LEGACY_LAUNCHER="$BIN_DIR/stocksage"
 
 echo "== MingCang native Pi installer =="
 
@@ -61,18 +60,10 @@ export MINGCANG_APP_DIR="$APP_DIR"
 exec bash "$APP_DIR/scripts/mingcang_launcher.sh" "\$@"
 EOF
 chmod +x "$LAUNCHER"
-cat > "$LEGACY_LAUNCHER" <<EOF
-#!/usr/bin/env bash
-export MINGCANG_APP_DIR="$APP_DIR"
-echo "stocksage is a legacy alias; use mingcang for new installs." >&2
-exec bash "$APP_DIR/scripts/mingcang_launcher.sh" "\$@"
-EOF
-chmod +x "$LEGACY_LAUNCHER"
 
 echo
 echo "MingCang is installed."
 echo "Launcher: $LAUNCHER"
-echo "Legacy alias: $LEGACY_LAUNCHER"
 echo
 echo "Next:"
 echo "  mingcang"

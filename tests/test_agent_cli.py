@@ -14,7 +14,7 @@ def _run_cli(repo: Path, db_url: str, *args: str, env: dict[str, str] | None = N
     full_env = {
         "PYTHONPATH": str(repo),
         "DATABASE_URL": db_url,
-        "STOCKSAGE_AGENT_MODE": "local",
+        "MINGCANG_AGENT_MODE": "local",
     }
     if env:
         full_env.update(env)
@@ -300,8 +300,8 @@ def test_agent_cli_remote_mode_requires_api_key(tmp_path):
         db_url,
         "health",
         env={
-            "STOCKSAGE_AGENT_MODE": "remote",
-            "STOCKSAGE_AGENT_API_KEY": "secret",
+            "MINGCANG_AGENT_MODE": "remote",
+            "MINGCANG_AGENT_API_KEY": "secret",
         },
     )
 
@@ -315,8 +315,8 @@ def test_agent_cli_remote_mode_requires_api_key(tmp_path):
         "--api-key",
         "secret",
         env={
-            "STOCKSAGE_AGENT_MODE": "remote",
-            "STOCKSAGE_AGENT_API_KEY": "secret",
+            "MINGCANG_AGENT_MODE": "remote",
+            "MINGCANG_AGENT_API_KEY": "secret",
         },
     )
 
@@ -335,8 +335,8 @@ def test_agent_cli_global_api_key_can_appear_before_subcommand(tmp_path):
         "secret",
         "health",
         env={
-            "STOCKSAGE_AGENT_MODE": "remote",
-            "STOCKSAGE_AGENT_API_KEY": "secret",
+            "MINGCANG_AGENT_MODE": "remote",
+            "MINGCANG_AGENT_API_KEY": "secret",
         },
     )
 

@@ -4,8 +4,7 @@ Run locally with:
     PYTHONPATH=. python -m backend.agent.mcp_server
 
 Remote stdio MCP calls should set MINGCANG_AGENT_MODE=remote and pass
-MINGCANG_AGENT_API_KEY as the tool ``api_key`` argument. Legacy STOCKSAGE_*
-settings and stock_sage_* tool names remain available during the transition.
+MINGCANG_AGENT_API_KEY as the tool ``api_key`` argument.
 """
 from __future__ import annotations
 
@@ -122,41 +121,6 @@ def mingcang_stock_context(symbol: str, api_key: str | None = None) -> dict:
 @mcp.tool()
 def mingcang_health(api_key: str | None = None) -> dict:
     """Read basic database-backed agent health."""
-    return _health(api_key=api_key)
-
-
-@mcp.tool()
-def stock_sage_project_context(symbol: str | None = None, api_key: str | None = None) -> dict:
-    """Legacy alias for ``mingcang_project_context``."""
-    return _project_context(symbol=symbol, api_key=api_key)
-
-
-@mcp.tool()
-def stock_sage_memory_snapshot(api_key: str | None = None) -> dict:
-    """Legacy alias for ``mingcang_memory_snapshot``."""
-    return _memory_snapshot(api_key=api_key)
-
-
-@mcp.tool()
-def stock_sage_memory_context(
-    symbol: str,
-    task_type: str | None = None,
-    query: str | None = None,
-    api_key: str | None = None,
-) -> dict:
-    """Legacy alias for ``mingcang_memory_context``."""
-    return _memory_context(symbol, task_type=task_type, query=query, api_key=api_key)
-
-
-@mcp.tool()
-def stock_sage_stock_context(symbol: str, api_key: str | None = None) -> dict:
-    """Legacy alias for ``mingcang_stock_context``."""
-    return _stock_context(symbol, api_key=api_key)
-
-
-@mcp.tool()
-def stock_sage_health(api_key: str | None = None) -> dict:
-    """Legacy alias for ``mingcang_health``."""
     return _health(api_key=api_key)
 
 

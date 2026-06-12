@@ -1,5 +1,5 @@
 ---
-name: stock-sage-research
+name: mingcang-research
 description: Use for MingCang terminal-agent workflows covering health checks, project memory, single-stock research, topic research, paper-trading reviews and confirmed local actions.
 ---
 

@@ -319,7 +319,6 @@ def get_action(action_id: str, db: Session = Depends(get_db)):
 def confirm_action(
     action_id: str,
     mingcang_api_key: str | None = Header(default=None, alias="x-mingcang-agent-api-key"),
-    api_key: str | None = Header(default=None, alias="x-stocksage-agent-api-key"),
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
@@ -328,7 +327,7 @@ def confirm_action(
         raise HTTPException(404, "action not found")
     if row.status != "pending":
         return get_action(action_id, db)
-    require_http_agent_write_key(row.action, api_key=mingcang_api_key or api_key, authorization=authorization)
+    require_http_agent_write_key(row.action, api_key=mingcang_api_key, authorization=authorization)
 
     payload = _parse(row.payload_json, {})
     result = _execute_action(row.action, payload, db)

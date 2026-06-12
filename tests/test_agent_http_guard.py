@@ -12,9 +12,9 @@ class FakeRequest:
 def test_http_agent_write_guard_rejects_remote_without_key(monkeypatch):
     from backend.agent.http_guard import agent_write_guard
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
 
     guard = agent_write_guard("config.update")
     with pytest.raises(HTTPException) as exc:
@@ -26,16 +26,30 @@ def test_http_agent_write_guard_rejects_remote_without_key(monkeypatch):
 def test_http_agent_write_guard_honors_allowlist(monkeypatch):
     from backend.agent.http_guard import agent_write_guard
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", "watchlist.add")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", "watchlist.add")
 
-    agent_write_guard("watchlist.add")(FakeRequest({"x-stocksage-agent-api-key": "secret"}))
+    agent_write_guard("watchlist.add")(FakeRequest({"x-mingcang-agent-api-key": "secret"}))
     with pytest.raises(HTTPException) as exc:
-        agent_write_guard("config.update")(FakeRequest({"x-stocksage-agent-api-key": "secret"}))
+        agent_write_guard("config.update")(FakeRequest({"x-mingcang-agent-api-key": "secret"}))
 
     assert exc.value.status_code == 403
+
+
+def test_http_agent_write_guard_rejects_legacy_header_name(monkeypatch):
+    from backend.agent.http_guard import agent_write_guard
+
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
+
+    legacy_header = "x-" + "stock" + "sage" + "-agent-api-key"
+    with pytest.raises(HTTPException) as exc:
+        agent_write_guard("config.update")(FakeRequest({legacy_header: "secret"}))
+
+    assert exc.value.status_code == 401
 
 
 def test_http_agent_write_guard_accepts_mingcang_header_and_env(monkeypatch):
@@ -56,6 +70,17 @@ def test_http_agent_write_guard_accepts_bearer_auth(monkeypatch):
     monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
 
     agent_write_guard("config.update")(FakeRequest({"authorization": "Bearer secret"}))
+
+
+def test_ai_confirm_action_declares_only_mingcang_agent_header():
+    import inspect
+
+    from backend.api.routes.ai import confirm_action
+
+    params = inspect.signature(confirm_action).parameters
+
+    assert "api_key" not in params
+    assert getattr(params["mingcang_api_key"].default, "alias", None) == "x-mingcang-agent-api-key"
 
 
 def test_sensitive_write_routes_are_registered_with_agent_guard():

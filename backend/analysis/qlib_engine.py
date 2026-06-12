@@ -4,7 +4,7 @@ LightGBM Alpha 量化引擎（Qlib-style，不依赖 Qlib 数据基础设施）
 训练：python3 -m backend.analysis.qlib_engine --train
 推理：qlib_score(df_raw) → dict  (score: -100 ~ +100)
 
-模型文件：~/.mingcang/models/lgbm_alpha.pkl（兼容读取旧 ~/.stock-sage/models）
+模型文件：~/.mingcang/models/lgbm_alpha.pkl
 """
 import logging
 from pathlib import Path
@@ -21,8 +21,7 @@ from backend.data.qlib_data import FEATURE_COLS, PRODUCTION_FEATURE_COLS, build_
 logger = logging.getLogger(__name__)
 
 _MINGCANG_MODEL_DIR = Path.home() / ".mingcang" / "models"
-_LEGACY_MODEL_DIR = Path.home() / ".stock-sage" / "models"
-MODEL_DIR = _LEGACY_MODEL_DIR if _LEGACY_MODEL_DIR.exists() and not _MINGCANG_MODEL_DIR.exists() else _MINGCANG_MODEL_DIR
+MODEL_DIR = _MINGCANG_MODEL_DIR
 MODEL_PATH = MODEL_DIR / "lgbm_alpha.pkl"
 CANDIDATE_MODEL_PATH = MODEL_DIR / "lgbm_alpha_candidate.pkl"
 

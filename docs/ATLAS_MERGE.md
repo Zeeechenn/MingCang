@@ -45,8 +45,8 @@ The local readiness/merge package recorded these gates around 2026-06-05:
 
 - `git diff --check` passed.
 - `make verify` passed: ruff, mypy on 204 source files, backend pytest `1049 passed, 5 skipped`, frontend node tests `19 passed`, Vite build passed.
-- Test2 fixed-end replay used `--end 2026-06-05`; raw JSON diff against `/Users/zeeechenn/stock-sage/paper_trading/test2_ab_state.json` was zero.
-- DB copy-smoke on `/private/tmp/stocksage_m44_after_l0_gate_copy.db` passed `init_db()`, `PRAGMA integrity_check`, Atlas table/index checks, `forward_theses` normalized unique index check, and protected `stocks` / `signals` row-count stability (`718` / `879`).
+- Test2 fixed-end replay used `--end 2026-06-05`; raw JSON diff against the repository's `paper_trading/test2_ab_state.json` was zero.
+- DB copy-smoke on `/private/tmp/mingcang_m44_after_l0_gate_copy.db` passed `init_db()`, `PRAGMA integrity_check`, Atlas table/index checks, `forward_theses` normalized unique index check, and protected `stocks` / `signals` row-count stability (`718` / `879`).
 - `build_memory_context()` includes L0 memory by default only when `settings.atlas_enabled=True`; explicit memory API context can opt in with `include_l0=True`.
 - Fixed official-signal fixture with `WEIGHT_QUANT=0.0`, technical `0.6`, sentiment `0.4`, Kronos off produced composites `66.0`, `36.0`, `86.0`.
 

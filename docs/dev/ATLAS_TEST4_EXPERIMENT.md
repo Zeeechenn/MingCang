@@ -53,7 +53,7 @@ promotion-grade answer requires forward OOS data accumulated over calendar time.
 ## Stage 1 — LOCKED design (historical diagnostic)
 
 Engine: `backend.tools.gate_b_tracker`, with `--source-database-url` =
-production (`sqlite:////Users/zeeechenn/stock-sage/stock-sage.db`, read-only) and
+production (`sqlite:///<repo-root>/mingcang.db`, read-only) and
 `--database-url` = a throwaway observations DB under `/private/tmp`.
 
 Procedure, for each horizon `H ∈ {5, 10, 20}` trading days (separate obs DBs):

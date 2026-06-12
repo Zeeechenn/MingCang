@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${MINGCANG_APP_DIR:-${STOCKSAGE_APP_DIR:-$HOME/.mingcang/app}}"
+APP_DIR="${MINGCANG_APP_DIR:-$HOME/.mingcang/app}"
 
 if [[ ! -d "$APP_DIR" ]]; then
   echo "MingCang app directory was not found: $APP_DIR" >&2
@@ -88,8 +88,6 @@ Usage:
   mingcang postmarket  Show the postmarket review/export workflow contract (dry-run)
   mingcang weekend     Show the weekend review/calibration workflow contract (dry-run)
   mingcang update      Pull latest code and refresh setup
-
-Legacy alias: stocksage still calls this launcher during the transition.
 USAGE
     ;;
   *)

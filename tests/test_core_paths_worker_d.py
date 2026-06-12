@@ -38,9 +38,9 @@ def test_ai_chat_falls_back_to_project_context_for_incomplete_position(test_db, 
 
 
 def test_ai_chat_auth_fails_in_remote_mode_without_key(test_db, monkeypatch):
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
 
     client = _client_for_db(test_db)
     try:
@@ -65,9 +65,9 @@ def test_ai_confirm_action_auth_fails_for_pending_dynamic_action(test_db, monkey
     )
     assert pending_response.pending_action is not None
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
 
     with pytest.raises(HTTPException) as exc:
         confirm_action(pending_response.pending_action["id"], db=test_db)
@@ -104,9 +104,9 @@ def test_system_status_happy_path_counts_core_tables(test_db, monkeypatch):
 
 
 def test_system_runtime_config_auth_fails_in_remote_mode_without_key(test_db, monkeypatch):
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
 
     client = _client_for_db(test_db)
     try:

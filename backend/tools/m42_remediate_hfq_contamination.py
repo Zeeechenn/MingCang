@@ -13,7 +13,7 @@ Safety contract
   live settings.database_url path.
 - Before any DELETE the tool backs up the SQLite file via shutil.copy2 to
   ``<original>.bak.<YYYYMMDD_HHMMSS>``.
-- Never operates on /tmp/m42_prod_copy.db or the live mingcang.db / stock-sage.db directly.
+- Never operates on /tmp/m42_prod_copy.db or the live mingcang.db directly.
   The caller must supply an explicit --db-url pointing at a throwaway copy.
 - Idempotent: running twice produces the same result (second run finds 0 rows).
 
@@ -70,7 +70,6 @@ _MIN_PRECEDING: int = 5         # minimum history required to flag
 # Refuse to operate on paths that look like live production databases.
 _FORBIDDEN_PATH_FRAGMENTS = (
     "mingcang.db",
-    "stock-sage.db",
     "m42_prod_copy.db",
 )
 

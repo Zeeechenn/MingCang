@@ -6,6 +6,26 @@
 
 ---
 
+## [v0.5.0] MingCang naming finalization / 明仓命名收口（2026-06-12）
+
+### Changed / 变更
+- Finalized MingCang naming across native Pi assets, installer scripts,
+  launcher entrypoints, public READMEs, license, status docs, roadmap, API, and
+  frontend/package version surfaces.
+- 原生 Pi 资产、安装脚本、launcher 入口、公开 README、许可证、状态文档、路线图、
+  API 与前端/package 版本面统一收口到 MingCang / 明仓 与 `0.5.0`。
+
+### Removed / 移除
+- Removed the transition compatibility layer for the previous command, MCP tool,
+  environment-variable, launcher, and local-path names from this release slice.
+- 移除过渡期兼容层：旧命令、旧 MCP 工具别名、旧环境变量回退、旧 launcher 和旧本地路径入口
+  不再作为安装器或 Pi 终端公开合同。
+
+### Safety / 安全边界
+- No official signal, scheduler, test2, position, production-weight, database,
+  or trusted-memory behavior was changed.
+- 不改官方信号、scheduler、test2、仓位、生产权重、数据库或 trusted memory 行为。
+
 ## [v0.4.3] Frontend punctuation and M29 evidence baseline / 前端标点与 M29 证据基线（2026-06-12）
 
 ### Fixed / 修复
@@ -223,18 +243,18 @@
 ### Changed
 - README 首屏改为用户视角：用例表 → 不替你做主声明 → demo → 截图 → 架构一句话概括 + 链接。
 - 前端 `WatchlistPage` 版本条从写死的 `v0.2.1 / M27 / M28 / M29` 改为读取 `APP_VERSION`，统一显示 `v0.3.0`。
-- 清理 ROADMAP 标题、CHANGELOG、ATLAS 文档与 backend 注释/docstring 里的 StockSage 用户可见残留。
+- 清理 ROADMAP 标题、CHANGELOG、ATLAS 文档与 backend 注释/docstring 里的旧品牌用户可见残留。
 
 ### Kept (compat)
-- `_LEGACY_STOCKSAGE_DB_PATH`、`STOCKSAGE_AGENT_*` 环境变量、`.pi` MCP 工具名等载荷型兼容别名保留不动。
+- 旧数据库路径、旧 agent 环境变量、`.pi` MCP 工具名等载荷型兼容别名当时保留不动。
 
 ---
 
-## [v0.3.0] Research-to-decision loop rebuild + MingCang rebrand（2026-06-06）
+## [v0.3.0] Research-to-decision loop rebuild + MingCang identity（2026-06-06）
 
 > **Headline: the research model was rebuilt.** This release lands a case-based
 > research-to-decision loop, reframes the whole system around an auditable
-> import → falsify → review → memory loop, and renames StockSage to MingCang —
+> import → falsify → review → memory loop, and moves the public identity to MingCang —
 > all with **zero production-signal drift**.
 
 ### Architecture (the main story)
@@ -256,7 +276,7 @@
   official-signal fixture — large architecture, zero behavior drift.
 
 ### Changed
-- Public identity moved from StockSage to MingCang / 明仓 across the README,
+- Public identity moved to MingCang / 明仓 across the README,
   English README, project index, package metadata, install path, and
   agent-facing project description.
 - The homepage was rewritten to state the project's purpose, vision, feature map,
@@ -269,9 +289,8 @@
   ready-to-use entry point for non-developers.
 
 ### Decision
-- Legacy `stocksage`, `stock_sage_*`, `STOCKSAGE_AGENT_*`, and `~/.stock-sage`
-  compatibility paths remain available during the transition; new public installs
-  and docs should use MingCang naming.
+- Transition compatibility paths remained available in that release; new public
+  installs and docs were directed to MingCang naming.
 - This release does **not** change production signal weights, quant/Kronos
   promotion status (quant stays off), trading automation boundaries, or HK/US
   read-only constraints. The new architecture stays dormant until forward
@@ -321,7 +340,7 @@
 ## [v0.2.0] Agent-ready research runtime 与 Alpha evidence release（2026-05-31）
 
 ### Added
-- 原生 `stocksage` Pi 终端、项目内 `.pi` prompts/skills/extensions、安装脚本与本地 agent launcher 进入公开主线。
+- 原生 Pi 终端、项目内 `.pi` prompts/skills/extensions、安装脚本与本地 agent launcher 进入公开主线。
 - M26 / M27 工具链公开：量化 baseline、Kronos 零样本/finetuned 评估、alpha diagnostic、label/objective search、forward shadow、sentiment cache backfill plan/runner 与 production-profile A/B。
 - M28 research runtime 整合：dossier、deep research、copilot validation questions、多轮辩论 research_context 与结构化 IC Memo sections 串联。
 - 可选数据源扩展：Tushare qfq late fallback 与 iFinD MCP observe-only adapter，默认均关闭，不写入生产信号。
@@ -433,7 +452,7 @@
 ### Fixed
 - M22.0：持仓创建/更新 schema 锁定 CN/US 市场枚举、正数仓位/成本/止损/止盈/平仓价，并拒绝重复平仓覆盖 realized PnL。
 - M22.1：`position.add` agent action schema 对齐 HTTP API，可确认写入 opened_at、stop_loss、take_profit 和 note，仍拒绝未知字段。
-- M22.2：初始化数据库默认不再把本机 `~/.stock-sage/memory` 吸入非默认 SQLite；需显式 `STOCKSAGE_MIGRATE_LOCAL_MEMORY=1` 或默认本地 DB 才迁移。
+- M22.2：初始化数据库默认不再把旧本机记忆目录吸入非默认 SQLite；需显式迁移开关或默认本地 DB 才迁移。
 - M22.3：Dashboard Test2 universe 改为请求时加载并暴露 `universe_available`，缺失 ignored 本地文件时不再以 warning 表示异常；补齐前端 `npm test` 脚本与 deep research mypy 修复。
 
 ### Tests
@@ -485,7 +504,7 @@
 - remote 模式下 MCP 工具显式接收 `api_key` 参数并传入安全检查；本地模式保持无需 key。
 
 ### Fixed
-- `stock_sage_health` / `stock_sage_project_context` 在全新 clone 未初始化 SQLite schema 时返回空状态，不再因 `positions` / `stocks` 等缺表失败。
+- 旧 MCP health / project-context 兼容别名在全新 clone 未初始化 SQLite schema 时返回空状态，不再因 `positions` / `stocks` 等缺表失败。
 
 ## [Docs] 软件与 Agent 双用途文档分层（2026-05-21）
 

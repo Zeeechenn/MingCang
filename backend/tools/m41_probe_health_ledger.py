@@ -18,7 +18,7 @@ from backend.data.global_data import (
     probe_summary_from_payload,
 )
 
-DEFAULT_OUTPUT = Path("/private/tmp/stocksage_m41_probe_health_ledger.json")
+DEFAULT_OUTPUT = Path("/private/tmp/mingcang_m41_probe_health_ledger.json")
 DEFAULT_SYMBOLS = {
     "CN": ["600519"],
     "HK": ["700", "9988"],

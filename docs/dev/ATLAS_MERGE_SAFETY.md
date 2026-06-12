@@ -50,7 +50,7 @@ approval.
 Focused checks run after the rebase:
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. \
+PYTHONPYCACHEPREFIX=/private/tmp/mingcang_pycache PYTHONPATH=. \
   .venv/bin/python -m pytest -p no:cacheprovider -q \
   tests/test_core_database.py \
   tests/test_runtime_schema_forward_theses.py \
@@ -62,7 +62,7 @@ PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. \
 Result: `68 passed, 1 warning`.
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. \
+PYTHONPYCACHEPREFIX=/private/tmp/mingcang_pycache PYTHONPATH=. \
   .venv/bin/python -m pytest -p no:cacheprovider -q \
   tests/test_m31_cache_policy.py \
   tests/test_m31_cache_and_freshness.py \
@@ -80,7 +80,7 @@ PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. \
 Result: `105 passed`.
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. \
+PYTHONPYCACHEPREFIX=/private/tmp/mingcang_pycache PYTHONPATH=. \
   .venv/bin/python -m pytest -p no:cacheprovider -q \
   tests/test_signal_policy.py \
   tests/test_decision_harness.py::test_deep_research_run_does_not_update_last_signal_summary \
@@ -94,27 +94,27 @@ Result: `16 passed, 1 warning`.
 Test2 replay:
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache \
-PYTHONPATH=.:/Users/zeeechenn/stock-sage \
+PYTHONPYCACHEPREFIX=/private/tmp/mingcang_pycache \
+PYTHONPATH=.:<repo-root> \
 .venv/bin/python -m paper_trading.test2_ab_cli \
-  --db /Users/zeeechenn/stock-sage/stock-sage.db \
-  --universe /Users/zeeechenn/stock-sage/paper_trading/test2_universe.json \
+  --db <repo-root>/mingcang.db \
+  --universe <repo-root>/paper_trading/test2_universe.json \
   --end 2026-06-04 \
-  --out /private/tmp/stocksage_m44_phase1_test2_ab.md \
-  --state-out /private/tmp/stocksage_m44_phase1_test2_ab_state.json
-diff -u /Users/zeeechenn/stock-sage/paper_trading/test2_ab_state.json \
-  /private/tmp/stocksage_m44_phase1_test2_ab_state.json
+  --out /private/tmp/mingcang_m44_phase1_test2_ab.md \
+  --state-out /private/tmp/mingcang_m44_phase1_test2_ab_state.json
+diff -u <repo-root>/paper_trading/test2_ab_state.json \
+  /private/tmp/mingcang_m44_phase1_test2_ab_state.json
 ```
 
-Result: replay wrote `/private/tmp/stocksage_m44_phase1_test2_ab.md`; raw JSON
+Result: replay wrote `/private/tmp/mingcang_m44_phase1_test2_ab.md`; raw JSON
 state diff was zero.
 
 Final implementation gate:
 
 ```bash
-PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache \
-RUFF_CACHE_DIR=/private/tmp/stocksage_ruff_cache \
-MYPY_CACHE_DIR=/private/tmp/stocksage_mypy_cache \
+PYTHONPYCACHEPREFIX=/private/tmp/mingcang_pycache \
+RUFF_CACHE_DIR=/private/tmp/mingcang_ruff_cache \
+MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
@@ -130,14 +130,14 @@ Additional local checks run on 2026-06-04 after the architecture-contract review
   `1027 passed, 5 skipped`, frontend node tests `19 passed`, and Vite build
   passed.
 - Test2 fixed-end replay used Atlas code with main's protected DB and universe:
-  `/private/tmp/stocksage_m44_phase5_test2_ab_state.json` had zero raw JSON diff
-  against `/Users/zeeechenn/stock-sage/paper_trading/test2_ab_state.json`.
+  `/private/tmp/mingcang_m44_phase5_test2_ab_state.json` had zero raw JSON diff
+  against `<repo-root>/paper_trading/test2_ab_state.json`.
 - Canonical test2 parity passed with stable key ordering and explicit ignored
   non-semantic timestamp fields.
 - Official-signal, scheduler/postmarket, API route, memory-promotion,
   dormant-flag, runtime-schema, M31/M42, and architecture focused tests passed
   across the Phase 5 smoke set.
-- Live DB migration copy-smoke used `/private/tmp/stocksage_m44_phase5_copy.db`;
+- Live DB migration copy-smoke used `/private/tmp/mingcang_m44_phase5_copy.db`;
   `init_db()` completed, required Atlas tables/columns existed, and
   `PRAGMA integrity_check` returned `ok`.
 - `git diff --check` passed and conflict-marker scan returned no matches.
@@ -170,9 +170,9 @@ Phase 3-min guard hardening:
 - Official-signal and scheduler/postmarket focused smoke passed:
   `23 passed, 1 warning`.
 - Test2 fixed-end replay used `--end 2026-06-05`; raw JSON diff against
-  `/Users/zeeechenn/stock-sage/paper_trading/test2_ab_state.json` was zero.
+  `<repo-root>/paper_trading/test2_ab_state.json` was zero.
 - Live DB copy-smoke used
-  `/private/tmp/stocksage_phase3_l0_copy_20260605_afterguard.db`; `init_db()`
+  `/private/tmp/mingcang_phase3_l0_copy_20260605_afterguard.db`; `init_db()`
   completed, `memory_atoms`, `memory_scenarios`, and `memory_profiles` existed,
   `memory_promotion_candidates.memory_atom_id` existed, `PRAGMA integrity_check`
   returned `ok`, and protected `stocks` / `signals` row counts were stable.

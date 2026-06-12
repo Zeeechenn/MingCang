@@ -235,7 +235,7 @@ def test_exit_or_avoid_recommendations_force_zero_shadow_position(test_db):
 
 
 def test_stock_context_exposes_persisted_copilot_for_pi_shell(test_db, sample_stocks):
-    from backend.agent.context import stock_sage_stock_context
+    from backend.agent.context import mingcang_stock_context
 
     _signal(test_db, symbol="300308", recommendation="观望", composite_score=31)
     test_db.add(ResearchState(
@@ -252,7 +252,7 @@ def test_stock_context_exposes_persisted_copilot_for_pi_shell(test_db, sample_st
     ))
     test_db.commit()
 
-    context = stock_sage_stock_context(test_db, "300308")
+    context = mingcang_stock_context(test_db, "300308")
 
     assert context["copilot"]["stance"] == "谨慎"
     assert context["copilot"]["shadow_position_pct"] == 0.03

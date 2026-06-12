@@ -128,7 +128,7 @@ def run_benchmark(
         "symbol": symbol,
         "safety": {
             "network_calls_attempted": False,
-            "stock_sage_db_writes_attempted": False,
+            "mingcang_db_writes_attempted": False,
             "llm_calls_attempted": False,
             "default_outputs_under_private_tmp": True,
         },
@@ -146,7 +146,7 @@ def report_to_markdown(report: dict[str, Any]) -> str:
         f"- generated_at: {report['generated_at']}",
         f"- iterations: {report['iterations']}",
         f"- network_calls_attempted: {report['safety']['network_calls_attempted']}",
-        f"- stock_sage_db_writes_attempted: {report['safety']['stock_sage_db_writes_attempted']}",
+        f"- mingcang_db_writes_attempted: {report['safety']['mingcang_db_writes_attempted']}",
         "",
         "| Layer | Concept | measured | p50 ms | p95 ms | min ms | max ms |",
         "|---|---|---:|---:|---:|---:|---:|",

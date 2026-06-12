@@ -63,7 +63,7 @@ def next_forward_commands(
     start_token = start.replace("-", "")
     end_token = forward_end.replace("-", "") if forward_end else end_placeholder
     return [
-        "PYTHONPYCACHEPREFIX=/private/tmp/stocksage_pycache PYTHONPATH=. MULTI_AGENT_ENABLED=false "
+        "PYTHONPYCACHEPREFIX=/private/tmp/mingcang_pycache PYTHONPATH=. MULTI_AGENT_ENABLED=false "
         ".venv/bin/python -m backend.tools.m27_top_decile_forward_shadow "
         "--universe-path paper_trading/test3_universe.json --rolling "
         f"--start {start} --end {end_value} --rolling-window-days 7 --rolling-stride-days 7 "

@@ -8,7 +8,7 @@
   5. 价格数据写入 prices 表，factor 字段同步计算
   6. 完成后打印统计，可直接接 --retrain 用 active+inactive 扩盘股重训 LightGBM
 
-用法（从 stock-sage 根目录）：
+用法（从 mingcang 根目录）：
     PYTHONPATH=. python3 backend/tools/m26_expand_universe.py --dry-run
     PYTHONPATH=. python3 backend/tools/m26_expand_universe.py
     PYTHONPATH=. python3 backend/tools/m26_expand_universe.py --retrain

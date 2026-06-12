@@ -102,7 +102,7 @@ def _fetch_news_df(symbol: str):
     import pandas as pd
     import requests
 
-    _CB = "jQuery_stocksage"
+    _CB = "jQuery_mingcang"
     inner = {
         "uid": "", "keyword": symbol,
         "type": ["cmsArticleWebOld"],

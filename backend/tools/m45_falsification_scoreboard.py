@@ -69,8 +69,8 @@ SAFETY_FLAGS = {
     "allowed_write_tables": ["review_cases", "memory_promotion_candidates"],
 }
 
-DEFAULT_JSON_OUTPUT = Path("/private/tmp/stocksage_m45_falsification_scoreboard.json")
-DEFAULT_MARKDOWN_OUTPUT = Path("/private/tmp/stocksage_m45_falsification_scoreboard.md")
+DEFAULT_JSON_OUTPUT = Path("/private/tmp/mingcang_m45_falsification_scoreboard.json")
+DEFAULT_MARKDOWN_OUTPUT = Path("/private/tmp/mingcang_m45_falsification_scoreboard.md")
 SOURCE_TIER_VALUES = {tier.value for tier in SourceTier}
 SOURCE_TIER_ALIASES = {"social": SourceTier.social_lead.value}
 
@@ -617,7 +617,7 @@ def write_default_artifacts(result: dict[str, Any], *, as_of: str | None = None)
         write_artifacts(result, json_output=DEFAULT_JSON_OUTPUT, markdown_output=DEFAULT_MARKDOWN_OUTPUT)
         return
     stamp = as_of.replace("-", "")
-    base = Path(f"/private/tmp/stocksage_m45_scoreboard_{stamp}")
+    base = Path(f"/private/tmp/mingcang_m45_scoreboard_{stamp}")
     write_artifacts(result, json_output=base.with_suffix(".json"), markdown_output=base.with_suffix(".md"))
 
 

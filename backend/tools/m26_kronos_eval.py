@@ -142,7 +142,7 @@ def _resolve_finetuned_checkpoint(model_path: Path) -> Path:
             payload = json.loads(manifest.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"Finetuned Kronos checkpoint manifest is invalid: {manifest}") from exc
-        if payload.get("checkpoint_kind") == "stocksage_path_a_smoke_model":
+        if payload.get("checkpoint_kind") == "mingcang_path_a_smoke_model":
             raise RuntimeError(
                 f"Finetuned Kronos checkpoint is only a MingCang Path A smoke artifact: {resolved}. "
                 "Run real M27.4 Kronos-small fine-tuning before m26_kronos_eval."

@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler_stop()
 
 
-app = FastAPI(title="MingCang API", version="0.4.3", lifespan=lifespan)
+app = FastAPI(title="MingCang API", version="0.5.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

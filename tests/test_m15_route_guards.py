@@ -38,9 +38,9 @@ def test_write_route_rejects_remote_call_without_key(monkeypatch, module, path, 
     guards = _route_guards(router, path)
     assert guards, f"{path} is missing its agent write guard"
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
 
     with pytest.raises(HTTPException) as exc:
         guards[0](_FakeRequest())
@@ -52,18 +52,18 @@ def test_write_route_honors_action_allowlist(monkeypatch, module, path, action):
     router = importlib.import_module(module).router
     guards = _route_guards(router, path)
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", "watchlist.add")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", "watchlist.add")
 
-    headers = {"x-stocksage-agent-api-key": "secret"}
+    headers = {"x-mingcang-agent-api-key": "secret"}
     with pytest.raises(HTTPException) as exc:
         guards[0](_FakeRequest(headers))
     assert exc.value.status_code == 403
 
     # The route's own action on the allowlist is accepted.
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", action)
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", action)
     guards[0](_FakeRequest(headers))
     guards[0](_FakeRequest({"x-mingcang-agent-api-key": "secret"}))
     guards[0](_FakeRequest({"authorization": "Bearer secret"}))
@@ -71,7 +71,7 @@ def test_write_route_honors_action_allowlist(monkeypatch, module, path, action):
 
 @pytest.mark.parametrize("module, path, action", _GUARDED_ROUTES)
 def test_write_route_passes_in_trusted_local_mode(monkeypatch, module, path, action):
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "local")
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "local")
     router = importlib.import_module(module).router
     guards = _route_guards(router, path)
     # Local development mode is trusted: the guard must pass without any key.

@@ -77,7 +77,7 @@ def test_m27_sentiment_cache_plan_uses_explicit_sqlite_db_readonly(tmp_path):
 
     export_path = tmp_path / "cache_missing.json"
     _write_export(export_path)
-    db_path = tmp_path / "stocksage.sqlite"
+    db_path = tmp_path / "mingcang.sqlite"
     con = sqlite3.connect(db_path)
     try:
         con.execute("CREATE TABLE sentiment_cache (cache_key TEXT PRIMARY KEY)")
@@ -150,7 +150,7 @@ def test_m27_sentiment_cache_plan_rejects_non_sqlite_db_url(tmp_path):
     _write_export(export_path)
 
     try:
-        build_plan(export_path, db_url="postgresql://localhost/stocksage")
+        build_plan(export_path, db_url="postgresql://localhost/mingcang")
     except ValueError as exc:
         assert "only sqlite" in str(exc)
     else:

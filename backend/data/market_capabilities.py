@@ -386,7 +386,7 @@ def build_market_capability_catalog() -> dict:
         }
 
     return {
-        "version": "stocksage_market_data_skill_v1",
+        "version": "mingcang_market_data_skill_v1",
         "source": "M41 global market data skill bridge",
         "markets": list(SUPPORTED_MARKETS),
         "layers": [

@@ -110,7 +110,7 @@ def test_path_a_launch_config_is_guarded_and_complete(tmp_path):
     assert config["post_training_gate"]["eval_command"][-1] == str(output_dir)
     promotion_requires = config["post_training_gate"]["promotion_requires"]
     assert str(output_dir / "checkpoints" / "best_model") in promotion_requires[0]
-    assert "~/.stock-sage/models/kronos_finetuned/checkpoints/best_model" not in promotion_requires[0]
+    assert "~/.mingcang/models/kronos_finetuned/checkpoints/best_model" not in promotion_requires[0]
     assert "--execute-training" in config["future_training_command"]
 
 
@@ -247,9 +247,9 @@ def test_path_a_execute_training_runs_smoke_loop_and_writes_checkpoint(tmp_path)
     assert result["actual_device"] in {"cpu", "mps"}
     assert (output_dir / "checkpoints" / "best_model" / "model.pt").exists()
     manifest = json.loads((output_dir / "checkpoints" / "best_model" / "manifest.json").read_text())
-    assert manifest["checkpoint_kind"] == "stocksage_path_a_smoke_model"
+    assert manifest["checkpoint_kind"] == "mingcang_path_a_smoke_model"
     assert manifest["production_config_changed"] is False
-    assert (tmp_path / "logs" / "stocksage_path_a_training_log.jsonl").exists()
+    assert (tmp_path / "logs" / "mingcang_path_a_training_log.jsonl").exists()
 
 
 def test_path_a_execute_training_refuses_to_overwrite_existing_checkpoint(tmp_path):

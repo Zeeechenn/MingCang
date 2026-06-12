@@ -57,7 +57,7 @@ def test_ifind_client_call_tool_text(monkeypatch):
         def json(self):
             return {
                 "jsonrpc": "2.0",
-                "id": "stocksage-ifind",
+                "id": "mingcang-ifind",
                 "result": {"content": [{"type": "text", "text": "hello"}]},
             }
 
@@ -175,7 +175,7 @@ def test_call_ifind_mcp_tool_parses_json_fence_and_markdown_table(monkeypatch):
                     "raise_for_status": lambda self: None,
                     "json": lambda self: {
                         "jsonrpc": "2.0",
-                        "id": "stocksage-ifind",
+                        "id": "mingcang-ifind",
                         "result": {
                             "content": [
                                 {

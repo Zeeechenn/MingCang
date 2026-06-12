@@ -8,7 +8,7 @@ Kill Switch（Tier 4）
   (d) 手动触发（用户判断异常）
 
 触发后：
-  • 写状态文件 ~/.mingcang/kill_switch.json（兼容读取旧 ~/.stock-sage/kill_switch.json）
+  • 写状态文件 ~/.mingcang/kill_switch.json
   • scheduler 的 job_postmarket / job_stoploss_check 入口先 check is_active()，true 则跳过
   • Bark 推送告警（若配置）
   • /api/system/health 上报状态
@@ -33,7 +33,6 @@ def _now_utc_naive() -> datetime:
 logger = logging.getLogger(__name__)
 
 STATE_PATH = Path.home() / ".mingcang" / "kill_switch.json"
-LEGACY_STATE_PATH = Path.home() / ".stock-sage" / "kill_switch.json"
 
 DEFAULT_CONSECUTIVE_LOSSES = 8   # M2.2 测试期 2-3 个月震荡市预留
 DEFAULT_DRAWDOWN_PCT = 7.0       # 单日组合回撤阈值 %（A 股单日 -5% 时常出现，7% 留缓冲）
@@ -49,13 +48,6 @@ class KillSwitchState:
 
     def to_dict(self) -> dict:
         return asdict(self)
-
-
-def _state_path_candidates() -> list[Path]:
-    paths = [STATE_PATH]
-    if LEGACY_STATE_PATH != STATE_PATH:
-        paths.append(LEGACY_STATE_PATH)
-    return paths
 
 
 def _read_state_from_path(path: Path) -> KillSwitchState:
@@ -74,10 +66,9 @@ def _read_state_from_path(path: Path) -> KillSwitchState:
 
 
 def _read_state() -> KillSwitchState | None:
-    """Read kill switch state from disk, preferring MingCang then legacy state."""
-    for path in _state_path_candidates():
-        if path.exists():
-            return _read_state_from_path(path)
+    """Read kill switch state from the MingCang state file."""
+    if STATE_PATH.exists():
+        return _read_state_from_path(STATE_PATH)
     return None
 
 
@@ -85,9 +76,8 @@ def _write_state(state: KillSwitchState | None) -> None:
     """Write kill switch state to disk, or delete the file if state is None."""
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     if state is None:
-        for path in _state_path_candidates():
-            if path.exists():
-                path.unlink()
+        if STATE_PATH.exists():
+            STATE_PATH.unlink()
         return
     tmp_path = STATE_PATH.with_name(f"{STATE_PATH.name}.tmp")
     tmp_path.write_text(

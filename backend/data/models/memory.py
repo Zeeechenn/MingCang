@@ -17,9 +17,8 @@ from backend.data.orm import Base, _utcnow
 class DecisionMemoryLayered(Base):
     """M9.1 分层决策记忆迁 DB：medium(symbol) / long(symbol=NULL) 两层。
 
-    content 是整段 markdown（与原 `~/.stock-sage/memory/{medium_X.md,
+    content 是整段 markdown（与 `~/.mingcang/memory/{medium_X.md,
     long_term_reflection.md}` 文件 1:1 对应），写入时整体覆盖。
-    旧文件保留 30 天作为只读兜底。
     """
     __tablename__ = "decision_memory_layered"
     __table_args__ = (UniqueConstraint("symbol", "layer", name="uq_decision_memory_layered"),)

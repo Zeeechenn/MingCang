@@ -10,6 +10,7 @@
 |---|---|---|---|
 | M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 complete/released：SKILL/spec/Serenity/ResearchReportGate + `ai_supply_chain` source-tier fields + research-positioning importer/scoreboard source gate 均已落地；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
 | M29 Forward Evidence | 2026-06-12：价格回填完成（100支×7天，700行），baseline 1d/3d/5d artifacts 首次建立；positive delta 9/11+8/10+8/10 windows，non-promoting（预期）。下一步：06-12 价格入库后重跑 readiness，missing_existing_forward_artifacts 阻断已消除，可延伸 forward window | 重跑 readiness 确认已 ready，再追加下一窗口的 1d/3d/5d shadow | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
+| v0.5.0 MingCang naming finalization | complete：原生 Pi、安装器、launcher、公开文档、许可证与版本面统一到 MingCang / 明仓；过渡兼容入口已移除 | 推送后只跟进 CI 或安装/启动反馈 | 不改 official signal/仓位/scheduler/test2；不启用 quant/Kronos/Atlas |
 | v0.4.3 frontend punctuation / M29 baseline release | complete：前端中文可见文案逗号统一为中文逗号；M29 forward baseline 状态写入 `STATUS.md`/`docs/ROADMAP.md`；release surfaces 对齐到 0.4.3 | 推送后只跟进 CI 或用户反馈的展示问题 | 不改 official signal/仓位/scheduler/test2；不启用 quant/Kronos/Atlas |
 | v0.4.2 frontend TypeScript / visibility hardening | complete：前端迁移到 TypeScript/TSX + 真实 ES module imports；CI 覆盖率门、Dependabot 和威胁模型说明已发布；生产信号零漂移 | 推送后只跟进 CI 或前端类型/构建反馈 | 不改 official signal/仓位/scheduler/test2；不启用 quant/Kronos/Atlas |
 | v0.4.1 public-surface polish | complete：恢复旧版折线 favicon 语义并匹配新前端配色；GitHub 首页截图刷新；GitHub release notes 统一中英文双版本 | 后续只跟进 CI 或公开页面显示问题 | 不改 official signal/仓位/scheduler/test2 |
@@ -105,6 +106,7 @@ Detailed history is intentionally not repeated here. Read `CHANGELOG.md` for:
 
 - M46 onboarding/demo clarity and user-discovery follow-up.
 - M46.5–M48 correctness floor (lookahead one-time audit + key-number display tests), standing `lookahead-check` + data-trust visibility, and frontend TS/API/primitive reliability.
+- v0.5.0 MingCang naming finalization and transition compatibility removal.
 - v0.4.3 frontend punctuation normalization and M29 forward baseline release.
 - v0.4.2 frontend TypeScript module migration and visibility hardening.
 - v0.4.1 public-surface polish.

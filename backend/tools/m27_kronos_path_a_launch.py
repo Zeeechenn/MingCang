@@ -25,16 +25,16 @@ DEFAULT_DATASET_DIR = Path.home() / ".mingcang" / "m27_kronos_reviewed_data"
 DEFAULT_FINETUNED_OUTPUT_DIR = Path.home() / ".mingcang" / "models" / "kronos_finetuned"
 DEFAULT_OUTPUT_DIR = Path.home() / ".mingcang" / "models" / "kronos_path_a_smoke"
 DEFAULT_LOG_DIR = Path.home() / ".mingcang" / "logs" / "m27_kronos_path_a"
-DEFAULT_CONFIG_NAME = "stocksage_path_a_launch_config.json"
-DEFAULT_PLAN_NAME = "stocksage_path_a_training_plan.json"
-DEFAULT_LOG_NAME = "stocksage_path_a_training_log.jsonl"
-DEFAULT_SUMMARY_NAME = "stocksage_path_a_training_summary.json"
+DEFAULT_CONFIG_NAME = "mingcang_path_a_launch_config.json"
+DEFAULT_PLAN_NAME = "mingcang_path_a_training_plan.json"
+DEFAULT_LOG_NAME = "mingcang_path_a_training_log.jsonl"
+DEFAULT_SUMMARY_NAME = "mingcang_path_a_training_summary.json"
 REQUIRED_DATA_FILES = ["train_data.pkl", "valid_data.pkl", "windows.csv", "coverage_report.json"]
 FEATURE_COLUMNS = ["open", "high", "low", "close", "vol", "amt"]
 TIME_FEATURE_COLUMNS = ["minute", "hour", "weekday", "day", "month"]
 M27_GATE_POLICY = {"ic_floor": 0.04, "icir_floor": 0.40, "monotonic_required": True}
-REAL_FINETUNED_CHECKPOINT_KIND = "stocksage_kronos_finetuned_model"
-SMOKE_CHECKPOINT_KIND = "stocksage_path_a_smoke_model"
+REAL_FINETUNED_CHECKPOINT_KIND = "mingcang_kronos_finetuned_model"
+SMOKE_CHECKPOINT_KIND = "mingcang_path_a_smoke_model"
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _KRONOS_DIR = _REPO_ROOT / "vendor" / "kronos"
 
@@ -704,7 +704,7 @@ def execute_training_loop(args: argparse.Namespace, coverage: dict[str, Any]) ->
         metadata = {
             "milestone": "M27.4",
             "tool": "backend.tools.m27_kronos_path_a_launch",
-            "checkpoint_kind": "stocksage_path_a_smoke_model",
+            "checkpoint_kind": "mingcang_path_a_smoke_model",
             "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "step": step,
             "epoch": epoch_number,

@@ -8,7 +8,7 @@ Trailing Stop 跟踪（阶段B）
   • 触及止损 → 平仓；触及固定止盈 → 默认仅提醒，显式开启时平仓
   • 时间退出默认关闭，仅在回测/实验显式开启
 
-落库位置：~/.mingcang/positions.json（兼容读取旧 ~/.stock-sage/positions.json）
+落库位置：~/.mingcang/positions.json
 """
 from __future__ import annotations
 
@@ -19,12 +19,7 @@ from pathlib import Path
 from backend.config import settings
 
 _MINGCANG_POSITIONS_PATH = Path.home() / ".mingcang" / "positions.json"
-_LEGACY_POSITIONS_PATH = Path.home() / ".stock-sage" / "positions.json"
-POSITIONS_PATH = (
-    _LEGACY_POSITIONS_PATH
-    if _LEGACY_POSITIONS_PATH.exists() and not _MINGCANG_POSITIONS_PATH.exists()
-    else _MINGCANG_POSITIONS_PATH
-)
+POSITIONS_PATH = _MINGCANG_POSITIONS_PATH
 
 
 @dataclass

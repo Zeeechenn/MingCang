@@ -53,7 +53,7 @@ def test_batch_runner_dry_run_writes_state_without_llm_or_db(tmp_path):
     plan_path = tmp_path / "plan.json"
     export_path = tmp_path / "missing.json"
     _write_plan(plan_path, export_path)
-    db_path = tmp_path / "stocksage.sqlite"
+    db_path = tmp_path / "mingcang.sqlite"
     _create_cache_db(db_path)
 
     def fail_runner(_titles, _symbol):
@@ -87,7 +87,7 @@ def test_batch_runner_execute_limits_batches(tmp_path):
     plan_path = tmp_path / "plan.json"
     export_path = tmp_path / "missing.json"
     _write_plan(plan_path, export_path)
-    db_path = tmp_path / "stocksage.sqlite"
+    db_path = tmp_path / "mingcang.sqlite"
     _create_cache_db(db_path)
     calls = {"count": 0}
 
@@ -124,7 +124,7 @@ def test_batch_runner_resume_skips_existing_without_overwrite(tmp_path):
     plan_path = tmp_path / "plan.json"
     export_path = tmp_path / "missing.json"
     rows = _write_plan(plan_path, export_path)
-    db_path = tmp_path / "stocksage.sqlite"
+    db_path = tmp_path / "mingcang.sqlite"
     _create_cache_db(db_path)
     with sqlite3.connect(db_path) as con:
         con.execute(

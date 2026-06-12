@@ -11,7 +11,6 @@ fi
 
 profile="${1:-research}"
 export MINGCANG_PI_PROFILE="$profile"
-export STOCKSAGE_PI_PROFILE="$profile"
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 if [[ "$profile" == "dev" ]]; then
   echo "Starting MingCang native Pi developer session. Read AGENTS.md before editing."

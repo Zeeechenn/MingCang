@@ -58,7 +58,7 @@ def test_eastmoney_stock_news_bypasses_system_proxy(monkeypatch):
 
     class FakeJSONPResponse:
         text = (
-            'jQuery_stocksage({"result":{"cmsArticleWebOld":[{'
+            'jQuery_mingcang({"result":{"cmsArticleWebOld":[{'
             '"title":"<em>贵州茅台</em>公告",'
             '"code":"202605260001",'
             '"date":"2026-05-26 12:00:00",'

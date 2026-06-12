@@ -117,8 +117,6 @@ python3 -m backend.agent.cli premarket --pretty
 python3 -m backend.agent.cli stock-context 000001 --pretty
 ```
 
-> 迁移说明：旧 `stocksage` 命令、`stock_sage_*` MCP 工具、`STOCKSAGE_AGENT_*` 环境变量在过渡期仍可用；新安装建议使用 `mingcang`。
-
 ---
 
 ## 使用指南
@@ -203,8 +201,6 @@ python3 -m backend.agent.cli memory-snapshot --pretty
 | `mingcang_memory_snapshot` | 分层记忆、审计日志、记忆促进状态 |
 | `mingcang_health` | 数据库、依赖、权限健康检查 |
 
-旧 `stock_sage_*` 工具名保留为兼容别名。
-
 ---
 
 ## 配置
@@ -236,7 +232,6 @@ MINGCANG_AGENT_MODE=local
 | `ANSPIRE_API_KEY` | empty | deep research 或严格事件新闻抓取 | Anspire 搜索 key；窗口和数量由 `ANSPIRE_NEWS_*` 控制。 |
 | `BARK_KEY` | empty | 需要 iOS Bark 推送时 | 可选通知 key；自建服务可改 `BARK_SERVER`。 |
 | `MINGCANG_AGENT_API_KEY` | empty | `MINGCANG_AGENT_MODE=remote` | 远程 agent 暴露必须设置；本地 `local` 模式不需要。 |
-| `STOCKSAGE_AGENT_API_KEY` | empty | 旧部署兼容 | 旧 StockSage 变量名仍可读取，新部署优先用 `MINGCANG_AGENT_API_KEY`。 |
 
 相关开关和限制：
 
@@ -272,7 +267,7 @@ MINGCANG_AGENT_REMOTE_WRITE_ENABLED=false
 MINGCANG_AGENT_REMOTE_WRITE_ACTIONS=
 ```
 
-旧 `STOCKSAGE_AGENT_*` 变量名仍可读取，新部署推荐用 `MINGCANG_AGENT_*`。`.env`、数据库、个人交易记录、真实 key 不进 Git。
+`.env`、数据库、个人交易记录、真实 key 不进 Git。
 
 </details>
 
@@ -297,16 +292,14 @@ MINGCANG_AGENT_REMOTE_WRITE_ACTIONS=
 
 ---
 
-## 从 StockSage 到明仓
+## MingCang 命名
 
-项目前身是 **StockSage**，0.3.0 起正式更名为 **明仓 / MingCang**。这次升级不只是换名字：
+0.5.0 起，公开文档、Pi 终端、安装器、launcher、MCP 工具示例和远程 agent 配置统一使用 **明仓 / MingCang** 命名。早期过渡期兼容入口已移除；新安装和本机启动入口只使用 `mingcang`。
 
 - 把整套研究模型重做成案卷式研究决策闭环（研究 → 信号 → 持仓 → 复盘 → 记忆）；
 - 定位转向"放大人的判断、用前向证据守门"，新增论题进口通道和证伪记分牌；
 - 新增开箱即用的 `mingcang` Pi 终端壳，降低使用门槛；
 - 扩展 A/HK/US 只读全球数据，强化数据质量与复权口径护栏。
-
-旧 `stocksage` 命令、`stock_sage_*` 工具、`STOCKSAGE_AGENT_*` 变量在过渡期仍兼容。
 
 ---
 

@@ -365,11 +365,11 @@ def test_l0_memory_route_guards_reject_remote_even_with_write_allowlist(monkeypa
         def __init__(self, headers):
             self.headers = headers
 
-    monkeypatch.setenv("STOCKSAGE_AGENT_MODE", "remote")
-    monkeypatch.setenv("STOCKSAGE_AGENT_API_KEY", "secret")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ENABLED", "true")
-    monkeypatch.setenv("STOCKSAGE_AGENT_REMOTE_WRITE_ACTIONS", "l0_memory.promote")
-    request = FakeRequest({"x-stocksage-agent-api-key": "secret"})
+    monkeypatch.setenv("MINGCANG_AGENT_MODE", "remote")
+    monkeypatch.setenv("MINGCANG_AGENT_API_KEY", "secret")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ENABLED", "true")
+    monkeypatch.setenv("MINGCANG_AGENT_REMOTE_WRITE_ACTIONS", "l0_memory.promote")
+    request = FakeRequest({"x-mingcang-agent-api-key": "secret"})
 
     agent_write_guard("l0_memory.promote")(request)
     with pytest.raises(HTTPException) as exc:

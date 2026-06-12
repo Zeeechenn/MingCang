@@ -6,7 +6,7 @@ test_db fixture — because:
   2. The remediation CLI creates its own sqlite3 connection from --db-url,
      independent of SQLAlchemy.
 
-No test ever touches /tmp/m42_prod_copy.db or the live mingcang.db or legacy stock-sage.db.
+No test ever touches /tmp/m42_prod_copy.db or the live mingcang.db or legacy mingcang.db.
 """
 from __future__ import annotations
 
@@ -235,10 +235,9 @@ def test_refuses_to_operate_on_prod_copy_db(tmp_path):
         run_remediation(f"sqlite:///{forbidden}", execute=True)
 
 
-@pytest.mark.parametrize("filename", ["mingcang.db", "stock-sage.db"])
-def test_refuses_to_operate_on_live_database_names(tmp_path, filename):
-    """The tool must refuse new and legacy live production database names."""
-    forbidden = tmp_path / filename
+def test_refuses_to_operate_on_live_database_name(tmp_path):
+    """The tool must refuse the live MingCang production database name."""
+    forbidden = tmp_path / "mingcang.db"
     _create_prices_db(forbidden)
 
     from backend.tools.m42_remediate_hfq_contamination import run_remediation

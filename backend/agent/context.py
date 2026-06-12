@@ -13,12 +13,7 @@ from backend.data.database import LongTermLabel, Position, ResearchState, Signal
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _MINGCANG_MEMORY_DIR = Path.home() / ".mingcang" / "memory"
-_LEGACY_MEMORY_DIR = Path.home() / ".stock-sage" / "memory"
-DEFAULT_MEMORY_DIR = (
-    _LEGACY_MEMORY_DIR
-    if _LEGACY_MEMORY_DIR.exists() and not _MINGCANG_MEMORY_DIR.exists()
-    else _MINGCANG_MEMORY_DIR
-)
+DEFAULT_MEMORY_DIR = _MINGCANG_MEMORY_DIR
 _COUNT_TABLES = {
     "ai_memory",
     "stock_memory_items",
@@ -369,10 +364,3 @@ def mingcang_memory_context(
             "used_memory_atom_ids": [],
             "l0_context": {},
         }
-
-
-# Legacy function names stay available for existing scripts and MCP clients.
-stock_sage_memory_snapshot = mingcang_memory_snapshot
-stock_sage_stock_context = mingcang_stock_context
-stock_sage_context = mingcang_context
-stock_sage_memory_context = mingcang_memory_context

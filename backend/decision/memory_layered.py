@@ -22,12 +22,7 @@ from backend.config import settings
 from backend.decision.signal_policy import entry_recommendations
 
 _MINGCANG_MEMORY_DIR = Path.home() / ".mingcang" / "memory"
-_LEGACY_MEMORY_DIR = Path.home() / ".stock-sage" / "memory"
-MEMORY_DIR = (
-    _LEGACY_MEMORY_DIR
-    if _LEGACY_MEMORY_DIR.exists() and not _MINGCANG_MEMORY_DIR.exists()
-    else _MINGCANG_MEMORY_DIR
-)
+MEMORY_DIR = _MINGCANG_MEMORY_DIR
 LONG_TERM_PATH = MEMORY_DIR / "long_term_reflection.md"
 
 _SHORT_TERM: dict[str, list[dict]] = {}  # symbol → list of recent decisions
@@ -80,7 +75,7 @@ def save_short_term(symbol: str, signal: dict) -> None:
 def save_medium_term(symbol: str, date: str, signal: dict, db=None) -> None:
     """追加到该股的中期记忆 markdown 表（保留全部历史）。
 
-    M9.1：文件 + DB 双写。文件保留作为旧路径兜底，DB 是 source of truth；
+    M9.1：文件 + DB 双写。文件保留作为本地镜像，DB 是 source of truth；
     若未提供 db 则仅写文件（保持兼容）。
     """
     if not settings.layered_memory_enabled:

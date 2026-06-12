@@ -1,10 +1,10 @@
 """M43.2 single-factor IC diagnostics, sealed to OOS 2021-2024.
 
 Run one factor:
-    python3 scripts/m43_2_amihud_ic.py --factor amihud_20 --db-path ~/.stock-sage/m43_work.db
+    python3 scripts/m43_2_amihud_ic.py --factor amihud_20 --db-path ~/.mingcang/m43_work.db
 
 Run the full M43.2 factor set:
-    python3 scripts/m43_2_amihud_ic.py --factor all --db-path ~/.stock-sage/m43_work.db
+    python3 scripts/m43_2_amihud_ic.py --factor all --db-path ~/.mingcang/m43_work.db
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import pandas as pd
 SEALED_END_DATE = pd.Timestamp("2024-12-31")
 DEFAULT_START_DATE = "2021-01-01"
 DEFAULT_END_DATE = "2024-12-31"
-DEFAULT_DB_PATH = Path.home() / ".stock-sage" / "m43_work.db"
+DEFAULT_DB_PATH = Path.home() / ".mingcang" / "m43_work.db"
 DEFAULT_HFQ_EXCLUDE = "600519,600601,600602"
 LABEL_COL = "label_5d"
 T_CRIT_BONFERRONI = 2.50

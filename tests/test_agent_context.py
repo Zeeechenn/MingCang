@@ -47,9 +47,9 @@ def test_memory_snapshot_summarizes_project_memory(test_db, tmp_path):
     (memory_dir / "backups").mkdir()
     (memory_dir / "backups" / "ai_memory_2026-05-19.json").write_text("[]", encoding="utf-8")
 
-    from backend.agent.context import stock_sage_memory_snapshot
+    from backend.agent.context import mingcang_memory_snapshot
 
-    snapshot = stock_sage_memory_snapshot(test_db, memory_dir=memory_dir)
+    snapshot = mingcang_memory_snapshot(test_db, memory_dir=memory_dir)
 
     assert snapshot["database"]["ai_memory_count"] == 1
     assert snapshot["database"]["decision_memory_layered_count"] == 1
@@ -66,41 +66,54 @@ def test_memory_snapshot_summarizes_project_memory(test_db, tmp_path):
 def test_local_mode_allows_sensitive_operations_without_api_key():
     from backend.agent.security import require_agent_access
 
-    require_agent_access("write", env={"STOCKSAGE_AGENT_MODE": "local"})
+    require_agent_access("write", env={"MINGCANG_AGENT_MODE": "local"})
     require_agent_access("write", env={})
+
+
+def test_legacy_agent_env_names_do_not_enable_remote_mode():
+    from backend.agent.security import AgentSecurityError, agent_mode, require_agent_access
+
+    legacy_mode = "STOCK" + "SAGE" + "_AGENT_MODE"
+    legacy_key = "STOCK" + "SAGE" + "_AGENT_API_KEY"
+    env = {legacy_mode: "remote", legacy_key: "secret"}
+
+    assert agent_mode(env) == "local"
+    require_agent_access("write", env=env)
+    with pytest.raises(AgentSecurityError):
+        require_agent_access("read", env={"MINGCANG_AGENT_MODE": "remote", legacy_key: "secret"})
 
 
 def test_remote_mode_requires_api_key_for_read_and_disallows_write_by_default():
     from backend.agent.security import AgentSecurityError, require_agent_access
 
     with pytest.raises(AgentSecurityError):
-        require_agent_access("read", env={"STOCKSAGE_AGENT_MODE": "remote"})
+        require_agent_access("read", env={"MINGCANG_AGENT_MODE": "remote"})
 
     require_agent_access(
         "read",
-        env={"STOCKSAGE_AGENT_MODE": "remote", "STOCKSAGE_AGENT_API_KEY": "secret"},
+        env={"MINGCANG_AGENT_MODE": "remote", "MINGCANG_AGENT_API_KEY": "secret"},
         api_key="secret",
     )
 
     with pytest.raises(AgentSecurityError):
         require_agent_access(
             "write",
-            env={"STOCKSAGE_AGENT_MODE": "remote", "STOCKSAGE_AGENT_API_KEY": "secret"},
+            env={"MINGCANG_AGENT_MODE": "remote", "MINGCANG_AGENT_API_KEY": "secret"},
             api_key="secret",
         )
 
 
-def test_stock_sage_context_handles_uninitialized_database(tmp_path):
+def test_mingcang_context_handles_uninitialized_database(tmp_path):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from backend.agent.context import stock_sage_context
+    from backend.agent.context import mingcang_context
 
     engine = create_engine(f"sqlite:///{tmp_path / 'blank.db'}", connect_args={"check_same_thread": False})
     Session = sessionmaker(bind=engine)
     db = Session()
     try:
-        context = stock_sage_context(db, symbol="300308")
+        context = mingcang_context(db, symbol="300308")
     finally:
         db.close()
 
@@ -111,17 +124,17 @@ def test_stock_sage_context_handles_uninitialized_database(tmp_path):
     assert context["symbol_context"]["latest_signal"] is None
 
 
-def test_stock_sage_memory_context_handles_uninitialized_database(tmp_path):
+def test_mingcang_memory_context_handles_uninitialized_database(tmp_path):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from backend.agent.context import stock_sage_memory_context
+    from backend.agent.context import mingcang_memory_context
 
     engine = create_engine(f"sqlite:///{tmp_path / 'blank-memory.db'}", connect_args={"check_same_thread": False})
     Session = sessionmaker(bind=engine)
     db = Session()
     try:
-        context = stock_sage_memory_context(db, symbol="300308")
+        context = mingcang_memory_context(db, symbol="300308")
     finally:
         db.close()
 
@@ -134,7 +147,7 @@ def test_stock_sage_memory_context_handles_uninitialized_database(tmp_path):
     assert "l0_context" in context
 
 
-def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_stocks):
+def test_mingcang_context_includes_rules_memory_and_positions(test_db, sample_stocks):
     from backend.data.database import Position, Signal
     from backend.memory.ai_memory import remember
     from backend.memory.stock_memory import create_stock_memory
@@ -175,9 +188,9 @@ def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_
     ))
     test_db.commit()
 
-    from backend.agent.context import stock_sage_context
+    from backend.agent.context import mingcang_context
 
-    context = stock_sage_context(test_db, symbol="300308")
+    context = mingcang_context(test_db, symbol="300308")
 
     assert context["agent_mode"] == "local"
     assert context["memory"]["ai_memory_count"] == 1
@@ -187,6 +200,16 @@ def test_stock_sage_context_includes_rules_memory_and_positions(test_db, sample_
     assert "memory_context" in context
     assert "300308 若缩量上冲需降低仓位" in context["memory_context"]["text"]
     assert "300308 若缩量上冲需降低仓位" in context["symbol_context"]["memory_context"]["text"]
+
+
+def test_legacy_context_aliases_are_not_exported():
+    import backend.agent.context as context
+
+    prefix = "stock" + "_sage_"
+    assert not hasattr(context, prefix + "context")
+    assert not hasattr(context, prefix + "memory_snapshot")
+    assert not hasattr(context, prefix + "memory_context")
+    assert not hasattr(context, prefix + "stock_context")
 
 
 def test_mcp_server_smoke_lists_tools_and_reads_health(tmp_path):
@@ -220,7 +243,7 @@ async def main():
         async with ClientSession(read, write) as session:
             await session.initialize()
             tools = await session.list_tools()
-            result = await session.call_tool("stock_sage_health", arguments={})
+            result = await session.call_tool("mingcang_health", arguments={})
             print(json.dumps({
                 "tools": [tool.name for tool in tools.tools],
                 "content": [getattr(item, "text", "") for item in result.content],
@@ -232,7 +255,7 @@ asyncio.run(main())
     env = {
         "DATABASE_URL": db_url,
         "PYTHONPATH": str(repo),
-        "STOCKSAGE_AGENT_MODE": "local",
+        "MINGCANG_AGENT_MODE": "local",
     }
     result = subprocess.run(
         [sys.executable, "-c", script],
@@ -253,12 +276,8 @@ asyncio.run(main())
         "mingcang_memory_context",
         "mingcang_stock_context",
         "mingcang_health",
-        "stock_sage_project_context",
-        "stock_sage_memory_snapshot",
-        "stock_sage_memory_context",
-        "stock_sage_stock_context",
-        "stock_sage_health",
     ]
+    assert "stock" + "_sage_health" not in data["tools"]
     assert '"ok": true' in data["content"][0]
 
 
@@ -321,7 +340,7 @@ asyncio.run(main())
 
     assert "mingcang_project_context" in data["tools"]
     assert "mingcang_health" in data["tools"]
-    assert "stock_sage_health" in data["tools"]
+    assert "stock" + "_sage_health" not in data["tools"]
     assert '"ok": true' in data["content"][0]
 
 
@@ -354,8 +373,8 @@ async def main():
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            denied = await session.call_tool("stock_sage_health", arguments={})
-            allowed = await session.call_tool("stock_sage_health", arguments={"api_key": "secret"})
+            denied = await session.call_tool("mingcang_health", arguments={})
+            allowed = await session.call_tool("mingcang_health", arguments={"api_key": "secret"})
             print(json.dumps({
                 "denied": [getattr(item, "text", "") for item in denied.content],
                 "allowed": [getattr(item, "text", "") for item in allowed.content],
@@ -366,8 +385,8 @@ asyncio.run(main())
     env = {
         "DATABASE_URL": db_url,
         "PYTHONPATH": str(repo),
-        "STOCKSAGE_AGENT_MODE": "remote",
-        "STOCKSAGE_AGENT_API_KEY": "secret",
+        "MINGCANG_AGENT_MODE": "remote",
+        "MINGCANG_AGENT_API_KEY": "secret",
     }
     result = subprocess.run(
         [sys.executable, "-c", script],

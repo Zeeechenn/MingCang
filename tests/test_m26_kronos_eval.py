@@ -117,7 +117,7 @@ def test_kronos_finetuned_model_path_rejects_smoke_checkpoint(tmp_path):
     checkpoint = tmp_path / "checkpoints" / "best_model"
     checkpoint.mkdir(parents=True)
     (checkpoint / "manifest.json").write_text(
-        json.dumps({"checkpoint_kind": "stocksage_path_a_smoke_model"}),
+        json.dumps({"checkpoint_kind": "mingcang_path_a_smoke_model"}),
         encoding="utf-8",
     )
 

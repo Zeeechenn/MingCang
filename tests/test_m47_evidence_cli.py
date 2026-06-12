@@ -13,7 +13,7 @@ def test_evidence_lookahead_cli_runs_read_only_on_demo_data(tmp_path):
     env = {
         "PYTHONPATH": str(repo),
         "DATABASE_URL": db_url,
-        "STOCKSAGE_AGENT_MODE": "local",
+        "MINGCANG_AGENT_MODE": "local",
     }
 
     seed = subprocess.run(

@@ -11,7 +11,6 @@ from backend.agent.security import AgentSecurityError, require_agent_access
 def _api_key_from_request(request: Request) -> str | None:
     return (
         request.headers.get("x-mingcang-agent-api-key")
-        or request.headers.get("x-stocksage-agent-api-key")
         or request.headers.get("authorization", "").removeprefix("Bearer ").strip()
         or None
     )

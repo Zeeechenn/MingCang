@@ -25,8 +25,7 @@ function runMingCang(cwd: string, args: string[], signal?: AbortSignal): Promise
         env: {
           ...process.env,
           PYTHONPATH: cwd,
-          MINGCANG_AGENT_MODE: process.env.MINGCANG_AGENT_MODE || process.env.STOCKSAGE_AGENT_MODE || "local",
-          STOCKSAGE_AGENT_MODE: process.env.STOCKSAGE_AGENT_MODE || process.env.MINGCANG_AGENT_MODE || "local",
+          MINGCANG_AGENT_MODE: process.env.MINGCANG_AGENT_MODE || "local",
         },
         stdio: ["ignore", "pipe", "pipe"],
       },
@@ -58,18 +57,8 @@ function textResult(text: string, details: Record<string, unknown> = {}) {
   };
 }
 
-function registerToolAliases(pi: ExtensionAPI, primary: string, legacy: string, spec: Parameters<ExtensionAPI["registerTool"]>[0]) {
-  pi.registerTool({ ...spec, name: primary });
-  pi.registerTool({
-    ...spec,
-    name: legacy,
-    label: `${spec.label} (legacy)`,
-    description: `${spec.description} Legacy alias (前身 StockSage).`,
-  });
-}
-
 export default function (pi: ExtensionAPI) {
-  registerToolAliases(pi, "mingcang_health", "stocksage_health", {
+  pi.registerTool({
     name: "mingcang_health",
     label: "MingCang Health",
     description: "Read MingCang agent health, database counts, watchlist, positions, and memory counts.",
@@ -81,7 +70,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  registerToolAliases(pi, "mingcang_project_context", "stocksage_project_context", {
+  pi.registerTool({
     name: "mingcang_project_context",
     label: "MingCang Project Context",
     description: "Read MingCang startup context, project memory summary, active watchlist, and positions.",
@@ -97,7 +86,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  registerToolAliases(pi, "mingcang_stock_context", "stocksage_stock_context", {
+  pi.registerTool({
     name: "mingcang_stock_context",
     label: "MingCang Stock Context",
     description: "Read one stock's latest signal, position, long-term label, copilot shadow opinion, and memory context.",
@@ -111,7 +100,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  registerToolAliases(pi, "mingcang_memory_snapshot", "stocksage_memory_snapshot", {
+  pi.registerTool({
     name: "mingcang_memory_snapshot",
     label: "MingCang Memory Snapshot",
     description: "Read MingCang project-owned memory counts, recent memory rows, layered memory, and audit summaries.",
@@ -123,7 +112,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  registerToolAliases(pi, "mingcang_action_dry_run", "stocksage_action_dry_run", {
+  pi.registerTool({
     name: "mingcang_action_dry_run",
     label: "MingCang Action Dry Run",
     description: "Inspect a MingCang action schema, risk level, and payload without executing it.",
@@ -138,7 +127,7 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  registerToolAliases(pi, "mingcang_action_confirm", "stocksage_action_confirm", {
+  pi.registerTool({
     name: "mingcang_action_confirm",
     label: "MingCang Confirmed Action",
     description: "Execute a confirmed MingCang action. Use only after the user explicitly approves the exact payload.",
@@ -161,14 +150,6 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("mingcang-health", {
     description: "Run MingCang health check.",
-    handler: async (_args, ctx) => {
-      const result = await runMingCang(ctx.cwd, ["health", "--pretty"]);
-      ctx.ui.notify(result.stdout.trim(), "info");
-    },
-  });
-
-  pi.registerCommand("stocksage-health", {
-    description: "Run MingCang health check through the legacy command alias (前身 StockSage).",
     handler: async (_args, ctx) => {
       const result = await runMingCang(ctx.cwd, ["health", "--pretty"]);
       ctx.ui.notify(result.stdout.trim(), "info");

@@ -77,7 +77,7 @@ def _run_cli(repo: Path, db_url: str, *args: str):
         env={
             "PYTHONPATH": str(repo),
             "DATABASE_URL": db_url,
-            "STOCKSAGE_AGENT_MODE": "local",
+            "MINGCANG_AGENT_MODE": "local",
         },
         text=True,
         capture_output=True,
@@ -87,14 +87,14 @@ def _run_cli(repo: Path, db_url: str, *args: str):
 
 def test_pi_context_contracts_keep_prompt_entry_fields(test_db, sample_stocks):
     from backend.agent.context import (
-        stock_sage_context,
-        stock_sage_memory_snapshot,
-        stock_sage_stock_context,
+        mingcang_context,
+        mingcang_memory_snapshot,
+        mingcang_stock_context,
     )
 
-    project = stock_sage_context(test_db, symbol="300308")
-    memory = stock_sage_memory_snapshot(test_db)
-    stock = stock_sage_stock_context(test_db, "300308")
+    project = mingcang_context(test_db, symbol="300308")
+    memory = mingcang_memory_snapshot(test_db)
+    stock = mingcang_stock_context(test_db, "300308")
 
     _assert_exact_keys(project, PROJECT_CONTEXT_KEYS)
     _assert_exact_keys(memory, MEMORY_SNAPSHOT_KEYS)
@@ -131,10 +131,11 @@ def test_mcp_health_contract_matches_agent_health(monkeypatch, test_db):
 
     monkeypatch.setattr(mcp_server, "SessionLocal", lambda: test_db)
 
-    health = mcp_server.stock_sage_health()
+    health = mcp_server.mingcang_health()
 
     _assert_exact_keys(health, AGENT_HEALTH_KEYS)
     assert health["ok"] is True
+    assert not hasattr(mcp_server, "stock" + "_sage_health")
     assert isinstance(health["memory"]["ai_memory_count"], int)
     assert {"open_count", "symbols"} <= set(health["positions"])
     assert {"active_count", "symbols"} <= set(health["watchlist"])

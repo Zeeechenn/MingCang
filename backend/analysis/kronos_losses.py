@@ -1,4 +1,4 @@
-"""StockSage-owned M27.4 Path A losses for Kronos fine-tuning."""
+"""MingCang-owned M27.4 Path A losses for Kronos fine-tuning."""
 from __future__ import annotations
 
 from dataclasses import dataclass

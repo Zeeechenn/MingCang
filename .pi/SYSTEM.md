@@ -36,7 +36,7 @@ python3 -m backend.agent.cli actions --pretty
 
 ## Tool Boundary
 
-- Use MingCang CLI or the project-local `.pi/extensions/stocksage.ts` tools
+- Use MingCang CLI or the project-local `.pi/extensions/mingcang.ts` tools
   for project state, memory, watchlist, positions and health before relying on
   chat-only memory.
 - Use project commands for verification: `make test`, `make verify`,

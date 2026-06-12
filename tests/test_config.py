@@ -33,8 +33,19 @@ if any("class-based `config`" in message for message in messages):
 def test_sqlite_path_from_url_resolves_local_database_paths(tmp_path):
     from backend.config import sqlite_path_from_url
 
-    db_path = tmp_path / "stock-sage.db"
+    db_path = tmp_path / "mingcang.db"
 
     assert sqlite_path_from_url(f"sqlite:///{db_path}") == db_path
     assert sqlite_path_from_url("sqlite:///:memory:") is None
     assert sqlite_path_from_url("postgresql://localhost/mingcang") is None
+
+
+def test_default_database_url_uses_mingcang_db_even_when_legacy_exists(monkeypatch, tmp_path):
+    import backend.config as config
+
+    mingcang_path = tmp_path / "mingcang.db"
+    legacy_path = tmp_path / ("stock" + "-sage.db")
+    legacy_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(config, "_MINGCANG_DB_PATH", mingcang_path)
+
+    assert config._default_database_url() == f"sqlite:///{mingcang_path}"
