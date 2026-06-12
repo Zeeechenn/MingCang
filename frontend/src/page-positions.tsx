@@ -1,6 +1,8 @@
 // ============================================================
 // 持仓页 — 记录 / 平仓 / 已实现盈亏(不接券商,不自动交易)
 // ============================================================
+import React from 'react';
+import { Badge, CCY, Card, MCStore, MKT, PageHead, RefreshButton, fmt, navigate, pnlClass, toast, useStockSuggest, useStore } from './shared';
 const { useState: usePoState, useMemo: usePoMemo } = React;
 
 function PositionForm() {
@@ -70,7 +72,7 @@ function PositionForm() {
   );
 }
 
-function CloseButton({ item }) {
+function CloseButton({ item }: any) {
   const [open, setOpen] = usePoState(false);
   const [price, setPrice] = usePoState('');
   function submit(e) {
@@ -101,11 +103,11 @@ function CloseButton({ item }) {
   );
 }
 
-function PositionsPage() {
+export function PositionsPage() {
   const [state] = useStore();
   const { positions } = state;
   const R = window.MC_DATA.RUNTIME;
-  const [confirmDel, setConfirmDel] = usePoState(null);
+  const [confirmDel, setConfirmDel] = usePoState<any>(null);
   const open = positions.filter((p) => p.status !== 'closed');
   const closed = positions.filter((p) => p.status === 'closed');
   const totals = usePoMemo(() => open.reduce((acc, p) => {

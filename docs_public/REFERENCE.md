@@ -104,9 +104,9 @@
 | `backend/agent/` | CLI、action registry、MCP、安全边界。 |
 | `backend/jobs/` | 盘前/盘中/盘后/周末工作流。 |
 | `backend/backtest/` | 回测和统计验证。 |
-| `frontend/src/App.jsx` | 前端路由。 |
-| `frontend/src/api.js` | 前端 API client。 |
-| `frontend/src/pages/` | 前端页面。 |
+| `frontend/src/main.tsx` | 前端入口与路由（TypeScript）。 |
+| `frontend/src/api.ts` | 前端 API client。 |
+| `frontend/src/page-*.tsx` | 前端页面。 |
 | `docs_public/FEATURE_MAP.md` | 功能目录。 |
 | `STATUS.md` | 当前状态。 |
 

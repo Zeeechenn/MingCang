@@ -1,11 +1,14 @@
 // ============================================================
 // MingCang — 共享组件:store / 路由 / 格式化 / 图表 / Markdown
 // ============================================================
+import React from 'react';
+import { createPortal } from 'react-dom';
+import { MC_DATA } from './data';
 const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } = React;
 
 // ---------- 极简全局 store ----------
-const MCStore = (() => {
-  const D = window.MC_DATA;
+export const MCStore = (() => {
+  const D = MC_DATA;
   let state = {
     watchlist: D.WATCHLIST.map((w) => ({ ...w })),
     positions: D.POSITIONS.map((p) => ({ ...p })),
@@ -15,25 +18,25 @@ const MCStore = (() => {
     memoryItems: D.MEMORY.items.slice(),
     toast: null,
   };
-  const subs = new Set();
+  const subs = new Set<() => void>();
   return {
     get: () => state,
     set(patch) {
       state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) };
       subs.forEach((fn) => fn());
     },
-    subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
+    subscribe(fn: () => void) { subs.add(fn); return () => { subs.delete(fn); }; },
   };
 })();
 
-function useStore() {
+export function useStore(): [any, (patch: any) => void] {
   const [, force] = useState(0);
   useEffect(() => MCStore.subscribe(() => force((n) => n + 1)), []);
   return [MCStore.get(), MCStore.set];
 }
 
-let toastTimer = null;
-function toast(msg, tone = 'accent') {
+let toastTimer: any = null;
+export function toast(msg, tone = 'accent') {
   MCStore.set({ toast: { msg, tone } });
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => MCStore.set({ toast: null }), 2600);
@@ -47,7 +50,7 @@ function parseHash() {
   if (!seg[0]) return { page: 'home' };
   return { page: seg[0] };
 }
-function useRoute() {
+export function useRoute() {
   const [route, setRoute] = useState(parseHash);
   useEffect(() => {
     const fn = () => { setRoute(parseHash()); window.scrollTo(0, 0); };
@@ -56,36 +59,36 @@ function useRoute() {
   }, []);
   return route;
 }
-function navigate(to) { location.hash = to; }
+export function navigate(to) { location.hash = to; }
 
 // ---------- 格式化 ----------
-const fmt = {
+export const fmt = {
   price: (v, d = 2) => (v === null || v === undefined || isNaN(v) ? '–' : Number(v).toFixed(d)),
   money: (v) => (v === null || v === undefined || isNaN(v) ? '–' : Number(v).toLocaleString('zh-CN', { maximumFractionDigits: 0 })),
   signed: (v, d = 1) => (v === null || v === undefined || isNaN(v) ? '–' : `${v > 0 ? '+' : ''}${Number(v).toFixed(d)}`),
   signedPct: (v, d = 2) => (v === null || v === undefined || isNaN(v) ? '–' : `${v > 0 ? '+' : ''}${Number(v).toFixed(d)}%`),
   signedMoney: (v) => (v === null || v === undefined || isNaN(v) ? '–' : `${v > 0 ? '+' : ''}${Number(v).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`),
 };
-const CCY = { CN: 'CNY', HK: 'HKD', US: 'USD' };
-const MKT = { CN: 'A股', HK: '港股', US: '美股' };
+export const CCY = { CN: 'CNY', HK: 'HKD', US: 'USD' };
+export const MKT = { CN: 'A股', HK: '港股', US: '美股' };
 
-function recTone(rec) {
+export function recTone(rec) {
   if (!rec) return 'badge-dim';
   if (/试错|买|关注/.test(rec)) return 'badge-up';
   if (/观望/.test(rec)) return 'badge-warn';
   if (/规避|卖/.test(rec)) return 'badge-down';
   return 'badge-dim';
 }
-function ltTone(label) {
+export function ltTone(label) {
   if (label === '值得持有') return 'badge-up';
   if (label === '估值偏高') return 'badge-warn';
   if (label === '规避') return 'badge-down';
   return 'badge-accent';
 }
-function pnlClass(v) { return (v || 0) >= 0 ? 'up' : 'down'; }
+export function pnlClass(v) { return (v || 0) >= 0 ? 'up' : 'down'; }
 
 // ---------- 基础组件 ----------
-function Card({ title, eyebrow, right, children, className = '', pad = true, tour }) {
+export function Card({ title, eyebrow, right, children, className = '', pad = true, tour }: any) {
   return (
     <section className={`glass ${className}`} data-tour={tour}>
       {(title || eyebrow || right) && (
@@ -102,7 +105,7 @@ function Card({ title, eyebrow, right, children, className = '', pad = true, tou
   );
 }
 
-function Metric({ label, value, tone = '', sub }) {
+export function Metric({ label, value, tone = '', sub }: any) {
   return (
     <div className="glass-inset" style={{ padding: '10px 12px', minWidth: 0 }}>
       <div className="t-eyebrow">{label}</div>
@@ -112,17 +115,17 @@ function Metric({ label, value, tone = '', sub }) {
   );
 }
 
-function Badge({ tone = 'badge-dim', children }) {
+export function Badge({ tone = 'badge-dim', children }: any) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
 
-function Toggle({ on, onChange, label }) {
+export function Toggle({ on, onChange, label }: any) {
   return (
     <button type="button" className={`toggle ${on ? 'on' : ''}`} role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}></button>
   );
 }
 
-function Seg({ value, options, onChange }) {
+export function Seg({ value, options, onChange }: any) {
   return (
     <div className="seg">
       {options.map(([id, label]) => (
@@ -132,7 +135,7 @@ function Seg({ value, options, onChange }) {
   );
 }
 
-function ScoreBar({ score, height = 6 }) {
+export function ScoreBar({ score, height = 6 }: any) {
   const c = Math.max(-100, Math.min(100, Number(score || 0)));
   const color = c > 20 ? 'var(--up)' : c < -20 ? 'var(--down)' : 'var(--warn)';
   return (
@@ -143,7 +146,7 @@ function ScoreBar({ score, height = 6 }) {
   );
 }
 
-function Spark({ symbol, width = 88, height = 30 }) {
+export function Spark({ symbol, width = 88, height = 30 }: any) {
   const prices = (window.MC_DATA.PRICES[symbol] || []).slice(-30);
   if (!prices.length) return <svg width={width} height={height}></svg>;
   const vals = prices.map((p) => p.close);
@@ -158,10 +161,10 @@ function Spark({ symbol, width = 88, height = 30 }) {
 }
 
 // ---------- 主价格图 ----------
-function PriceChart({ symbol, signal }) {
-  const ref = useRef(null);
+export function PriceChart({ symbol, signal }: any) {
+  const ref = useRef<any>(null);
   const [w, setW] = useState(800);
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useState<any>(null);
   const prices = window.MC_DATA.PRICES[symbol] || [];
   useEffect(() => {
     const el = ref.current;
@@ -257,7 +260,7 @@ function PriceChart({ symbol, signal }) {
 }
 
 // ---------- Markdown ----------
-function inline(text, key) {
+export function inline(text: any, key?: any) {
   const parts = String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((p, i) => {
     if (p.startsWith('**') && p.endsWith('**')) return <strong key={i} style={{ color: 'var(--ink)', fontWeight: 650 }}>{p.slice(2, -2)}</strong>;
@@ -266,23 +269,23 @@ function inline(text, key) {
   });
 }
 
-function Markdown({ text }) {
+export function Markdown({ text }: any) {
   const blocks = useMemo(() => {
     const lines = String(text || '').split(/\r?\n/);
-    const out = [];
+    const out: any[] = [];
     let i = 0;
     while (i < lines.length) {
       const line = lines[i];
       if (!line.trim()) { i++; continue; }
       if (line.startsWith('```')) {
-        const buf = []; i++;
+        const buf: string[] = []; i++;
         while (i < lines.length && !lines[i].startsWith('```')) buf.push(lines[i++]);
         i++; out.push({ t: 'code', text: buf.join('\n') }); continue;
       }
       const h = line.match(/^(#{1,3})\s+(.*)/);
       if (h) { out.push({ t: `h${h[1].length}`, text: h[2] }); i++; continue; }
       if (/^\|/.test(line)) {
-        const rows = [];
+        const rows: string[][] = [];
         while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i].split('|').slice(1, -1).map((c) => c.trim())); i++; }
         const headers = rows[0] || [];
         const body = rows.filter((r, idx) => idx > 0 && !r.every((c) => /^:?-+:?$/.test(c)));
@@ -290,13 +293,13 @@ function Markdown({ text }) {
       }
       const ul = line.match(/^[-·*]\s+(.*)/);
       if (ul) {
-        const items = [];
+        const items: string[] = [];
         while (i < lines.length && /^[-·*]\s+/.test(lines[i])) items.push(lines[i++].replace(/^[-·*]\s+/, ''));
         out.push({ t: 'ul', items }); continue;
       }
       const ol = line.match(/^\d+[.、]\s+(.*)/);
       if (ol) {
-        const items = [];
+        const items: string[] = [];
         while (i < lines.length && /^\d+[.、]\s+/.test(lines[i])) items.push(lines[i++].replace(/^\d+[.、]\s+/, ''));
         out.push({ t: 'ol', items }); continue;
       }
@@ -327,7 +330,7 @@ function Markdown({ text }) {
 }
 
 // ---------- 页头 ----------
-function PageHead({ eyebrow, title, desc, right }) {
+export function PageHead({ eyebrow, title, desc, right }: any) {
   return (
     <div className="spread pop" style={{ alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
       <div style={{ minWidth: 0 }}>
@@ -341,7 +344,7 @@ function PageHead({ eyebrow, title, desc, right }) {
 }
 
 // ---------- 股票搜索建议 ----------
-function useStockSuggest(query, market) {
+export function useStockSuggest(query, market) {
   return useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
@@ -352,7 +355,7 @@ function useStockSuggest(query, market) {
 }
 
 // ---------- 弹层 Modal（portal 到 body,确保悬浮全屏,不被 glass 卡的 backdrop-filter/overflow 裁剪）----------
-function Modal({ title, eyebrow, onClose, children, maxWidth = 560, right }) {
+export function Modal({ title, eyebrow, onClose, children, maxWidth = 560, right }: any) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -376,11 +379,11 @@ function Modal({ title, eyebrow, onClose, children, maxWidth = 560, right }) {
       </div>
     </div>
   );
-  return ReactDOM.createPortal(node, document.body);
+  return createPortal(node, document.body);
 }
 
 // ---------- 线性图标(SF Symbol 风格,stroke currentColor) ----------
-function McIcon({ name, size = 17, style }) {
+export function McIcon({ name, size = 17, style }: any) {
   const P = {
     pulse: 'M3 12h3.5l2-6 3 12 2-7H20',
     reviews: 'M8 4h8v3H8zM6 5H5a1 1 0 00-1 1v13a1 1 0 001 1h14a1 1 0 001-1V6a1 1 0 00-1-1h-1M8.5 13l2 2 4-4',
@@ -418,7 +421,7 @@ function McIcon({ name, size = 17, style }) {
 }
 
 // ---------- 数据刷新按钮(带旋转动效 + 演示同步) ----------
-function RefreshButton({ label = '刷新', busyLabel = '同步中…', toastMsg, onDone, className = 'btn btn-sm', title }) {
+export function RefreshButton({ label = '刷新', busyLabel = '同步中…', toastMsg, onDone, className = 'btn btn-sm', title }: any) {
   const [busy, setBusy] = useState(false);
   function run() {
     if (busy) return;
@@ -434,14 +437,14 @@ function RefreshButton({ label = '刷新', busyLabel = '同步中…', toastMsg,
 }
 
 // ---------- 池排序:默认 / 按分数 / 按当日涨跌(点同一项切换升降序) ----------
-function dailyChangePct(symbol) {
+export function dailyChangePct(symbol) {
   const px = window.MC_DATA.PRICES[symbol];
   if (!px || px.length < 2) return null;
   const a = px[px.length - 1].close, b = px[px.length - 2].close;
   return ((a - b) / b) * 100;
 }
 
-function useSortCtl() {
+export function useSortCtl() {
   const [sort, setSort] = useState({ key: 'default', dir: 'desc' });
   const onSort = useCallback((key) => {
     setSort((s) => {
@@ -453,7 +456,7 @@ function useSortCtl() {
   return [sort, onSort];
 }
 
-function SortSeg({ sort, onSort }) {
+export function SortSeg({ sort, onSort }: any) {
   const arrow = (k) => (sort.key === k ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '');
   return (
     <Seg value={sort.key} onChange={onSort}
@@ -461,7 +464,7 @@ function SortSeg({ sort, onSort }) {
   );
 }
 
-function applyPoolSort(items, sort) {
+export function applyPoolSort(items, sort) {
   if (!sort || sort.key === 'default') return items;
   const val = (w) => (sort.key === 'score'
     ? (w.latest_signal ? w.latest_signal.composite_score : null)
@@ -477,18 +480,18 @@ function applyPoolSort(items, sort) {
 }
 
 // ---------- 股票池筛选:筛选按钮 + 可收起的筛选条(搜索/市场/信号/长期标签) ----------
-function useStockPoolFilter(items) {
+export function useStockPoolFilter(items) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [mkt, setMkt] = useState('all');
   const [rec, setRec] = useState('all');
   const [lt, setLt] = useState('all');
-  const recs = useMemo(() => {
+  const recs = useMemo<any[]>(() => {
     const rs = Array.from(new Set(items.filter((w) => w.latest_signal).map((w) => w.latest_signal.recommendation))).sort();
     if (items.some((w) => !w.latest_signal)) rs.push('无信号');
     return rs;
   }, [items]);
-  const lts = useMemo(() => Array.from(new Set(items.filter((w) => w.long_term_label).map((w) => w.long_term_label.label))).sort(), [items]);
+  const lts = useMemo<any[]>(() => Array.from(new Set(items.filter((w) => w.long_term_label).map((w) => w.long_term_label.label))).sort(), [items]);
   const ql = q.trim().toLowerCase();
   const filtered = items.filter((w) =>
     (mkt === 'all' || w.market === mkt)
@@ -524,7 +527,7 @@ function useStockPoolFilter(items) {
 
 // ---------- 信息池外壳:默认收起 + 展开按钮 + 卡片/列表双视图 ----------
 // items 由宿主先筛选好;PoolShell 只负责截断、展开和视图切换。
-function PoolShell({ items, defaultCount = 8, renderCard, renderRow, cardMin = 218, unit = '条', empty = null }) {
+export function PoolShell({ items, defaultCount = 8, renderCard, renderRow, cardMin = 218, unit = '条', empty = null }: any) {
   const [expanded, setExpanded] = useState(false);
   const [view, setView] = useState('cards');
   if (!items.length) return empty || <div className="empty">暂无内容。</div>;

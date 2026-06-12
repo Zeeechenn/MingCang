@@ -1,7 +1,21 @@
 const BASE = '/api'
 
+export type ApiErrorKind = 'transient' | 'server' | 'client' | 'timeout' | 'network' | 'unknown'
+
+interface ApiErrorInfo {
+  status?: number | null
+  kind?: ApiErrorKind
+  path?: string
+  retriable?: boolean
+}
+
 export class ApiError extends Error {
-  constructor(message, { status = null, kind = 'unknown', path = '', retriable = false } = {}) {
+  status: number | null
+  kind: ApiErrorKind
+  path: string
+  retriable: boolean
+
+  constructor(message: string, { status = null, kind = 'unknown', path = '', retriable = false }: ApiErrorInfo = {}) {
     super(message)
     this.name = 'ApiError'
     this.status = status
@@ -11,15 +25,23 @@ export class ApiError extends Error {
   }
 }
 
-function classifyStatus(status) {
+function classifyStatus(status: number): ApiErrorKind {
   if (status === 408 || status === 429) return 'transient'
   if (status >= 500) return 'server'
   if (status >= 400) return 'client'
   return 'unknown'
 }
 
-function defaultSleep(ms) {
+function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+interface RequestClientOptions {
+  base?: string
+  fetchImpl?: typeof fetch
+  timeoutMs?: number
+  retries?: number
+  sleep?: (ms: number) => Promise<void>
 }
 
 export function createRequestClient({
@@ -28,12 +50,12 @@ export function createRequestClient({
   timeoutMs = 15000,
   retries = 1,
   sleep = defaultSleep,
-} = {}) {
-  async function request(path, options = {}) {
-    const method = (options.method || 'GET').toUpperCase()
+}: RequestClientOptions = {}) {
+  async function request(path: string, options: RequestInit = {}): Promise<any> {
+    const method = (typeof options.method === 'string' ? options.method : 'GET').toUpperCase()
     const retryableMethod = method === 'GET'
     const maxAttempts = retryableMethod ? retries + 1 : 1
-    let lastError
+    let lastError: ApiError | undefined
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
@@ -54,12 +76,12 @@ export function createRequestClient({
         return res.json()
       } catch (err) {
         if (timer) clearTimeout(timer)
-        if (err?.name === 'AbortError') {
+        if (err instanceof Error && err.name === 'AbortError') {
           lastError = new ApiError(`请求超时：${path}`, { kind: 'timeout', path, retriable: retryableMethod })
         } else if (err instanceof ApiError) {
           lastError = err
         } else {
-          lastError = new ApiError(err?.message || '网络请求失败', { kind: 'network', path, retriable: retryableMethod })
+          lastError = new ApiError((err instanceof Error && err.message) || '网络请求失败', { kind: 'network', path, retriable: retryableMethod })
         }
         if (!lastError.retriable || attempt >= maxAttempts) throw lastError
         await sleep(250 * attempt)
@@ -127,10 +149,20 @@ export const chatWithAI = (payload) =>
     body: JSON.stringify(payload),
   })
 
-function parseSseBlock(block) {
+export interface ChatStreamHandlers {
+  onPrepare?: (data: any) => void
+  onRunning?: (data: any) => void
+  onEvidence?: (data: any) => void
+  onToken?: (text: string) => void
+  onMeta?: (data: any) => void
+  onError?: (data: any) => void
+  onDone?: (data: any) => void
+}
+
+function parseSseBlock(block: string) {
   const lines = block.split(/\r?\n/)
   let event = 'message'
-  const data = []
+  const data: string[] = []
   for (const line of lines) {
     if (line.startsWith('event:')) event = line.slice(6).trim()
     if (line.startsWith('data:')) data.push(line.slice(5).trim())
@@ -138,7 +170,7 @@ function parseSseBlock(block) {
   return { event, data: data.join('\n') }
 }
 
-export async function chatWithAIStream(payload, handlers = {}) {
+export async function chatWithAIStream(payload: any, handlers: ChatStreamHandlers = {}) {
   const res = await fetch(BASE + '/ai/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

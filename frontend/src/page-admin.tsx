@@ -1,6 +1,8 @@
 // ============================================================
 // 治理台 — 决策 / 仓位 / Agent / 数据 / 调度 / 熔断 / 记忆 / LLM 成本
 // ============================================================
+import React from 'react';
+import { Badge, Card, MCStore, McIcon, Metric, PageHead, Seg, Toggle, toast, useStore } from './shared';
 const { useState: useAState, useEffect: useAEffect } = React;
 
 const ADMIN_SECTIONS = [
@@ -15,7 +17,7 @@ const ADMIN_SECTIONS = [
   ['llmcost', '研究成本账本', '7 天用量', 'llmcost'],
 ];
 
-function SettingRow({ label, hint, children }) {
+function SettingRow({ label, hint, children }: any) {
   return (
     <div className="spread" style={{ padding: '12px 0', borderBottom: '1px solid var(--hairline-soft)', gap: 16 }}>
       <div style={{ minWidth: 0 }}>
@@ -27,7 +29,7 @@ function SettingRow({ label, hint, children }) {
   );
 }
 
-function NumSlider({ value, onChange, min, max, step = 1, unit = '' }) {
+function NumSlider({ value, onChange, min, max, step = 1, unit = '' }: any) {
   return (
     <div className="row" style={{ gap: 10 }}>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))}
@@ -37,7 +39,7 @@ function NumSlider({ value, onChange, min, max, step = 1, unit = '' }) {
   );
 }
 
-function DecisionSection({ cfg, set }) {
+function DecisionSection({ cfg, set }: any) {
   const wsum = cfg.weights.quant + cfg.weights.technical + cfg.weights.sentiment;
   return (
     <div>
@@ -70,7 +72,7 @@ function DecisionSection({ cfg, set }) {
   );
 }
 
-function PortfolioSection({ cfg, set }) {
+function PortfolioSection({ cfg, set }: any) {
   return (
     <div>
       <SettingRow label="单股仓位上限" hint="任何单一标的不超过总资产的该比例">
@@ -92,7 +94,7 @@ function PortfolioSection({ cfg, set }) {
   );
 }
 
-function AgentsSection({ cfg, set }) {
+function AgentsSection({ cfg, set }: any) {
   const [topic, setTopic] = useAState('');
   const [symbols, setSymbols] = useAState('');
   const [running, setRunning] = useAState('');
@@ -167,7 +169,7 @@ function ActionRegistryPanel() {
   );
 }
 
-function DataSection({ cfg, set }) {
+function DataSection({ cfg, set }: any) {
   return (
     <div>
       <SettingRow label="财务回填年数" hint="长期研究与 Piotroski 评分所需的财务数据深度">
@@ -189,7 +191,7 @@ function DataSection({ cfg, set }) {
   );
 }
 
-function ScheduleSection({ cfg, set }) {
+function ScheduleSection({ cfg, set }: any) {
   const W = window.MC_DATA.WORKFLOWS;
   return (
     <div>
@@ -224,7 +226,7 @@ function ScheduleSection({ cfg, set }) {
   );
 }
 
-function RiskSection({ cfg, set }) {
+function RiskSection({ cfg, set }: any) {
   const [confirming, setConfirming] = useAState(false);
   return (
     <div>
@@ -264,7 +266,7 @@ function RiskSection({ cfg, set }) {
 function MemorySectionPanel() {
   const [state] = useStore();
   const [tab, setTab] = useAState('items');
-  const [confirmDel, setConfirmDel] = useAState(null);
+  const [confirmDel, setConfirmDel] = useAState<any>(null);
   const M = window.MC_DATA.MEMORY;
   const items = state.memoryItems;
   return (
@@ -408,7 +410,7 @@ function AdminSidebar() {
   );
 }
 
-function CredRow({ item, configured, onSave }) {
+function CredRow({ item, configured, onSave }: any) {
   const [val, setVal] = useAState('');
   const [editing, setEditing] = useAState(false);
   const disabled = item.disabled;
@@ -442,7 +444,7 @@ function CredRow({ item, configured, onSave }) {
   );
 }
 
-function ApiKeySection({ cfg }) {
+function ApiKeySection({ cfg }: any) {
   const [configured, setConfigured] = useAState({ tavily: true });
   function save(id) {
     setConfigured((c) => ({ ...c, [id]: true }));
@@ -497,7 +499,7 @@ function ApiKeySection({ cfg }) {
   );
 }
 
-function AdminPage() {
+export function AdminPage() {
   const [adState] = useStore();
   const [active, setActive] = useAState('decision');
   const [cfg, setCfg] = useAState({ ...window.MC_DATA.RUNTIME });

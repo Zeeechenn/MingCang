@@ -1,6 +1,9 @@
 // ============================================================
 // 脉冲页 — 自选与候选池首页
 // ============================================================
+import React from 'react';
+import { DebateReport } from './page-reports';
+import { Badge, Card, MCStore, MKT, Metric, Modal, PageHead, PoolShell, RefreshButton, ScoreBar, SortSeg, Spark, applyPoolSort, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, toast, useSortCtl, useStockPoolFilter, useStockSuggest, useStore } from './shared';
 const { useState: usePState, useMemo: usePMemo } = React;
 
 const RELEASE_DISMISS_KEY = 'mc_release_dismissed_v1';
@@ -41,7 +44,7 @@ function ReleaseStrip() {
   );
 }
 
-function TodayCall({ watchlist }) {
+function TodayCall({ watchlist }: any) {
   const top = watchlist.filter((w) => w.latest_signal).sort((a, b) => b.latest_signal.composite_score - a.latest_signal.composite_score)[0];
   const sig = top?.latest_signal;
   const arb = sig?.llm_arbitration || {};
@@ -153,7 +156,7 @@ function TodayCall({ watchlist }) {
   );
 }
 
-function PositionsOverview({ positions }) {
+function PositionsOverview({ positions }: any) {
   const open = positions.filter((p) => p.status !== 'closed');
   const mv = open.reduce((a, p) => a + p.latest_price * p.quantity, 0);
   const cost = open.reduce((a, p) => a + p.avg_cost * p.quantity, 0);
@@ -227,7 +230,7 @@ function DataHealthGlance() {
   );
 }
 
-function SignalCardTile({ w }) {
+function SignalCardTile({ w }: any) {
   const s = w.latest_signal;
   const chg = dailyChangePct(w.symbol);
   return (
@@ -257,7 +260,7 @@ function SignalCardTile({ w }) {
 }
 
 // 列表行:一行一条,用涨跌、技术/情感分、止损止盈、长期标签填满信息密度
-function SignalRowTile({ w }) {
+function SignalRowTile({ w }: any) {
   const s = w.latest_signal;
   const chg = dailyChangePct(w.symbol);
   return (
@@ -283,7 +286,7 @@ function SignalRowTile({ w }) {
   );
 }
 
-function SignalGrid({ watchlist }) {
+function SignalGrid({ watchlist }: any) {
   const [filterOpen, setFilterOpen] = usePState(false);
   const [fq, setFq] = usePState('');
   const [fRec, setFRec] = usePState('all');
@@ -291,8 +294,8 @@ function SignalGrid({ watchlist }) {
   const [fLt, setFLt] = usePState('all');
   const [sort, onSort] = useSortCtl();
   const signals = watchlist.filter((w) => w.latest_signal);
-  const recs = usePMemo(() => Array.from(new Set(signals.map((w) => w.latest_signal.recommendation))).sort(), [watchlist]);
-  const lts = usePMemo(() => Array.from(new Set(signals.filter((w) => w.long_term_label).map((w) => w.long_term_label.label))).sort(), [watchlist]);
+  const recs = usePMemo<any[]>(() => Array.from(new Set(signals.map((w) => w.latest_signal.recommendation))).sort(), [watchlist]);
+  const lts = usePMemo<any[]>(() => Array.from(new Set(signals.filter((w) => w.long_term_label).map((w) => w.long_term_label.label))).sort(), [watchlist]);
   const ql = fq.trim().toLowerCase();
   const filtered = signals.filter((w) =>
     (fRec === 'all' || w.latest_signal.recommendation === fRec)
@@ -344,7 +347,7 @@ function SignalGrid({ watchlist }) {
   );
 }
 
-function AddStockForm({ onAdd }) {
+function AddStockForm({ onAdd }: any) {
   const [open, setOpen] = usePState(false);
   const [q, setQ] = usePState('');
   const [market, setMarket] = usePState('CN');
@@ -372,8 +375,8 @@ function AddStockForm({ onAdd }) {
   );
 }
 
-function WatchlistManage({ watchlist }) {
-  const [removing, setRemoving] = usePState(null);
+function WatchlistManage({ watchlist }: any) {
+  const [removing, setRemoving] = usePState<any>(null);
   const [sort, onSort] = useSortCtl();
   const f = useStockPoolFilter(watchlist);
   const filtered = f.filtered;
@@ -472,7 +475,7 @@ function WatchlistManage({ watchlist }) {
   );
 }
 
-function ActivityLedger({ watchlist, positions }) {
+function ActivityLedger({ watchlist, positions }: any) {
   const items = [
     ...watchlist.filter((w) => w.latest_signal).slice(0, 5).map((w) => ({
       time: w.latest_signal.date.slice(5), kind: '信号',
@@ -503,7 +506,7 @@ function ActivityLedger({ watchlist, positions }) {
   );
 }
 
-function PulsePage() {
+export function PulsePage() {
   const [state] = useStore();
   const { watchlist, positions } = state;
   return (

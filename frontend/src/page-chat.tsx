@@ -1,9 +1,11 @@
 // ============================================================
 // AI 聊天页 — 会话 / 流式回答 / 待确认动作
 // ============================================================
+import React from 'react';
+import { Badge, MCStore, Markdown, McIcon, PageHead, navigate, toast, useStore } from './shared';
 const { useState: useCState, useRef: useCRef, useEffect: useCEffect } = React;
 
-function StagePill({ stage, label }) {
+function StagePill({ stage, label }: any) {
   return (
     <div className="row" style={{ gap: 7, fontSize: 12, color: 'var(--ink-3)' }}>
       <span className="pulse-dot" style={{ background: 'var(--accent)' }}></span>
@@ -12,7 +14,7 @@ function StagePill({ stage, label }) {
   );
 }
 
-function PendingAction({ action, onConfirm, confirmed }) {
+function PendingAction({ action, onConfirm, confirmed }: any) {
   return (
     <div className="glass-inset" style={{ marginTop: 12, padding: 13, borderColor: 'var(--warn)', borderWidth: 1 }}>
       <div className="spread">
@@ -39,7 +41,7 @@ function PendingAction({ action, onConfirm, confirmed }) {
   );
 }
 
-function DebateRoundControl({ value, onChange }) {
+function DebateRoundControl({ value, onChange }: any) {
   const ORCH = window.MC_DATA.COPILOT_ORCHESTRATION;
   const max = ORCH.round_templates.length;
   return (
@@ -68,7 +70,7 @@ function DebateRoundControl({ value, onChange }) {
   );
 }
 
-function ModeChoice({ item, active, onSelect }) {
+function ModeChoice({ item, active, onSelect }: any) {
   return (
     <button
       type="button"
@@ -100,7 +102,7 @@ function ModeChoice({ item, active, onSelect }) {
   );
 }
 
-function CopilotOrchestrationPanel({ mode, onModeChange, debateRounds, onDebateRounds }) {
+function CopilotOrchestrationPanel({ mode, onModeChange, debateRounds, onDebateRounds }: any) {
   const ORCH = window.MC_DATA.COPILOT_ORCHESTRATION;
   const modeOptions = [
     {
@@ -232,16 +234,16 @@ ${roundText}
 **结论:** 300308 趋势与产业景气仍强,但估值和拥挤度要求维持小仓纪律;不建议追高加仓。`;
 }
 
-function ChatPage() {
+export function ChatPage() {
   const [state, setStore] = useStore();
   const { sessions } = state;
   const [mode, setMode] = useCState('general');
   const [activeId, setActiveId] = useCState(sessions[0]?.id || null);
   const [input, setInput] = useCState('');
   const [busy, setBusy] = useCState(false);
-  const [confirmArchive, setConfirmArchive] = useCState(null);
-  const [confirmedActs, setConfirmedActs] = useCState({});
-  const scrollRef = useCRef(null);
+  const [confirmArchive, setConfirmArchive] = useCState<any>(null);
+  const [confirmedActs, setConfirmedActs] = useCState<any>({});
+  const scrollRef = useCRef<any>(null);
   const active = sessions.find((s) => s.id === activeId);
   const debateRounds = state.runtime?.debate_rounds || 3;
 
@@ -355,7 +357,7 @@ function ChatPage() {
         return { ...s, messages: msgs, last_message: answer.slice(0, 40).replace(/[#*|\n]/g, ' ').trim() };
       });
     } catch (err) {
-      patchLast((m) => ({ ...m, _stage: 'done', answer: `请求失败:${err?.message || '后端错误'}` }));
+      patchLast((m) => ({ ...m, _stage: 'done', answer: `请求失败:${(err as any)?.message || '后端错误'}` }));
     }
     setBusy(false);
   }
@@ -387,7 +389,7 @@ function ChatPage() {
       messages: [...s.messages, { role: 'user', content: text }, { role: 'assistant', answer: '', _stage: 'prepare' }],
     }));
 
-    const stages = [['running', mode === 'long_term_team' ? '长期研究团队分析中…' : '处理中…', 500], ['evidence', '读取项目证据…', 1050]];
+    const stages: [string, string, number][] = [['running', mode === 'long_term_team' ? '长期研究团队分析中…' : '处理中…', 500], ['evidence', '读取项目证据…', 1050]];
     stages.forEach(([stage, label, at]) => {
       setTimeout(() => patchSession(sid, (s) => {
         const msgs = s.messages.slice();

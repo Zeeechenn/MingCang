@@ -46,7 +46,7 @@ layer of the system, from the browser to the database and back.
 
 ```
 Browser (React/Vite)
-    │  fetch('/api/...')          frontend/src/api.js createRequestClient
+    │  fetch('/api/...')          frontend/src/api.ts createRequestClient
     ▼
 FastAPI application              backend/main.py  app = FastAPI(...)
     │  router                    backend/api/routes/__init__.py

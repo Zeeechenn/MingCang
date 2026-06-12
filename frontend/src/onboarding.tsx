@@ -1,6 +1,8 @@
 // ============================================================
 // 新手引导 — 首次运行向导 + 功能导览(逐步高亮)
 // ============================================================
+import React from 'react';
+import { Badge, navigate } from './shared';
 const { useState: useOState, useEffect: useOEffect, useRef: useORef } = React;
 
 const WIZ_KEY = 'mc_proto_wizard_done_v1';
@@ -12,7 +14,7 @@ const WIZ_MODES = [
   { id: 'demo', label: '只看 Demo', hint: '用示例数据了解系统,不录入真实数据' },
 ];
 
-function StepDots({ current, total }) {
+function StepDots({ current, total }: any) {
   return (
     <div className="row" style={{ gap: 5 }}>
       {Array.from({ length: total }, (_, i) => (
@@ -26,7 +28,7 @@ function StepDots({ current, total }) {
   );
 }
 
-function FirstRunWizard({ onDone, onStartTour }) {
+export function FirstRunWizard({ onDone, onStartTour }: any) {
   const [step, setStep] = useOState(0);
   const [mode, setMode] = useOState('research');
   const [agreed, setAgreed] = useOState(false);
@@ -155,9 +157,9 @@ const TOUR_STEPS = [
   { route: '/admin', target: 'admin-nav', title: '配置中心', body: '权重、阈值、仓位规则、调度、熔断开关、记忆管理和 LLM 成本都在这里。修改保存为草稿,下次决策运行生效。导览结束,开始探索吧!' },
 ];
 
-function Tour({ onClose }) {
+export function Tour({ onClose }: any) {
   const [idx, setIdx] = useOState(0);
-  const [rect, setRect] = useOState(null);
+  const [rect, setRect] = useOState<any>(null);
   const step = TOUR_STEPS[idx];
 
   useOEffect(() => {

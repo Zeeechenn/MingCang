@@ -7,16 +7,20 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vite build --emptyOutDir=false",
-    "lint": "vite build --emptyOutDir=false",
-    "smoke": "node smoke.cjs"
+    "test": "tsc --noEmit && vite build --emptyOutDir=false",
+    "lint": "tsc --noEmit",
+    "smoke": "node smoke.cjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^6.0.3",
     "vite": "^6.4.3"
   }
 }

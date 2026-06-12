@@ -2,7 +2,9 @@
 // 来源健康页 — 提供商回退链 / 全球数据边界 / 检查项 / 告警 / 覆盖
 // ============================================================
 
-function HealthPage() {
+import React from 'react';
+import { Badge, Card, MKT, PageHead, RefreshButton, navigate, toast } from './shared';
+export function HealthPage() {
   const C = window.MC_DATA.COVERAGE;
   const checks = Object.entries(C.checks);
   const allPass = checks.every(([, v]) => v);

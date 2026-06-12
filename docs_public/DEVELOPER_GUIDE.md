@@ -12,9 +12,9 @@
 
 ## 2. 加一个前端页面
 
-1. 在 `frontend/src/pages/` 新增页面。
-2. 在 `frontend/src/App.jsx` 增加路由和导航。
-3. 在 `frontend/src/api.js` 增加 API wrapper。
+1. 新增 `frontend/src/page-<name>.tsx` 页面（TypeScript）。
+2. 在 `frontend/src/main.tsx` 增加路由和导航。
+3. 在 `frontend/src/api.ts` 增加 API wrapper。
 4. 把“是否写入/是否需确认”写到 UI 行为里。
 5. 给复杂 helper 加测试。
 6. 用 demo 数据跑一遍。

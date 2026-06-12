@@ -1,6 +1,8 @@
 // ============================================================
 // 主页 — 明仓终端 / 大对话框 / 结果驾驶台
 // ============================================================
+import React from 'react';
+import { Badge, MCStore, MKT, Markdown, McIcon, Spark, fmt, navigate, toast, useStore } from './shared';
 const {
   useState: useHState,
   useRef: useHRef,
@@ -300,11 +302,11 @@ function buildRun(text, state) {
   };
 }
 
-function ScoreGauge({ label, value, tone, sub }) {
+function ScoreGauge({ label, value, tone, sub }: any) {
   const raw = Number(String(value).replace(/[+,%]/g, ''));
   const pct = Math.max(0, Math.min(100, Number.isFinite(raw) ? Math.abs(raw) : 50));
   return (
-    <div className="glass-inset desk-gauge" style={{ '--pct': `${pct}%` }}>
+    <div className="glass-inset desk-gauge" style={{ '--pct': `${pct}%` } as React.CSSProperties}>
       <div className="desk-gauge-ring"><span className={`t-num ${tone || ''}`}>{value}</span></div>
       <div>
         <div style={{ fontWeight: 720 }}>{label}</div>
@@ -314,7 +316,7 @@ function ScoreGauge({ label, value, tone, sub }) {
   );
 }
 
-function SourceCard({ source }) {
+function SourceCard({ source }: any) {
   const tone = source.status === 'pass' ? 'badge-down' : source.status === 'warning' ? 'badge-warn' : 'badge-dim';
   return (
     <div className="glass-inset desk-source">
@@ -328,7 +330,7 @@ function SourceCard({ source }) {
   );
 }
 
-function ResultDashboard({ run, onConfirm }) {
+function ResultDashboard({ run, onConfirm }: any) {
   if (!run) return null;
   return (
     <section className="glass result-desk pop-2">
@@ -402,7 +404,7 @@ function ResultDashboard({ run, onConfirm }) {
   );
 }
 
-function TerminalMessage({ msg, onConfirm }) {
+function TerminalMessage({ msg, onConfirm }: any) {
   const isUser = msg.role === 'user';
   return (
     <article className={`command-msg ${isUser ? 'user' : 'assistant'}`}>
@@ -444,7 +446,7 @@ function TerminalMessage({ msg, onConfirm }) {
   );
 }
 
-function HelpPanel({ onRun }) {
+function HelpPanel({ onRun }: any) {
   return (
     <section className="glass terminal-help pop-3">
       <div className="card-head">
@@ -474,13 +476,13 @@ function HelpPanel({ onRun }) {
   );
 }
 
-function HomePage() {
+export function HomePage() {
   const [state, setStore] = useStore();
-  const scrollRef = useHRef(null);
+  const scrollRef = useHRef<any>(null);
   const [input, setInput] = useHState('');
   const [busy, setBusy] = useHState(false);
-  const [lastRun, setLastRun] = useHState(null);
-  const [messages, setMessages] = useHState([]);
+  const [lastRun, setLastRun] = useHState<any>(null);
+  const [messages, setMessages] = useHState<any[]>([]);
 
   useHEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;

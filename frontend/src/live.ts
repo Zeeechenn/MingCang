@@ -6,7 +6,7 @@
 //  3. 后端不可达时静默保持 demo 数据,导航栏显示「演示数据」
 //  4. 写操作统一走 window.MC_API,live 模式调后端,demo 模式由调用方落回本地演示行为
 // ============================================================
-import * as api from './api.js';
+import * as api from './api';
 
 let live = false;
 let atlasOn = false; // 后端 atlas_enabled 开启时为 true(论题/记忆候选/case-view 账本可用)
@@ -140,7 +140,7 @@ function runtimeFromBackend(rt) {
 
 function runtimeToBackend(cfg) {
   const frac = (v) => Number(v) / 100;
-  const out = {
+  const out: any = {
     new_framework_entry_threshold: Number(cfg.entry_threshold),
     weight_quant: frac(cfg.weights.quant),
     weight_technical: frac(cfg.weights.technical),
@@ -223,8 +223,8 @@ const CHECK_LABEL = {
 
 function normCoverage(c) {
   if (!c) return null;
-  const checks = {};
-  Object.entries(c.checks || {}).forEach(([k, v]) => {
+  const checks: Record<string, boolean> = {};
+  Object.entries(c.checks || {}).forEach(([k, v]: [string, any]) => {
     checks[CHECK_LABEL[k] || k] = typeof v === 'boolean' ? v : !!(v && v.ok !== false && v.pass !== false);
   });
   const allPass = Object.values(checks).every(Boolean);
@@ -405,7 +405,7 @@ export async function startLive() {
   if (cov) Dd.COVERAGE = cov;
 
   // 聊天会话(消息懒取)
-  let chatSessions = null;
+  let chatSessions: any = null;
   if (Array.isArray(sessions) && sessions.length) {
     chatSessions = sessions.map((s) => ({
       id: s.id, title: s.title || `会话 ${s.id}`, mode: s.mode || 'general',
@@ -503,7 +503,7 @@ export async function ensureSymbol(symbol) {
 
 // ---------- 写操作门面(live 调后端;demo 抛错由调用方落回演示行为) ----------
 async function ensureLive() {
-  if (!live) { const e = new Error('demo'); e.demo = true; throw e; }
+  if (!live) { const e: any = new Error('demo'); e.demo = true; throw e; }
 }
 
 async function refreshCore() {
@@ -619,12 +619,12 @@ export const MC_API = {
   },
   isAtlasOn() { return atlasOn; },
   async candidatePromote(id) {
-    if (!live || !atlasOn) { const e = new Error('demo'); e.demo = true; throw e; }
+    if (!live || !atlasOn) { const e: any = new Error('demo'); e.demo = true; throw e; }
     await api.promoteMemoryCandidate(id);
     await refreshCandidates();
   },
   async candidateReject(id) {
-    if (!live || !atlasOn) { const e = new Error('demo'); e.demo = true; throw e; }
+    if (!live || !atlasOn) { const e: any = new Error('demo'); e.demo = true; throw e; }
     await api.rejectMemoryCandidate(id);
     await refreshCandidates();
   },

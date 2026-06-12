@@ -2,21 +2,34 @@
 // 主应用 — 导航壳 / 路由 / 主题 / Tweaks
 // import 顺序即求值顺序:boot(全局 React) → data(MC_DATA) → shared(MCStore) → 各页面
 // ============================================================
-import './boot.js';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { FirstRunWizard, Tour } from './onboarding';
+import { AdminPage } from './page-admin';
+import { ChatPage } from './page-chat';
+import { HealthPage } from './page-health';
+import { HomePage } from './page-home';
+import { PositionsPage } from './page-positions';
+import { PulsePage } from './page-pulse';
+import { ReportsPage } from './page-reports';
+import { StockPage, StocksPage } from './page-stock';
+import { MKT, McIcon, navigate, useRoute, useStockSuggest, useStore } from './shared';
+import { TweakColor, TweakRadio, TweakSection, TweakSlider, TweakToggle, TweaksPanel, useTweaks } from './tweaks-panel';
+import './boot';
 import './glass.css';
-import './data.js';
-import './shared.jsx';
-import './tweaks-panel.jsx';
-import './onboarding.jsx';
-import './page-reports.jsx';
-import './page-pulse.jsx';
-import './page-stock.jsx';
-import './page-positions.jsx';
-import './page-home.jsx';
-import './page-chat.jsx';
-import './page-health.jsx';
-import './page-admin.jsx';
-import { startLive } from './live.js';
+import './data';
+import './shared';
+import './tweaks-panel';
+import './onboarding';
+import './page-reports';
+import './page-pulse';
+import './page-stock';
+import './page-positions';
+import './page-home';
+import './page-chat';
+import './page-health';
+import './page-admin';
+import { startLive } from './live';
 
 const { useState: useMState, useEffect: useMEffect } = React;
 
@@ -211,5 +224,5 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')!).render(<App />);
 startLive();

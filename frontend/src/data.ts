@@ -1,7 +1,7 @@
 // ============================================================
 // MingCang 明仓 — 原型演示数据层(全部为示例数据)
 // ============================================================
-(function () {
+export const MC_DATA: any = (function () {
   // 确定性伪随机,保证每次刷新图表一致
   function prng(seed) {
     let s = seed >>> 0;
@@ -13,7 +13,7 @@
 
   function genPrices(seed, base, drift, vol, days) {
     const rnd = prng(seed);
-    const out = [];
+    const out: any[] = [];
     let close = base;
     const end = new Date('2026-06-09');
     let d = new Date(end);
@@ -918,7 +918,7 @@
   ];
   const CHAT_FALLBACK = '我可以帮你:\n\n- **查询**:「300308 怎么看」「今天复盘说了什么」「持仓风险如何」\n- **操作**(需确认):「添加自选 002475」「添加持仓 300308 100股 成本150」\n\n所有写入操作都会生成待确认动作,确认前不会执行。';
 
-  window.MC_DATA = {
+  return {
     PRICES, WATCHLIST, POSITIONS, SEARCH_POOL, NEWS, EVIDENCE, COPILOT, EVAL, DOSSIER,
     REVIEWS, COVERAGE, RUNTIME, LLM_USAGE, MEMORY, SYSTEM,
     DEBATE, DEEP_RESEARCH, FORWARD_THESES, SIGNAL_FACTORS, FINANCIALS, ANALYSIS,
@@ -927,3 +927,6 @@
     SIG_DATE, mkHistory, last,
   };
 })();
+
+// window 挂载仅为运行时兼容保留（部分模块仍按 window.MC_DATA 读取）
+window.MC_DATA = MC_DATA;

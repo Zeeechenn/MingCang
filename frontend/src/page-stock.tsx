@@ -1,6 +1,8 @@
 // ============================================================
 // 单股详情页 — 信号 / 研究 / 证据 / 新闻
 // ============================================================
+import React from 'react';
+import { Badge, Card, MCStore, MKT, Markdown, McIcon, Metric, PageHead, PoolShell, PriceChart, RefreshButton, ScoreBar, Seg, SortSeg, Spark, applyPoolSort, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, toast, useSortCtl, useStockPoolFilter, useStore } from './shared';
 const { useState: useSState, useEffect: useSEffect } = React;
 
 function getStock(symbol) {
@@ -10,7 +12,7 @@ function getStock(symbol) {
 }
 function pick(map, symbol) { return map[symbol] || map._default; }
 
-function StockHeader({ stock, signal }) {
+function StockHeader({ stock, signal }: any) {
   const px = window.MC_DATA.PRICES[stock.symbol];
   const lastPx = px && px[px.length - 1];
   const chg = lastPx && px[px.length - 2] ? (lastPx.close - px[px.length - 2].close) / px[px.length - 2].close * 100 : null;
@@ -65,7 +67,7 @@ function StockHeader({ stock, signal }) {
   );
 }
 
-function CaseLoopPanel({ stock, signal }) {
+function CaseLoopPanel({ stock, signal }: any) {
   const c = pick(window.MC_DATA.CASE_LOOP, stock.symbol);
   const sourceTotal = c.source_mix.reduce((a, [, n]) => a + n, 0) || 1;
   const finalPosition = pick(window.MC_DATA.DOSSIER, stock.symbol).final_position;
@@ -139,7 +141,7 @@ function CaseLoopPanel({ stock, signal }) {
   );
 }
 
-function LongTermPanel({ stock }) {
+function LongTermPanel({ stock }: any) {
   const [busy, setBusy] = useSState(false);
   const [notice, setNotice] = useSState('');
   const label = stock.long_term_label;
@@ -183,7 +185,7 @@ function LongTermPanel({ stock }) {
   );
 }
 
-function DossierPanel({ symbol, signal }) {
+function DossierPanel({ symbol, signal }: any) {
   const d = pick(window.MC_DATA.DOSSIER, symbol);
   return (
     <Card eyebrow="研究档案" title="仓位裁决案卷" right={signal && <Badge tone={recTone(signal.recommendation)}>{signal.recommendation}</Badge>}>
@@ -218,7 +220,7 @@ function DossierPanel({ symbol, signal }) {
   );
 }
 
-function CopilotCard({ symbol }) {
+function CopilotCard({ symbol }: any) {
   const [busy, setBusy] = useSState(false);
   const [refreshed, setRefreshed] = useSState(false);
   const c = pick(window.MC_DATA.COPILOT, symbol);
@@ -266,7 +268,7 @@ function CopilotCard({ symbol }) {
   );
 }
 
-function EvidencePanel({ symbol }) {
+function EvidencePanel({ symbol }: any) {
   const items = pick(window.MC_DATA.EVIDENCE, symbol);
   const KIND = { decision_run: '决策运行', news_audit: '新闻审计', risk_check: '风控检查', lookahead: '反穿越' };
   return (
@@ -287,7 +289,7 @@ function EvidencePanel({ symbol }) {
   );
 }
 
-function EvalPanel({ symbol }) {
+function EvalPanel({ symbol }: any) {
   const [days, setDays] = useSState(60);
   const ev = pick(window.MC_DATA.EVAL, symbol);
   const scale = days / 60;
@@ -316,7 +318,7 @@ function EvalPanel({ symbol }) {
   );
 }
 
-function HistoryPanel({ symbol, score }) {
+function HistoryPanel({ symbol, score }: any) {
   const items = window.MC_DATA.mkHistory(symbol, score);
   return (
     <Card eyebrow="History" title="历史信号" pad={false}>
@@ -334,7 +336,7 @@ function HistoryPanel({ symbol, score }) {
   );
 }
 
-function NewsSidebar({ symbol }) {
+function NewsSidebar({ symbol }: any) {
   const news = window.MC_DATA.NEWS[symbol] || window.MC_DATA.NEWS._default;
   return (
     <Card eyebrow="News · 48h" title="来源审计后的新闻情绪" pad={false} tour="news"
@@ -360,7 +362,7 @@ function NewsSidebar({ symbol }) {
   );
 }
 
-function AnalysisPanel({ symbol }) {
+function AnalysisPanel({ symbol }: any) {
   const text = window.MC_DATA.ANALYSIS[symbol] || window.MC_DATA.ANALYSIS._default;
   return (
     <Card eyebrow="Analysis" title="裁决摘要" tour="analysis">
@@ -372,7 +374,7 @@ function AnalysisPanel({ symbol }) {
   );
 }
 
-function ShortTermSignalPanel({ symbol, signal }) {
+function ShortTermSignalPanel({ symbol, signal }: any) {
   const f = pick(window.MC_DATA.SIGNAL_FACTORS, symbol);
   if (!signal) return null;
   return (
@@ -415,7 +417,7 @@ function ShortTermSignalPanel({ symbol, signal }) {
   );
 }
 
-function FinancialsPanel({ symbol }) {
+function FinancialsPanel({ symbol }: any) {
   const fin = pick(window.MC_DATA.FINANCIALS, symbol);
   return (
     <Card eyebrow="公司财务状况" title="质量 · 成长 · 估值" tour="financials"
@@ -463,7 +465,7 @@ function FinancialsPanel({ symbol }) {
   );
 }
 
-function StockTile({ s }) {
+function StockTile({ s }: any) {
   const sig = s.latest_signal;
   return (
     <a className="glass-inset stock-tile" onClick={() => navigate(`/stock/${s.symbol}`)}>
@@ -495,7 +497,7 @@ function StockTile({ s }) {
 }
 
 // 列表行视图:一行一条,补上涨跌、止损止盈与长期标签信息
-function StockRow({ s }) {
+function StockRow({ s }: any) {
   const sig = s.latest_signal;
   const chg = dailyChangePct(s.symbol);
   return (
@@ -524,7 +526,7 @@ function StockRow({ s }) {
 }
 
 // 股票池卡片:卡片头部自带排序标签 + 筛选按钮,内容用 PoolShell 收起/展开
-function StockPoolCard({ eyebrow, title, items, defaultCount = 8, extraRight = null, empty = null, className = '' }) {
+function StockPoolCard({ eyebrow, title, items, defaultCount = 8, extraRight = null, empty = null, className = '' }: any) {
   const [sort, onSort] = useSortCtl();
   const f = useStockPoolFilter(items);
   return (
@@ -547,7 +549,7 @@ function StockPoolCard({ eyebrow, title, items, defaultCount = 8, extraRight = n
   );
 }
 
-function StocksPage() {
+export function StocksPage() {
   const [state] = useStore();
   const [q, setQ] = useSState('');
   const [market, setMarket] = useSState('all');
@@ -601,7 +603,7 @@ function StocksPage() {
   );
 }
 
-function StockPage({ symbol }) {
+export function StockPage({ symbol }: any) {
   const [state] = useStore();
   // live 模式下懒取该股的 K线/新闻/证据/归因/案卷,数据落地后 poke store 重渲染
   useSEffect(() => { if (window.MC_LIVE) window.MC_LIVE.ensureSymbol(symbol); }, [symbol]);

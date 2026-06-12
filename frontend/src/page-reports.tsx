@@ -1,6 +1,8 @@
 // ============================================================
 // 证据案卷库 — 汇总跑过的所有案卷:裁决 / 深研闸门 / 复盘 / 盘后导出 / 外部论题
 // ============================================================
+import React from 'react';
+import { Badge, Card, Markdown, Metric, PageHead, ScoreBar, fmt, recTone, toast, useStore } from './shared';
 const { useState: useRepState, useMemo: useRepMemo, useEffect: useRepEffect } = React;
 
 const ROLE_TONE = (score) => (score > 10 ? 'up' : score < -10 ? 'down' : '');
@@ -14,7 +16,7 @@ const WIN_LABEL = { bull: '多方胜', bear: '空方胜', tie: '平局' };
 const WIN_TONE = { bull: 'badge-up', bear: 'badge-down', tie: 'badge-dim' };
 
 // ---------- 多空辩论 · 完整报告(共享:脉冲弹层 + 报告中心) ----------
-function DebateReport({ debate }) {
+export function DebateReport({ debate }: any) {
   if (!debate) return <div className="empty">暂无辩论记录。</div>;
   const quick = !debate.rounds || debate.rounds.length === 0;
   const r1 = (debate.rounds || []).find((r) => r.speaker === 'bull');
@@ -232,7 +234,7 @@ function SourceGateOverview() {
   );
 }
 
-function ReportGateSnapshot({ status }) {
+function ReportGateSnapshot({ status }: any) {
   return (
     <div className="glass-inset" style={{ padding: '12px 15px' }}>
       <div className="spread" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -261,7 +263,7 @@ function ReportGateSnapshot({ status }) {
 }
 
 // ---------- 深度研究 · 完整报告 ----------
-function DeepResearchReport({ report }) {
+export function DeepResearchReport({ report }: any) {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -324,7 +326,7 @@ function DeepResearchReport({ report }) {
 }
 
 // ---------- 外部论题 · ForwardThesis ----------
-function ForwardThesisReport({ thesis }) {
+export function ForwardThesisReport({ thesis }: any) {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -408,7 +410,7 @@ const TYPE_META = {
 
 function buildReportIndex() {
   const D = window.MC_DATA;
-  const out = [];
+  const out: any[] = [];
   // 多空辩论 / 深度研究目前后端无落库 API:live 模式下明确标注「演示」
   const demoTag = window.MC_LIVE && window.MC_LIVE.isLive() ? '演示 · ' : '';
   // 多空辩论(每个有信号的标的一条,按今日决策标的优先)
@@ -450,7 +452,7 @@ function buildReportIndex() {
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
-function ReportReader({ entry }) {
+function ReportReader({ entry }: any) {
   if (!entry) return <div className="empty">从左侧选择一份报告,这里显示完整内容。</div>;
   if (entry.type === 'debate') return <DebateReport debate={entry.payload} />;
   if (entry.type === 'deep_research') return <DeepResearchReport report={entry.payload} />;
@@ -458,7 +460,7 @@ function ReportReader({ entry }) {
   return <Markdown text={entry.payload.content} />;
 }
 
-function EvidenceWorkspace({ reports }) {
+function EvidenceWorkspace({ reports }: any) {
   const [filter, setFilter] = useRepState('all');
   const [selectedId, setSelectedId] = useRepState(reports[0]?.id);
   const filtered = filter === 'all' ? reports : reports.filter((r) => r.type === filter);
@@ -531,7 +533,7 @@ function EvidenceWorkspace({ reports }) {
   );
 }
 
-function ReplayReviewCard({ title, item, onEnsure, busy }) {
+function ReplayReviewCard({ title, item, onEnsure, busy }: any) {
   return (
     <Card eyebrow={title} title={item ? item.as_of : '尚未生成'}
       right={<button className="btn btn-sm" disabled={busy} onClick={onEnsure}>{busy ? '处理中…' : '立即检查'}</button>}>
@@ -745,7 +747,7 @@ function MemoryWorkspace() {
   );
 }
 
-function ReportsPage() {
+export function ReportsPage() {
   const [repPageState] = useStore(); // live 数据落地后重建报告索引
   const reports = useRepMemo(() => buildReportIndex(), [repPageState]);
   const [section, setSection] = useRepState('reviews');
