@@ -46,9 +46,9 @@ cd MingCang
 make demo        # 种子 mock 数据，并启动后端 + 前端
 ```
 
-打开 <http://127.0.0.1:5173>。首页先看到 3 只示例股票（贵州茅台 / 中际旭创 / 中国平安）、最新信号、沪深300样例行情和一条中际旭创示例持仓；demo 数据库还包含一条中际旭创长期论题、一份复盘和一条待确认记忆候选，供 [User Guide](docs_public/USER_GUIDE.md) 串成完整闭环。后端健康检查在 <http://127.0.0.1:8000/health>。按 `Ctrl+C` 停止 demo。
+打开 <http://127.0.0.1:5173>。首页是新的明仓终端：可以用自然语言发起个股研究、复盘候选、自选动作和治理台草稿；导航可进入今日裁决、个股案卷、复盘案卷、研究副驾驶、持仓纪律、来源健康和治理台。demo 数据库还包含示例股票、长期论题、复盘和待确认记忆候选，供 [User Guide](docs_public/USER_GUIDE.md) 串成完整闭环。后端健康检查在 <http://127.0.0.1:8000/health>。按 `Ctrl+C` 停止 demo。
 
-![明仓前端界面预览：脉冲页收盘快照](docs/assets/screenshot-watchlist.png)
+![明仓前端界面预览：今日裁决案卷](docs/assets/screenshot-watchlist.png)
 
 <!-- TODO: 后续可补一段操作 GIF（添加标的→研究卡→证伪→复盘→记忆候选）。 -->
 

@@ -6,27 +6,59 @@
 
 ---
 
+## [v0.4.1] Public-surface polish / 公开展示面修补（2026-06-11）
+
+### Added / 新增
+- Restored the original line-chart favicon concept and recolored it for the new
+  glass-shell frontend palette.
+- 恢复旧版折线网页图标语义,并按新版玻璃拟态前端的蓝色主色重配色。
+
+### Changed / 变更
+- Refreshed the GitHub homepage screenshot to show the new decision pulse
+  dossier instead of the old watchlist UI.
+- 将 GitHub 首页截图更新为新版「今日裁决案卷」界面,替换旧自选页截图。
+- Aligned package, API, frontend, runtime-demo, and lockfile version surfaces on
+  `0.4.1`.
+- 将 package / API / frontend / 演示运行时 / lockfile 版本面统一到 `0.4.1`。
+- GitHub release notes are now maintained as bilingual Chinese/English entries.
+- GitHub release notes 统一维护为中英文双版本。
+
+### Safety / 安全边界
+- No official signal, scheduler, test2, position, production-weight, database,
+  or trusted-memory behavior was changed.
+- 不改官方信号、scheduler、test2、仓位、生产权重、数据库或 trusted memory 行为。
+
+---
+
 ## [v0.4.0] Frontend glass-shell refresh（2026-06-11）
 
-### Added
+### Added / 新增
 - Replaced the old Tailwind/react-router frontend with a high-fidelity glass-shell
   UI covering terminal, pulse, stock dossier, reports, chat, positions, health,
   and admin routes.
+- 用高保真玻璃拟态前端替换旧 Tailwind / react-router 页面,覆盖终端、今日裁决、个股案卷、
+  复盘案卷、聊天、持仓纪律、来源健康和治理台。
 - Added live/demo data fallback: the UI shows local backend data when `/api` is
   reachable and falls back to bundled demo data when the backend is unavailable.
+- 增加 live/demo 数据回落: `/api` 可达时显示本地后端数据,后端不可达时回落到内置演示数据。
 - Added frontend ATLAS ledger surfaces for forward theses, thesis ledger, memory
   candidates, and case loop views; backend `ATLAS_ENABLED=false` dormancy gates
   still control real access.
+- 增加 ATLAS 账本前端界面: ForwardThesis、论题账本、记忆候选和 case loop 视图;真实访问仍由
+  后端 `ATLAS_ENABLED=false` 休眠门控制。
 
-### Changed
+### Changed / 变更
 - Package, API, frontend, and lockfile version surfaces now align on `0.4.0`.
-- Frontend CI entrypoint now keeps `npm test` available as a Vite build gate for
-  the prototype-style frontend, preserving the existing GitHub workflow order.
+- package / API / frontend / lockfile 版本面统一到 `0.4.0`。
+- Frontend CI entrypoint keeps `npm test` available as a Vite build gate for the
+  prototype-style frontend, preserving the existing GitHub workflow order.
+- 前端 CI 保留 `npm test`,以 Vite build 作为原型式前端的构建门,不改变现有 GitHub workflow 顺序。
 
-### Safety
+### Safety / 安全边界
 - No official signal, scheduler, test2, position, production-weight, or trusted
   memory behavior was changed. ATLAS data remains controlled by the existing
   backend dormant guard.
+- 不改官方信号、scheduler、test2、仓位、生产权重或 trusted memory 行为;ATLAS 数据仍受后端休眠门控制。
 
 ---
 
