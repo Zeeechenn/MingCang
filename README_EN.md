@@ -356,17 +356,17 @@ MingCang is a personal research tool, **not financial advice**. It doesn't place
 
 ## Where this is heading
 
-In one line: **let AI amplify your judgment instead of guessing for you.** That splits into two tracks — how the research works, and making the tool easier to use.
+In one line: **let AI amplify your judgment instead of guessing for you.** You and the researchers and proven frameworks you trust make the calls; MingCang watches them, finds holes, runs reviews, and distills verified lessons into memory.
 
-**On research, a few principles:**
+**On research, the principles we hold:**
 
-- **The judgment that actually makes money comes from people, not a model guessing.** The core is still you, plus researchers and proven frameworks you trust (prosperity, financial quality). MingCang's job is to watch those judgments, find holes, and warn you — not to "read tea leaves" from price action, a path we backtested and found has no edge.
+- **Judgment mainly comes from people and proven frameworks, not a model guessing prices.** The core is you, plus prosperity, financial-quality, and supply-chain frameworks; reading price action like tea leaves is a path we backtested and found has no edge.
 - **AI does just two things: widen breadth and poke holes.** Breadth means surfacing news and leads one person can't cover — always as "unverified guesses." Poking holes means challenging your assumptions, tracking invalidation conditions, and alarming before a loss.
-- **AI is welcome to get smarter, but it has to prove it with outcomes.** Any new model or capability may try, but it must prove itself on real results before it can influence your decisions; until then, the final call is always yours.
+- **A new capability must prove itself on real results before it influences decisions.** This is also the current reality: the full research loop (L0–L4) has landed but is dormant by default, with the quant layer off; any stronger signal or model must first clear forward-evidence gates (IC / ICIR, independent samples, data quality) and your confirmation before it activates, layer by layer. Until then, production signals use a plain formula (technical 0.6 + sentiment 0.4 + ATR trailing stop).
 - **Only outcome-verified lessons are remembered.** Whether a judgment was right is settled only after the outcome lands and the review passes — never recorded as truth just because it "sounds reasonable."
 
 **On the tool, what's coming next:**
 
+- **Activate the loop layer by layer, on forward evidence.** Keep accruing paper-trading and forward samples; verify a layer, then open it — not all at once.
 - **Hong Kong and US markets.** A-shares are the main battleground today; HK/US are still read-only research context. Next we make them a full research → track → review pipeline like A-shares.
-- **Polished frontend and backend.** Make the research console, signal views, and review records smoother to use, and the backend more stable, faster, and easier to maintain.
-- **A genuinely usable piece of software.** The goal is a one-click, ready-to-use install that non-coders can run — not just a set of developer scripts.
+- **A polished frontend/backend and a genuinely usable tool.** A one-click, ready-to-use install non-coders can run — not just a set of developer scripts.
