@@ -31,3 +31,14 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "actions/upload-pages-artifact"
+        versions:
+          - "5.x"
+      - dependency-name: "actions/deploy-pages"
+        versions:
+          - "5.x"
