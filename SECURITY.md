@@ -12,7 +12,7 @@ open a public GitHub issue**.
 
 Instead, report it privately through GitHub Security Advisories:
 
-1. Go to <https://github.com/Zeeechenn/stock-sage/security/advisories/new>
+1. Go to <https://github.com/Zeeechenn/MingCang/security/advisories/new>
 2. Fill in a short description and reproduction steps
 3. Submit the advisory
 
