@@ -46,7 +46,7 @@ cd MingCang
 make demo        # seed mock data, then start backend + frontend
 ```
 
-Open <http://127.0.0.1:5173>. The first screen is the new MingCang terminal: you can ask for stock research, review candidates, watchlist actions, and governance drafts in natural language. The navigation opens the decision pulse, stock dossiers, review dossiers, research copilot, position discipline, source health, and governance console. The demo database also includes sample stocks, a long-term thesis, a review case, and one pending memory-promotion candidate for the full loop in the [User Guide](docs_public/USER_GUIDE.md). The backend health check is at <http://127.0.0.1:8000/health>. Press `Ctrl+C` to stop the demo.
+Open <http://127.0.0.1:5173>. The first screen is the new MingCang terminal: you can ask for stock research, review candidates, watchlist actions, and governance drafts in natural language. The navigation opens the decision pulse, stock dossiers, review dossiers, research copilot, position discipline, source health, and governance console. The demo database also includes sample stocks, a long-term thesis, a review case, and one pending memory-promotion candidate for the full loop in the [User Guide](docs_public/USER_GUIDE.md). The backend health check is at <http://127.0.0.1:8000/health>, and the interactive API docs (Swagger UI) are at <http://127.0.0.1:8000/docs>. Press `Ctrl+C` to stop the demo.
 
 ![MingCang frontend preview: decision pulse dossier](docs/assets/screenshot-watchlist.png)
 

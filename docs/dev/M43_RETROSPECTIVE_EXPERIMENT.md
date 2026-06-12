@@ -193,11 +193,11 @@ stride=5, active_only=False, hfq excluded, 2025 sealed. PROMOTE needs
 quintile spread in the expected direction.
 
 **Current reproducibility status.** The repository now contains a parameterized
-M43.2 reproduction script, `m43_2_amihud_ic.py`, covering all three frozen
-single-factor candidates:
+M43.2 reproduction script, `scripts/m43_2_amihud_ic.py`, covering all three
+frozen single-factor candidates:
 
 ```bash
-python3 m43_2_amihud_ic.py --factor all --db-path ~/.stock-sage/m43_work.db
+python3 scripts/m43_2_amihud_ic.py --factor all --db-path ~/.stock-sage/m43_work.db
 ```
 
 For single-factor checks, pass `--factor amihud_20`,

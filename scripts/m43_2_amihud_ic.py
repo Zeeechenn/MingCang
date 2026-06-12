@@ -1,10 +1,10 @@
 """M43.2 single-factor IC diagnostics, sealed to OOS 2021-2024.
 
 Run one factor:
-    python3 m43_2_amihud_ic.py --factor amihud_20 --db-path ~/.stock-sage/m43_work.db
+    python3 scripts/m43_2_amihud_ic.py --factor amihud_20 --db-path ~/.stock-sage/m43_work.db
 
 Run the full M43.2 factor set:
-    python3 m43_2_amihud_ic.py --factor all --db-path ~/.stock-sage/m43_work.db
+    python3 scripts/m43_2_amihud_ic.py --factor all --db-path ~/.stock-sage/m43_work.db
 """
 from __future__ import annotations
 

@@ -126,6 +126,7 @@ source = ["backend"]
 [tool.coverage.report]
 show_missing = true
 skip_empty = true
+fail_under = 65
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

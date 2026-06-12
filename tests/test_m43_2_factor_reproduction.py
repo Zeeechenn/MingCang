@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_PATH = PROJECT_ROOT / "m43_2_amihud_ic.py"
+SCRIPT_PATH = PROJECT_ROOT / "scripts" / "m43_2_amihud_ic.py"
 
 
 def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
@@ -131,7 +131,7 @@ def test_m43_2_synthetic_db_runs_all_three_factors(tmp_path: Path) -> None:
 
 
 def test_m43_2_quintile_spread_is_datewise() -> None:
-    from m43_2_amihud_ic import quintile_spread
+    from scripts.m43_2_amihud_ic import quintile_spread
 
     frame = pd.DataFrame({
         "date": ["2021-01-01"] * 5 + ["2021-01-02"] * 5,
@@ -147,7 +147,7 @@ def test_m43_2_quintile_spread_is_datewise() -> None:
 
 
 def test_m43_2_sparse_ic_json_is_standard() -> None:
-    from m43_2_amihud_ic import summarize_ic
+    from scripts.m43_2_amihud_ic import summarize_ic
 
     payload = {"summary": summarize_ic(pd.Series([0.25]))}
 

@@ -55,6 +55,15 @@ jobs:
       - name: Run backend tests with coverage
         run: make coverage
 
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          if [ -f coverage.xml ]; then
+            pct=$(python3 -c "import xml.etree.ElementTree as ET; print(round(float(ET.parse('coverage.xml').getroot().get('line-rate')) * 100, 1))")
+            echo "### Backend coverage" >> $GITHUB_STEP_SUMMARY
+            echo "Line coverage: **${pct}%** (gate: fail_under in pyproject.toml)" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:

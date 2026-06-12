@@ -1,5 +1,25 @@
 # Security Policy
 
+## Threat Model
+
+MingCang is a **local-first, single-user** research workbench. The security
+posture follows from that:
+
+- The SQLite database, `.env`, and project memory live on the user's own
+  machine and are treated as a trusted local surface. The database is **not
+  encrypted at rest by design** — protecting local files is delegated to
+  OS-level controls (file permissions, full-disk encryption such as FileVault).
+- Nothing is sent to a server operated by this project. Outbound traffic only
+  goes to the data/LLM providers the user explicitly configures.
+- The HTTP/MCP agent surface is for local use by default. Remote exposure is
+  **opt-in** (`MINGCANG_AGENT_MODE=remote`), requires
+  `MINGCANG_AGENT_API_KEY`, is read-only by default, and mutating actions
+  additionally require an explicit allowlist
+  (`MINGCANG_AGENT_REMOTE_WRITE_ENABLED` +
+  `MINGCANG_AGENT_REMOTE_WRITE_ACTIONS`). See [AGENTS.md](AGENTS.md) for the
+  full rules.
+- Write paths default to dry-run; persistence requires `--confirm`.
+
 ## Supported Versions
 
 This project is in active development and tracks the latest commit on the
