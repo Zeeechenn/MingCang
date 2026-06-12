@@ -169,6 +169,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.atlas_stage2b_strict_gate",
+        "category": "evidence",
+        "purpose": "Run the one-command Atlas Stage 2b strict gate from shadow replay plus Gate-B realization/report evidence.",
+        "read_write_boundary": "Reads source DB/universe; writes only isolated Gate-B DB rows and requested evidence artifacts, never production DB/test2/scheduler/config state.",
+        "recommended_entrypoint": "python3 -m backend.tools.atlas_stage2b_strict_gate --print",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m26_kronos_eval",
         "category": "evidence",
         "purpose": "Evaluate Kronos model integration against MingCang data and validation windows.",

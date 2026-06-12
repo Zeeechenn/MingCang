@@ -99,3 +99,35 @@ def test_write_artifacts_keeps_json_and_markdown_in_requested_paths(tmp_path):
     assert payload["run_mode"] == "read_only_atlas_stage2b_forward_shadow"
     assert "Atlas Test4 Stage 2b Forward Shadow" in markdown
     assert "stage2b_forward_sample_not_mature" in markdown
+
+
+def test_stage2b_overlay_never_exits_before_entry_date(tmp_path):
+    from backend.tools import atlas_test4_stage2b_shadow as tool
+
+    signals = [
+        Signal("AAA", "Alpha", "2026-06-04T09:33+08:00", 0.0, 80.0, 80.0, 9.0, 13.0),
+        Signal("AAA", "Alpha", "2026-06-04T15:10+08:00", 0.0, 80.0, 80.0, 9.0, 13.0),
+    ]
+    prices = {
+        ("AAA", "2026-06-04"): PriceBar("AAA", "2026-06-04", 10.0, 11.0, 8.0, 10.0),
+        ("AAA", "2026-06-05"): PriceBar("AAA", "2026-06-05", 10.0, 10.5, 9.5, 10.2),
+    }
+    gate_rows = [
+        {"symbol": "AAA", "signal_date": signals[0].date, "gate_pass_variant": True, "card_pass": True},
+        {"symbol": "AAA", "signal_date": signals[1].date, "gate_pass_variant": True, "card_pass": True},
+    ]
+
+    report = tool.build_report(
+        signals=signals,
+        prices=prices,
+        universe={"AAA"},
+        sectors={},
+        gate_rows=gate_rows,
+        start="2026-06-04",
+        end="2026-06-05",
+        source_db="sqlite:////prod.db",
+        gate_db=str(tmp_path / "gate.sqlite"),
+    )
+
+    closed = report["arms"]["atlas_signal_overlay"]["closed_trades"]
+    assert all(trade["exit_date"] >= trade["entry_date"] for trade in closed)

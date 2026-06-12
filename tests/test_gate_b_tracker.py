@@ -76,15 +76,18 @@ def _seed_decision_run(
     db,
     symbol: str = "600519",
     as_of: str = "2025-11-14",
+    input_snapshot_json: str | None = None,
 ) -> DecisionRun:
-    snap = json.dumps(
-        {
-            "universe_hash": "abc123",
-            "data_source": "tushare",
-            "fetched_at": "2025-11-14",
-            "adjustment": "qfq",
-        }
-    )
+    snap = input_snapshot_json
+    if snap is None:
+        snap = json.dumps(
+            {
+                "universe_hash": "abc123",
+                "data_source": "tushare",
+                "fetched_at": "2025-11-14",
+                "adjustment": "qfq",
+            }
+        )
     dr = DecisionRun(
         run_id=f"dr-{symbol}-{as_of}",
         run_type="postmarket",
@@ -102,6 +105,9 @@ def _seed_prices(
     symbol: str = "600519",
     entry_date: str = "2025-11-15",
     closes: tuple = (100.0, 101.0, 102.5, 101.5, 103.0, 104.0),
+    source: str | None = None,
+    fetched_at: str | None = None,
+    adjustment: str | None = None,
 ) -> None:
     """Seed `len(closes)` prices starting at entry_date (entry + 0..N-1 calendar days)."""
     for i, c in enumerate(closes):
@@ -115,6 +121,9 @@ def _seed_prices(
                 low=c - 1,
                 close=c,
                 volume=1_000_000,
+                source=source,
+                fetched_at=datetime.fromisoformat(fetched_at) if fetched_at else None,
+                adjustment=adjustment,
             )
         )
     db.commit()
@@ -292,6 +301,33 @@ class TestRecordObservations:
         rows = record_observations(test_db, as_of="2025-11-15")
         assert rows == []
 
+    def test_timestamped_signal_uses_trade_date_for_entry_price_and_provenance(self, test_db):
+        """Intraday signal timestamps should match the same day's daily price row."""
+        _seed_signal(test_db, sig_date="2025-11-15T16:10+08:00")
+        _seed_label(test_db, ldate="2025-11-10", expires="2025-11-25")
+        _seed_decision_run(
+            test_db,
+            as_of="2025-11-15",
+            input_snapshot_json=json.dumps({"universe_hash": "abc123", "data_timestamp": "2025-11-15"}),
+        )
+        _seed_deep_research(test_db, created_at="2025-11-14")
+        _seed_prices(
+            test_db,
+            entry_date="2025-11-15",
+            source="tickflow_cn",
+            fetched_at="2025-11-15T18:00:00",
+            adjustment="qfq",
+        )
+        test_db.commit()
+
+        rows = _record(test_db, as_of="2025-11-15T16:10+08:00")
+
+        assert len(rows) == 1
+        assert rows[0]["entry_close"] == pytest.approx(100.0)
+        assert rows[0]["gate_pass_variant"] is True
+        assert rows[0]["card_pass"] is True
+        assert rows[0]["ready_variant"] is True
+
 
 # ---------------------------------------------------------------------------
 # TestRealizeReturns
@@ -403,6 +439,26 @@ class TestRealizeReturns:
         assert obs.forward_status == "realized"
         expected_net = net_return_from_prices(100.0, 104.0)
         assert obs.forward_return_net == pytest.approx(expected_net, abs=1e-6)
+
+    def test_realize_timestamped_signal_uses_trade_date_window(self, test_db):
+        """A timestamped signal realizes from daily prices strictly after its trade date."""
+        from backend.backtest.costs import net_return_from_prices
+
+        _seed_signal(test_db, sig_date="2025-11-15T16:10+08:00")
+        _seed_label(test_db, ldate="2025-11-10", expires="2025-11-25")
+        _seed_decision_run(test_db, as_of="2025-11-15")
+        _seed_deep_research(test_db, created_at="2025-11-14")
+        _seed_prices(test_db, entry_date="2025-11-15", closes=(100.0, 101.0, 102.0, 103.0))
+        test_db.commit()
+
+        _record(test_db, as_of="2025-11-15T16:10+08:00", horizon_days=3)
+        realized = _realize(test_db, as_of="2025-11-18")
+
+        assert len(realized) == 1
+        assert realized[0]["forward_return_net"] == pytest.approx(
+            net_return_from_prices(100.0, 103.0),
+            abs=1e-6,
+        )
 
 
 # ---------------------------------------------------------------------------

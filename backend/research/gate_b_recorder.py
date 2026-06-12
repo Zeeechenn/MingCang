@@ -52,6 +52,11 @@ def _iso(value: Any) -> str | None:
     return str(value)
 
 
+def _trade_date(value: Any) -> str:
+    """Return the daily price-table key for a date or timestamp string."""
+    return str(value)[:10]
+
+
 def _row_to_dict(row) -> dict:
     return {
         "id": row.id,
@@ -98,6 +103,8 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
     """
     from sqlalchemy import text
 
+    as_of_day = _trade_date(as_of)
+
     # Signal
     sig_row = db.execute(
         text("""
@@ -132,7 +139,7 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
             ORDER BY date DESC, id DESC
             LIMIT 1
         """),
-        {"sym": symbol, "d": as_of},
+        {"sym": symbol, "d": as_of_day},
     ).fetchone()
 
     long_term_label: dict | None = None
@@ -158,8 +165,21 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
             ORDER BY as_of DESC, created_at DESC
             LIMIT 3
         """),
-        {"sym": symbol, "d": as_of},
+        {"sym": symbol, "d": as_of_day},
     ).fetchall()
+
+    price_meta = db.execute(
+        text("""
+            SELECT source, fetched_at, adjustment
+            FROM prices
+            WHERE symbol = :sym
+              AND date <= :d
+              AND (source IS NOT NULL OR fetched_at IS NOT NULL OR adjustment IS NOT NULL)
+            ORDER BY date DESC
+            LIMIT 1
+        """),
+        {"sym": symbol, "d": as_of_day},
+    ).fetchone()
 
     evidence: list[dict] = []
     for dr in dr_rows:
@@ -169,6 +189,18 @@ def _build_pit_dossier(db, symbol: str, as_of: str) -> dict:
                 input_snapshot = json.loads(dr[9])
             except (json.JSONDecodeError, TypeError):
                 pass
+        if price_meta:
+            if price_meta[0] and not input_snapshot.get("data_source"):
+                input_snapshot["data_source"] = price_meta[0]
+            if price_meta[2] and not input_snapshot.get("adjustment"):
+                input_snapshot["adjustment"] = price_meta[2]
+        if not input_snapshot.get("fetched_at"):
+            input_snapshot["fetched_at"] = (
+                input_snapshot.get("data_timestamp")
+                or _iso(price_meta[1] if price_meta else None)
+                or _iso(dr[10])
+                or dr[4]
+            )
         evidence.append({
             "run_id": dr[1],
             "run_type": dr[2],
@@ -334,9 +366,10 @@ def record_observations(
             label_id = label.get("id")
 
         # entry_close from Price on sig_date (read from the source session)
+        sig_day = _trade_date(sig_date)
         price_row = src.execute(
             text("SELECT close FROM prices WHERE symbol=:sym AND date=:d LIMIT 1"),
-            {"sym": symbol, "d": sig_date},
+            {"sym": symbol, "d": sig_day},
         ).fetchone()
         entry_close: float | None = float(price_row[0]) if price_row else None
 
@@ -443,6 +476,8 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
         if horizon_days <= 0:
             continue
 
+        signal_day = _trade_date(obs.signal_date)
+
         # Fetch up to horizon_days forward prices strictly after signal_date and
         # no later than effective_as_of (from source).
         fwd_rows = src.execute(
@@ -456,7 +491,7 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
             """),
             {
                 "sym": obs.symbol,
-                "sig_date": obs.signal_date,
+                "sig_date": signal_day,
                 "as_of": effective_as_of,
                 "limit": horizon_days,
             },
@@ -477,7 +512,7 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
             try:
                 span_days = (
                     _date.fromisoformat(exit_date_str)
-                    - _date.fromisoformat(obs.signal_date)
+                    - _date.fromisoformat(signal_day)
                 ).days
             except ValueError:
                 span_days = None
@@ -532,7 +567,7 @@ def realize_returns(db, *, source_db=None, as_of: str | None = None) -> list[dic
             # Check if we've waited more than 30 calendar days
             latest_price_date = fwd_rows[-1][0]
             try:
-                sig_dt = _date.fromisoformat(obs.signal_date)
+                sig_dt = _date.fromisoformat(signal_day)
                 latest_dt = _date.fromisoformat(latest_price_date)
                 if (latest_dt - sig_dt).days > 30:
                     obs.forward_status = "unrealizable"
