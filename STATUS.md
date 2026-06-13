@@ -8,8 +8,8 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.5.0`; the latest
-documented release is `v0.5.0` MingCang naming finalization in
+Current release surface: package/API/frontend versions are `0.5.1`; the latest
+documented release is `v0.5.1` context sanitization and status surface in
 `CHANGELOG.md`.
 
 ## Current State
@@ -21,6 +21,7 @@ documented release is `v0.5.0` MingCang naming finalization in
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
+| v0.5.1 | complete: UI context sanitization, safe system status version surface, Atlas dormant preload silence, desktop sample-snapshot clarity |
 | v0.5.0 | complete: MingCang naming finalized across native Pi, installer, launcher, public docs, license, and version surfaces; transition compatibility entrypoints removed |
 | v0.4.3 | complete: frontend Chinese punctuation normalization, M29 forward baseline status recorded, release surfaces aligned |
 | v0.4.2 | complete: frontend TypeScript module migration, CI coverage gate, Dependabot, and threat-model documentation |
@@ -89,11 +90,11 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate for v0.4.3 on 2026-06-12:
+Last full recorded gate for v0.5.1 on 2026-06-13:
 `make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 RUFF_CACHE_DIR=/private/tmp/mingcang_ruff_cache
 MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache` passed locally: ruff passed,
-mypy passed, backend pytest reported 1200 passed / 5 skipped, frontend
+mypy passed, backend pytest reported 1214 passed / 5 skipped, frontend
 typecheck/Vite test/build passed, and frontend lint-summary passed. GitHub CI
 should still be checked after push before treating the release as remote-green.
 

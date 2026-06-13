@@ -16,25 +16,26 @@ export const MC_DATA: any = (function () {
     const out: any[] = [];
     let close = base;
     const end = new Date('2026-06-09');
+    const dates: Date[] = [];
     let d = new Date(end);
-    d.setDate(d.getDate() - Math.round(days * 1.45));
-    while (out.length < days && d <= end) {
+    while (dates.length < days) {
       const dow = d.getDay();
-      if (dow !== 0 && dow !== 6) {
-        const chg = (rnd() - 0.5 + drift) * vol;
-        const open = close;
-        close = Math.max(1, close * (1 + chg));
-        const high = Math.max(open, close) * (1 + rnd() * vol * 0.4);
-        const low = Math.min(open, close) * (1 - rnd() * vol * 0.4);
-        const volu = Math.round(8e5 + rnd() * 2.4e6 * (1 + Math.abs(chg) * 30));
-        out.push({
-          date: d.toISOString().slice(0, 10),
-          open: +open.toFixed(2), close: +close.toFixed(2),
-          high: +high.toFixed(2), low: +low.toFixed(2), volume: volu,
-        });
-      }
-      d = new Date(d); d.setDate(d.getDate() + 1);
+      if (dow !== 0 && dow !== 6) dates.push(new Date(d));
+      d = new Date(d); d.setDate(d.getDate() - 1);
     }
+    dates.reverse().forEach((date) => {
+      const chg = (rnd() - 0.5 + drift) * vol;
+      const open = close;
+      close = Math.max(1, close * (1 + chg));
+      const high = Math.max(open, close) * (1 + rnd() * vol * 0.4);
+      const low = Math.min(open, close) * (1 - rnd() * vol * 0.4);
+      const volu = Math.round(8e5 + rnd() * 2.4e6 * (1 + Math.abs(chg) * 30));
+      out.push({
+        date: date.toISOString().slice(0, 10),
+        open: +open.toFixed(2), close: +close.toFixed(2),
+        high: +high.toFixed(2), low: +low.toFixed(2), volume: volu,
+      });
+    });
     return out;
   }
 
@@ -51,6 +52,7 @@ export const MC_DATA: any = (function () {
   const last = (s) => PRICES[s][PRICES[s].length - 1];
 
   const SIG_DATE = '2026-06-09';
+  const DEMO_META = { is_demo: true, snapshot_as_of: SIG_DATE, label: '示例快照' };
 
   function mkSignal(symbol, rec, score, tech, senti, conf, bull, bear, rationale, bias) {
     const px = last(symbol).close;
@@ -116,9 +118,9 @@ export const MC_DATA: any = (function () {
   ];
 
   const POSITIONS = [
-    { id: 1, symbol: '300308', name: '中际旭创', market: 'CN', status: 'open', quantity: 200, avg_cost: 142.6, latest_price: last('300308').close, stop_loss: +(last('300308').close * 0.93).toFixed(2), take_profit: +(last('300308').close * 1.12).toFixed(2), entry_date: '2026-05-12' },
-    { id: 2, symbol: '600519', name: '贵州茅台', market: 'CN', status: 'open', quantity: 100, avg_cost: 1438.0, latest_price: last('600519').close, stop_loss: +(last('600519').close * 0.94).toFixed(2), take_profit: +(last('600519').close * 1.1).toFixed(2), entry_date: '2026-04-28' },
-    { id: 3, symbol: '000725', name: '京东方A', market: 'CN', status: 'open', quantity: 8000, avg_cost: 4.02, latest_price: last('000725').close, stop_loss: 3.78, take_profit: 4.65, entry_date: '2026-05-22' },
+    { id: 1, symbol: '300308', name: '中际旭创', market: 'CN', status: 'open', quantity: 200, avg_cost: 98.6, latest_price: last('300308').close, stop_loss: +(last('300308').close * 0.93).toFixed(2), take_profit: +(last('300308').close * 1.12).toFixed(2), entry_date: '2026-05-12' },
+    { id: 2, symbol: '600519', name: '贵州茅台', market: 'CN', status: 'open', quantity: 100, avg_cost: 1368.0, latest_price: last('600519').close, stop_loss: +(last('600519').close * 0.94).toFixed(2), take_profit: +(last('600519').close * 1.1).toFixed(2), entry_date: '2026-04-28' },
+    { id: 3, symbol: '000725', name: '京东方A', market: 'CN', status: 'open', quantity: 8000, avg_cost: 3.86, latest_price: last('000725').close, stop_loss: 3.78, take_profit: 4.65, entry_date: '2026-05-22' },
     { id: 4, symbol: '00700', name: '腾讯控股', market: 'HK', status: 'open', quantity: 100, avg_cost: 358.0, latest_price: last('00700').close, stop_loss: 334, take_profit: 412, entry_date: '2026-05-06' },
     { id: 5, symbol: '300394', name: '天孚通信', market: 'CN', status: 'closed', quantity: 300, avg_cost: 88.4, close_price: 101.2, opened_at: '2026-04-14', closed_at: '2026-05-20', realized_pnl: 3840, realized_pnl_pct: 14.48 },
     { id: 6, symbol: '002230', name: '科大讯飞', market: 'CN', status: 'closed', quantity: 500, avg_cost: 46.8, close_price: 43.9, opened_at: '2026-04-02', closed_at: '2026-04-30', realized_pnl: -1450, realized_pnl_pct: -6.2 },
@@ -859,7 +861,7 @@ export const MC_DATA: any = (function () {
   };
 
   const SYSTEM = {
-    version: '0.4.3', release: [['v0.4.3', '标点修正'], ['M29', '基线记录'], ['Release', '格式统一'], ['Quant', '生产关闭']],
+    version: '0.5.1', release: [['v0.5.1', '上下文脱敏'], ['Status', '安全版本面'], ['Atlas', '休眠静默'], ['Quant', '生产关闭']],
     market_overview: { available: true, name: '沪深300', close: 4082.35, change_pct: 0.42, date: '2026-06-09',
       indices: [
         { name: '上证指数', close: 3421.56, change_pct: 0.38 },
@@ -919,7 +921,7 @@ export const MC_DATA: any = (function () {
   const CHAT_FALLBACK = '我可以帮你:\n\n- **查询**:「300308 怎么看」「今天复盘说了什么」「持仓风险如何」\n- **操作**(需确认):「添加自选 002475」「添加持仓 300308 100股 成本150」\n\n所有写入操作都会生成待确认动作，确认前不会执行。';
 
   return {
-    PRICES, WATCHLIST, POSITIONS, SEARCH_POOL, NEWS, EVIDENCE, COPILOT, EVAL, DOSSIER,
+    DEMO_META, PRICES, WATCHLIST, POSITIONS, SEARCH_POOL, NEWS, EVIDENCE, COPILOT, EVAL, DOSSIER,
     REVIEWS, COVERAGE, RUNTIME, LLM_USAGE, MEMORY, SYSTEM,
     DEBATE, DEEP_RESEARCH, FORWARD_THESES, SIGNAL_FACTORS, FINANCIALS, ANALYSIS,
     CHAT_SESSIONS, CHAT_SCRIPTS, CHAT_FALLBACK, COPILOT_ORCHESTRATION,

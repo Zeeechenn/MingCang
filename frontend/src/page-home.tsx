@@ -121,7 +121,7 @@ function buildRun(text, state) {
         ['加入后能做什么', '可继续问“研究这只股票”或“生成今日裁决”。'],
       ],
       sources: [{ label: '演示股票池', status: 'pass', note: '来自本地演示股票池', meta: target.symbol }],
-      pending: { type: 'watchlist.add', label: `确认加入自选:${target.name}`, note: '写入演示关注池，刷新后不会持久化', payload: target },
+      pending: { type: 'watchlist.add', label: `确认加入自选:${target.name}`, note: '写入终端示例状态，刷新后不会持久化', payload: target },
       actions: [[`打开 ${target.name} 案卷`, `/stock/${target.symbol}`], ['打开今日裁决', '/pulse']],
     };
   }
@@ -167,7 +167,7 @@ function buildRun(text, state) {
         ['回滚方式', '治理台保留旧值，确认前不覆盖现有规则。'],
       ],
       sources: [{ label: '治理台', status: 'warning', note: '规则变更需人工确认', meta: '规则草稿' }],
-      pending: { type: 'rule.update', label: '确认应用规则草稿', note: '演示状态生效，刷新后不会持久化', payload: { key: 'max_single_position', value: '12%' } },
+      pending: { type: 'rule.update', label: '确认应用规则草稿', note: '终端示例状态生效，刷新后不会持久化', payload: { key: 'max_single_position', value: '12%' } },
       actions: [['打开治理台', '/admin'], ['看持仓纪律', '/positions']],
     };
   }
@@ -193,7 +193,7 @@ function buildRun(text, state) {
         { label: '持仓记录', status: 'pass', note: '已平仓与当前持仓演示记录', meta: '本地演示' },
         { label: '复盘案卷', status: 'warning', note: '候选复盘尚未进入可信记忆', meta: '候选' },
       ],
-      pending: { type: 'review.write', label: '确认写入复盘案卷', note: '写入演示状态，刷新后不会持久化' },
+      pending: { type: 'review.write', label: '确认写入复盘案卷', note: '写入终端示例状态，刷新后不会持久化' },
       actions: [['打开复盘案卷', '/reports'], ['看持仓纪律', '/positions']],
     };
   }
@@ -531,18 +531,18 @@ export function HomePage() {
         content: '卖出后应区分纪律止盈与情绪性离场;若景气未破且仍在关键均线上方，优先降仓而不是清零。',
       };
       setStore((st) => ({ reviews: [review, ...st.reviews] }));
-      toast('已写入演示复盘候选');
+      toast('已写入终端示例复盘候选');
     } else if (pending?.type === 'watchlist.add') {
       const p = pending.payload;
       setStore((st) => st.watchlist.some((w) => w.symbol === p.symbol)
         ? {}
         : { watchlist: [...st.watchlist, { symbol: p.symbol, name: p.name, market: p.market, industry: p.industry || '待标注', latest_signal: null }] });
-      toast(`已加入演示自选:${p.name}`);
+      toast(`已加入终端示例自选:${p.name}`);
     } else if (pending?.type === 'api_key.update') {
-      toast('已更新演示凭证状态');
+      toast('已更新终端示例凭证状态');
     } else if (pending?.type === 'rule.update') {
       setStore((st) => ({ runtime: { ...st.runtime, max_single_position: '12%' } }));
-      toast('规则草稿已在演示状态生效');
+      toast('规则草稿已在终端示例状态生效');
     }
   }
 
@@ -569,6 +569,7 @@ export function HomePage() {
         <div className="row" style={{ gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Badge tone="badge-accent">本地优先</Badge>
           <Badge tone="badge-dim">写入需确认</Badge>
+          <Badge tone="badge-dim">终端示例</Badge>
         </div>
       </header>
 
@@ -578,7 +579,7 @@ export function HomePage() {
             <span className="terminal-dot red"></span>
             <span className="terminal-dot amber"></span>
             <span className="terminal-dot green"></span>
-            <span className="t-faint">本地对话通道</span>
+            <span className="t-faint">桌面示例通道</span>
           </div>
           <Badge tone={messages.length ? 'badge-accent' : 'badge-dim'}>{messages.length ? '已生成驾驶台' : '等待输入'}</Badge>
         </div>

@@ -3,13 +3,14 @@
 // 原则:
 //  1. 启动时并行预取核心数据,成功则覆写 MC_DATA + MCStore(live 模式)
 //  2. 个股详情数据(K线/新闻/证据/归因/案卷)按需懒取,写回 MC_DATA 后 poke 重渲染
-//  3. 后端不可达时静默保持 demo 数据,导航栏显示「演示数据」
-//  4. 写操作统一走 window.MC_API,live 模式调后端,demo 模式由调用方落回本地演示行为
+//  3. 后端不可达时静默保持示例快照,导航栏显示「示例快照」
+//  4. 写操作统一走 window.MC_API,live 模式调后端,demo 模式由调用方落回本地示例行为
 // ============================================================
 import * as api from './api';
 
 let live = false;
 let atlasOn = false; // 后端 atlas_enabled 开启时为 true(论题/记忆候选/case-view 账本可用)
+let healthTimer: ReturnType<typeof setInterval> | null = null;
 const fetchedSymbols = new Set();
 const reviewContentLoaded = new Set();
 
@@ -18,6 +19,27 @@ const store = () => window.MCStore;
 const poke = () => store().set({});
 
 export function isLive() { return live; }
+
+function stopHealthMonitor() {
+  if (healthTimer) clearInterval(healthTimer);
+  healthTimer = null;
+}
+
+function startHealthMonitor() {
+  stopHealthMonitor();
+  healthTimer = setInterval(async () => {
+    if (!live) return;
+    try {
+      await api.getSystemHealth();
+      store().set({ live: 'live' });
+    } catch (e) {
+      live = false;
+      atlasOn = false;
+      stopHealthMonitor();
+      store().set({ live: 'offline' });
+    }
+  }, 30000);
+}
 
 // ---------- 归一化 ----------
 function normSignal(s) {
@@ -309,6 +331,8 @@ export async function startLive() {
     watchlist = await api.getWatchlist();
   } catch (e) {
     live = false;
+    atlasOn = false;
+    stopHealthMonitor();
     store().set({ live: 'demo' });
     return; // 后端不可达,保持 demo
   }
@@ -414,21 +438,24 @@ export async function startLive() {
     Dd.CHAT_SESSIONS = chatSessions;
   }
 
-  // ATLAS 账本探测:后端 atlas_enabled 关闭时这些路由统一 503,保持演示内容
-  try {
-    await refreshCandidates();
-    atlasOn = true;
-    // 外部论题:取持仓标的 + 前 10 只自选(账本为空时诚实展示空列表)
-    const ftSymbols = Array.from(new Set([
-      ...(posOpen || []).map((p) => p.symbol),
-      ...wl.slice(0, 10).map((w) => w.symbol),
-    ]));
-    const lists = await Promise.allSettled(ftSymbols.map((s) => api.getForwardTheses(s)));
-    Dd.FORWARD_THESES = lists
-      .flatMap((r) => (r.status === 'fulfilled' ? (r.value.items || []) : []))
-      .map(normForwardThesis);
-  } catch (e) {
-    atlasOn = false;
+  // ATLAS 账本仅在系统状态明确开启时预取;关闭时不打会 503 的业务探测路由。
+  atlasOn = false;
+  if (sysStatus?.atlas_enabled === true) {
+    try {
+      await refreshCandidates();
+      atlasOn = true;
+      // 外部论题:取持仓标的 + 前 10 只自选(账本为空时诚实展示空列表)
+      const ftSymbols = Array.from(new Set([
+        ...(posOpen || []).map((p) => p.symbol),
+        ...wl.slice(0, 10).map((w) => w.symbol),
+      ]));
+      const lists = await Promise.allSettled(ftSymbols.map((s) => api.getForwardTheses(s)));
+      Dd.FORWARD_THESES = lists
+        .flatMap((r) => (r.status === 'fulfilled' ? (r.value.items || []) : []))
+        .map(normForwardThesis);
+    } catch (e) {
+      atlasOn = false;
+    }
   }
 
   // 预取自选股 K 线(首页 Spark / 详情主图)
@@ -446,6 +473,7 @@ export async function startLive() {
     memoryItems: Dd.MEMORY.items.slice(),
     sessions: chatSessions || s.sessions,
   }));
+  startHealthMonitor();
   window.toast && window.toast('已连接本地后端，数据为实时数据');
 }
 

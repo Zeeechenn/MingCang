@@ -294,6 +294,35 @@ def test_chat_context_answer_presents_official_and_copilot_tracks(test_db, sampl
     assert "research_copilot" in response.used_resources
 
 
+def test_chat_context_answer_sanitizes_copilot_fields_for_ui(test_db, sample_stocks):
+    from backend.api.routes.ai import _context_answer
+
+    _signal(test_db, symbol="300308", recommendation="观望", composite_score=31)
+    test_db.add(ResearchState(
+        symbol="300308",
+        risks_json="[]",
+        open_questions_json="[]",
+        copilot_json=json.dumps({
+            "stance": "谨慎",
+            "summary_opinion": "影子摘要 {\"report_path\":\"/private/tmp/copilot.json\"}",
+            "shadow_position_pct": 0.03,
+            "risk_conflict": False,
+            "official": {"recommendation": "观望", "composite_score": 31},
+            "risks": ["复核 /Users/example/mingcang/risk.md"],
+            "validation_questions": ["读取 report_path=/private/tmp/question.json"],
+        }, ensure_ascii=False),
+    ))
+    test_db.commit()
+
+    response = _context_answer("帮我看一下 300308", test_db, session_id=None)
+
+    assert "LLM 副驾驶：" in response.answer
+    assert "/private/tmp" not in response.answer
+    assert "/Users/" not in response.answer
+    assert "report_path" not in response.answer
+    assert "{\"" not in response.answer
+
+
 def test_copilot_card_carries_passing_vetter_review(test_db):
     """M15.1: a clean copilot card is run through the safety vetter."""
     from backend.research.copilot import generate_symbol_copilot

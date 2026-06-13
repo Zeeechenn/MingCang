@@ -78,14 +78,20 @@ function applyTweaks(t, theme) {
   }
 }
 
-// 数据通道指示:live = 已连接后端,demo = 后端不可达,展示演示数据
+// 数据通道指示:live = 已连接后端,demo = 示例快照,offline = 后端断开
 function LiveBadge() {
   const [state] = useStore();
-  const live = state.live === 'live';
+  const mode = state.live || 'demo';
+  const live = mode === 'live';
+  const offline = mode === 'offline';
+  const label = live ? '本地后端' : (offline ? '后端断开' : '示例快照');
+  const title = live
+    ? '已连接本地后端:数据来自 /api'
+    : (offline ? '后端连接中断:保留当前页面数据' : '后端未连接:当前展示示例快照');
   return (
-    <span className="nav-status" title={live ? '已连接本地后端:数据来自 /api' : '后端未连接:当前展示演示数据'}>
+    <span className="nav-status" title={title}>
       <span className="pulse-dot" style={live ? undefined : { background: 'var(--warn)' }}></span>
-      <span className="nav-local-label">{live ? '本地后端' : '演示数据'}</span>
+      <span className="nav-local-label">{label}</span>
     </span>
   );
 }

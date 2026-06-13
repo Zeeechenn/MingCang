@@ -90,6 +90,29 @@ def test_build_memory_context_prioritizes_user_rules_stock_items_and_research(te
     assert "l0_context" in ctx
 
 
+def test_chat_answer_sanitizes_research_memory_context_for_ui(test_db, sample_stocks):
+    from backend.api.routes.ai import _context_answer
+    from backend.memory.research_memory import remember_deep_research
+
+    remember_deep_research(
+        test_db,
+        topic="AI算力产业链",
+        summary="300308 算力链重点观察光模块订单兑现",
+        symbols=["300308"],
+        report_path="/Users/example/mingcang/reports/300308.json",
+        sections=[{"source_path": "/private/tmp/mingcang/raw-context.json"}],
+    )
+
+    response = _context_answer("帮我看一下 300308", test_db, session_id=None)
+
+    assert "AI算力产业链" in response.answer
+    assert "算力链重点观察光模块订单兑现" in response.answer
+    assert "/Users/" not in response.answer
+    assert "/private/tmp/" not in response.answer
+    assert "report_path" not in response.answer
+    assert "{\"" not in response.answer
+
+
 def test_build_memory_context_includes_l0_trusted_and_pending_sections(test_db):
     from backend.memory.l0_memory import create_memory_atom, promote_atom
     from backend.memory.stock_memory import build_memory_context, create_stock_memory

@@ -6,6 +6,36 @@
 
 ---
 
+## [v0.5.1] Context sanitization and status surface / 上下文脱敏与状态版本面（2026-06-13）
+
+### Fixed / 修复
+- Sanitized AI chat, research-memory, and copilot context rendering so local
+  paths, `report_path` fields, and raw JSON snippets are not exposed in the UI.
+- 研究副驾驶 / 聊天上下文展示增加脱敏与折叠，避免向前端暴露本机路径、
+  `report_path` 字段或原始 JSON 片段。
+- Stopped the desktop live preload from probing dormant Atlas business routes
+  when `atlas_enabled=false`, eliminating expected 503 noise from
+  `/research/memory-candidates`.
+- 前端 live 预取改为先读取系统状态，Atlas 休眠时不再调用会返回 503 的业务探测路由。
+
+### Changed / 变更
+- Added a shared backend version constant and exposed safe `version`,
+  `atlas_enabled`, and `ai_provider` fields from `/api/system/status` without
+  returning local database URLs or absolute paths.
+- 增加共享后端版本常量，`/api/system/status` 只返回安全状态字段，不再返回本机
+  database URL 或绝对路径。
+- Aligned Python, API, frontend package, lockfile, and static runtime release
+  surfaces on `0.5.1`.
+- 将 Python / API / 前端 package / lockfile / 静态运行时版本面统一到 `0.5.1`。
+- Clarified the desktop terminal fallback as a sample snapshot flow and made
+  the built-in demo price dates self-consistent with the snapshot date.
+- 桌面首页终端回落语义改为示例快照，并让内置样例价格日期与快照日期一致。
+
+### Safety / 安全边界
+- No official signal, scheduler, test2, position, production-weight, database,
+  or trusted-memory behavior was changed.
+- 不改官方信号、scheduler、test2、仓位、生产权重、数据库或 trusted memory 行为。
+
 ## [v0.5.0] MingCang naming finalization / 明仓命名收口（2026-06-12）
 
 ### Changed / 变更

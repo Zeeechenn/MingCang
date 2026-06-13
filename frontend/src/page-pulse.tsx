@@ -25,7 +25,7 @@ function ReleaseStrip() {
         <div style={{ minWidth: 240, flex: 1 }}>
           <div className="t-eyebrow">当前发布</div>
           <div style={{ marginTop: 3, fontSize: 13.5, fontWeight: 550 }}>
-            v{SYS.version} 前端中文标点统一，M29 前向证据基线已记录，量化生产仍保持关闭。
+            v{SYS.version} 上下文脱敏与系统状态修复，Atlas 休眠保持静默，量化生产仍保持关闭。
           </div>
         </div>
         <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>

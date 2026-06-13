@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from backend.agent.http_guard import agent_write_guard
 from backend.api.deps import get_settings
 from backend.api.schemas import DataCoverageOut
-from backend.config import Settings
+from backend.config import Settings, sqlite_path_from_url
 from backend.data.database import (
     FinancialMetric,
     LongTermLabel,
@@ -26,6 +26,7 @@ from backend.data.external_sources import (
     probe_external_sources,
     summarize_probe_results,
 )
+from backend.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -175,10 +176,12 @@ def system_status(
     except Exception:
         scheduler_state = None
 
+    database_path = sqlite_path_from_url(settings.database_url)
     return {
-        "database_url": settings.database_url,
-        "database_path": settings.database_url.removeprefix("sqlite:///"),
-        "database_exists": Path(settings.database_url.removeprefix("sqlite:///")).exists(),
+        "version": APP_VERSION,
+        "atlas_enabled": settings.atlas_enabled,
+        "ai_provider": settings.ai_provider,
+        "database_exists": bool(database_path and database_path.exists()),
         "latest_price_date": latest_price_date[0] if latest_price_date else None,
         "financial_metrics_count": db.query(FinancialMetric).count(),
         "long_term_labels_count": db.query(LongTermLabel).count(),

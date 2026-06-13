@@ -19,6 +19,7 @@ from backend.observability import (
 )
 from backend.scheduler import start as scheduler_start
 from backend.scheduler import stop as scheduler_stop
+from backend.version import APP_VERSION
 
 # 模块级最早配置中心化结构化日志，确保在 app 创建及后续 import 前生效。
 configure_logging(settings.log_level)
@@ -41,7 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         scheduler_stop()
 
 
-app = FastAPI(title="MingCang API", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="MingCang API", version=APP_VERSION, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

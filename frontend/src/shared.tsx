@@ -16,6 +16,7 @@ export const MCStore = (() => {
     sessions: D.CHAT_SESSIONS.map((s) => ({ ...s, messages: s.messages.slice() })),
     runtime: { ...D.RUNTIME },
     memoryItems: D.MEMORY.items.slice(),
+    live: 'demo',
     toast: null,
   };
   const subs = new Set<() => void>();
