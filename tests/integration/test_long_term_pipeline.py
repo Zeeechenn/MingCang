@@ -57,7 +57,7 @@ def _seed_stocks_with_data(db):
 
 # ── 集成测试 ──────────────────────────────────────────────────────────
 
-@patch("backend.agents.long_term.team.a_teacher_analyst.analyze")
+@patch("backend.agents.long_term.team.track_analyst.analyze")
 @patch("backend.agents.long_term.team.piotroski_analyst.analyze")
 @patch("backend.agents.long_term.team.jingqi_analyst.analyze")
 def test_weekly_job_generates_labels_for_all_stocks(
@@ -94,10 +94,10 @@ def test_weekly_job_generates_labels_for_all_stocks(
     assert len(labels) == 3
     assert labels["300308"].label == "值得持有"   # 高分 + 都不投规避
     assert labels["603986"].label == "估值偏高"   # 中等分
-    assert labels["600036"].label == "规避"       # a_teacher 投规避 → 一票否决
+    assert labels["600036"].label == "规避"       # track_analyst 投规避 → 一票否决
 
 
-@patch("backend.agents.long_term.team.a_teacher_analyst.analyze")
+@patch("backend.agents.long_term.team.track_analyst.analyze")
 @patch("backend.agents.long_term.team.piotroski_analyst.analyze")
 @patch("backend.agents.long_term.team.jingqi_analyst.analyze")
 def test_postmarket_pipeline_respects_avoid_label(
@@ -150,7 +150,7 @@ def test_postmarket_pipeline_respects_avoid_label(
     assert result["recommendation"] == "观望"
 
 
-@patch("backend.agents.long_term.team.a_teacher_analyst.analyze")
+@patch("backend.agents.long_term.team.track_analyst.analyze")
 @patch("backend.agents.long_term.team.piotroski_analyst.analyze")
 @patch("backend.agents.long_term.team.jingqi_analyst.analyze")
 def test_postmarket_pipeline_respects_overvalued_label(

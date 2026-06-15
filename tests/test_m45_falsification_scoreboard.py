@@ -24,7 +24,7 @@ def _item(**overrides):
         "evidence_level": "verified",
         "source_verified": True,
         "source_verified_by": "tester",
-        "thesis_ref": "ateacher-2026-06-05-optical",
+        "thesis_ref": "track-2026-06-05-optical",
         "evidence_summary": (
             "Invalidation alarm fired before the loss threshold materialized."
         ),
@@ -60,7 +60,7 @@ def _protected_counts(db):
     }
 
 
-def _seed_forward_thesis(db, *, symbol="300308", source_ref="ateacher-2026-06-05-optical"):
+def _seed_forward_thesis(db, *, symbol="300308", source_ref="track-2026-06-05-optical"):
     from backend.research.forward_thesis import create_forward_thesis
 
     return create_forward_thesis(

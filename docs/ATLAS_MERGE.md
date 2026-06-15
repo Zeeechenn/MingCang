@@ -69,9 +69,9 @@ Stop if any official signal, test2, test3, 标的1, scheduler/postmarket, migrat
 
 Still pending, all dormant / shadow unless explicitly promoted:
 
-- Phase 3-full: legacy adapters/backfill for `decision_memory_layered`, research memory, A-teacher skill, long-term reports, and topic reports.
+- Phase 3-full: legacy adapters/backfill for `decision_memory_layered`, research memory, track-analyst skill, long-term reports, and topic reports.
 - Native ResearchCase / future ActionProposal recall to L0.
-- Full long-term research / A-teacher / deep_research / copilot / debate migration.
+- Full long-term research / track-analyst / deep_research / copilot / debate migration.
 - Full M29 ledger integration.
 - Atlas/test4 Stage 2b forward shadow for investment effect: signal-overlay
   starter exists via `backend.tools.atlas_test4_stage2b_shadow`; exit-overlay

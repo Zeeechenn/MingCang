@@ -1,4 +1,4 @@
-"""M45 A-teacher thesis import tests.
+"""M45 track-analyst thesis import tests.
 
 The importer is dry-run-first and writes only ForwardThesis + L0 pending atoms
 when explicitly executed.
@@ -13,9 +13,9 @@ def _item(**overrides):
         "symbol": "300308",
         "theme": "optical modules",
         "statement": "Optical module leaders benefit from AI capex pull-forward.",
-        "source": "A-teacher",
-        "source_ref": "ateacher-2026-06-05-optical",
-        "source_url": "local://a-teacher/2026-06-05",
+        "source": "track-analyst",
+        "source_ref": "track-2026-06-05-optical",
+        "source_url": "local://track-analyst/2026-06-05",
         "source_kind": "direct_source",
         "source_tier": "filing",
         "evidence_level": "verified",
@@ -35,9 +35,9 @@ def _item(**overrides):
     return base
 
 
-def test_m45_ateacher_import_dry_run_does_not_write(test_db):
+def test_m45_track_import_dry_run_does_not_write(test_db):
     from backend.data.database import ForwardThesis
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     result = execute_import(None, [normalize_item(_item())], execute=False)
 
@@ -62,10 +62,10 @@ def test_m45_ateacher_import_dry_run_does_not_write(test_db):
     assert test_db.query(ForwardThesis).count() == 0
 
 
-def test_m45_ateacher_import_execute_writes_forward_thesis_and_l0_pending(test_db):
+def test_m45_track_import_execute_writes_forward_thesis_and_l0_pending(test_db):
     from backend.data.database import ForwardThesis, MemoryPromotionCandidate, StockMemoryItem
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     result = execute_import(test_db, [normalize_item(_item())], execute=True)
 
@@ -84,8 +84,8 @@ def test_m45_ateacher_import_execute_writes_forward_thesis_and_l0_pending(test_d
     atoms = list_memory_atoms(test_db, scope_type="stock", scope_key="300308", trust_state="pending")
     assert len(atoms) == 1
     atom = atoms[0]
-    assert atom["source_type"] == "a_teacher_import"
-    assert atom["source_ref"] == "ateacher-2026-06-05-optical"
+    assert atom["source_type"] == "track_import"
+    assert atom["source_ref"] == "track-2026-06-05-optical"
     assert atom["memory_type"] == "imported_human_thesis"
     assert atom["evidence"]["decision_owner"] == "human"
     assert atom["evidence"]["source_kind"] == "direct_source"
@@ -97,10 +97,10 @@ def test_m45_ateacher_import_execute_writes_forward_thesis_and_l0_pending(test_d
     assert test_db.query(StockMemoryItem).count() == 0
 
 
-def test_m45_ateacher_import_is_idempotent(test_db):
+def test_m45_track_import_is_idempotent(test_db):
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     item = normalize_item(_item())
     first = execute_import(test_db, [item], execute=True)
@@ -112,10 +112,10 @@ def test_m45_ateacher_import_is_idempotent(test_db):
     assert len(list_memory_atoms(test_db, q="Optical module leaders", include_archived=True)) == 1
 
 
-def test_m45_ateacher_import_appends_manifest_for_new_source_ref_same_thesis(test_db):
+def test_m45_track_import_appends_manifest_for_new_source_ref_same_thesis(test_db):
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     first = normalize_item(_item(source_ref="source-a"))
     second = normalize_item(_item(source_ref="source-b", source_note="second confirmation"))
@@ -132,12 +132,12 @@ def test_m45_ateacher_import_appends_manifest_for_new_source_ref_same_thesis(tes
     assert {atom["source_ref"] for atom in atoms} == {"source-a", "source-b"}
 
 
-def test_m45_ateacher_import_refuses_protected_l0_source_ref_before_forward_write(test_db):
+def test_m45_track_import_refuses_protected_l0_source_ref_before_forward_write(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import create_memory_atom, promote_atom
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     atom = create_memory_atom(
         test_db,
@@ -145,7 +145,7 @@ def test_m45_ateacher_import_refuses_protected_l0_source_ref_before_forward_writ
         scope_key="300308",
         memory_type="imported_human_thesis",
         summary="already trusted",
-        source_type="a_teacher_import",
+        source_type="track_import",
         source_ref="protected-source",
         trust_state="pending",
     )
@@ -157,12 +157,12 @@ def test_m45_ateacher_import_refuses_protected_l0_source_ref_before_forward_writ
     assert test_db.query(ForwardThesis).count() == 0
 
 
-def test_m45_ateacher_import_requires_forward_thesis_enabled(test_db, monkeypatch):
+def test_m45_track_import_requires_forward_thesis_enabled(test_db, monkeypatch):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools import m45_import_ateacher_theses as tool
+    from backend.tools import m45_import_track_theses as tool
 
     monkeypatch.setattr(tool.settings, "forward_thesis_enabled", False, raising=False)
 
@@ -173,9 +173,9 @@ def test_m45_ateacher_import_requires_forward_thesis_enabled(test_db, monkeypatc
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_dry_run_flags_unverified_source(test_db):
+def test_m45_track_import_dry_run_flags_unverified_source(test_db):
     from backend.data.database import ForwardThesis
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     result = execute_import(
         None,
@@ -198,12 +198,12 @@ def test_m45_ateacher_import_dry_run_flags_unverified_source(test_db):
     assert test_db.query(ForwardThesis).count() == 0
 
 
-def test_m45_ateacher_import_execute_refuses_unverified_source(test_db):
+def test_m45_track_import_execute_refuses_unverified_source(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="source_not_verified"):
         execute_import(
@@ -216,12 +216,12 @@ def test_m45_ateacher_import_execute_refuses_unverified_source(test_db):
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_execute_requires_direct_source_kind(test_db):
+def test_m45_track_import_execute_requires_direct_source_kind(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="source_kind_not_direct_source"):
         execute_import(
@@ -234,12 +234,12 @@ def test_m45_ateacher_import_execute_requires_direct_source_kind(test_db):
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_execute_rejects_derived_summary_source_kind(test_db):
+def test_m45_track_import_execute_rejects_derived_summary_source_kind(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="source_kind_not_direct_source"):
         execute_import(
@@ -252,12 +252,12 @@ def test_m45_ateacher_import_execute_rejects_derived_summary_source_kind(test_db
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_execute_rejects_social_only_source_tier(test_db):
+def test_m45_track_import_execute_rejects_social_only_source_tier(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="source_tier_social_only"):
         execute_import(
@@ -270,12 +270,12 @@ def test_m45_ateacher_import_execute_rejects_social_only_source_tier(test_db):
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_execute_rejects_needs_check_evidence_level(test_db):
+def test_m45_track_import_execute_rejects_needs_check_evidence_level(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="evidence_level_needs_check"):
         execute_import(
@@ -288,12 +288,12 @@ def test_m45_ateacher_import_execute_rejects_needs_check_evidence_level(test_db)
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_execute_requires_source_tier(test_db):
+def test_m45_track_import_execute_requires_source_tier(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="missing_source_tier"):
         execute_import(
@@ -306,12 +306,12 @@ def test_m45_ateacher_import_execute_requires_source_tier(test_db):
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_execute_requires_source_verified_by(test_db):
+def test_m45_track_import_execute_requires_source_verified_by(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="missing_source_verified_by"):
         execute_import(
@@ -324,12 +324,12 @@ def test_m45_ateacher_import_execute_requires_source_verified_by(test_db):
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_execute_requires_explicit_source_ref(test_db):
+def test_m45_track_import_execute_requires_explicit_source_ref(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="missing_explicit_source_ref"):
         execute_import(
@@ -342,12 +342,12 @@ def test_m45_ateacher_import_execute_requires_explicit_source_ref(test_db):
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_execute_requires_source_locator(test_db):
+def test_m45_track_import_execute_requires_source_locator(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     with pytest.raises(ValueError, match="missing_source_locator"):
         execute_import(
@@ -360,12 +360,12 @@ def test_m45_ateacher_import_execute_requires_source_locator(test_db):
     assert list_memory_atoms(test_db, include_archived=True) == []
 
 
-def test_m45_ateacher_import_refuses_pending_source_ref_identity_mismatch(test_db):
+def test_m45_track_import_refuses_pending_source_ref_identity_mismatch(test_db):
     import pytest
 
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import create_memory_atom, list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     create_memory_atom(
         test_db,
@@ -373,8 +373,8 @@ def test_m45_ateacher_import_refuses_pending_source_ref_identity_mismatch(test_d
         scope_key="300308",
         memory_type="imported_human_thesis",
         summary="different pending summary",
-        source_type="a_teacher_import",
-        source_ref="ateacher-2026-06-05-optical",
+        source_type="track_import",
+        source_ref="track-2026-06-05-optical",
         trust_state="pending",
     )
 
@@ -387,9 +387,9 @@ def test_m45_ateacher_import_refuses_pending_source_ref_identity_mismatch(test_d
     assert atoms[0]["summary"] == "different pending summary"
 
 
-def test_m45_ateacher_import_does_not_touch_signal_decision_or_position(test_db):
+def test_m45_track_import_does_not_touch_signal_decision_or_position(test_db):
     from backend.data.database import DecisionRun, Position, Signal
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     test_db.add(Signal(
         symbol="300308",
@@ -414,10 +414,10 @@ def test_m45_ateacher_import_does_not_touch_signal_decision_or_position(test_db)
     assert test_db.query(Position).count() == 1
 
 
-def test_m45_ateacher_import_theme_scope_without_symbol(test_db):
+def test_m45_track_import_theme_scope_without_symbol(test_db):
     from backend.data.database import ForwardThesis
     from backend.memory.l0_memory import list_memory_atoms
-    from backend.tools.m45_import_ateacher_theses import execute_import, normalize_item
+    from backend.tools.m45_import_track_theses import execute_import, normalize_item
 
     raw = _item(symbol=None, theme="memory cycle")
     result = execute_import(test_db, [normalize_item(raw)], execute=True)
@@ -428,53 +428,53 @@ def test_m45_ateacher_import_theme_scope_without_symbol(test_db):
     assert len(atoms) == 1
 
 
-def test_m45_ateacher_import_requires_invalidation_conditions():
+def test_m45_track_import_requires_invalidation_conditions():
     import pytest
 
-    from backend.tools.m45_import_ateacher_theses import normalize_item
+    from backend.tools.m45_import_track_theses import normalize_item
 
     with pytest.raises(ValueError, match="invalidation_conditions"):
         normalize_item(_item(invalidation_conditions=[]))
 
 
-def test_m45_ateacher_import_requires_review_cadence_days():
+def test_m45_track_import_requires_review_cadence_days():
     import pytest
 
-    from backend.tools.m45_import_ateacher_theses import normalize_item
+    from backend.tools.m45_import_track_theses import normalize_item
 
     with pytest.raises(ValueError, match="review_cadence_days"):
         normalize_item(_item(review_cadence_days=None))
 
 
-def test_m45_ateacher_import_rejects_trading_fields():
+def test_m45_track_import_rejects_trading_fields():
     import pytest
 
-    from backend.tools.m45_import_ateacher_theses import normalize_item
+    from backend.tools.m45_import_track_theses import normalize_item
 
     with pytest.raises(ValueError, match="forbidden trading fields"):
         normalize_item(_item(price_target=88.0, position_size=0.2))
 
 
-def test_m45_ateacher_import_source_verified_must_be_boolean():
+def test_m45_track_import_source_verified_must_be_boolean():
     import pytest
 
-    from backend.tools.m45_import_ateacher_theses import normalize_item
+    from backend.tools.m45_import_track_theses import normalize_item
 
     with pytest.raises(ValueError, match="source_verified must be a boolean"):
         normalize_item(_item(source_verified="yes"))
 
 
-def test_m45_ateacher_import_rejects_unknown_source_kind():
+def test_m45_track_import_rejects_unknown_source_kind():
     import pytest
 
-    from backend.tools.m45_import_ateacher_theses import normalize_item
+    from backend.tools.m45_import_track_theses import normalize_item
 
     with pytest.raises(ValueError, match="source_kind"):
         normalize_item(_item(source_kind="chat_recap"))
 
 
 def test_m45_importer_has_no_official_signal_test2_or_scheduler_imports():
-    module_path = "backend/tools/m45_import_ateacher_theses.py"
+    module_path = "backend/tools/m45_import_track_theses.py"
     tree = ast.parse(open(module_path, encoding="utf-8").read())
     forbidden_prefixes = (
         "backend.decision",

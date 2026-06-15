@@ -29,7 +29,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# SKILL.md loader (mirrors a_teacher_analyst._load_skill_system_prompt)
+# SKILL.md loader (mirrors track_analyst._load_skill_system_prompt)
 # ---------------------------------------------------------------------------
 
 # backend/research/serenity_chokepoint.py: parents[0]=research, parents[1]=backend, parents[2]=repo root

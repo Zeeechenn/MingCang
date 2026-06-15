@@ -1,4 +1,4 @@
-"""Dry-run-first importer for M45 A-teacher-class thesis records.
+"""Dry-run-first importer for M45 track-analyst-class thesis records.
 
 The importer writes only shadow research state when explicitly executed:
 
@@ -52,7 +52,7 @@ SOURCE_TIER_ALIASES = {"social": SourceTier.social_lead.value}
 
 
 @dataclass(frozen=True)
-class ATeacherThesisInput:
+class TrackThesisInput:
     statement: str
     source: str
     as_of: str
@@ -146,7 +146,7 @@ def _optional_source_tier(raw: dict[str, Any]) -> str | None:
     return normalized
 
 
-def _stable_source_ref(item: ATeacherThesisInput) -> str:
+def _stable_source_ref(item: TrackThesisInput) -> str:
     if item.source_ref:
         return item.source_ref
     digest_input = "|".join([
@@ -158,10 +158,10 @@ def _stable_source_ref(item: ATeacherThesisInput) -> str:
         item.horizon_date or "",
     ])
     digest = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()[:16]
-    return f"m45:ateacher:{digest}"
+    return f"m45:track:{digest}"
 
 
-def normalize_item(raw: dict[str, Any]) -> ATeacherThesisInput:
+def normalize_item(raw: dict[str, Any]) -> TrackThesisInput:
     if not isinstance(raw, dict):
         raise ValueError("each thesis item must be an object")
     forbidden = sorted(FORBIDDEN_TRADING_FIELDS.intersection(raw))
@@ -183,7 +183,7 @@ def normalize_item(raw: dict[str, Any]) -> ATeacherThesisInput:
     if not invalidation_conditions:
         raise ValueError("invalidation_conditions must contain at least one item")
 
-    normalized = ATeacherThesisInput(
+    normalized = TrackThesisInput(
         statement=_required_str(raw, "statement"),
         source=_required_str(raw, "source"),
         as_of=_required_str(raw, "as_of"),
@@ -215,7 +215,7 @@ def normalize_item(raw: dict[str, Any]) -> ATeacherThesisInput:
     return normalized
 
 
-def load_items(path: Path) -> list[ATeacherThesisInput]:
+def load_items(path: Path) -> list[TrackThesisInput]:
     payload = json.loads(path.expanduser().read_text(encoding="utf-8"))
     raw_items: Any
     if isinstance(payload, list):
@@ -229,7 +229,7 @@ def load_items(path: Path) -> list[ATeacherThesisInput]:
     return [normalize_item(raw) for raw in raw_items]
 
 
-def _evidence_manifest(item: ATeacherThesisInput, source_ref: str) -> list[dict[str, str | None]]:
+def _evidence_manifest(item: TrackThesisInput, source_ref: str) -> list[dict[str, str | None]]:
     return [{
         "kind": "ledger_snapshot",
         "ref": source_ref,
@@ -240,13 +240,13 @@ def _evidence_manifest(item: ATeacherThesisInput, source_ref: str) -> list[dict[
     }]
 
 
-def _forward_statement(item: ATeacherThesisInput) -> str:
+def _forward_statement(item: TrackThesisInput) -> str:
     if item.symbol or not item.theme:
         return item.statement
     return f"[theme:{item.theme}] {item.statement}"
 
 
-def _forward_thesis_args(item: ATeacherThesisInput, source_ref: str) -> dict[str, Any]:
+def _forward_thesis_args(item: TrackThesisInput, source_ref: str) -> dict[str, Any]:
     return {
         "statement": _forward_statement(item),
         "horizon_date": item.horizon_date,
@@ -262,7 +262,7 @@ def _forward_thesis_args(item: ATeacherThesisInput, source_ref: str) -> dict[str
     }
 
 
-def _memory_atom_args(item: ATeacherThesisInput, source_ref: str, thesis_id: int | None) -> dict[str, Any]:
+def _memory_atom_args(item: TrackThesisInput, source_ref: str, thesis_id: int | None) -> dict[str, Any]:
     evidence = {
         "source": item.source,
         "source_ref": source_ref,
@@ -289,7 +289,7 @@ def _memory_atom_args(item: ATeacherThesisInput, source_ref: str, thesis_id: int
         "scope_key": item.scope_key,
         "memory_type": "imported_human_thesis",
         "summary": item.statement,
-        "source_type": "a_teacher_import",
+        "source_type": "track_import",
         "source_ref": source_ref,
         "trust_state": "pending",
         "evidence": evidence,
@@ -314,7 +314,7 @@ def _memory_atom_by_source_ref(db, source_ref: str):
     ).first()
 
 
-def _source_fidelity_blockers(item: ATeacherThesisInput) -> list[str]:
+def _source_fidelity_blockers(item: TrackThesisInput) -> list[str]:
     blockers: list[str] = []
     if not item.source_verified:
         blockers.append("source_not_verified")
@@ -335,9 +335,9 @@ def _source_fidelity_blockers(item: ATeacherThesisInput) -> list[str]:
     return blockers
 
 
-def _assert_existing_atom_matches_item(existing, item: ATeacherThesisInput, source_ref: str) -> None:
+def _assert_existing_atom_matches_item(existing, item: TrackThesisInput, source_ref: str) -> None:
     expected = {
-        "source_type": "a_teacher_import",
+        "source_type": "track_import",
         "scope_type": item.scope_type,
         "scope_key": item.scope_key,
         "memory_type": "imported_human_thesis",
@@ -355,7 +355,7 @@ def _assert_existing_atom_matches_item(existing, item: ATeacherThesisInput, sour
         )
 
 
-def _preflight_execute(db, items: list[ATeacherThesisInput]) -> None:
+def _preflight_execute(db, items: list[TrackThesisInput]) -> None:
     if not settings.forward_thesis_enabled:
         raise ValueError("forward_thesis_enabled must be true before M45 import execute")
     for item in items:
@@ -377,7 +377,7 @@ def _preflight_execute(db, items: list[ATeacherThesisInput]) -> None:
             _assert_existing_atom_matches_item(existing_atom, item, source_ref)
 
 
-def _ensure_manifest_contains_source(db, thesis: dict[str, Any], item: ATeacherThesisInput, source_ref: str) -> dict[str, Any]:
+def _ensure_manifest_contains_source(db, thesis: dict[str, Any], item: TrackThesisInput, source_ref: str) -> dict[str, Any]:
     manifest = list(thesis.get("evidence_manifest") or [])
     if any(entry.get("ref") == source_ref for entry in manifest if isinstance(entry, dict)):
         return thesis
@@ -393,7 +393,7 @@ def _ensure_manifest_contains_source(db, thesis: dict[str, Any], item: ATeacherT
     )
 
 
-def preview_import(items: list[ATeacherThesisInput]) -> dict[str, Any]:
+def preview_import(items: list[TrackThesisInput]) -> dict[str, Any]:
     planned: list[dict[str, Any]] = []
     for item in items:
         source_ref = _stable_source_ref(item)
@@ -425,7 +425,7 @@ def preview_import(items: list[ATeacherThesisInput]) -> dict[str, Any]:
     }
 
 
-def execute_import(db, items: list[ATeacherThesisInput], *, execute: bool = False) -> dict[str, Any]:
+def execute_import(db, items: list[TrackThesisInput], *, execute: bool = False) -> dict[str, Any]:
     if not execute:
         return preview_import(items)
 

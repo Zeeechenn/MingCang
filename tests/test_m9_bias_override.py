@@ -90,7 +90,7 @@ def test_caveat_survives_team_merge(test_db, monkeypatch):
     seed_default_overrides(test_db)
 
     # 只跑 piotroski 一路，让 team 退化为单分析师测试，避免依赖其他数据
-    monkeypatch.setattr(settings, "long_term_a_teacher_enabled", False)
+    monkeypatch.setattr(settings, "long_term_track_enabled", False)
     monkeypatch.setattr(settings, "long_term_jingqi_enabled", False)
     monkeypatch.setattr(settings, "long_term_qfii_flow_enabled", False)
     monkeypatch.setattr(settings, "long_term_piotroski_enabled", True)

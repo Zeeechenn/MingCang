@@ -8,9 +8,9 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.5.1`; the latest
-documented release is `v0.5.1` context sanitization and status surface in
-`CHANGELOG.md`.
+Current release surface: package/API/frontend versions are `0.5.2`; the latest
+documented release is `v0.5.2` track-analyst de-personalization and M51 plan
+archive in `CHANGELOG.md`.
 
 ## Current State
 
@@ -21,21 +21,8 @@ documented release is `v0.5.1` context sanitization and status surface in
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
-| v0.5.1 | complete: UI context sanitization, safe system status version surface, Atlas dormant preload silence, desktop sample-snapshot clarity |
-| v0.5.0 | complete: MingCang naming finalized across native Pi, installer, launcher, public docs, license, and version surfaces; transition compatibility entrypoints removed |
-| v0.4.3 | complete: frontend Chinese punctuation normalization, M29 forward baseline status recorded, release surfaces aligned |
-| v0.4.2 | complete: frontend TypeScript module migration, CI coverage gate, Dependabot, and threat-model documentation |
-| v0.4.1 | complete: favicon restored with the new glass-shell palette, GitHub homepage screenshot refreshed, release notes bilingualized |
-| v0.4.0 | complete: frontend glass-shell refresh with live/demo data fallback and ATLAS ledger surfaces kept behind existing dormant backend gates |
-| v0.3.4 | complete: non-promoting Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and research-positioning importer/scoreboard source gates |
-| M50 | complete/released through Phase 3: Serenity/ResearchReportGate foundation, `ai_supply_chain` source-tier fields, and research-positioning importer/scoreboard source gates; non-promoting |
-| v0.3.3 | complete: first-run wizard, data health page, per-signal provenance, reproducible evidence path, community provider example, API contract, and stricter CI/dependency gates |
-| M49 | complete: retained backend tools classified with purpose/read-write boundaries; `mingcang tools` JSON entry added; request/export/memory-candidate correlation IDs wired |
-| M46.5 | complete: one-time lookahead audit found warning-only gaps, no blockers; frontend key-number display tests added |
-| M46 | complete: docs_public router/manual/feature map + no-key demo first-screen data |
-| M47 | complete: `mingcang evidence lookahead-check` productized; coverage snapshot warnings/freshness/provider chain visible in API, UI, and export |
-| M48 | complete: first API response types added; SignalCard/EvidenceCard migrated to TSX; StatusBadge primitive and full frontend-test gate wired |
-| M45 | complete: source-gated research-positioning tools; future work is guardrail-only |
+| recent completed (v0.3.3–v0.5.1, M45–M50) | complete: productization, frontend glass-shell + TypeScript migration, MingCang naming finalization, context sanitization, M45 source-gated research positioning, M46–M48 correctness/discovery/reliability floor, M49 tools registry, M50 Serenity + ResearchReportGate. Detail in `docs/ROADMAP.md` Completed Index and `CHANGELOG.md` |
+| M51 external borrowing | scoped, not started: research track (report pack / Evidence Card / MingCang-GAIA) + quant-track grafts (D1-D4); non-promoting. Plan in `docs/dev/M51_EXTERNAL_BORROWING_PLAN.md` |
 | M44 / Atlas | complete and dormant: `9820143` is in `origin/main`; Atlas/test4 Stage 2b signal-overlay shadow starter exists; `ATLAS_ENABLED=false` |
 | M29 | baseline 1d/3d/5d forward artifacts created 2026-06-12; positive delta 9/11 + 8/10 + 8/10 windows; non-promoting; next: extend window after 06-12 price coverage available |
 | remote agent mode | opt-in only; read-only by default |
@@ -68,7 +55,8 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 | Workstream | First action | Stop condition |
 |---|---|---|
-| M50 research gate follow-up | Phase 0-3 is complete/released; only start next-batch quality gates or frontend evidence cards when explicitly scoped | Do not connect Serenity, source tiers, or importer metadata to official signals, labels, scheduler, test2, positions, or production weights |
+| M51 external borrowing | Start research-track Phase 1 (single-stock report pack schema, wrapping existing deep_research/gate/falsification/supply-chain/research_case); quant-track first step is D1 (add Deflated Sharpe/PBO/trial-count to `m29_hypothesis_registry`). Plan: `docs/dev/M51_EXTERNAL_BORROWING_PLAN.md` | Graft into existing modules only; never build a parallel backtest/factor/audit/data-validation system; do not touch official signal, positions, scheduler, test2, or production weights |
+| M50 research gate follow-up | Phase 0-3 is complete/released; only start next-batch quality gates or frontend evidence cards when explicitly scoped (folded into M51 Phase 2) | Do not connect Serenity, source tiers, or importer metadata to official signals, labels, scheduler, test2, positions, or production weights |
 | M29 forward evidence ops | Re-run readiness after 2026-06-12+ price coverage arrives, then extend the next 1d/3d/5d shadow window | Stop if fresh coverage is incomplete, artifacts are partial, or a change would re-enable quant / Kronos / production scoring |
 | M45 research-positioning follow-up | Use dry-run-first importer / scoreboard only with direct source fidelity | Do not promote trusted memory, official signals, production profile, scheduler, test2, stops, sizing, or positions |
 | M32 hypothesis bridge | Start only after review data is thick enough; current local DB has only a small seed set (`review_cases=2`, `forward_theses=2` as of 2026-06-09) | Output falsifiable theses, not Strong Buy labels |
@@ -90,7 +78,7 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate for v0.5.1 on 2026-06-13:
+Last full recorded gate for v0.5.2 on 2026-06-15:
 `make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 RUFF_CACHE_DIR=/private/tmp/mingcang_ruff_cache
 MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache` passed locally: ruff passed,

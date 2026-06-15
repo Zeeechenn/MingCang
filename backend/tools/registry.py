@@ -137,11 +137,11 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
-        "module": "backend.tools.m45_ateacher_hook_update",
+        "module": "backend.tools.m45_track_hook_update",
         "category": "maintenance",
-        "purpose": "Adapt structured A-teacher hook updates into the M45 ForwardThesis import path.",
+        "purpose": "Adapt structured track-analyst hook updates into the M45 ForwardThesis import path.",
         "read_write_boundary": "Dry-run by default; --execute writes only ForwardThesis and L0 pending atoms via the M45 importer path.",
-        "recommended_entrypoint": "python3 -m backend.tools.m45_ateacher_hook_update --input <updates.json>",
+        "recommended_entrypoint": "python3 -m backend.tools.m45_track_hook_update --input <updates.json>",
         "still_runnable": True,
     },
     {
@@ -153,11 +153,11 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
-        "module": "backend.tools.m45_import_ateacher_theses",
+        "module": "backend.tools.m45_import_track_theses",
         "category": "maintenance",
-        "purpose": "Import A-teacher-class thesis records into M45 shadow research state.",
+        "purpose": "Import track-analyst-class thesis records into M45 shadow research state.",
         "read_write_boundary": "Dry-run by default; --execute writes ForwardThesis rows and L0 pending atoms only.",
-        "recommended_entrypoint": "python3 -m backend.tools.m45_import_ateacher_theses --input <theses.json>",
+        "recommended_entrypoint": "python3 -m backend.tools.m45_import_track_theses --input <theses.json>",
         "still_runnable": True,
     },
     {

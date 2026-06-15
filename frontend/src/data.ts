@@ -556,7 +556,7 @@ export const MC_DATA: any = (function () {
   const FORWARD_THESES = [
     {
       id: 'ft-1', title: '光模块 1.6T 渗透周期', symbol: '300308', name: '中际旭创',
-      source_type: '外部研究者', source_name: 'A-teacher 框架', as_of: '2026-05-28', status: 'active',
+      source_type: '外部研究者', source_name: 'track-analyst 框架', as_of: '2026-05-28', status: 'active',
       review_cadence: '每两周', next_review: '2026-06-22',
       summary: '把成熟外部研究者关于 1.6T 渗透节奏的判断进口为可跟踪论题，带失效条件，长期持续跟踪。论题只作论据，不直接抬高买入分。',
       follow_metrics: ['北美四大云厂季度资本开支', '1.6T 送样 → 量产时间表', '光模块板块成交额扩散度'],
@@ -853,7 +853,7 @@ export const MC_DATA: any = (function () {
     items: [
       { module: 'coverage_snapshot', category: 'stable', boundary: 'read-only', purpose: '输出当前数据覆盖快照' },
       { module: 'm29_forward_readiness', category: 'evidence', boundary: 'read-only', purpose: '守住下一次 forward shadow readiness' },
-      { module: 'm45_import_ateacher_theses', category: 'maintenance', boundary: 'dry-run first', purpose: '导入外部论题，只写 ForwardThesis / pending atoms' },
+      { module: 'm45_import_track_theses', category: 'maintenance', boundary: 'dry-run first', purpose: '导入外部论题，只写 ForwardThesis / pending atoms' },
       { module: 'm45_falsification_scoreboard', category: 'maintenance', boundary: 'dry-run first', purpose: '记录证伪记分牌事件' },
       { module: 'm42_remediate_hfq_contamination', category: 'maintenance', boundary: 'dry-run/report safe', purpose: '检测和修复复权污染' },
       { module: 'atlas_test4_stage2b_shadow', category: 'evidence', boundary: 'non-promoting', purpose: 'Atlas 信号叠加影子观察' },
@@ -861,7 +861,7 @@ export const MC_DATA: any = (function () {
   };
 
   const SYSTEM = {
-    version: '0.5.1', release: [['v0.5.1', '上下文脱敏'], ['Status', '安全版本面'], ['Atlas', '休眠静默'], ['Quant', '生产关闭']],
+    version: '0.5.2', release: [['v0.5.2', '去人格化重命名'], ['Status', '安全版本面'], ['Atlas', '休眠静默'], ['Quant', '生产关闭']],
     market_overview: { available: true, name: '沪深300', close: 4082.35, change_pct: 0.42, date: '2026-06-09',
       indices: [
         { name: '上证指数', close: 3421.56, change_pct: 0.38 },

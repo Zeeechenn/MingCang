@@ -6,7 +6,7 @@
 标签映射规则（一票否决 + 加权融合）：
   • 任一分析师投"规避" → label="规避"（一票否决）
   • score ≥ 50  → 值得持有
-  • 30 ≤ score < 50（或 a_teacher 第五层⚠️）→ 估值偏高
+  • 30 ≤ score < 50（或 track_analyst 第五层⚠️）→ 估值偏高
   • -20 ≤ score < 30 → 观望
   • score < -20 → 规避
 """
@@ -16,10 +16,10 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from backend.agents.long_term import (
-    a_teacher_analyst,
     jingqi_analyst,
     piotroski_analyst,
     qfii_flow_analyst,
+    track_analyst,
 )
 from backend.agents.long_term.base import LabelQuality, LongTermLabel, LongTermReport, VoteLabel
 from backend.config import settings
@@ -34,7 +34,7 @@ def _aggregate_score(reports: dict[str, LongTermReport]) -> float:
     其 confidence=0 时（未触发规避）会被本函数自动跳过，不稀释正向分。
     """
     weights = {
-        "track": settings.long_term_a_teacher_weight,
+        "track": settings.long_term_track_weight,
         "quality": settings.long_term_piotroski_weight,
         "boom": settings.long_term_jingqi_weight,
         "flow": settings.long_term_qfii_flow_weight,
@@ -53,19 +53,19 @@ def _aggregate_score(reports: dict[str, LongTermReport]) -> float:
 
 
 def _resolve_label(score: float, votes: dict[str, VoteLabel],
-                   a_teacher_layer5: str | None = None) -> VoteLabel:
-    """根据综合分 + 一票否决 + a_teacher 高位 决定最终 label"""
+                   track_layer5: str | None = None) -> VoteLabel:
+    """根据综合分 + 一票否决 + track_analyst 高位 决定最终 label"""
     # 一票否决：任一分析师投"规避"
     if "规避" in votes.values():
         return "规避"
 
-    # a_teacher 第五层"规避"或"等回调"硬约束
-    if a_teacher_layer5 == "规避":
+    # track_analyst 第五层"规避"或"等回调"硬约束
+    if track_layer5 == "规避":
         return "规避"
 
     if score >= 50:
-        # 但如果 a_teacher 第五层"等回调"，降级
-        if a_teacher_layer5 == "等回调":
+        # 但如果 track_analyst 第五层"等回调"，降级
+        if track_layer5 == "等回调":
             return "估值偏高"
         return "值得持有"
     if score >= 30:
@@ -102,14 +102,14 @@ def _assess_label_quality(reports: dict[str, LongTermReport]) -> tuple[LabelQual
         return "failed", False, ["没有有效长期分析师报告"]
 
     track = reports.get("track")
-    if settings.long_term_a_teacher_enabled:
+    if settings.long_term_track_enabled:
         if track is None:
-            return "failed", False, ["A老师分析缺失"]
+            return "failed", False, ["赛道研究员分析缺失"]
         if track.confidence < 0.01:
             finding_text = "；".join(track.key_findings)
             if "LLM 调用失败" in finding_text:
-                return "failed", False, ["A老师 LLM 调用失败"]
-            return "degraded", False, ["A老师置信度为 0，标签仅展示"]
+                return "failed", False, ["赛道研究员 LLM 调用失败"]
+            return "degraded", False, ["赛道研究员置信度为 0，标签仅展示"]
 
     if len(valid_reports) < 2:
         notes.append("有效长期分析师少于 2 路")
@@ -129,11 +129,11 @@ class LongTermTeam:
         """Run all long-term analysts and aggregate into a LongTermLabel."""
         reports: dict[str, LongTermReport] = {}
 
-        if settings.long_term_a_teacher_enabled:
+        if settings.long_term_track_enabled:
             try:
-                reports["track"] = a_teacher_analyst.analyze(symbol, name, db)
+                reports["track"] = track_analyst.analyze(symbol, name, db)
             except Exception as e:
-                logger.error("a_teacher 失败 %s: %s", symbol, e)
+                logger.error("track_analyst 失败 %s: %s", symbol, e)
         if settings.long_term_piotroski_enabled:
             try:
                 reports["quality"] = piotroski_analyst.analyze(symbol, db)

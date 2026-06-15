@@ -133,7 +133,7 @@ def test_default_aggregate_ignores_untrusted_long_term_avoid_label(monkeypatch):
         expires_at="2026-06-04",
         quality="failed",
         constraint_eligible=False,
-        quality_notes=["A老师 LLM 调用失败"],
+        quality_notes=["赛道研究员 LLM 调用失败"],
     )
     result = aggregator.aggregate(
         quant_score=0,
@@ -160,7 +160,7 @@ def test_research_constraints_do_not_block_entry_for_failed_long_term_label(monk
         "key_findings": ["LLM 调用失败，默认观望"],
         "quality": "failed",
         "constraint_eligible": False,
-        "quality_notes": ["A老师 LLM 调用失败"],
+        "quality_notes": ["赛道研究员 LLM 调用失败"],
     }
 
     result = research_constraints.apply_research_constraints(

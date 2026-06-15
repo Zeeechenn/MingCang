@@ -6,6 +6,24 @@
 
 ---
 
+## [v0.5.2] De-personalize track analyst and archive M51 plan / 去人格化重命名与 M51 方案归档（2026-06-15）
+
+重构 + 文档，non-promoting，功能行为不变；未改 official signal / 仓位 / scheduler / test2 / production weights。
+
+### Added / 新增
+- 新建 `docs/dev/M51_EXTERNAL_BORROWING_PLAN.md`：外部金融开源项目（FinGenius/FinRobot/FinGPT/FinGAIA 研究系 + QuantDinger/alpha101 量化系）统一借鉴详案，含四域归口表、逐项目重复判定、两轨边界与防回归护栏。核心结论：QuantDinger/alpha101 对明仓净增量≈0（回测/统计门/审计/Qlib 因子均已自建），一律 graft 现有模块、不新建平行轨；曾议的 M29.6 新回测 lab 取消，拆为 D1-D4 小 graft。
+- `docs/ROADMAP.md` 新增 M51 里程碑级承重点与量化轨 D1-D4 归口（D1→m29_hypothesis_registry、D2/D4→M12、D3→ATLAS）。
+
+### Changed / 变更
+- 压缩 `docs/ROADMAP.md` 当前接手入口表与 `STATUS.md` Current State：已完成项（v0.3.3–v0.5.1、M44–M50）从活跃表下沉到 Completed Milestones Index 与本 CHANGELOG，活跃表只保留进行中/触发待命工作线，便于后续查询。
+- 内容收敛为"仅 skill 功能"：`.pi/skills/track-analyst/SKILL.md` 收敛为纯方法框架（5 层 + 6 工具），移除人物身份/外部来源出处/外部文章引用/具名公司数据点等记录。
+- 去人格化重命名（明仓 repo 范围）：长期团队 track 角色统一为中性命名——中文显示名 `赛道研究员`，代码标识符 `track_analyst` / `track` / `track-analyst`，配置键 `LONG_TERM_TRACK_*`；相关模块、测试与 skill 目录名同步规整。功能逻辑（长期团队 track 角色、m45 导入工具、registry）行为不变；全量回归 1214 passed / 5 skipped。
+- 外部内容来源出处字样从代码/文档中移除。
+- 将 Python / API / 前端 package / lockfile / 静态运行时版本面统一到 `0.5.2`。
+
+### Notes / 说明
+- 外部抓取的原始内容（帖子/文章/记录）不纳入明仓仓库；本地 skills 另建独立 git 库并以 `.gitignore` 排除原始内容。
+
 ## [v0.5.1] Context sanitization and status surface / 上下文脱敏与状态版本面（2026-06-13）
 
 ### Fixed / 修复
@@ -792,7 +810,7 @@
 ### M1.3 长期分析师团 first batch（2026-05-15）
 
 **三位分析师 + QFII 规避**：
-- A 老师赛道分析师（光通信/存储等硬件赛道，via A 老师小红书更新）
+- 赛道研究员（光通信/存储等硬件赛道，供应链驱动框架）
 - Piotroski 财务质量评分（F-Score 9 因子，高分=财务健康）
 - 景气投资 Δ 类指标（边际变化 + 同行业分位，判断景气拐点）
 - QFII Outflow 反向规避（连续 ≥2 季减仓且累计 ≥20% → 一票否决）

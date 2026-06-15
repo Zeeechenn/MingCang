@@ -1,7 +1,7 @@
-"""Dry-run-first M45 adapter for A-teacher hook updates.
+"""Dry-run-first M45 adapter for track-analyst hook updates.
 
-This tool turns structured A-teacher hook updates into the existing M45
-ForwardThesis + L0 pending import path. It does not call the A-teacher analyst,
+This tool turns structured track-analyst hook updates into the existing M45
+ForwardThesis + L0 pending import path. It does not call the track-analyst analyst,
 LLMs, scheduler jobs, official signals, positions, production profiles, or
 trusted-memory promotion.
 """
@@ -14,16 +14,16 @@ from pathlib import Path
 from typing import Any
 
 from backend.config import settings
-from backend.tools.m45_import_ateacher_theses import (
-    ATeacherThesisInput,
+from backend.tools.m45_import_track_theses import (
+    TrackThesisInput,
     execute_import,
     normalize_item,
 )
 
 
 @dataclass(frozen=True)
-class ATeacherHookUpdate:
-    import_item: ATeacherThesisInput
+class TrackHookUpdate:
+    import_item: TrackThesisInput
 
 
 def _required_str(raw: dict[str, Any], field: str) -> str:
@@ -33,7 +33,7 @@ def _required_str(raw: dict[str, Any], field: str) -> str:
     return value.strip()
 
 
-def normalize_hook_update(raw: dict[str, Any]) -> ATeacherHookUpdate:
+def normalize_hook_update(raw: dict[str, Any]) -> TrackHookUpdate:
     """Normalize a hook update into the canonical M45 import contract."""
     if not isinstance(raw, dict):
         raise ValueError("each hook update must be an object")
@@ -42,10 +42,10 @@ def normalize_hook_update(raw: dict[str, Any]) -> ATeacherHookUpdate:
     item["statement"] = hook_update
     item.pop("hook_update", None)
     item.pop("markdown_note", None)
-    return ATeacherHookUpdate(import_item=normalize_item(item))
+    return TrackHookUpdate(import_item=normalize_item(item))
 
 
-def load_hook_updates(path: Path) -> list[ATeacherHookUpdate]:
+def load_hook_updates(path: Path) -> list[TrackHookUpdate]:
     payload = json.loads(path.expanduser().read_text(encoding="utf-8"))
     raw_items: Any
     if isinstance(payload, list):
@@ -59,7 +59,7 @@ def load_hook_updates(path: Path) -> list[ATeacherHookUpdate]:
     return [normalize_hook_update(raw) for raw in raw_items]
 
 
-def execute_hook_updates(db, updates: list[ATeacherHookUpdate], *, execute: bool = False) -> dict[str, Any]:
+def execute_hook_updates(db, updates: list[TrackHookUpdate], *, execute: bool = False) -> dict[str, Any]:
     items = [update.import_item for update in updates]
     return execute_import(db, items, execute=execute)
 

@@ -194,10 +194,10 @@ def test_qfii_empty_outside_disclosure_window_stays_cached(tmp_path, monkeypatch
 def test_team_includes_flow_analyst_in_votes(monkeypatch):
     """team.LongTermTeam.run 调用了 flow analyst，最终 votes 含 'flow' 键"""
     from backend.agents.long_term import (
-        a_teacher_analyst,
         jingqi_analyst,
         piotroski_analyst,
         qfii_flow_analyst,
+        track_analyst,
     )
     from backend.agents.long_term import team as team_mod
     from backend.agents.long_term.base import LongTermReport
@@ -211,7 +211,7 @@ def test_team_includes_flow_analyst_in_votes(monkeypatch):
 
     monkeypatch.setattr(qfii_flow_analyst, "get_qfii_history", lambda *a, **kw: history)
 
-    monkeypatch.setattr(a_teacher_analyst, "analyze",
+    monkeypatch.setattr(track_analyst, "analyze",
                         lambda s, n, db: LongTermReport(role="track", score=40, confidence=0.7,
                                                        label_vote="观望", key_findings=[]))
     monkeypatch.setattr(piotroski_analyst, "analyze",

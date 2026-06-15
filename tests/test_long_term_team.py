@@ -66,9 +66,9 @@ def test_resolve_label_avoid_veto():
     assert label == "规避"
 
 
-def test_resolve_label_a_teacher_layer5_avoid():
-    """a_teacher 第五层'规避'即使无 vote 也强制规避"""
-    label = _resolve_label(score=70, votes={"track": "值得持有"}, a_teacher_layer5="规避")
+def test_resolve_label_track_layer5_avoid():
+    """track_analyst 第五层'规避'即使无 vote 也强制规避"""
+    label = _resolve_label(score=70, votes={"track": "值得持有"}, track_layer5="规避")
     assert label == "规避"
 
 
@@ -79,8 +79,8 @@ def test_resolve_label_hold():
 
 
 def test_resolve_label_hold_downgraded_by_layer5():
-    """score ≥ 50 但 a_teacher 第五层'等回调' → 估值偏高"""
-    label = _resolve_label(score=70, votes={"track": "值得持有"}, a_teacher_layer5="等回调")
+    """score ≥ 50 但 track_analyst 第五层'等回调' → 估值偏高"""
+    label = _resolve_label(score=70, votes={"track": "值得持有"}, track_layer5="等回调")
     assert label == "估值偏高"
 
 
@@ -105,7 +105,7 @@ def test_resolve_label_avoid_low_score():
 
 # ── LongTermTeam.run 集成 ─────────────────────────────────────────────
 
-@patch("backend.agents.long_term.team.a_teacher_analyst.analyze")
+@patch("backend.agents.long_term.team.track_analyst.analyze")
 @patch("backend.agents.long_term.team.piotroski_analyst.analyze")
 @patch("backend.agents.long_term.team.jingqi_analyst.analyze")
 def test_team_run_full_pipeline(mock_jingqi, mock_pio, mock_at, test_db):
@@ -131,7 +131,7 @@ def test_team_run_full_pipeline(mock_jingqi, mock_pio, mock_at, test_db):
     assert label.expires_at > label.date
 
 
-@patch("backend.agents.long_term.team.a_teacher_analyst.analyze")
+@patch("backend.agents.long_term.team.track_analyst.analyze")
 @patch("backend.agents.long_term.team.piotroski_analyst.analyze")
 @patch("backend.agents.long_term.team.jingqi_analyst.analyze")
 def test_team_run_avoid_vote_wins(mock_jingqi, mock_pio, mock_at, test_db):
@@ -145,7 +145,7 @@ def test_team_run_avoid_vote_wins(mock_jingqi, mock_pio, mock_at, test_db):
     assert label.label == "规避"
 
 
-@patch("backend.agents.long_term.team.a_teacher_analyst.analyze")
+@patch("backend.agents.long_term.team.track_analyst.analyze")
 @patch("backend.agents.long_term.team.piotroski_analyst.analyze")
 @patch("backend.agents.long_term.team.jingqi_analyst.analyze")
 def test_team_run_analyst_exception_doesnt_crash(mock_jingqi, mock_pio, mock_at, test_db):

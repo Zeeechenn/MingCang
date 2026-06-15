@@ -141,7 +141,7 @@ def test_agent_cli_tools_lists_registry_with_boundaries(tmp_path):
 
     for module in (
         "backend.tools.coverage_snapshot",
-        "backend.tools.m45_import_ateacher_theses",
+        "backend.tools.m45_import_track_theses",
         "backend.tools.atlas_test4_stage2b_shadow",
         "backend.tools.attic.backfill_and_run",
     ):
@@ -151,7 +151,7 @@ def test_agent_cli_tools_lists_registry_with_boundaries(tmp_path):
         assert tools[module]["recommended_entrypoint"]
 
     assert tools["backend.tools.coverage_snapshot"]["category"] == "stable"
-    assert tools["backend.tools.m45_import_ateacher_theses"]["category"] == "maintenance"
+    assert tools["backend.tools.m45_import_track_theses"]["category"] == "maintenance"
     assert tools["backend.tools.atlas_test4_stage2b_shadow"]["category"] == "evidence"
     assert tools["backend.tools.attic.backfill_and_run"]["category"] == "attic"
     assert tools["backend.tools.attic.backfill_and_run"]["still_runnable"] is False

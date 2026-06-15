@@ -200,10 +200,10 @@ class Settings(BaseSettings):
 
     # 长期分析师团 first batch（周频运行）
     long_term_team_enabled: bool = True
-    long_term_a_teacher_enabled: bool = True
+    long_term_track_enabled: bool = True
     long_term_piotroski_enabled: bool = True
     long_term_jingqi_enabled: bool = True
-    long_term_a_teacher_weight: float = 0.3
+    long_term_track_weight: float = 0.3
     long_term_piotroski_weight: float = 0.3
     long_term_jingqi_weight: float = 0.4
     piotroski_strong_threshold: int = 7

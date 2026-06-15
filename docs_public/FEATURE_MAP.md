@@ -79,7 +79,7 @@
 | Trader Agent | 交易视角 agent，辅助解释入场/观察/回避。 | `backend/agents/trader.py` | 影子 | 不自动下单。 |
 | Portfolio Manager Agent | 组合层视角，辅助看集中度、仓位和组合风险。 | `backend/agents/portfolio_manager.py` | 影子/常用 | 不自动调仓。 |
 | Long-term Team | 长期分析师团队聚合慢变量标签。 | `long_term.run` | 需确认/影子 | 需要数据/LLM；默认不直接改信号。 |
-| A-teacher Analyst | 把 A-teacher 类外部判断作为 imported thesis 的输入。 | long-term / M45 importer | 影子/需确认 | 需要来源和失效条件。 |
+| track-analyst Analyst | 把 track-analyst 类外部判断作为 imported thesis 的输入。 | long-term / M45 importer | 影子/需确认 | 需要来源和失效条件。 |
 | 景气 Analyst | 用行业景气位置辅助长期判断。 | `jingqi_analyst.py` | 影子 | 不直接买入。 |
 | Piotroski Analyst | 用财务质量评分辅助长期判断。 | `piotroski_analyst.py` | 影子 | 依赖财务数据。 |
 | QFII Flow Analyst | 用 QFII 减仓等作为反向规避参考。 | `qfii_flow_analyst.py` | 影子 | 只做风险参考。 |
