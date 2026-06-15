@@ -106,6 +106,11 @@ class Settings(BaseSettings):
     weight_technical: float = 0.6
     weight_sentiment: float = 0.4
     new_framework_entry_threshold: float = 25.0
+    # Event-taxonomy override (0.65×事件极性 blend). Default OFF: the M27 sentiment IC
+    # diagnosis (2026-06-15) measured event delta consistently negative across every
+    # variant tested (-0.0027 / -0.0146 / -0.0280), i.e. the override only subtracts IC.
+    # Kept behind a flag so it can be re-enabled for a clean single-provider OOS re-test.
+    sentiment_event_override_enabled: bool = False
 
     # Signal profile: legacy Qlib framework or current new framework.
     paper_trading_profile: str = "auto"  # auto / test1_legacy_qlib / new_framework

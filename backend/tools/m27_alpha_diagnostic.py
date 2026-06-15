@@ -598,7 +598,9 @@ def _event_ab_row_frame(
         polarity_score = sentiment["polarity_score"]
         polarity_source = sentiment["polarity_source"]
         polarity_available = polarity_score is not None
-        adjusted = event_score(polarity_score or 0.0, titles)
+        # Force the override ON here: this A/B harness exists to measure the override's
+        # counterfactual IC effect, independent of the production default (which is OFF).
+        adjusted = event_score(polarity_score or 0.0, titles, enable_override=True)
         event_available = polarity_available or adjusted["event_score_mode"] == "event_override"
 
         ab_rows.append({

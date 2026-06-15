@@ -148,7 +148,8 @@ def _postmarket_news_sentiment(stock, db) -> dict:
             logger.info("Tavily补充 %s: +%d条 (DB=%d条)",
                         stock.symbol, len(tavily_titles), len(titles) - len(tavily_titles))
 
-    sentiment_result = analyze_news(titles, symbol=stock.symbol)
+    company_aliases = [a for a in (stock.name, stock.symbol) if a]
+    sentiment_result = analyze_news(titles, symbol=stock.symbol, company_aliases=company_aliases)
     sentiment_result["news_audit"] = [
         {
             "title": audit.title,

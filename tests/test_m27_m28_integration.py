@@ -30,6 +30,7 @@ def test_event_taxonomy_overrides_sentiment_when_event_matches():
     result = apply_event_score(
         {"sentiment": -0.2, "key_events": ["公司获得重大合同订单"]},
         [],
+        enable_override=True,  # override is opt-in (default OFF per M27 IC diagnosis)
     )
 
     assert result["event_score_mode"] == "event_override"

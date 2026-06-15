@@ -27,12 +27,71 @@ EVENT_TYPES: tuple[EventType, ...] = (
 )
 EVENT_TAXONOMY = EVENT_TYPES
 
+# Weight of the hard-event polarity in the event_override blend (rest goes to raw
+# LLM sentiment). Module constant so it can be tuned/measured via m27 --event-ab.
+EVENT_OVERRIDE_WEIGHT = 0.65
+
+# Market/flow/list-roundup headlines that are NOT company-specific corporate events.
+# These must never trigger a strong event_override; they were empirically dragging
+# sentiment IC down (M27 diagnosis 2026-06-15: event delta -0.0146). Detected first
+# and excluded from hard-event classification so an incidental polarity keyword
+# (e.g. "下滑" inside "市场下滑") cannot misfire as an earnings_warning.
+MARKET_FLOW_KEYWORDS: tuple[str, ...] = (
+    "资金流", "主力净", "净流入", "净流出", "大宗交易", "杠杆资金", "两融",
+    "千股千评", "涨幅榜", "跌幅榜", "龙虎榜", "北向资金", "南向资金", "成交额",
+    "特大单", "主力动向", "基金浮亏", "基金浮盈", "板块异动", "概念涨", "概念跌",
+)
+# Roundup / list headlines tagged loosely to many symbols ("XX股一览", "7只个股…").
+_LIST_HEADLINE_KEYWORDS: tuple[str, ...] = (
+    "一览", "名单", "股大", "只个股", "多股", "股获", "股名单",
+)
+
+
+def is_market_flow(title: str) -> bool:
+    """True if a headline is market/fund-flow/list noise, not a company-specific event."""
+    text = str(title)
+    if any(k in text for k in MARKET_FLOW_KEYWORDS):
+        return True
+    return any(k in text for k in _LIST_HEADLINE_KEYWORDS)
+
+
+def is_company_specific(
+    title: str, company_aliases: list[str] | tuple[str, ...] | None = None
+) -> bool:
+    """True if a headline plausibly carries company-specific signal.
+
+    Always rejects market/flow/list noise. When ``company_aliases`` (e.g. the stock
+    name + code) are given, the headline must also mention one of them — this is what
+    catches cross-company contamination (a 长鑫-IPO headline loosely tagged to 兆易).
+    """
+    text = str(title)
+    if is_market_flow(text):
+        return False
+    aliases = [str(a) for a in (company_aliases or []) if a]
+    if aliases and not any(a in text for a in aliases):
+        return False
+    return True
+
+
+def company_specific_titles(
+    titles: list[str] | tuple[str, ...],
+    company_aliases: list[str] | tuple[str, ...] | None = None,
+) -> list[str]:
+    """Keep only headlines that are company-specific (see ``is_company_specific``)."""
+    return [str(t) for t in titles if is_company_specific(t, company_aliases)]
+
 
 def classify_events(events: list[str] | tuple[str, ...]) -> list[dict]:
-    """Classify event strings into the local A-share taxonomy."""
+    """Classify event strings into the local A-share taxonomy.
+
+    Market/flow/list noise is skipped up front so it cannot be misclassified as a
+    hard corporate event via an incidental keyword match.
+    """
     classified: list[dict] = []
     for event in events:
         text = str(event)
+        if is_market_flow(text):
+            continue
         for event_type in EVENT_TYPES:
             if any(keyword in text for keyword in event_type.keywords):
                 classified.append({
@@ -69,19 +128,38 @@ def build_event_extraction_prompt(symbol: str | None, titles: list[str]) -> str:
     )
 
 
-def event_score(sentiment: float, events: list[str] | tuple[str, ...]) -> dict:
-    """Return an event-aware score in [-1, 1], falling back to sentiment when no event matches."""
+def event_score(
+    sentiment: float,
+    events: list[str] | tuple[str, ...],
+    *,
+    enable_override: bool | None = None,
+) -> dict:
+    """Return an event-aware score in [-1, 1].
+
+    The event_override blend is gated by ``enable_override`` (defaults to
+    ``settings.sentiment_event_override_enabled``, which is OFF). When disabled, the
+    raw sentiment is kept (mode ``sentiment_fallback``) but matched event types are
+    still reported for observability. The override was measured net-negative for IC
+    (M27 diagnosis 2026-06-15) — keep it off unless a clean OOS re-test earns it back.
+    """
     clipped_sentiment = max(-1.0, min(1.0, float(sentiment or 0.0)))
     classified = classify_events(events)
-    if not classified:
+    if enable_override is None:
+        try:
+            from backend.config import settings
+
+            enable_override = bool(settings.sentiment_event_override_enabled)
+        except Exception:
+            enable_override = False
+    if not classified or not enable_override:
         return {
             "event_score": clipped_sentiment,
             "event_score_mode": "sentiment_fallback",
-            "event_types": [],
+            "event_types": classified,
         }
 
     polarity_avg = sum(item["polarity"] for item in classified) / len(classified)
-    score = 0.65 * polarity_avg + 0.35 * clipped_sentiment
+    score = EVENT_OVERRIDE_WEIGHT * polarity_avg + (1.0 - EVENT_OVERRIDE_WEIGHT) * clipped_sentiment
     return {
         "event_score": round(max(-1.0, min(1.0, score)), 4),
         "event_score_mode": "event_override",
@@ -89,12 +167,19 @@ def event_score(sentiment: float, events: list[str] | tuple[str, ...]) -> dict:
     }
 
 
-def apply_event_score(sentiment_result: dict[str, Any], titles: list[str] | None = None) -> dict[str, Any]:
+def apply_event_score(
+    sentiment_result: dict[str, Any],
+    titles: list[str] | None = None,
+    *,
+    enable_override: bool | None = None,
+) -> dict[str, Any]:
     """Add event-aware scoring to an analyze_news-style result."""
     out = dict(sentiment_result)
     event_texts: list[str] = []
     if titles:
         event_texts.extend(titles)
     event_texts.extend(str(item) for item in out.get("key_events", []) or [])
-    out.update(event_score(float(out.get("sentiment") or 0.0), event_texts))
+    out.update(
+        event_score(float(out.get("sentiment") or 0.0), event_texts, enable_override=enable_override)
+    )
     return out

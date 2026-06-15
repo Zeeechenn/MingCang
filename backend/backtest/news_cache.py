@@ -69,6 +69,16 @@ def _fetch_titles(symbol: str, date: str, db, lookback_days: int = 3) -> list[st
     return [r[0] for r in rows if r[0]]
 
 
+def _company_aliases_for_symbol(symbol: str, db) -> list[str] | None:
+    """Return name+symbol aliases when Stock metadata is available."""
+    from backend.data.database import Stock
+
+    stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+    if stock is None or not stock.name:
+        return None
+    return [stock.name, symbol]
+
+
 def get_or_backfill(
     symbol: str,
     date: str,
@@ -105,7 +115,11 @@ def get_or_backfill(
         }
     else:
         from backend.analysis.sentiment import analyze_news
-        result = analyze_news(titles, symbol=symbol)
+        result = analyze_news(
+            titles,
+            symbol=symbol,
+            company_aliases=_company_aliases_for_symbol(symbol, db),
+        )
 
     # 写回缓存（即使是空结果也缓存，避免每次都重查 NewsItem）
     cache[key] = result
@@ -144,7 +158,11 @@ def backfill_all(
 
         try:
             from backend.analysis.sentiment import analyze_news
-            result = analyze_news(titles, symbol=s.symbol)
+            result = analyze_news(
+                titles,
+                symbol=s.symbol,
+                company_aliases=_company_aliases_for_symbol(s.symbol, db),
+            )
             if not result.get("key_events") and result.get("summary") == "解析失败":
                 stats["llm_fail"] += 1
             cache[key] = result

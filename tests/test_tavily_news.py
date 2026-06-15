@@ -184,7 +184,7 @@ def test_postmarket_news_sentiment_skips_tavily_when_local_titles_meet_threshold
 
     monkeypatch.setattr("backend.data.news.fetch_titles_tavily", fake_tavily)
 
-    def fake_analyze_news(titles, symbol):
+    def fake_analyze_news(titles, symbol, company_aliases=None):
         captured["titles"] = titles
         return {"sentiment": 0.0}
 

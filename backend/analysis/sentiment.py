@@ -4,7 +4,7 @@ import json
 from collections import OrderedDict
 from datetime import UTC, datetime
 
-from backend.analysis.event_taxonomy import apply_event_score
+from backend.analysis.event_taxonomy import apply_event_score, company_specific_titles
 from backend.config import settings
 from backend.llm import get_provider, has_runtime_llm_provider
 
@@ -55,6 +55,20 @@ _DISABLED_FALLBACK = {
     "key_events": [],
     "event_score": 0.0,
     "event_score_mode": "sentiment_fallback",
+    "event_types": [],
+}
+# Evidence floor: when a symbol's window has no company-specific headline (only
+# sector/fund-flow/list noise), neutralise sentiment instead of scoring noise.
+# Prevents the M27 whipsaw (e.g. 兆易 603986: 2 sector-IPO headlines, 0 company
+# news → -71.3 sentiment). Skips the LLM call entirely, so it is also cheaper.
+_NOISE_ONLY_FALLBACK = {
+    "sentiment": 0.0,
+    "summary": "仅板块/资金流新闻，无个股特定信号，情感置中",
+    "impact": "short",
+    "key_events": [],
+    "low_confidence": True,
+    "event_score": 0.0,
+    "event_score_mode": "evidence_floor",
     "event_types": [],
 }
 
@@ -158,28 +172,37 @@ def _persistent_cache_set(key: str, titles_hash: str, symbol: str | None, value:
         return
 
 
-def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
+def analyze_news(
+    titles: list[str],
+    symbol: str | None = None,
+    company_aliases: list[str] | None = None,
+) -> dict:
     """
     输入新闻标题列表，返回情感分析结果。
     {sentiment: float, summary: str, impact: str, key_events: list}
     相同股票+标题集合优先命中进程内和 SQLite 缓存，避免重复消耗 LLM 配额。
+    company_aliases（股票名/代码等别名）用于个股相关性过滤与证据地板；不传则只过滤行情/资金流噪声。
     """
     if not titles:
         return apply_event_score(_FALLBACK, [])
     if not has_runtime_llm_provider(settings):
         return apply_event_score(_DISABLED_FALLBACK, titles)
+    # Evidence floor: no company-specific headline (only noise / cross-company) → neutral, skip LLM.
+    analysis_titles = company_specific_titles(titles, company_aliases)
+    if not analysis_titles:
+        return dict(_NOISE_ONLY_FALLBACK)
 
-    cache_key, titles_hash = _cache_key(titles, symbol)
+    cache_key, titles_hash = _cache_key(analysis_titles, symbol)
     cached = _cache_get(cache_key)
     if cached is not None:
-        return apply_event_score(cached, titles)
+        return apply_event_score(cached, analysis_titles)
     cached = _persistent_cache_get(cache_key)
     if cached is not None:
         _cache_set(cache_key, cached)
-        return apply_event_score(cached, titles)
+        return apply_event_score(cached, analysis_titles)
 
     context = f"股票代码：{symbol}\n" if symbol else ""
-    prompt = context + "新闻标题：\n" + "\n".join(f"- {t}" for t in titles[:15])
+    prompt = context + "新闻标题：\n" + "\n".join(f"- {t}" for t in analysis_titles[:15])
 
     data = get_provider().complete_structured(
         prompt=prompt,
@@ -205,11 +228,11 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
             "event_score": 0.0,
             "event_score_mode": "sentiment_fallback",
             "event_types": [],
-        }, titles)
+        }, analysis_titles)
 
     data["sentiment"] = max(-1.0, min(1.0, float(data.get("sentiment", 0))))
     data["key_events"] = data.get("key_events", [])[:3]
-    data = apply_event_score(data, titles)
+    data = apply_event_score(data, analysis_titles)
     _cache_set(cache_key, data)
     _persistent_cache_set(cache_key, titles_hash, symbol, data)
     return dict(data)

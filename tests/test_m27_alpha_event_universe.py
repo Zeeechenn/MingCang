@@ -32,8 +32,11 @@ def test_event_taxonomy_scores_events_and_falls_back_to_polarity():
     positive = apply_event_score(
         {"sentiment": -0.1, "key_events": []},
         ["公司公告获得重大合同并中标算力项目"],
+        enable_override=True,  # override is opt-in (default OFF per M27 IC diagnosis)
     )
-    neutral = apply_event_score({"sentiment": 0.2, "key_events": []}, ["普通经营动态"])
+    neutral = apply_event_score(
+        {"sentiment": 0.2, "key_events": []}, ["普通经营动态"], enable_override=True
+    )
 
     assert positive["event_score_mode"] == "event_override"
     assert positive["event_score"] > 0
