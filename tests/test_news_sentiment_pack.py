@@ -199,3 +199,28 @@ def test_backtest_news_cache_passes_company_aliases(monkeypatch, tmp_path, test_
     assert captured["symbol"] == "603986"
     assert captured["company_aliases"] == ["兆易创新", "603986"]
     assert "兆易创新发布业绩预增公告" in captured["titles"]
+
+
+def test_analyze_news_uses_configured_sentiment_model_tier(monkeypatch):
+    # Sentiment must score with the configured tier (default "capable" → sonnet-4.6),
+    # not the hardcoded "fast" tier. Clean OOS measured IC 0.0735 (sonnet) vs ~0.02 (fast).
+    from backend.config import settings
+
+    monkeypatch.setattr(sentiment, "has_runtime_llm_provider", lambda *_a, **_k: True)
+    monkeypatch.setattr(sentiment, "_cache_get", lambda *_a, **_k: None)
+    monkeypatch.setattr(sentiment, "_persistent_cache_get", lambda *_a, **_k: None)
+    monkeypatch.setattr(sentiment, "_cache_set", lambda *_a, **_k: None)
+    monkeypatch.setattr(sentiment, "_persistent_cache_set", lambda *_a, **_k: None)
+    monkeypatch.setattr(settings, "sentiment_model_tier", "capable")
+
+    captured = {}
+
+    class _Prov:
+        def complete_structured(self, **kwargs):
+            captured["model_tier"] = kwargs.get("model_tier")
+            return {"sentiment": 0.3, "summary": "ok", "impact": "short", "key_events": []}
+
+    monkeypatch.setattr(sentiment, "get_provider", lambda: _Prov())
+
+    sentiment.analyze_news(["兆易创新发布业绩预增公告"], symbol="603986")
+    assert captured["model_tier"] == "capable"

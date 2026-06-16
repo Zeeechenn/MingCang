@@ -209,7 +209,7 @@ def analyze_news(
         tool=_SENTIMENT_TOOL,
         system=SYSTEM_PROMPT,
         max_tokens=300,
-        model_tier="fast",
+        model_tier=settings.sentiment_model_tier,
     )
     try:
         import json as _json

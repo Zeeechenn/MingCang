@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     # variant tested (-0.0027 / -0.0146 / -0.0280), i.e. the override only subtracts IC.
     # Kept behind a flag so it can be re-enabled for a clean single-provider OOS re-test.
     sentiment_event_override_enabled: bool = False
+    # Model tier for news sentiment scoring. "capable" → claude-sonnet-4-6 on every
+    # provider. The 2026-06-15 clean single-provider OOS measured sentiment IC 0.0735
+    # under sonnet-4.6 vs ~0.020 under the "fast"/Codex tier — provider quality is the
+    # dominant lever for this signal. NOTE: with AI_PROVIDER=local_cli also set
+    # LOCAL_CLI_PREFER_CODEX=false, otherwise the Codex path ignores this model.
+    sentiment_model_tier: str = "capable"
 
     # Signal profile: legacy Qlib framework or current new framework.
     paper_trading_profile: str = "auto"  # auto / test1_legacy_qlib / new_framework

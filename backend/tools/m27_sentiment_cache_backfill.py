@@ -170,13 +170,15 @@ def _call_llm_sentiment(titles: list[str], symbol: str) -> dict[str, Any]:
     if not has_runtime_llm_provider():
         readiness = runtime_readiness()
         raise RuntimeError(f"runtime LLM provider is not usable: {readiness.get('reason')}")
+    from backend.config import settings
+
     prompt = f"股票代码：{symbol}\n新闻标题：\n" + "\n".join(f"- {title}" for title in titles[:15])
     data = get_provider().complete_structured(
         prompt=prompt,
         tool=_SENTIMENT_TOOL,
         system=SYSTEM_PROMPT,
         max_tokens=300,
-        model_tier="fast",
+        model_tier=settings.sentiment_model_tier,
     )
     if not data:
         data = {"sentiment": 0.0, "summary": "解析失败", "impact": "short", "key_events": []}
