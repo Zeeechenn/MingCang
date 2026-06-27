@@ -10,6 +10,7 @@
 
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
+| M54 新闻层 v2（多源可插拔·正文级·多信号综合评分） | 设计定稿 2026-06-28 / 路线A / observe-only 待实施。承接 M52 收口（标题级新闻情感干净 OOS 证伪，详见工作分支 `codex/m52-news-sentiment-on-m51`）+ 决定性发现：东财/Anspire 正文一直被入库口丢弃（`news.py:146`/`:411`），M52 全程只用 26 字标题；库内 96% 是 Anspire、Tavily 仅 4%、iFinD MCP 已是第一兜底。目标两者并重：多源可插拔统一 schema 拉正文（"源无关"=处理源无关）+ 正文级多信号综合评分跑赢 legacy（default-off 靠独立 OOS）。核心：分级读正文 + source_diversity 反兆易 whipsaw + 确定性可审计融合(新闻⊕真实资金流) + 缺失显式降级不污染。完整 spec `docs/dev/M54_NEWS_LAYER_V2_DESIGN.md` | 阶段0：实测东财/Anspire 能否取历史正文（定一期 OOS 时间线）+ `news` 表加 content/provider 列 + 入库口停止丢 content | 未过独立预注册 OOS 即启用/接 live test2/改情感权重/外溢 official signal·仓位·scheduler；不机械堆源放大 whipsaw；探索性 IC 当裁决 |
 | M51 外部项目借鉴优化 | 已立方案、未启动：研究轨（报告包 v1 / Evidence Card 前端 / MingCang-GAIA）+ 量化轨小 graft（D1-D4）。详案 `docs/dev/M51_EXTERNAL_BORROWING_PLAN.md` | 先做研究轨 Phase 1（报告包 schema 封装已有 deep_research/gate/falsification/supply-chain/research_case）；量化轨先做 D1 统计门补强 | non-promoting；不新建平行回测/因子/审计/数据校验系统；不改 official signal/仓位/scheduler/test2/weights |
 | M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 complete/released；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card（已并入 M51 Phase 2）；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
 | M29 Forward Evidence | 2026-06-12：价格回填完成（100支×7天，700行），baseline 1d/3d/5d artifacts 已建；positive delta 9/11+8/10+8/10 windows，non-promoting。可延伸 forward window | 重跑 readiness 确认 ready，再追加下一窗口的 1d/3d/5d shadow；可在此续作内插入 M51 D1（DSR/PBO/trial-count 补强 m29_hypothesis_registry） | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
@@ -112,6 +113,22 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 | M12 external data governance | Any new endpoint | Add provider health, PIT timestamp, field normalization, and tests before DB writes |
 | M10.5 migrations | SQLite runtime patch becomes bottleneck | Consider Alembic baseline |
 | M4 / M5 automation | Strong validated evidence and explicit user intent | LangGraph / FinMem / broker automation stay deferred; no real trades |
+
+---
+
+## M54 新闻层 v2（多源可插拔 · 正文级 · 多信号综合评分）【设计定稿 2026-06-28 / 路线A / observe-only 待实施】
+
+承接 M52 收口（标题级新闻情感干净 OOS 证伪——sonnet 三腿全负 IC、无显著差异、无一过门；详见工作分支 `codex/m52-news-sentiment-on-m51` 的 `docs/dev/M52_NEWS_FINISH_PLAN.md` 与 `paper_trading/m52_oos_preregister.md`）+ 决定性新发现：**东财/Anspire 正文一直被入库口丢弃**（东财 `backend/data/news.py:146`、Anspire `:411`），M52 全程建立在「26 字纯标题、零正文」上。库内 96% 是 Anspire 财经媒体、Tavily 仅 4%、iFinD MCP 已是第一兜底——问题不是「只用 Tavily」，而是「全链路只留标题」。
+
+**目标（两者并重）**：① 基建——多源可插拔 + 统一 evidence schema + 拉正文 + 用户自选/自接源；"源无关" = **处理源无关**（换/加源不改评分逻辑），非输出相同。② alpha——正文级 + 多信号综合评分跑赢 legacy，default-off 靠独立 OOS 挣启用资格。
+
+**核心设计**：5 层架构（适配器只取数不评分 → 归一/聚类 → 分级抽取 → 确定性融合+降级 → v2 候选）。关键机制：(a) **分级读正文**（全部存、materiality 高的才用强模型啃全文）；(b) **source_diversity（不同源数而非文章数）做置信**——结构上修兆易 whipsaw（一事件 50 转载≠信号）；(c) **确定性可审计融合**：news_score(簇加权) ⊕ flow_score(真实资金流,独立通道)；(d) **降级铁律**：某类缺失显式降 confidence + 打 flag，绝不塞冒充信号的中性 0。信号分期：一期=正文情感+资金流，二期=公告/龙虎榜(接 M53,可能最高价值)，延后=研报。
+
+**完整 spec**：`docs/dev/M54_NEWS_LAYER_V2_DESIGN.md`（架构/schema/管线/融合/降级/路线A·B·C/验证门控/回填可行性/实施6阶段/开放决策）。
+
+**第一动作**：阶段0 可行性验——拿 1–2 支股票实测东财/Anspire **能否取历史正文**（决定一期 OOS 是「几天」还是「向前采集数周」）+ `news` 表加 `content`/`provider` 列 + 入库口停止丢 content。
+
+**停止条件**：未过独立预注册 OOS 门即启用 v2 / 接 live test2 / 改情感权重 / 外溢到 official signal·仓位·scheduler；不机械堆源充数（无 dedup/materiality 的多源放大 whipsaw）；把探索性 IC 当统计裁决。
 
 ---
 
