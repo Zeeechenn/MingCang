@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Self
 from urllib.parse import unquote
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).parent.parent
@@ -256,6 +256,8 @@ class Settings(BaseSettings):
     anspire_news_max_results: int = 5     # 每股最多读取的搜索结果
     anspire_news_max_add: int = 2         # 每股最多补入情感分析的标题
     anspire_news_min_score: int = 75      # Anspire 来源进入情感链路的最低审计分
+    # M54 news adapter seam. Order defines priority; default keeps legacy source choice unchanged.
+    news_adapters_enabled: list[str] = Field(default_factory=lambda: ["eastmoney"])
 
     # Bark 推送通知（可选，iOS App）
     bark_key: str = ""                    # Bark App 设备密钥
