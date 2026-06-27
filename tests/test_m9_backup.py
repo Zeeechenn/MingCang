@@ -81,7 +81,7 @@ def test_run_daily_backup_writes_file_and_audits(test_db, tmp_path):
 
     remember(test_db, "rule:test1", "测试1 规则", category="rule", scope="test1")
 
-    path = run_daily_backup(test_db, backup_dir=tmp_path, today="2026-05-19")
+    path = run_daily_backup(test_db, backup_dir=tmp_path, keep_days=365, today="2026-05-19")
 
     assert path.exists()
     assert path.name == "ai_memory_2026-05-19.json"
@@ -98,10 +98,10 @@ def test_run_daily_backup_is_idempotent_same_day(test_db, tmp_path):
     from backend.memory.backup import run_daily_backup
 
     remember(test_db, "rule:test1", "v1", category="rule", scope="test1")
-    run_daily_backup(test_db, backup_dir=tmp_path, today="2026-05-19")
+    run_daily_backup(test_db, backup_dir=tmp_path, keep_days=365, today="2026-05-19")
 
     remember(test_db, "rule:test1", "v2", category="rule", scope="test1")
-    run_daily_backup(test_db, backup_dir=tmp_path, today="2026-05-19")
+    run_daily_backup(test_db, backup_dir=tmp_path, keep_days=365, today="2026-05-19")
 
     files = list(tmp_path.glob("ai_memory_*.json"))
     assert len(files) == 1
