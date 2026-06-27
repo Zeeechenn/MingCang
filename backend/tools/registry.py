@@ -57,6 +57,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m54_content_probe",
+        "category": "evidence",
+        "purpose": "M54 feasibility probe: report 东财/Anspire raw article-content coverage and history reach before ingestion drops it.",
+        "read_write_boundary": "Read-only: performs external news fetches and prints a summary; never writes the DB or any artifact.",
+        "recommended_entrypoint": "python3 -m backend.tools.m54_content_probe",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.backfill_coverage",
         "category": "maintenance",
         "purpose": "Backfill missing financial rows, fresh news rows, and short price history coverage gaps.",
