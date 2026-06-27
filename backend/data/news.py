@@ -143,7 +143,9 @@ def _fetch_news_df(symbol: str):
             for col in ["新闻标题", "新闻内容"]:
                 if col in df.columns:
                     df[col] = df[col].str.replace(r"</?em>", "", regex=True)
-            return df[["新闻标题", "新闻链接", "发布时间", "文章来源"]]
+            if "新闻内容" not in df.columns:
+                df["新闻内容"] = None
+            return df[["新闻标题", "新闻链接", "发布时间", "文章来源", "新闻内容"]]
     except Exception as e:
         logger.warning("direct news API failed for %s: %s, fallback to AkShare", symbol, e)
 
@@ -177,6 +179,12 @@ def fetch_stock_news_cn(symbol: str, limit: int = 20) -> list[RawNews]:
             title = str(row.get("新闻标题", "")).strip()
             url = str(row.get("新闻链接", "")).strip()
             source = str(row.get("文章来源", "东财")).strip()
+            content_raw = row.get("新闻内容")
+            content = None
+            if content_raw is not None:
+                content_text = str(content_raw).strip()
+                if content_text and content_text.lower() != "nan":
+                    content = content_text
 
             # 无链接时用 symbol+title 的 hash 生成稳定唯一 URL
             if not url or url == "nan":
@@ -200,6 +208,8 @@ def fetch_stock_news_cn(symbol: str, limit: int = 20) -> list[RawNews]:
                 published_at=pub_dt,
                 source=source,
                 symbol=symbol,
+                content=content,
+                provider="eastmoney",
             ))
         except Exception:
             continue
@@ -279,6 +289,8 @@ def save_news_to_db(news_list: list[RawNews], db) -> int:
             url=n.url,
             published_at=n.published_at,
             source=n.source,
+            content=n.content,
+            provider=n.provider,
         ))
 
     if new_items:
@@ -329,6 +341,8 @@ def get_recent_news_items(symbol: str, db, hours: int = 24) -> list[RawNews]:
             published_at=r.published_at,
             source=r.source,
             symbol=r.symbol,
+            content=r.content,
+            provider=r.provider,
         )
         for r in rows
     ]
@@ -414,6 +428,8 @@ def fetch_stock_news_anspire(
             published_at=_parse_anspire_date(result.get("date"), current),
             source=source,
             symbol=symbol,
+            content=content or None,
+            provider="anspire",
         ))
 
     if not items:

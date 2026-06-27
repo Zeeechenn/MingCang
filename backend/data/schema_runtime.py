@@ -34,6 +34,14 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
             if index_price_cols and col not in index_price_cols:
                 conn.execute(text(ddl))
 
+        news_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(news)")).fetchall()]
+        for col, ddl in {
+            "content": "ALTER TABLE news ADD COLUMN content TEXT",
+            "provider": "ALTER TABLE news ADD COLUMN provider TEXT",
+        }.items():
+            if news_cols and col not in news_cols:
+                conn.execute(text(ddl))
+
         signal_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(signals)")).fetchall()]
         if "rule_version" not in signal_cols:
             conn.execute(text("ALTER TABLE signals ADD COLUMN rule_version TEXT"))

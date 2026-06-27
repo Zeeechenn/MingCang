@@ -127,3 +127,53 @@ def test_runtime_schema_adds_l0_memory_tables_and_legacy_candidate_column(tmp_pa
             "idx_memory_atoms_source_ref",
             "idx_memory_atoms_review_case",
         } <= indexes
+
+
+def test_runtime_schema_adds_news_content_provider_and_preserves_legacy_nulls(tmp_path):
+    from backend.data.database import Base, _ensure_runtime_schema
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-news.db'}")
+    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE news"))
+        conn.execute(text("""
+            CREATE TABLE news (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol TEXT,
+                title VARCHAR NOT NULL,
+                url VARCHAR UNIQUE NOT NULL,
+                published_at DATETIME NOT NULL,
+                source VARCHAR,
+                summary TEXT,
+                sentiment_score FLOAT,
+                fetched_at DATETIME
+            )
+        """))
+        conn.execute(
+            text("""
+                INSERT INTO news (
+                    symbol, title, url, published_at, source, summary,
+                    sentiment_score, fetched_at
+                )
+                VALUES (
+                    '600519', '旧新闻', 'https://example.com/legacy',
+                    '2026-05-26 12:00:00', '东方财富', NULL, NULL,
+                    '2026-05-26 12:01:00'
+                )
+            """)
+        )
+
+    _ensure_runtime_schema(engine)
+    _ensure_runtime_schema(engine)
+
+    with engine.connect() as conn:
+        cols = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(news)")).fetchall()
+        }
+        assert {"content", "provider"} <= cols
+        row = conn.execute(text(
+            "SELECT content, provider FROM news WHERE url = 'https://example.com/legacy'"
+        )).one()
+        assert row.content is None
+        assert row.provider is None

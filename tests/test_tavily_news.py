@@ -60,6 +60,7 @@ def test_eastmoney_stock_news_bypasses_system_proxy(monkeypatch):
         text = (
             'jQuery_mingcang({"result":{"cmsArticleWebOld":[{'
             '"title":"<em>贵州茅台</em>公告",'
+            '"content":"<em>贵州茅台</em>公告正文",'
             '"code":"202605260001",'
             '"date":"2026-05-26 12:00:00",'
             '"mediaName":"东方财富"'
@@ -92,6 +93,7 @@ def test_eastmoney_stock_news_bypasses_system_proxy(monkeypatch):
     assert calls[0][0] is False
     assert calls[0][1] == "https://search-api-web.eastmoney.com/search/jsonp"
     assert df.iloc[0]["新闻标题"] == "贵州茅台公告"
+    assert df.iloc[0]["新闻内容"] == "贵州茅台公告正文"
 
 
 def test_fetch_stock_news_cn_deduplicates_generates_url_and_converts_cst(monkeypatch):
@@ -107,6 +109,7 @@ def test_fetch_stock_news_cn_deduplicates_generates_url_and_converts_cst(monkeyp
             "新闻链接": "https://example.com/a",
             "文章来源": "东方财富",
             "发布时间": "2026-05-26 12:00:00",
+            "新闻内容": "贵州茅台公告正文",
         },
         {
             "新闻标题": "重复链接",
@@ -126,9 +129,61 @@ def test_fetch_stock_news_cn_deduplicates_generates_url_and_converts_cst(monkeyp
 
     assert [row.title for row in rows] == ["贵州茅台公告", "无链接标题"]
     assert rows[0].published_at.isoformat() == "2026-05-26T04:00:00"
+    assert rows[0].content == "贵州茅台公告正文"
+    assert rows[0].provider == "eastmoney"
     digest = hashlib.md5("无链接标题".encode()).hexdigest()[:8]  # noqa: S324 - expected legacy URL key.
     assert rows[1].url == f"em://600519#{digest}"
     assert rows[1].symbol == "600519"
+
+
+def test_save_news_to_db_persists_content_provider_and_reads_back(test_db):
+    from datetime import UTC, datetime
+
+    from backend.data.news import RawNews, get_recent_news_items, save_news_to_db
+
+    published_at = datetime.now(UTC).replace(tzinfo=None)
+    inserted = save_news_to_db(
+        [
+            RawNews(
+                title="贵州茅台公告",
+                url="https://example.com/news-content",
+                published_at=published_at,
+                source="东方财富",
+                symbol="600519",
+                content="贵州茅台公告正文",
+                provider="eastmoney",
+            )
+        ],
+        test_db,
+    )
+
+    assert inserted == 1
+    items = get_recent_news_items("600519", test_db, hours=48)
+    assert len(items) == 1
+    assert items[0].content == "贵州茅台公告正文"
+    assert items[0].provider == "eastmoney"
+
+
+def test_get_recent_news_items_allows_legacy_null_content_provider(test_db):
+    from datetime import UTC, datetime
+
+    from backend.data.database import NewsItem
+    from backend.data.news import get_recent_news_items
+
+    test_db.add(NewsItem(
+        symbol="600519",
+        title="旧新闻",
+        url="https://example.com/legacy-null-content",
+        published_at=datetime.now(UTC).replace(tzinfo=None),
+        source="东方财富",
+    ))
+    test_db.commit()
+
+    items = get_recent_news_items("600519", test_db, hours=48)
+
+    assert len(items) == 1
+    assert items[0].content is None
+    assert items[0].provider is None
 
 
 def test_search_titles_tavily_bypasses_system_proxy(monkeypatch):

@@ -63,6 +63,8 @@ def test_fetch_stock_news_anspire_returns_filtered_event_items(monkeypatch):
     assert [item.title for item in items] == ["五粮液：回购方案获临时股东会审议通过"]
     assert items[0].source == "finance.eastmoney.com"
     assert items[0].symbol == "000858"
+    assert items[0].content == "五粮液 000858 回购方案通过"
+    assert items[0].provider == "anspire"
 
 
 def test_fetch_stock_news_anspire_disabled_without_key(monkeypatch):

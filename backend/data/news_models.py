@@ -12,3 +12,5 @@ class RawNews:
     published_at: datetime
     source: str
     symbol: str | None = None
+    content: str | None = None
+    provider: str | None = None

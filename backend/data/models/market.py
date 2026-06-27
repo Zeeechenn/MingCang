@@ -76,6 +76,8 @@ class NewsItem(Base):
     published_at: Mapped[datetime] = mapped_column(DateTime)
     source: Mapped[str] = mapped_column(String, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)       # LLM 生成摘要
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)       # 原始新闻正文（抓到才有）
+    provider: Mapped[str | None] = mapped_column(String, nullable=True)    # 适配器来源：eastmoney/anspire/...
     sentiment_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # -1.0 ~ +1.0
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
