@@ -65,6 +65,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m54_news_v2_oos",
+        "category": "evidence",
+        "purpose": "Run the M54 news_layer_v2 clean OOS harness with isolated cache namespace and IC gate diagnostics.",
+        "read_write_boundary": "Reads local news/prices and writes only the requested JSON artifact; --mock avoids live LLM/provider calls.",
+        "recommended_entrypoint": "python3 -m backend.tools.m54_news_v2_oos --mock --start <YYYY-MM-DD> --end <YYYY-MM-DD>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.backfill_coverage",
         "category": "maintenance",
         "purpose": "Backfill missing financial rows, fresh news rows, and short price history coverage gaps.",
