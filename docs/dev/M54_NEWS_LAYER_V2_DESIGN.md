@@ -198,13 +198,17 @@ OOS 中低 confidence/降级窗口**单独追踪、不静默平均进主样本**
 
 ## 9. 实施阶段（路线 A）
 
-- **阶段0**：可行性验（历史正文回填）+ `news` 表加 content/provider 列 + 入库口停止丢 content（东财/Anspire）。
-- **阶段1**：抽出 `NewsSourceAdapter` Protocol，把现有东财/Anspire 改造成适配器（行为等价，default 走旧路 diff=0）。
-- **阶段2**：Normalize+Cluster 层（事件簇 + source_diversity）。
-- **阶段3**：分级抽取（预筛 + 选择性全文）+ ClusterScore schema。
-- **阶段4**：确定性融合 + 降级矩阵 → NewsSignalV2（default-off）。
-- **阶段5**：`m52_clean_oos.py` 加 `news_layer_v2` variant + 独立预注册 + 跑 OOS 出裁决。
-- **阶段6（条件）**：若一期赢 → 扩源（iFinD/Tavily/用户自接）+ 扩信号（公告/龙虎榜，接 M53）。
+> **状态（2026-06-28，分支 `feat/m54-news-v2`，基于 main）：阶段0–5b 代码全部建完 + 测试 + 提交，全后端 1243 passed，生产 diff=0（打分链路全程未碰）。** 由 codex CLI 编码、本会话审 diff + 独立验证 + 纠偏。OOS **真跑**(数据回填 + 多额度窗口打分)是后续多天阶段，未启动。
+
+- [x] **阶段0**：探针证实东财提供正文 ~140 字/可回溯 ~59 天（Anspire 探针 0 条待查）；`news` 表加 content/provider 列（幂等迁移）+ 东财/Anspire 入库口停止丢 content。
+- [x] **阶段1**：`NewsEvidence`/`NewsWindow`/`NewsSourceAdapter` Protocol + Eastmoney/Anspire 适配器 + registry；config `news_adapters_enabled` 默认 `["eastmoney"]`。适配器只取数不评分。
+- [x] **阶段2**：`cluster_evidence`/`EventCluster`，URL 规范化去重 + 标题/实体/时间聚簇，`source_diversity=不同 provider 数`（反 whipsaw），轻过滤保广度。
+- [x] **阶段3**：`ClusterScore` + 分级抽取（确定性预筛 → capable 啃全文 / title_only 轻打分，0.65 折扣）；LLM 仅经 get_provider()，测试 mock。
+- [x] **阶段4**：`NewsSignalV2` + `fuse_signal`：簇加权 news_score ⊕ 真实资金流 flow_score；同号升/异号降+收缩；5 种降级显式 flag，DEGRADED composite=0 占位+confidence floor 0.05（不进 IC 主样本）。
+- [x] **阶段5a**：`news_layer_v2.py` 端到端编排器 + `evidence_from_db`（严格 PIT，不取 as_of 之后）。
+- [x] **阶段5b**：`m54_news_v2_oos.py` 独立 OOS harness（复用 M52 的 IC/quantile/forward-return 计算，DEGRADED 排除主样本，ns `oos_news_v2`，--mock smoke 通过）+ `M54_OOS_PREREGISTER.md` 预注册。
+- [ ] **OOS 真跑（多天，未启动）**：① 先回填东财正文（覆盖率<50% 不开跑，见预注册 §0）；② 跨多额度窗口 capable 打分；③ 对照 legacy 出裁决回填预注册 §7。
+- [ ] **阶段6（条件）**：若一期赢 → 扩源（iFinD/Tavily/用户自接）+ 扩信号（公告/龙虎榜，接 M53）。
 
 ## 10. 开放决策（实施前确认）
 
@@ -215,4 +219,6 @@ OOS 中低 confidence/降级窗口**单独追踪、不静默平均进主样本**
 ## 错误记录
 | 错误 | 尝试 | 解决 |
 |------|------|------|
-| （待填） | | |
+| codex exec 以 xhigh effort 卡死 ~18h（0% CPU、无输出、不耗额度）；启动期 model-refresh 超时 + 失效 MCP（Notion/Figma auth）噪声 | 1 | 杀进程；降 `-c model_reasoning_effort=medium`（xhigh 回个 OK 烧 21k tokens 且易卡）；后续每个 codex 任务加存活看门狗，卡死即自己兜底 |
+| codex 新增 tool 文件未登记 registry → tools-registry 边界测试失败 | 1 | 每个新 tool 在 `backend/tools/registry.py` 加 evidence 类登记（阶段5b codex 已自觉登记） |
+| m9_backup 2 个测试因写死日期 2026-05-19 + 默认 30 天清理而预存在失败（main 上就有，非本里程碑引起） | 1 | 加 `keep_days=365`（独立 commit `308c1e9`），与 M54 解耦 |
