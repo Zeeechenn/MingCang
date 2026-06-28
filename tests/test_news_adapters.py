@@ -136,13 +136,79 @@ def test_anspire_adapter_wraps_existing_fetcher_with_name_and_window(monkeypatch
     assert rows[0].content_status == "title_only"
 
 
+def test_tavily_adapter_maps_titles_to_title_only_evidence(monkeypatch):
+    from backend.data.news_adapters.tavily import TavilyAdapter
+    from backend.data.news_evidence import NewsWindow
+
+    calls = []
+
+    def fake_fetch(symbol: str, name: str, days: int = 1, max_results: int = 5):
+        calls.append((symbol, name, days, max_results))
+        return ["贵州茅台：回购计划推进", "贵州茅台发布经营数据"]
+
+    monkeypatch.setattr("backend.data.news_adapters.tavily.fetch_titles_tavily", fake_fetch)
+
+    as_of = datetime(2026, 6, 28, 15, 0, 0)
+    adapter = TavilyAdapter(name_resolver=lambda symbol: "贵州茅台")
+    rows = adapter.fetch("600519", NewsWindow(lookback_days=3, max_results=9, as_of=as_of))
+
+    assert calls == [("600519", "贵州茅台", 3, 9)]
+    assert [row.title for row in rows] == ["贵州茅台：回购计划推进", "贵州茅台发布经营数据"]
+    assert {row.provider for row in rows} == {"tavily"}
+    assert {row.source_name for row in rows} == {"tavily"}
+    assert all(row.content is None for row in rows)
+    assert all(row.content_status == "title_only" for row in rows)
+    assert all(row.published_at == as_of for row in rows)
+    assert rows[0].url.startswith("tavily://600519#")
+    assert rows[0].url != rows[1].url
+
+
+def test_ifind_adapter_maps_titles_to_title_only_evidence(monkeypatch):
+    from backend.data.news_adapters.ifind import IFindAdapter
+    from backend.data.news_evidence import NewsWindow
+
+    calls = []
+
+    def fake_fetch(symbol: str, name: str, days: int = 2, max_results: int = 5):
+        calls.append((symbol, name, days, max_results))
+        return ["五粮液公告：中期分红方案"]
+
+    monkeypatch.setattr("backend.data.news_adapters.ifind.fetch_titles_ifind", fake_fetch)
+
+    as_of = datetime(2026, 6, 28, 16, 0, 0)
+    adapter = IFindAdapter(name_resolver=lambda symbol: "五粮液")
+    rows = adapter.fetch("000858", NewsWindow(lookback_days=4, max_results=7, as_of=as_of))
+
+    assert calls == [("000858", "五粮液", 4, 7)]
+    assert len(rows) == 1
+    assert rows[0].title == "五粮液公告：中期分红方案"
+    assert rows[0].provider == "ifind"
+    assert rows[0].source_name == "ifind"
+    assert rows[0].content is None
+    assert rows[0].content_status == "title_only"
+    assert rows[0].published_at == as_of
+    assert rows[0].url.startswith("ifind://000858#")
+
+
+def test_title_only_adapters_return_empty_when_fetcher_has_no_titles(monkeypatch):
+    from backend.data.news_adapters.ifind import IFindAdapter
+    from backend.data.news_adapters.tavily import TavilyAdapter
+    from backend.data.news_evidence import NewsWindow
+
+    monkeypatch.setattr("backend.data.news_adapters.tavily.fetch_titles_tavily", lambda *args, **kwargs: [])
+    monkeypatch.setattr("backend.data.news_adapters.ifind.fetch_titles_ifind", lambda *args, **kwargs: [])
+
+    assert TavilyAdapter().fetch("600519", NewsWindow()) == []
+    assert IFindAdapter().fetch("600519", NewsWindow()) == []
+
+
 def test_get_enabled_adapters_uses_config_order_as_priority(monkeypatch):
     from backend.config import settings
     from backend.data.news_adapters import get_enabled_adapters
 
-    monkeypatch.setattr(settings, "news_adapters_enabled", ["anspire", "eastmoney"])
+    monkeypatch.setattr(settings, "news_adapters_enabled", ["tavily", "ifind", "anspire", "eastmoney"])
 
     adapters = get_enabled_adapters()
 
-    assert [adapter.name for adapter in adapters] == ["anspire", "eastmoney"]
-    assert [adapter.requires_key for adapter in adapters] == [True, False]
+    assert [adapter.name for adapter in adapters] == ["tavily", "ifind", "anspire", "eastmoney"]
+    assert [adapter.requires_key for adapter in adapters] == [True, True, True, False]

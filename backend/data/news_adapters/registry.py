@@ -5,6 +5,8 @@ from collections.abc import Callable, Sequence
 
 from backend.data.news_adapters.anspire import AnspireAdapter
 from backend.data.news_adapters.eastmoney import EastmoneyAdapter
+from backend.data.news_adapters.ifind import IFindAdapter
+from backend.data.news_adapters.tavily import TavilyAdapter
 from backend.data.news_evidence import NewsSourceAdapter
 
 AdapterFactory = Callable[[], NewsSourceAdapter]
@@ -12,6 +14,8 @@ AdapterFactory = Callable[[], NewsSourceAdapter]
 _ADAPTER_FACTORIES: dict[str, AdapterFactory] = {
     "eastmoney": EastmoneyAdapter,
     "anspire": AnspireAdapter,
+    "tavily": TavilyAdapter,
+    "ifind": IFindAdapter,
 }
 
 
@@ -23,6 +27,11 @@ def get_enabled_adapters(enabled: Sequence[str] | None = None) -> list[NewsSourc
     """Instantiate enabled adapters in priority order.
 
     Priority is the order of names in ``news_adapters_enabled``.
+
+    User-provided adapters follow the same contract: implement
+    ``NewsSourceAdapter``, add a factory to this registry under a stable name,
+    then include that name in ``news_adapters_enabled``. The default enabled
+    list remains project config, not this registry.
     """
     if enabled is None:
         from backend.config import settings
