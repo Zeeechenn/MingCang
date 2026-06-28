@@ -65,6 +65,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m54_content_backfill",
+        "category": "evidence",
+        "purpose": "Backfill historical M54 news content through existing 东财/Anspire fetchers and report content coverage.",
+        "read_write_boundary": "Writes only deduplicated news rows through save_news_to_db; report-only mode is read-only and no LLM/scoring path is called.",
+        "recommended_entrypoint": "python3 -m backend.tools.m54_content_backfill --start <YYYY-MM-DD> --end <YYYY-MM-DD>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m54_news_v2_oos",
         "category": "evidence",
         "purpose": "Run the M54 news_layer_v2 clean OOS harness with isolated cache namespace and IC gate diagnostics.",
