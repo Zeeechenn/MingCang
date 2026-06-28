@@ -7,6 +7,7 @@
 import functools
 import json
 import logging
+import os
 import re
 import subprocess
 import time
@@ -129,15 +130,25 @@ class LocalCLIProvider(LLMProvider):
 
     def _complete_with_codex(self, full_prompt: str) -> dict:
         """Fallback to Codex CLI when Claude CLI is unavailable or logged out."""
+        # Optional reasoning-effort override. Codex's configured default is xhigh,
+        # which is slow + token-heavy + hang-prone for a trivial classification call.
+        # Set LOCAL_CLI_CODEX_EFFORT (e.g. "medium") to override; unset = codex's own
+        # config, so production is unaffected. Also disable MCP servers (-c
+        # mcp_servers={}) to avoid the Notion/Figma auth handshake that can hang exec.
+        cmd = [
+            "codex", "exec",
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "-s", "read-only",
+            "-c", "mcp_servers={}",
+        ]
+        effort = os.environ.get("LOCAL_CLI_CODEX_EFFORT", "").strip()
+        if effort:
+            cmd += ["-c", f"model_reasoning_effort={effort}"]
+        cmd.append("-")
         try:
             proc = subprocess.run(
-                [
-                    "codex", "exec",
-                    "--ephemeral",
-                    "--skip-git-repo-check",
-                    "-s", "read-only",
-                    "-",
-                ],
+                cmd,
                 input=full_prompt,
                 capture_output=True,
                 text=True,
