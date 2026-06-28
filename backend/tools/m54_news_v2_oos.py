@@ -39,6 +39,153 @@ def _set_oos_namespace(ns: str = DEFAULT_OOS_NS) -> None:
     os.environ["SENTIMENT_CACHE_NS"] = ns
 
 
+def _ensure_score_cache_schema(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS m54_oos_score_cache (
+                namespace TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                sig_date TEXT NOT NULL,
+                lookback_days INTEGER NOT NULL,
+                tier TEXT NOT NULL,
+                composite REAL NOT NULL,
+                news_score REAL,
+                flow_score REAL,
+                confidence REAL NOT NULL,
+                degradation_flags TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (namespace, symbol, sig_date, lookback_days, tier)
+            )
+            """
+        )
+    )
+
+
+def _score_cache_get(
+    db: Session,
+    *,
+    namespace: str,
+    symbol: str,
+    sig_date: str,
+    lookback_days: int,
+    tier: str,
+) -> dict[str, Any] | None:
+    row = db.execute(
+        text(
+            """
+            SELECT composite, news_score, flow_score, confidence, degradation_flags
+            FROM m54_oos_score_cache
+            WHERE namespace = :namespace
+              AND symbol = :symbol
+              AND sig_date = :sig_date
+              AND lookback_days = :lookback_days
+              AND tier = :tier
+            """
+        ),
+        {
+            "namespace": namespace,
+            "symbol": symbol,
+            "sig_date": sig_date,
+            "lookback_days": lookback_days,
+            "tier": tier,
+        },
+    ).fetchone()
+    if row is None:
+        return None
+
+    data = row._mapping
+    flags_raw = str(data["degradation_flags"] or "[]")
+    try:
+        flags = json.loads(flags_raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(flags, list):
+        return None
+    return {
+        "score": float(data["composite"]),
+        "news_score": (
+            None if data["news_score"] is None else float(data["news_score"])
+        ),
+        "flow_score": (
+            None if data["flow_score"] is None else float(data["flow_score"])
+        ),
+        "confidence": float(data["confidence"]),
+        "degradation_flags": [str(flag) for flag in flags],
+    }
+
+
+def _score_is_cacheable(score: dict[str, Any]) -> bool:
+    flags = score.get("degradation_flags", [])
+    if DEGRADED in flags:
+        return False
+    composite = score.get("score")
+    confidence = score.get("confidence")
+    if composite is None or confidence is None:
+        return False
+    return math.isfinite(float(composite)) and math.isfinite(float(confidence))
+
+
+def _score_from_signal(signal: Any) -> dict[str, Any]:
+    return {
+        "score": float(signal.composite),
+        "news_score": (
+            None if signal.news_score is None else float(signal.news_score)
+        ),
+        "flow_score": (
+            None if signal.flow_score is None else float(signal.flow_score)
+        ),
+        "confidence": float(signal.confidence),
+        "degradation_flags": list(signal.degradation_flags),
+    }
+
+
+def _score_cache_set(
+    db: Session,
+    *,
+    namespace: str,
+    symbol: str,
+    sig_date: str,
+    lookback_days: int,
+    tier: str,
+    score: dict[str, Any],
+) -> None:
+    db.execute(
+        text(
+            """
+            INSERT OR REPLACE INTO m54_oos_score_cache (
+                namespace, symbol, sig_date, lookback_days, tier,
+                composite, news_score, flow_score, confidence,
+                degradation_flags, created_at
+            )
+            VALUES (
+                :namespace, :symbol, :sig_date, :lookback_days, :tier,
+                :composite, :news_score, :flow_score, :confidence,
+                :degradation_flags, :created_at
+            )
+            """
+        ),
+        {
+            "namespace": namespace,
+            "symbol": symbol,
+            "sig_date": sig_date,
+            "lookback_days": lookback_days,
+            "tier": tier,
+            "composite": float(score["score"]),
+            "news_score": score.get("news_score"),
+            "flow_score": score.get("flow_score"),
+            "confidence": float(score["confidence"]),
+            "degradation_flags": json.dumps(
+                score.get("degradation_flags", []),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+    )
+    db.commit()
+
+
 def _safe_spearman(xs: list[float], ys: list[float]) -> float | None:
     try:
         import pandas as pd
@@ -327,12 +474,14 @@ def run_oos(
     *,
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
     tier: str = "capable",
+    ns: str = DEFAULT_OOS_NS,
+    refresh: bool = False,
     out: Path | None = None,
     db: Session | None = None,
     session_factory: SessionFactory = SessionLocal,
     mock: bool = False,
 ) -> dict[str, Any]:
-    _set_oos_namespace()
+    _set_oos_namespace(ns)
     if mock:
         _install_mock_provider()
 
@@ -341,28 +490,59 @@ def run_oos(
     active_db = db or session_factory()
     records: list[dict[str, Any]] = []
     skipped_degraded = 0
+    cache_hits = 0
+    cache_misses = 0
+    cache_writes = 0
 
     try:
+        _ensure_score_cache_schema(active_db)
         for sig_date in _iter_signal_dates(start, end):
             as_of = datetime.strptime(f"{sig_date} 23:59:59", "%Y-%m-%d %H:%M:%S")
             for symbol in symbols:
-                signal = news_v2_score_from_db(
-                    symbol,
-                    as_of,
-                    lookback_days,
-                    active_db,
-                    tier=tier,
-                )
-                if DEGRADED in signal.degradation_flags:
+                score = None
+                if not refresh:
+                    score = _score_cache_get(
+                        active_db,
+                        namespace=ns,
+                        symbol=symbol,
+                        sig_date=sig_date,
+                        lookback_days=lookback_days,
+                        tier=tier,
+                    )
+                if score is None:
+                    cache_misses += 1
+                    signal = news_v2_score_from_db(
+                        symbol,
+                        as_of,
+                        lookback_days,
+                        active_db,
+                        tier=tier,
+                    )
+                    score = _score_from_signal(signal)
+                    if _score_is_cacheable(score):
+                        _score_cache_set(
+                            active_db,
+                            namespace=ns,
+                            symbol=symbol,
+                            sig_date=sig_date,
+                            lookback_days=lookback_days,
+                            tier=tier,
+                            score=score,
+                        )
+                        cache_writes += 1
+                else:
+                    cache_hits += 1
+
+                if DEGRADED in score["degradation_flags"]:
                     skipped_degraded += 1
                     continue
 
                 row: dict[str, Any] = {
                     "symbol": symbol,
                     "date": sig_date,
-                    "score": float(signal.composite),
-                    "confidence": float(signal.confidence),
-                    "degradation_flags": list(signal.degradation_flags),
+                    "score": float(score["score"]),
+                    "confidence": float(score["confidence"]),
+                    "degradation_flags": list(score["degradation_flags"]),
                 }
                 prices = prices_by_symbol.get(symbol, {})
                 for horizon in HORIZONS:
@@ -390,6 +570,11 @@ def run_oos(
             "end": end,
             "lookback_days": lookback_days,
             "tier": tier,
+            "refresh": refresh,
+            "cache_table": "m54_oos_score_cache",
+            "cache_hits": cache_hits,
+            "cache_misses": cache_misses,
+            "cache_writes": cache_writes,
             "horizons": list(HORIZONS),
             "n_buckets": N_BUCKETS,
             "min_non_overlap_ic_days": MIN_NON_OVERLAP_IC_DAYS,
@@ -412,6 +597,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--end", required=True, help="Inclusive signal end date YYYY-MM-DD")
     parser.add_argument("--lookback", type=int, default=DEFAULT_LOOKBACK_DAYS)
     parser.add_argument("--tier", default="capable")
+    parser.add_argument("--ns", default=DEFAULT_OOS_NS, help="OOS score-cache namespace")
+    parser.add_argument("--refresh", action="store_true", help="Ignore cached window scores")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--mock", action="store_true")
@@ -428,6 +615,8 @@ def main() -> None:
         args.end,
         lookback_days=args.lookback,
         tier=args.tier,
+        ns=args.ns,
+        refresh=args.refresh,
         out=args.out,
         mock=args.mock,
     )

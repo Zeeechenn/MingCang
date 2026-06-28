@@ -1,7 +1,10 @@
 import json
 from datetime import datetime, timedelta
 
+from sqlalchemy import text
+
 from backend.data.database import NewsItem, Price
+from backend.data.news_fusion import DEGRADED, NewsSignalV2
 
 
 class _MockLLMProvider:
@@ -105,3 +108,164 @@ def test_m54_news_v2_oos_mock_smoke_excludes_degraded(test_db, tmp_path, monkeyp
     written = json.loads(out.read_text(encoding="utf-8"))
     assert written["n_windows"] == 4
     assert written["skipped_degraded"] == 2
+
+
+def test_m54_news_v2_oos_cache_miss_writes_then_hit_skips_scoring(test_db, monkeypatch):
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+    calls = 0
+
+    def fake_score(symbol, as_of, lookback_days, db, *, tier="capable", flow_value=None):
+        nonlocal calls
+        calls += 1
+        return NewsSignalV2(
+            composite=0.42,
+            news_score=0.5,
+            flow_score=None,
+            confidence=0.7,
+            degradation_flags=["FLOW_MISSING"],
+            contributing_clusters=["c1"],
+        )
+
+    monkeypatch.setattr(tool, "news_v2_score_from_db", fake_score)
+
+    first = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+    second = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+
+    assert calls == 1
+    assert first["meta"]["cache_hits"] == 0
+    assert first["meta"]["cache_misses"] == 1
+    assert first["meta"]["cache_writes"] == 1
+    assert second["meta"]["cache_hits"] == 1
+    assert second["meta"]["cache_misses"] == 0
+    assert second["meta"]["cache_writes"] == 0
+    assert second["n_windows"] == 1
+
+
+def test_m54_news_v2_oos_degraded_score_is_not_cached(test_db, monkeypatch):
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+    calls = 0
+
+    def fake_score(symbol, as_of, lookback_days, db, *, tier="capable", flow_value=None):
+        nonlocal calls
+        calls += 1
+        return NewsSignalV2(
+            composite=0.0,
+            news_score=None,
+            flow_score=None,
+            confidence=0.05,
+            degradation_flags=["NEWS_THIN", "FLOW_MISSING", DEGRADED],
+            contributing_clusters=[],
+        )
+
+    monkeypatch.setattr(tool, "news_v2_score_from_db", fake_score)
+
+    first = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+    second = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+
+    cached_rows = test_db.execute(text("SELECT COUNT(*) FROM m54_oos_score_cache")).scalar()
+    assert calls == 2
+    assert first["skipped_degraded"] == 1
+    assert first["meta"]["cache_writes"] == 0
+    assert second["meta"]["cache_hits"] == 0
+    assert cached_rows == 0
+
+
+def test_m54_news_v2_oos_refresh_ignores_cache_and_ns_isolated(test_db, monkeypatch):
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+    calls = 0
+
+    def fake_score(symbol, as_of, lookback_days, db, *, tier="capable", flow_value=None):
+        nonlocal calls
+        calls += 1
+        return NewsSignalV2(
+            composite=0.1 * calls,
+            news_score=0.1 * calls,
+            flow_score=None,
+            confidence=0.7,
+            degradation_flags=[],
+            contributing_clusters=[f"c{calls}"],
+        )
+
+    monkeypatch.setattr(tool, "news_v2_score_from_db", fake_score)
+
+    tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        ns="ns_a",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+    refreshed = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        ns="ns_a",
+        refresh=True,
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+    isolated = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        ns="ns_b",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+
+    assert calls == 3
+    assert refreshed["meta"]["cache_hits"] == 0
+    assert refreshed["meta"]["cache_misses"] == 1
+    assert refreshed["meta"]["cache_writes"] == 1
+    assert refreshed["meta"]["refresh"] is True
+    assert refreshed["meta"]["oos_namespace"] == "ns_a"
+    assert isolated["meta"]["cache_hits"] == 0
+    assert isolated["meta"]["cache_misses"] == 1
