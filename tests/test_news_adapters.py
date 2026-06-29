@@ -163,31 +163,43 @@ def test_tavily_adapter_maps_titles_to_title_only_evidence(monkeypatch):
     assert rows[0].url != rows[1].url
 
 
-def test_ifind_adapter_maps_titles_to_title_only_evidence(monkeypatch):
+def test_ifind_adapter_maps_full_content_news(monkeypatch):
     from backend.data.news_adapters.ifind import IFindAdapter
     from backend.data.news_evidence import NewsWindow
+    from backend.data.news_models import RawNews
 
     calls = []
 
-    def fake_fetch(symbol: str, name: str, days: int = 2, max_results: int = 5):
+    def fake_fetch(symbol: str, name: str, days: int = 7, max_results: int = 20):
         calls.append((symbol, name, days, max_results))
-        return ["五粮液公告：中期分红方案"]
+        return [
+            RawNews(
+                title="五粮液公告：中期分红方案",
+                url="https://notice.example/000858",
+                published_at=datetime(2026, 6, 28, 15, 30, 0),
+                source="notice.example",
+                symbol=symbol,
+                content="五粮液公告正文",
+                provider="ifind",
+            )
+        ]
 
-    monkeypatch.setattr("backend.data.news_adapters.ifind.fetch_titles_ifind", fake_fetch)
+    monkeypatch.setattr("backend.data.news_adapters.ifind.fetch_news_ifind", fake_fetch)
 
     as_of = datetime(2026, 6, 28, 16, 0, 0)
     adapter = IFindAdapter(name_resolver=lambda symbol: "五粮液")
     rows = adapter.fetch("000858", NewsWindow(lookback_days=4, max_results=7, as_of=as_of))
 
     assert calls == [("000858", "五粮液", 4, 7)]
+    assert adapter.provides_content is True
     assert len(rows) == 1
     assert rows[0].title == "五粮液公告：中期分红方案"
     assert rows[0].provider == "ifind"
-    assert rows[0].source_name == "ifind"
-    assert rows[0].content is None
-    assert rows[0].content_status == "title_only"
-    assert rows[0].published_at == as_of
-    assert rows[0].url.startswith("ifind://000858#")
+    assert rows[0].source_name == "notice.example"
+    assert rows[0].content == "五粮液公告正文"
+    assert rows[0].content_status == "full"
+    assert rows[0].published_at == datetime(2026, 6, 28, 15, 30, 0)
+    assert rows[0].url == "https://notice.example/000858"
 
 
 def test_title_only_adapters_return_empty_when_fetcher_has_no_titles(monkeypatch):
@@ -196,7 +208,7 @@ def test_title_only_adapters_return_empty_when_fetcher_has_no_titles(monkeypatch
     from backend.data.news_evidence import NewsWindow
 
     monkeypatch.setattr("backend.data.news_adapters.tavily.fetch_titles_tavily", lambda *args, **kwargs: [])
-    monkeypatch.setattr("backend.data.news_adapters.ifind.fetch_titles_ifind", lambda *args, **kwargs: [])
+    monkeypatch.setattr("backend.data.news_adapters.ifind.fetch_news_ifind", lambda *args, **kwargs: [])
 
     assert TavilyAdapter().fetch("600519", NewsWindow()) == []
     assert IFindAdapter().fetch("600519", NewsWindow()) == []

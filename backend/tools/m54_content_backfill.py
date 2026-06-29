@@ -16,7 +16,12 @@ from typing import Any
 from sqlalchemy import case, func
 
 from backend.data.database import NewsItem, SessionLocal
-from backend.data.news import fetch_stock_news_anspire, fetch_stock_news_cn, save_news_to_db
+from backend.data.news import (
+    fetch_news_ifind,
+    fetch_stock_news_anspire,
+    fetch_stock_news_cn,
+    save_news_to_db,
+)
 from backend.data.news_models import RawNews
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -76,6 +81,7 @@ def run_backfill(
             items: list[RawNews] = []
             items.extend(fetch_stock_news_cn(target.symbol, limit=cn_limit))
             items.extend(fetch_stock_news_anspire(target.symbol, target.name))
+            items.extend(fetch_news_ifind(target.symbol, target.name))
             inserted += save_news_to_db(items, db)
             processed += 1
         except Exception as exc:  # pragma: no cover - operator resilience.

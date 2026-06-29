@@ -77,8 +77,20 @@ def test_m54_content_backfill_ingests_mocked_fetches_and_reports_coverage(
             )
         ]
 
+    def fake_ifind(symbol: str, name: str) -> list[RawNews]:
+        assert (symbol, name) == ("603986", "兆易创新")
+        return [
+            _raw_news(
+                title="兆易创新 iFinD 公告",
+                url="https://ifind.example/full",
+                content="iFinD 公告正文。",
+                provider="ifind",
+            )
+        ]
+
     monkeypatch.setattr(tool, "fetch_stock_news_cn", fake_cn)
     monkeypatch.setattr(tool, "fetch_stock_news_anspire", fake_anspire)
+    monkeypatch.setattr(tool, "fetch_news_ifind", fake_ifind)
 
     result = tool.run_backfill(
         db=test_db,
@@ -90,7 +102,7 @@ def test_m54_content_backfill_ingests_mocked_fetches_and_reports_coverage(
     assert result.stocks_total == 2
     assert result.stocks_processed == 1
     assert result.stocks_failed == 1
-    assert result.inserted == 3
+    assert result.inserted == 4
 
     report = tool.coverage_report(
         test_db,
@@ -98,8 +110,9 @@ def test_m54_content_backfill_ingests_mocked_fetches_and_reports_coverage(
         end=datetime(2026, 6, 30, 23, 59, 59),
     )
 
-    assert report["total"] == {"rows": 3, "with_content": 2, "coverage_pct": pytest.approx(66.67)}
+    assert report["total"] == {"rows": 4, "with_content": 3, "coverage_pct": pytest.approx(75.0)}
     assert report["by_provider"] == {
         "anspire": {"rows": 1, "with_content": 1, "coverage_pct": pytest.approx(100.0)},
         "eastmoney": {"rows": 2, "with_content": 1, "coverage_pct": pytest.approx(50.0)},
+        "ifind": {"rows": 1, "with_content": 1, "coverage_pct": pytest.approx(100.0)},
     }

@@ -4,6 +4,7 @@ import hashlib
 import logging
 import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlparse
 
 from backend.data.news_models import RawNews
@@ -63,6 +64,11 @@ def _domain_from_url(url: str) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
+def _stable_news_url(provider: str, symbol: str, title: str) -> str:
+    digest = hashlib.md5(title.encode()).hexdigest()[:12]  # noqa: S324 - stable local URL key.
+    return f"{provider}://{symbol}#{digest}"
+
+
 def _parse_anspire_date(value: str | None, fallback: datetime) -> datetime:
     """Parse Anspire result date strings, falling back to now."""
     if not value:
@@ -74,6 +80,32 @@ def _parse_anspire_date(value: str | None, fallback: datetime) -> datetime:
         except ValueError:
             continue
     return fallback
+
+
+def _parse_ifind_date(value: Any, fallback: datetime) -> datetime:
+    raw = str(value or "").strip().replace("T", " ")[:19]
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return fallback
+
+
+def _parse_ifind_items(text: str) -> list[dict[str, Any]]:
+    import json as _json
+
+    outer = _json.loads(text)
+    data = outer.get("data") if isinstance(outer, dict) else outer
+    if isinstance(data, dict):
+        inner = data.get("data", [])
+    else:
+        inner = data
+    if isinstance(inner, str):
+        inner = _json.loads(inner) if inner else []
+    if not isinstance(inner, list):
+        return []
+    return [item for item in inner if isinstance(item, dict)]
 
 
 def _anspire_has_identity(title: str, content: str, symbol: str, name: str) -> bool:
@@ -485,6 +517,61 @@ def fetch_titles_tavily(symbol: str, name: str, days: int = 1, max_results: int 
     DB 新闻不足时作为补充，返回标题列表（空列表表示未启用或失败）。
     """
     return search_titles_tavily(f"{name} {symbol} 股票 最新消息", days=days, max_results=max_results)
+
+
+def fetch_news_ifind(symbol: str, name: str, days: int = 7, max_results: int = 20) -> list[RawNews]:
+    """用 iFinD MCP search_news + search_notice 拉取带正文的新闻/公告。"""
+    from backend.config import settings
+    from backend.data.ifind_mcp import NEWS_MCP_ID, IfindMcpClient
+
+    if not settings.ifind_mcp_enabled or not settings.ifind_mcp_token:
+        return []
+
+    current = datetime.now(UTC).replace(tzinfo=None)
+    start = current - timedelta(days=days)
+    arguments = {
+        "query": f"{name} {symbol}",
+        "time_start": start.strftime("%Y-%m-%d"),
+        "time_end": current.strftime("%Y-%m-%d"),
+        "size": max_results,
+    }
+
+    client = IfindMcpClient()
+    items: list[RawNews] = []
+    seen_urls: set[str] = set()
+    for tool in ("search_news", "search_notice"):
+        try:
+            result = client.call_tool(NEWS_MCP_ID, tool, arguments)
+            for item in _parse_ifind_items(result.text):
+                title = str(item.get("资讯标题") or item.get("公告标题") or "").strip()
+                content = str(item.get("资讯内容") or item.get("公告内容") or "").strip()
+                url = str(item.get("URL") or "").strip()
+                if not title:
+                    continue
+                if not url:
+                    url = _stable_news_url("ifind", symbol, title)
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                items.append(
+                    RawNews(
+                        title=title,
+                        url=url,
+                        published_at=_parse_ifind_date(item.get("日期"), current),
+                        source=(
+                            "ifind"
+                            if url.startswith("ifind://")
+                            else (_domain_from_url(url) or "ifind")
+                        ),
+                        symbol=symbol,
+                        content=content or None,
+                        provider="ifind",
+                    )
+                )
+        except Exception as e:
+            logger.warning("iFinD %s content fetch failed for %s: %s", tool, symbol, e)
+
+    return items[:max_results]
 
 
 def fetch_titles_ifind(symbol: str, name: str, days: int = 2, max_results: int = 5) -> list[str]:
