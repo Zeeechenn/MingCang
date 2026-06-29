@@ -10,14 +10,15 @@ import argparse
 import json
 import math
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend.analysis.sentiment import analyze_news
 from backend.data.database import SessionLocal
 from backend.data.news_fusion import DEGRADED
 from backend.data.news_layer_v2 import news_v2_score_from_db
@@ -26,6 +27,11 @@ from backend.llm.base import LLMProvider
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_UNIVERSE = REPO_ROOT / "paper_trading" / "test3_universe_50.json"
 DEFAULT_OOS_NS = "oos_news_v2"
+DEFAULT_VARIANT_NS = {
+    "v2": DEFAULT_OOS_NS,
+    "legacy-fast": "oos_legacy_fast",
+    "legacy-capable": "oos_legacy_capable",
+}
 DEFAULT_LOOKBACK_DAYS = 3
 HORIZONS = (3, 5)
 N_BUCKETS = 5
@@ -33,6 +39,7 @@ MIN_SAMPLE_WINDOWS = 25
 MIN_NON_OVERLAP_IC_DAYS = 20
 
 SessionFactory = Callable[[], Session]
+Variant = Literal["v2", "legacy-fast", "legacy-capable"]
 
 
 def _set_oos_namespace(ns: str = DEFAULT_OOS_NS) -> None:
@@ -137,6 +144,128 @@ def _score_from_signal(signal: Any) -> dict[str, Any]:
         ),
         "confidence": float(signal.confidence),
         "degradation_flags": list(signal.degradation_flags),
+    }
+
+
+def _legacy_tier_for_variant(variant: Variant) -> str:
+    if variant == "legacy-capable":
+        return "capable"
+    return ""
+
+
+def _default_ns_for_variant(variant: Variant) -> str:
+    return DEFAULT_VARIANT_NS[variant]
+
+
+def _analyze_news_with_tier(titles: list[str], *, symbol: str, tier: str) -> dict[str, Any]:
+    try:
+        return cast(dict[str, Any], cast(Any, analyze_news)(titles, symbol=symbol, tier=tier))
+    except TypeError as exc:
+        if "tier" not in str(exc):
+            raise
+        return cast(dict[str, Any], analyze_news(titles, symbol=symbol))
+
+
+def _aligned_windows_get(
+    db: Session,
+    *,
+    namespace: str,
+    symbols: Iterable[str],
+    start: str,
+    end: str,
+    lookback_days: int,
+) -> set[tuple[str, str]]:
+    symbol_list = list(symbols)
+    if not symbol_list:
+        return set()
+    placeholders = ", ".join(f":s{i}" for i in range(len(symbol_list)))
+    params: dict[str, Any] = {
+        "namespace": namespace,
+        "start": start,
+        "end": end,
+        "lookback_days": lookback_days,
+    }
+    params.update({f"s{i}": symbol for i, symbol in enumerate(symbol_list)})
+    rows = db.execute(
+        text(
+            f"""
+            SELECT symbol, sig_date
+            FROM m54_oos_score_cache
+            WHERE namespace = :namespace
+              AND lookback_days = :lookback_days
+              AND sig_date >= :start
+              AND sig_date <= :end
+              AND symbol IN ({placeholders})
+            """
+        ),
+        params,
+    ).fetchall()
+    return {(str(row._mapping["symbol"]), str(row._mapping["sig_date"])) for row in rows}
+
+
+def _news_titles_from_db(
+    db: Session,
+    *,
+    symbol: str,
+    as_of: datetime,
+    lookback_days: int,
+) -> list[str]:
+    start_dt = datetime.combine(
+        (as_of - timedelta(days=lookback_days)).date(),
+        datetime.min.time(),
+    )
+    rows = db.execute(
+        text(
+            """
+            SELECT title
+            FROM news
+            WHERE symbol = :symbol
+              AND published_at >= :start_dt
+              AND published_at <= :as_of
+              AND title IS NOT NULL
+              AND TRIM(title) != ''
+            ORDER BY published_at ASC, id ASC
+            """
+        ),
+        {
+            "symbol": symbol,
+            "start_dt": start_dt,
+            "as_of": as_of,
+        },
+    ).fetchall()
+    return [str(row._mapping["title"]) for row in rows]
+
+
+def _legacy_score_from_db(
+    db: Session,
+    *,
+    symbol: str,
+    as_of: datetime,
+    lookback_days: int,
+    variant: Variant,
+) -> dict[str, Any] | None:
+    titles = _news_titles_from_db(
+        db,
+        symbol=symbol,
+        as_of=as_of,
+        lookback_days=lookback_days,
+    )
+    if not titles:
+        return None
+    tier = _legacy_tier_for_variant(variant)
+    result = _analyze_news_with_tier(titles, symbol=symbol, tier=tier)
+    sentiment = result.get("sentiment") if isinstance(result, dict) else None
+    if sentiment is None:
+        return None
+    score = float(sentiment)
+    if not math.isfinite(score):
+        return None
+    return {
+        "score": score,
+        "news_score": score,
+        "flow_score": None,
+        "confidence": 1.0,
+        "degradation_flags": [],
     }
 
 
@@ -474,14 +603,18 @@ def run_oos(
     *,
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
     tier: str = "capable",
-    ns: str = DEFAULT_OOS_NS,
+    ns: str | None = None,
+    variant: Variant = "v2",
+    align_ns: str | None = None,
     refresh: bool = False,
     out: Path | None = None,
     db: Session | None = None,
     session_factory: SessionFactory = SessionLocal,
     mock: bool = False,
 ) -> dict[str, Any]:
-    _set_oos_namespace(ns)
+    active_ns = ns or _default_ns_for_variant(variant)
+    cache_tier = tier if variant == "v2" else _legacy_tier_for_variant(variant)
+    _set_oos_namespace(active_ns)
     if mock:
         _install_mock_provider()
 
@@ -496,37 +629,62 @@ def run_oos(
 
     try:
         _ensure_score_cache_schema(active_db)
+        aligned_windows = (
+            _aligned_windows_get(
+                active_db,
+                namespace=align_ns,
+                symbols=symbols,
+                start=start,
+                end=end,
+                lookback_days=lookback_days,
+            )
+            if align_ns
+            else None
+        )
         for sig_date in _iter_signal_dates(start, end):
             as_of = datetime.strptime(f"{sig_date} 23:59:59", "%Y-%m-%d %H:%M:%S")
             for symbol in symbols:
+                if aligned_windows is not None and (symbol, sig_date) not in aligned_windows:
+                    continue
                 score = None
                 if not refresh:
                     score = _score_cache_get(
                         active_db,
-                        namespace=ns,
+                        namespace=active_ns,
                         symbol=symbol,
                         sig_date=sig_date,
                         lookback_days=lookback_days,
-                        tier=tier,
+                        tier=cache_tier,
                     )
                 if score is None:
                     cache_misses += 1
-                    signal = news_v2_score_from_db(
-                        symbol,
-                        as_of,
-                        lookback_days,
-                        active_db,
-                        tier=tier,
-                    )
-                    score = _score_from_signal(signal)
+                    if variant == "v2":
+                        signal = news_v2_score_from_db(
+                            symbol,
+                            as_of,
+                            lookback_days,
+                            active_db,
+                            tier=tier,
+                        )
+                        score = _score_from_signal(signal)
+                    else:
+                        score = _legacy_score_from_db(
+                            active_db,
+                            symbol=symbol,
+                            as_of=as_of,
+                            lookback_days=lookback_days,
+                            variant=variant,
+                        )
+                    if score is None:
+                        continue
                     if _score_is_cacheable(score):
                         _score_cache_set(
                             active_db,
-                            namespace=ns,
+                            namespace=active_ns,
                             symbol=symbol,
                             sig_date=sig_date,
                             lookback_days=lookback_days,
-                            tier=tier,
+                            tier=cache_tier,
                             score=score,
                         )
                         cache_writes += 1
@@ -565,7 +723,9 @@ def run_oos(
         or ["no_data: no non-degraded (symbol, date) pairs produced scores"],
         "meta": {
             "tool": "backend.tools.m54_news_v2_oos",
+            "variant": variant,
             "oos_namespace": os.environ.get("SENTIMENT_CACHE_NS", ""),
+            "align_ns": align_ns,
             "start": start,
             "end": end,
             "lookback_days": lookback_days,
@@ -597,7 +757,18 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--end", required=True, help="Inclusive signal end date YYYY-MM-DD")
     parser.add_argument("--lookback", type=int, default=DEFAULT_LOOKBACK_DAYS)
     parser.add_argument("--tier", default="capable")
-    parser.add_argument("--ns", default=DEFAULT_OOS_NS, help="OOS score-cache namespace")
+    parser.add_argument(
+        "--variant",
+        choices=tuple(DEFAULT_VARIANT_NS),
+        default="v2",
+        help="Scoring leg: v2, legacy-fast, or legacy-capable",
+    )
+    parser.add_argument("--ns", default=None, help="OOS score-cache namespace")
+    parser.add_argument(
+        "--align-ns",
+        default=None,
+        help="Only score windows already present in this OOS score-cache namespace",
+    )
     parser.add_argument("--refresh", action="store_true", help="Ignore cached window scores")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--out", type=Path, default=None)
@@ -616,6 +787,8 @@ def main() -> None:
         lookback_days=args.lookback,
         tier=args.tier,
         ns=args.ns,
+        variant=args.variant,
+        align_ns=args.align_ns,
         refresh=args.refresh,
         out=args.out,
         mock=args.mock,

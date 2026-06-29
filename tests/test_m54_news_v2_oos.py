@@ -269,3 +269,173 @@ def test_m54_news_v2_oos_refresh_ignores_cache_and_ns_isolated(test_db, monkeypa
     assert refreshed["meta"]["oos_namespace"] == "ns_a"
     assert isolated["meta"]["cache_hits"] == 0
     assert isolated["meta"]["cache_misses"] == 1
+
+
+def test_m54_news_v2_oos_routes_v2_variant(test_db, monkeypatch):
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+    calls: list[tuple[str, str, int, str]] = []
+
+    def fake_score(symbol, as_of, lookback_days, db, *, tier="capable", flow_value=None):
+        calls.append((symbol, as_of.strftime("%Y-%m-%d"), lookback_days, tier))
+        return NewsSignalV2(
+            composite=0.25,
+            news_score=0.25,
+            flow_score=None,
+            confidence=0.8,
+            degradation_flags=[],
+            contributing_clusters=["c1"],
+        )
+
+    monkeypatch.setattr(tool, "news_v2_score_from_db", fake_score)
+
+    result = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        variant="v2",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+
+    assert calls == [("000001", "2026-01-05", 1, "capable")]
+    assert result["meta"]["variant"] == "v2"
+    assert result["meta"]["oos_namespace"] == "oos_news_v2"
+
+
+def test_m54_news_v2_oos_legacy_fast_uses_titles_and_isolated_ns(
+    test_db, monkeypatch
+):
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+    _add_news(test_db, "000001", "2026-01-04", "旧窗标题 利好", "content")
+    _add_news(test_db, "000001", "2026-01-05", "信号日标题 中标", "content")
+    _add_news(test_db, "000001", "2026-01-01", "窗外标题 利空", "content")
+    test_db.commit()
+
+    calls: list[tuple[list[str], str, str, str]] = []
+
+    def fake_analyze_news(titles, *, symbol=None, tier=""):
+        calls.append((list(titles), symbol, tier, tool.os.environ["SENTIMENT_CACHE_NS"]))
+        return {"sentiment": -0.35}
+
+    monkeypatch.setattr(tool, "analyze_news", fake_analyze_news)
+
+    result = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        variant="legacy-fast",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+
+    assert calls == [
+        (
+            ["旧窗标题 利好", "信号日标题 中标"],
+            "000001",
+            "",
+            "oos_legacy_fast",
+        )
+    ]
+    assert result["n_windows"] == 1
+    assert result["meta"]["variant"] == "legacy-fast"
+    assert result["meta"]["oos_namespace"] == "oos_legacy_fast"
+    row = test_db.execute(
+        text(
+            "SELECT namespace, tier, composite FROM m54_oos_score_cache "
+            "WHERE symbol = '000001'"
+        )
+    ).fetchone()
+    assert row is not None
+    assert row._mapping["namespace"] == "oos_legacy_fast"
+    assert row._mapping["tier"] == ""
+    assert row._mapping["composite"] == -0.35
+
+
+def test_m54_news_v2_oos_legacy_capable_uses_capable_tier(test_db, monkeypatch):
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+    _add_news(test_db, "000001", "2026-01-05", "标题 利好", "content")
+    test_db.commit()
+    calls: list[str] = []
+
+    def fake_analyze_news(titles, *, symbol=None, tier=""):
+        calls.append(tier)
+        return {"sentiment": 0.55}
+
+    monkeypatch.setattr(tool, "analyze_news", fake_analyze_news)
+
+    result = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        variant="legacy-capable",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+
+    assert calls == ["capable"]
+    assert result["meta"]["variant"] == "legacy-capable"
+    assert result["meta"]["oos_namespace"] == "oos_legacy_capable"
+
+
+def test_m54_news_v2_oos_align_ns_limits_legacy_to_cached_windows(
+    test_db, monkeypatch
+):
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001", "000002"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+    _add_news(test_db, "000001", "2026-01-05", "000001 标题 利好", "content")
+    _add_news(test_db, "000002", "2026-01-05", "000002 标题 利空", "content")
+    test_db.commit()
+    tool._ensure_score_cache_schema(test_db)
+    tool._score_cache_set(
+        test_db,
+        namespace="oos_news_v2",
+        symbol="000001",
+        sig_date="2026-01-05",
+        lookback_days=1,
+        tier="capable",
+        score={
+            "score": 0.4,
+            "news_score": 0.4,
+            "flow_score": None,
+            "confidence": 0.8,
+            "degradation_flags": [],
+        },
+    )
+
+    calls: list[str] = []
+
+    def fake_analyze_news(titles, *, symbol=None, tier=""):
+        calls.append(symbol)
+        return {"sentiment": 0.2}
+
+    monkeypatch.setattr(tool, "analyze_news", fake_analyze_news)
+
+    result = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        variant="legacy-fast",
+        align_ns="oos_news_v2",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+
+    assert calls == ["000001"]
+    assert result["n_windows"] == 1
+    assert result["meta"]["align_ns"] == "oos_news_v2"
