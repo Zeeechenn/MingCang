@@ -1,10 +1,12 @@
 import json
 from datetime import datetime, timedelta
 
+import pytest
 from sqlalchemy import text
 
 from backend.data.database import NewsItem, Price
 from backend.data.news_fusion import DEGRADED, NewsSignalV2
+from backend.data.news_layer_v2 import PYRAMID_NOT_TRIGGERED
 
 
 class _MockLLMProvider:
@@ -439,3 +441,112 @@ def test_m54_news_v2_oos_align_ns_limits_legacy_to_cached_windows(
     assert calls == ["000001"]
     assert result["n_windows"] == 1
     assert result["meta"]["align_ns"] == "oos_news_v2"
+
+
+def test_m54_news_v2_oos_excludes_pyramid_not_triggered_from_ic(test_db, monkeypatch):
+    """bug-1b: PYRAMID_NOT_TRIGGERED fallback windows must be excluded from IC,
+    same as DEGRADED, and counted separately (skipped_degraded / skipped_not_triggered)."""
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001", "000002", "000003"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+
+    def fake_score(symbol, as_of, lookback_days, db, *, tier="capable", flow_value=None):
+        if symbol == "000001":
+            flags = [DEGRADED]
+        elif symbol == "000002":
+            flags = [PYRAMID_NOT_TRIGGERED]
+        else:
+            flags = []
+        return NewsSignalV2(
+            composite=0.3,
+            news_score=0.3,
+            flow_score=None,
+            confidence=0.9,
+            degradation_flags=flags,
+            contributing_clusters=["c"],
+        )
+
+    monkeypatch.setattr(tool, "news_v2_score_from_db", fake_score)
+
+    result = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-06",
+        lookback_days=1,
+        tier="capable",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+
+    # only 000003 (clean, no flags) contributes windows: 2 signal dates.
+    assert result["n_windows"] == 2
+    assert result["skipped_degraded"] == 2
+    assert result["skipped_not_triggered"] == 2
+    assert result["meta"]["skipped_degraded"] == 2
+    assert result["meta"]["skipped_not_triggered"] == 2
+
+    # non-pyramid legs (legacy) never emit PYRAMID_NOT_TRIGGERED; only DEGRADED
+    # exclusion applies there. This is exercised by the existing DEGRADED-only
+    # legacy/v2 tests above and is unaffected by this change.
+
+
+def test_m54_news_v2_oos_require_price_coverage_raises_on_gap(test_db, monkeypatch):
+    """bug-1a: insufficient forward-price coverage in the window's tail must be
+    self-evidenced in meta.price_coverage, and must raise when a floor is set."""
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001", "000002"]
+    # Only 3 days of price bars from the window start -- nowhere near enough
+    # trailing days for a horizon=5 forward return from any signal date in the
+    # 2026-01-05..2026-01-09 window (5 signal dates).
+    _add_price_bars(test_db, symbols, "2026-01-05", days=3)
+
+    def fake_score(symbol, as_of, lookback_days, db, *, tier="capable", flow_value=None):
+        return NewsSignalV2(
+            composite=0.1,
+            news_score=0.1,
+            flow_score=None,
+            confidence=0.8,
+            degradation_flags=[],
+            contributing_clusters=["c1"],
+        )
+
+    monkeypatch.setattr(tool, "news_v2_score_from_db", fake_score)
+
+    with pytest.raises(ValueError, match="price coverage insufficient"):
+        tool.run_oos(
+            symbols,
+            "2026-01-05",
+            "2026-01-09",
+            lookback_days=1,
+            tier="capable",
+            db=test_db,
+            session_factory=lambda: test_db,
+            require_price_coverage=50.0,
+        )
+
+    # Default (no requirement) never raises; it just self-evidences the gap.
+    result = tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-09",
+        lookback_days=1,
+        tier="capable",
+        db=test_db,
+        session_factory=lambda: test_db,
+    )
+    coverage = result["meta"]["price_coverage"]
+    assert coverage["coverage_pct"] == 0.0
+    assert coverage["horizon"] == 5
+    assert coverage["n_symbols"] == 2
+    assert coverage["n_pairs_total"] == 10  # 5 tail signal dates x 2 symbols
+    assert coverage["n_pairs_covered"] == 0
+    assert coverage["window_dates"] == [
+        "2026-01-05",
+        "2026-01-06",
+        "2026-01-07",
+        "2026-01-08",
+        "2026-01-09",
+    ]
+    assert result["meta"]["require_price_coverage"] == 0.0

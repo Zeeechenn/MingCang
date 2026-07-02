@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from backend.analysis.sentiment import analyze_news
 from backend.data.database import SessionLocal
 from backend.data.news_fusion import DEGRADED
-from backend.data.news_layer_v2 import news_v2_score_from_db
+from backend.data.news_layer_v2 import PYRAMID_NOT_TRIGGERED, news_v2_score_from_db
 from backend.llm.base import LLMProvider
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +37,14 @@ HORIZONS = (3, 5)
 N_BUCKETS = 5
 MIN_SAMPLE_WINDOWS = 25
 MIN_NON_OVERLAP_IC_DAYS = 20
+
+# Degradation flags that must never feed the IC computation. DEGRADED covers
+# the pre-existing low-confidence/thin-evidence fallback path; PYRAMID_NOT_TRIGGERED
+# covers M54 stage-7 pyramid windows that fell through to a reused/fallback score
+# without a fresh LLM call (only ever set when news_v2_pyramid_enabled=True, so
+# non-pyramid legs never see it). Any window carrying either flag is excluded
+# from IC/quantile diagnostics, though it may still be cached for reuse.
+EXCLUDE_FROM_IC = {DEGRADED, PYRAMID_NOT_TRIGGERED}
 
 SessionFactory = Callable[[], Session]
 Variant = Literal["v2", "legacy-fast", "legacy-capable"]
@@ -422,6 +430,42 @@ def _forward_return(prices: dict[str, float], signal_date: str, horizon: int) ->
     return max(-0.30, min(0.30, ret))
 
 
+def _price_coverage_check(
+    symbols: list[str],
+    prices_by_symbol: dict[str, dict[str, float]],
+    window_dates: list[str],
+    horizon: int,
+) -> dict[str, Any]:
+    """Coverage of the horizon-day forward price for the tail of the signal window.
+
+    Reuses ``_forward_return`` so "covered" means exactly what the scoring loop
+    means by it (same trading-day lookup, same None-on-missing semantics) --
+    not a separate/approximate calendar check.
+    """
+    missing: list[list[str]] = []
+    total = 0
+    covered = 0
+    for sig_date in window_dates:
+        for symbol in symbols:
+            total += 1
+            prices = prices_by_symbol.get(symbol, {})
+            if _forward_return(prices, sig_date, horizon) is not None:
+                covered += 1
+            else:
+                missing.append([symbol, sig_date])
+    coverage_pct = round(covered / total, 4) if total else None
+    return {
+        "window_dates": window_dates,
+        "horizon": horizon,
+        "n_symbols": len(symbols),
+        "n_pairs_total": total,
+        "n_pairs_covered": covered,
+        "coverage_pct": coverage_pct,
+        "n_missing": len(missing),
+        "missing_sample": missing[:20],
+    }
+
+
 def _iter_signal_dates(start: str, end: str) -> list[str]:
     out: list[str] = []
     cur = datetime.strptime(start, "%Y-%m-%d")
@@ -611,6 +655,7 @@ def run_oos(
     db: Session | None = None,
     session_factory: SessionFactory = SessionLocal,
     mock: bool = False,
+    require_price_coverage: float = 0.0,
 ) -> dict[str, Any]:
     active_ns = ns or _default_ns_for_variant(variant)
     cache_tier = tier if variant == "v2" else _legacy_tier_for_variant(variant)
@@ -619,10 +664,29 @@ def run_oos(
         _install_mock_provider()
 
     prices_by_symbol = _load_prices(symbols, start, end, session_factory=session_factory)
+
+    max_horizon = max(HORIZONS)
+    all_signal_dates = _iter_signal_dates(start, end)
+    tail_dates = all_signal_dates[-max_horizon:] if all_signal_dates else []
+    price_coverage = _price_coverage_check(symbols, prices_by_symbol, tail_dates, max_horizon)
+    if require_price_coverage > 0:
+        coverage_pct = price_coverage["coverage_pct"]
+        actual_pct = 0.0 if coverage_pct is None else coverage_pct * 100
+        if actual_pct < require_price_coverage:
+            raise ValueError(
+                "price coverage insufficient: "
+                f"{actual_pct:.2f}% < required {require_price_coverage:.2f}% "
+                f"for tail window {tail_dates} (horizon={max_horizon}d, "
+                f"{price_coverage['n_pairs_covered']}/{price_coverage['n_pairs_total']} pairs covered). "
+                "Backfill/refresh prices before scoring, otherwise horizon legs may see "
+                "different in-flight price snapshots (see M54_OOS_PREREGISTER §11)."
+            )
+
     owns_db = db is None
     active_db = db or session_factory()
     records: list[dict[str, Any]] = []
     skipped_degraded = 0
+    skipped_not_triggered = 0
     cache_hits = 0
     cache_misses = 0
     cache_writes = 0
@@ -691,8 +755,12 @@ def run_oos(
                 else:
                     cache_hits += 1
 
-                if DEGRADED in score["degradation_flags"]:
+                flags = score["degradation_flags"]
+                if DEGRADED in flags:
                     skipped_degraded += 1
+                    continue
+                if PYRAMID_NOT_TRIGGERED in flags:
+                    skipped_not_triggered += 1
                     continue
 
                 row: dict[str, Any] = {
@@ -718,6 +786,7 @@ def run_oos(
         "n_symbols": len(symbols),
         "n_windows": len(records),
         "skipped_degraded": skipped_degraded,
+        "skipped_not_triggered": skipped_not_triggered,
         "metrics": metrics,
         "gate_blockers": gate_blockers
         or ["no_data: no non-degraded (symbol, date) pairs produced scores"],
@@ -740,6 +809,10 @@ def run_oos(
             "min_non_overlap_ic_days": MIN_NON_OVERLAP_IC_DAYS,
             "min_sample_windows": MIN_SAMPLE_WINDOWS,
             "mock": mock,
+            "skipped_degraded": skipped_degraded,
+            "skipped_not_triggered": skipped_not_triggered,
+            "price_coverage": price_coverage,
+            "require_price_coverage": require_price_coverage,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
     }
@@ -773,6 +846,18 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--mock", action="store_true")
+    parser.add_argument(
+        "--require-price-coverage",
+        type=float,
+        default=0.0,
+        metavar="PCT",
+        help=(
+            "Minimum forward-price coverage (0-100) required for the window's "
+            "tail signal dates (last max(horizons) days, at horizon=max(horizons)) "
+            "before scoring proceeds. Default 0 = only report meta.price_coverage, "
+            "never raise. See M54_OOS_PREREGISTER §11 bug (a)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -792,6 +877,7 @@ def main() -> None:
         refresh=args.refresh,
         out=args.out,
         mock=args.mock,
+        require_price_coverage=args.require_price_coverage,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
