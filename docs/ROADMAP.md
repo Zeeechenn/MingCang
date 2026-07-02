@@ -175,6 +175,17 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 
 **输出形态增补（借 AI Berkshire news-pulse，归 M51 borrowing）**：个股触发 L2 时产出「**异动归因卡**」——事件时间线 + 主因判断（公司事件/监管政策/行业对手/市场情绪四路）+ **是否触发论题重审**（接 forward_thesis 触发字段）。只借输出形态，不借其 web-only 流程。
 
+### 阶段7：token 金字塔实施（2026-07-02 列编 · 全部落在 v2 管线内，生产 legacy 打分链零接触）
+
+> 铁律：`backend/analysis/sentiment.py`（legacy 生产打分链）本阶段一行不改；金字塔全部构件挂在 v2（本身 default-off），成本优化天然 observe-only。新 config 一律 default-safe。
+
+- [ ] **7a L1 触发层**：确定性 `TriggerDecision`（无 LLM）——新公告/价量异动/政策关键词/source_diversity 突增/L0 事件分≥阈值，任一命中才升级吃 LLM；未触发=复用昨日+as-of 戳。附「异动归因卡」最小结构体（时间线/四路主因/是否触发论题重审），字段确定性生成、不靠 LLM 拍。
+- [ ] **7b L2 域共享**：簇作用域分类（market/policy/sector/stock，确定性规则）+ 共享 digest 缓存（按 scope+date 键控）——非个股专属簇每域每天只打一次分、跨股复用；个股专属簇仅 L1 触发者打分。
+- [ ] **7c 预算护栏**：基于 `llm_usage` 的日预算计量 + 阈值 config；v2 管线超限自动降级（显式 flag，与降级铁律同构）；legacy 侧最多加"仅告警不拦截"钩子（default-off）。
+- [ ] **7d 前端推送模型**（后置，待 v2 挣到启用资格再做）：夜间批量+异动刷新+as-of 新鲜度标记。
+
+验收：全量 pytest 绿；`git diff` 不含 sentiment.py/official signal/scheduler/test2/weights；新增检查项有测试；OOS 第三轮直接走金字塔管线跑（同时回答 alpha 与成本两个问题）。
+
 承接 M52 收口（标题级新闻情感干净 OOS 证伪——sonnet 三腿全负 IC、无显著差异、无一过门；详见工作分支 `codex/m52-news-sentiment-on-m51` 的 `docs/dev/M52_NEWS_FINISH_PLAN.md` 与 `paper_trading/m52_oos_preregister.md`）+ 决定性新发现：**东财/Anspire 正文一直被入库口丢弃**（东财 `backend/data/news.py:146`、Anspire `:411`），M52 全程建立在「26 字纯标题、零正文」上。库内 96% 是 Anspire 财经媒体、Tavily 仅 4%、iFinD MCP 已是第一兜底——问题不是「只用 Tavily」，而是「全链路只留标题」。
 
 **目标（两者并重）**：① 基建——多源可插拔 + 统一 evidence schema + 拉正文 + 用户自选/自接源；"源无关" = **处理源无关**（换/加源不改评分逻辑），非输出相同。② alpha——正文级 + 多信号综合评分跑赢 legacy，default-off 靠独立 OOS 挣启用资格。

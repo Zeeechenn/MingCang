@@ -209,6 +209,12 @@ OOS 中低 confidence/降级窗口**单独追踪、不静默平均进主样本**
 - [x] **阶段5b**：`m54_news_v2_oos.py` 独立 OOS harness（复用 M52 的 IC/quantile/forward-return 计算，DEGRADED 排除主样本，ns `oos_news_v2`，--mock smoke 通过）+ `M54_OOS_PREREGISTER.md` 预注册。
 - [ ] **OOS 真跑（多天，未启动）**：① 先回填东财正文（覆盖率<50% 不开跑，见预注册 §0）；② 跨多额度窗口 capable 打分；③ 对照 legacy 出裁决回填预注册 §7。
 - [ ] **阶段6（条件）**：若一期赢 → 扩源（iFinD/Tavily/用户自接）+ 扩信号（公告/龙虎榜，接 M53）。
+- **阶段7（Token 金字塔，只挂 v2 管线，`news_v2_pyramid_enabled` default False，第三轮 OOS 显式开启）**：
+  - [x] **7a**：`backend/data/news_trigger.py` — 确定性 L1 触发层（新公告事件/价格异动/成交量异动/政策关键词/source_diversity 突增/L0 事件分阈值），零 LLM；触发时产出 `AttributionCard`（异动归因卡，四类 main_cause + thesis_recheck 标记）。
+  - [x] **7b**：`backend/data/news_scope.py` — 确定性作用域分类（market/policy/sector/stock，零 LLM）+ `plan_scope_sharing`：非 stock 域簇按 `shared_digest_key`（scope+域标识+日期）分组，每域每日只需打一次分。
+  - [x] **7c**：`backend/ops/llm_budget.py` — token 预算护栏，读 `backend/ops/llm_usage.py` 已有用量（新 config `llm_daily_budget_tokens_sentiment`，0=不设限，default-safe）；DB/查询异常容错放行（`unknown=True`，不判定超限，绝不弄挂管线）。
+  - [x] **7 集成接线**：`backend/data/news_layer_v2.py` 在 `news_v2_pyramid_enabled=True` 分支内接线 7a/7b/7c——`score_news_v2`/`news_v2_score_from_db` 打分前跑 `decide_trigger`；未触发 → 跳过 LLM，复用进程内缓存或退化为 title_only 打分，附 `PYRAMID_NOT_TRIGGERED` 降级 flag；触发 → 走 `plan_scope_sharing`（非 stock 域共享 digest 缓存键）+ `check_budget` 预算门（超限 → `BUDGET_EXCEEDED` flag + 全退化为 title_only，不调 LLM）+ 附 `AttributionCard` 到 `NewsSignalV2.attribution_card`（additive 字段，默认 `None`）。`news_v2_pyramid_enabled=False`（当前默认）时 `score_news_v2` 逐字节走回阶段0–5b 的原路径（`extract_clusters`→`fuse_signal`），不碰 trigger/scope/budget 任何一行逻辑。
+  - [ ] **7d（后置）**：AttributionCard 落库/前端展示、L1 价格/成交量输入的实盘数据源接线、进程内缓存换成持久化表（当前 7 集成接线用的是 `news_layer_v2.py` 模块级内存 dict，跨进程/重启不持久）。
 
 ## 10. 开放决策（实施前确认）
 

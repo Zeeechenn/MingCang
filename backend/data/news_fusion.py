@@ -49,6 +49,12 @@ class NewsSignalV2:
     confidence: float
     degradation_flags: list[str]
     contributing_clusters: list[str]
+    # M54 阶段7 additive field. Only ever populated by the event-pyramid
+    # orchestrator (backend.data.news_layer_v2) when news_v2_pyramid_enabled
+    # is on and the symbol was L1-triggered that day. Left as the deterministic
+    # AttributionCard from backend.data.news_trigger to avoid a fusion->trigger
+    # import edge here; typed loosely (Any) so this module stays independent.
+    attribution_card: Any | None = None
 
 
 @dataclass(frozen=True)

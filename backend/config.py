@@ -258,6 +258,17 @@ class Settings(BaseSettings):
     anspire_news_min_score: int = 75      # Anspire 来源进入情感链路的最低审计分
     # M54 news adapter seam. Order defines priority; default keeps legacy source choice unchanged.
     news_adapters_enabled: list[str] = Field(default_factory=lambda: ["eastmoney"])
+    # M54 阶段7 event pyramid orchestration switch (news_layer_v2 only; legacy
+    # backend/analysis/sentiment.py is untouched). default False keeps the v2
+    # orchestrator byte-identical to pre-pyramid behavior (score_news_v2 falls
+    # straight through to extract_clusters()+fuse_signal()).
+    news_v2_pyramid_enabled: bool = False
+    # When the pyramid is enabled, gate LLM spend behind the deterministic L1
+    # trigger (backend.data.news_trigger.decide_trigger); untriggered symbols
+    # skip LLM scoring and reuse cached/title-only results with an explicit
+    # degradation flag instead of spending LLM budget. Default True (safe
+    # posture whenever the pyramid itself is turned on).
+    news_v2_pyramid_trigger_only: bool = True
 
     # Bark 推送通知（可选，iOS App）
     bark_key: str = ""                    # Bark App 设备密钥
@@ -265,6 +276,11 @@ class Settings(BaseSettings):
 
     # LLM 成本监控（M25.3）：超过日预算（CNY）时发 Bark 报警
     llm_daily_budget_cny: float = 1.0     # 默认 1 元/天预算上限
+
+    # M54 阶段7c: v2 event-pyramid sentiment LLM 预算护栏（按 token 计，独立
+    # 于上面的 legacy CNY 预算旋钮，互不覆盖）。0 = 不设限，default-safe，
+    # 关闭护栏时 backend.ops.llm_budget.check_budget 恒不判定超限。
+    llm_daily_budget_tokens_sentiment: int = 0
 
     # 调度器开关（false = 手动触发，不自动跑定时任务）
     scheduler_enabled: bool = False
