@@ -10,9 +10,9 @@
 
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
-| M54 新闻层 v2（多源可插拔·正文级·多信号综合评分） | 设计定稿 2026-06-28 / 路线A / observe-only 待实施。承接 M52 收口（标题级新闻情感干净 OOS 证伪，详见工作分支 `codex/m52-news-sentiment-on-m51`）+ 决定性发现：东财/Anspire 正文一直被入库口丢弃（`news.py:146`/`:411`），M52 全程只用 26 字标题；库内 96% 是 Anspire、Tavily 仅 4%、iFinD MCP 已是第一兜底。目标两者并重：多源可插拔统一 schema 拉正文（"源无关"=处理源无关）+ 正文级多信号综合评分跑赢 legacy（default-off 靠独立 OOS）。核心：分级读正文 + source_diversity 反兆易 whipsaw + 确定性可审计融合(新闻⊕真实资金流) + 缺失显式降级不污染。完整 spec `docs/dev/M54_NEWS_LAYER_V2_DESIGN.md` | 阶段0：实测东财/Anspire 能否取历史正文（定一期 OOS 时间线）+ `news` 表加 content/provider 列 + 入库口停止丢 content | 未过独立预注册 OOS 即启用/接 live test2/改情感权重/外溢 official signal·仓位·scheduler；不机械堆源放大 whipsaw；探索性 IC 当裁决 |
+| M54 新闻层 v2（多源可插拔·正文级·多信号综合评分） | 阶段0–5b 已建 + 两轮预注册 OOS（06-29/06-30）。**第二轮同窗三腿：v2 相对排序显著胜 legacy（h3d Δ=+0.074 / h5d Δ=+0.099，均超 +0.02 门；v2 正 IC、legacy 负）——「读正文≫读标题」首次正向支持**；但 IC天 12/8<20 绝对门未过 → 规则3 不晋级，生产维持 legacy。唯一硬门=横截面薄（50 支）。2026-07-02 增补 token 经济学约束（L0-L3 金字塔/域共享/预算护栏/前端推送模型，见 M54 节）。spec `docs/dev/M54_NEWS_LAYER_V2_DESIGN.md` + `docs/dev/M54_OOS_PREREGISTER.md` §7-8 | ① 先落地金字塔 L0/L1/L2 + 预算护栏（扩样本前置）② 扩 universe ~100-300 支采集/回填 ③ 再预注册第三轮同窗三腿 | 未过独立预注册 OOS 即启用/接 live test2/改情感权重/外溢 official signal·仓位·scheduler；金字塔未落地前不开正文级全量扩样本；weight_sentiment 由 OOS 重定、中途不手调；探索性 IC 当裁决 |
 | M51 外部项目借鉴优化 | 已启动 / non-promoting：D1 已把 DSR/PBO/trial-count 作为 `m29_hypothesis_registry` 的过拟合防线合约；研究轨已落 `research_report_pack.v1` 前端归一 adapter + Reports Markdown copy。详案 `docs/dev/M51_EXTERNAL_BORROWING_PLAN.md` | 下一步深化 Report Viewer / Evidence Card（不重写 deep_research），再在明确 scoped 时做 MingCang-GAIA seed；M29 续作只在 readiness true 后跑 forward shadow | non-promoting；不新建平行回测/因子/审计/数据校验系统；不改 official signal/仓位/scheduler/test2/weights |
-| M55 Serenity 收敛进 ATLAS + s-skill 优点归口 | planned 2026-07-02 / observe-only·non-promoting：M50 的 `serenity_chokepoint.analyze()` 事实休眠（default-off + 零 CLI/web/pipeline 入口，仅 tests/gate 类型注解引用），SKILL.md 生产影响≈0。按 M51 graft-not-parallel 原则收敛进 ATLAS 脊柱（theme_hypothesis_engine/forward_thesis/review_loop/dossier），并把 ZadAnthony/muxuuu/fadewalk 三个外部 Serenity skill 优点归口 ATLAS 各模块。详案 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md` | Phase 0 spec：优点→ATLAS 归口映射 + serenity 六步 vs ATLAS 逐条边界比对 + README 诚实口径修正 | 层纯度红线（fadewalk 资金流禁入研究层）；不改 official signal/仓位/scheduler/test2/weights；blocked 报告不落盘；不新建平行轨；生产 signal diff=0 |
+| M55 Serenity 收敛进 ATLAS + s-skill 优点归口 | **Phase 0-3 done 2026-07-02（`e45bbb1`，1274 passed / 生产 diff=0）** / observe-only·non-promoting：M50 的 `serenity_chokepoint.analyze()` 事实休眠（default-off + 零 CLI/web/pipeline 入口，仅 tests/gate 类型注解引用），SKILL.md 生产影响≈0。按 M51 graft-not-parallel 原则收敛进 ATLAS 脊柱（theme_hypothesis_engine/forward_thesis/review_loop/dossier），并把 ZadAnthony/muxuuu/fadewalk 三个外部 Serenity skill 优点归口 ATLAS 各模块。详案 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md` | Phase 0 spec：优点→ATLAS 归口映射 + serenity 六步 vs ATLAS 逐条边界比对 + README 诚实口径修正 | 层纯度红线（fadewalk 资金流禁入研究层）；不改 official signal/仓位/scheduler/test2/weights；blocked 报告不落盘；不新建平行轨；生产 signal diff=0 |
 | M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 complete/released；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card（已并入 M51 Phase 2）；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
 | M29 Forward Evidence | 2026-06-12：价格回填完成（100支×7天，700行），baseline 1d/3d/5d artifacts 已建；positive delta 9/11+8/10+8/10 windows，non-promoting。M51 D1 统计门合约已补强：DSR/PBO/trial-count 必须报告 | 先刷新/确认 2026-06-12 之后 close-complete 价格覆盖，再重跑 readiness；只有 readiness true 才追加下一窗口 1d/3d/5d shadow 和 residual attribution | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
 | M44 Atlas 合并 | complete / dormant：`9820143` 已在 `origin/main`；Atlas/test4 Stage 2b signal-overlay shadow starter 可用；`ATLAS_ENABLED=false` | 只用 `backend.tools.atlas_test4_stage2b_shadow` 做 non-promoting shadow accrual；M51 D3（paper-only 双解锁 + 审计审查）归口此处 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
@@ -63,6 +63,7 @@ Goal: 把外部金融开源项目（FinGenius/FinRobot/FinGPT/FinGAIA 研究系 
 - **研究轨（本里程碑主体）**：① Phase 1（P0）单股研究报告包 v1——`research_report_pack.v1` 前端归一 adapter 已落地，可从 legacy deep-research payload 生成稳定 schema + Markdown；Reports 页已显示 pack 覆盖度并支持复制报告包。下一步仍是深化 Report Viewer / Evidence Card（M50 后端纪律前台化，不重写分析器）；③ Phase 3（P1）MingCang-GAIA 本地金融 agent 评测集（净新，首批 20–30 任务，只作研发指标、不回流信号）。
 - **量化轨（小 graft，归口现有 owner，不新建里程碑）**：D1（P1）已在 `m29_hypothesis_registry` 合约层补 Deflated Sharpe / PBO / trial-count（复用 `backend/backtest/statistics/` 既有实现，不改算法）；D2/D4（P2）真实披露日 PIT + 100–300×3–5y 规模化验证，**本质是数据覆盖里程碑**（瓶颈是 financial 10/70、news 0/70，非引擎），归口 M12，数据补全前禁止规模化回测；D3（P2）paper-only 双解锁 token + 审计审查，归口 ATLAS。
 - **明确不做**：alpha101 遗传挖矿、QuantDinger 执行层、把 Alpha101 的 101 因子塞进 `FEATURE_COLS`（只可作一次性 null-benchmark 电池跑一遍 m29 注册表，不进生产特征）。
+- **新增借鉴对象：AI Berkshire（2026-07-02，用户判定 7/10 值得借鉴、不整套搬）**——Claude Code/Codex 投研 skill 集（四视角并行研究/固定报告结构/财务交叉验证/报告抽检/论文追踪/新闻异动归因）。只取 4 个小 graft，落点均为现有模块：① **报告 checklist/章节骨架** → `research_report_pack.v1` + dossier（只借结构不搬代码）；② **财务双源交叉验证**（关键财务数据 ≥2 独立来源、误差超阈标记）→ `ResearchReportGate` warning 检查项 + `research_evidence_defs`（与 M55 定性/数字分轨同族）；③ **报告抽检** → 按比例触发 M55 已建的 `review_loop.run_independent_review`（零新建）；④ **新闻异动归因卡**（事件时间线+四路主因+是否触发论文重审）→ M54 输出形态 + `forward_thesis` 触发字段。**不进门**：其 70% 年化战绩（作者自述，不作可迁移 alpha 证据）、价格区间/建仓比例/投资建议（违反明仓边界）、整套安装（造第二研究流程，违反 graft-not-parallel）。
 
 改动顺序纪律：先做最小 graft（D1、Phase 1）并跑 `make verify`（基线 backend 1214 passed / 5 skipped）转绿，再碰 D2/D4 这类数据层改动。
 
@@ -153,7 +154,26 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 
 ---
 
-## M54 新闻层 v2（多源可插拔 · 正文级 · 多信号综合评分）【设计定稿 2026-06-28 / 路线A / observe-only 待实施】
+## M54 新闻层 v2（多源可插拔 · 正文级 · 多信号综合评分）【阶段0–5b 已建 / 两轮预注册 OOS：方向胜出·样本不足 / observe-only】
+
+> **状态刷新（2026-07-02）**：阶段0–5b 代码全部建完（正文入库/适配器 seam/聚类/分级抽取/确定性融合/端到端编排/OOS harness+预注册），iFinD+Tavily 适配器已接（阶段6 partial）。两轮干净 OOS 已跑（判据先落盘）：
+> - **第一轮 06-29**（东财内容独力）：IC天 12/8 « 20，gate_blocked，规则3 不晋级。
+> - **第二轮 06-30**（+iFinD 正文，同窗同样本同模型三腿对照）：**v2 相对排序显著胜 legacy——h3d Δ=+0.074、h5d Δ=+0.099（均远超 +0.02 显著门），v2 正 IC、legacy 负 IC**。这是「读正文 ≫ 读标题」核心假设的首次正向支持（对比 M52 标题级全负）。但 IC天 12/8 < 20、非单调 → 绝对门未过，**规则3 强形态：方向确立、样本不足、不晋级，生产维持 legacy**。
+> - **唯一硬门 = 横截面薄**（50 支 → IC天 8-12，与内容覆盖无关）。**下一步：扩 universe 至 ~100-300 支 → 再预注册 → 同窗三腿重跑**；过绝对门后按预注册规则1 走用户显式授权 + epoch-reset 才可上 live。详见 `docs/dev/M54_OOS_PREREGISTER.md` §7-8。
+
+### Token 经济学约束（2026-07-02 增补 · 扩样本前必须先落地）
+
+**问题**：当前成本模型 = 每股 × 每天 × 同深度均匀处理；正文级(数千 token/篇)若直接铺到 100-300 支，OOS 与未来生产成本均爆炸（naive 估算 ~200 万 token/天量级）。**新闻的信息结构不均匀：大盘/政策/行业新闻共享、个股真有料的日子是少数**——均匀处理 = 大部分 token 花在"今天没事"的股票与重复分析同一条政策上。
+
+**四层金字塔（在 spec「分级读正文」基础上扩成全链路设计）**：
+- **L0 确定性层（零 LLM，永远全量）**：多源拉取、去重、`event_taxonomy` 关键词事件分类（已有）、source_diversity、资金流数字、政策关键词命中。
+- **L1 触发层（规则，决定谁配吃 LLM）**：仅命中触发器的股票升级——新公告/财报落地、价量异动、政策关键词、source_diversity 突增、L0 事件分≥阈值。**未触发 = 复用昨日结果 + as-of 戳，不调 LLM**。
+- **L2 共享域层（LLM 按域不按股）**：大盘 1 份/天 + 政策 1 份/天 + 行业按板块 ~20 份/天 + 个股仅 L1 触发者。**成本从 O(股票数) 变 O(板块数+触发数)，对关注列表规模亚线性**（金字塔后估算 ~24 万 token/天，约省 8 倍，200 支时几乎不涨）。
+- **L3 深研层（贵，仅按需）**：deep_research/dossier 仅用户点击或论题触发重审时跑，走 gate；加增量更新（复用未过期章节），不整篇重写。
+
+**配套**：① 预算护栏——`llm_usage.py` 已有按桶统计，加日预算阈值，sentiment 桶超限自动降级（只跑 L0/L1 + 显式"今日 LLM 降级"flag，与降级铁律同构）；② 前端放弃 100 支实时，改**推送模型**——夜间批量 + 盘中仅异动刷新，每卡带 as-of 时间戳与新鲜度标记（旧数据标旧，不装实时）。
+
+**输出形态增补（借 AI Berkshire news-pulse，归 M51 borrowing）**：个股触发 L2 时产出「**异动归因卡**」——事件时间线 + 主因判断（公司事件/监管政策/行业对手/市场情绪四路）+ **是否触发论题重审**（接 forward_thesis 触发字段）。只借输出形态，不借其 web-only 流程。
 
 承接 M52 收口（标题级新闻情感干净 OOS 证伪——sonnet 三腿全负 IC、无显著差异、无一过门；详见工作分支 `codex/m52-news-sentiment-on-m51` 的 `docs/dev/M52_NEWS_FINISH_PLAN.md` 与 `paper_trading/m52_oos_preregister.md`）+ 决定性新发现：**东财/Anspire 正文一直被入库口丢弃**（东财 `backend/data/news.py:146`、Anspire `:411`），M52 全程建立在「26 字纯标题、零正文」上。库内 96% 是 Anspire 财经媒体、Tavily 仅 4%、iFinD MCP 已是第一兜底——问题不是「只用 Tavily」，而是「全链路只留标题」。
 
@@ -163,9 +183,9 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 
 **完整 spec**：`docs/dev/M54_NEWS_LAYER_V2_DESIGN.md`（架构/schema/管线/融合/降级/路线A·B·C/验证门控/回填可行性/实施6阶段/开放决策）。
 
-**第一动作**：阶段0 可行性验——拿 1–2 支股票实测东财/Anspire **能否取历史正文**（决定一期 OOS 是「几天」还是「向前采集数周」）+ `news` 表加 `content`/`provider` 列 + 入库口停止丢 content。
+**第一动作（2026-07-02 刷新）**：~~阶段0 可行性验~~（已完成）→ 现为：① 先落地 L0/L1/L2 金字塔与预算护栏（扩样本的前置，防 OOS 第三轮成本爆炸）；② 扩 universe 至 ~100-300 支做内容采集/回填；③ 再预注册第三轮，同窗三腿重跑。
 
-**停止条件**：未过独立预注册 OOS 门即启用 v2 / 接 live test2 / 改情感权重 / 外溢到 official signal·仓位·scheduler；不机械堆源充数（无 dedup/materiality 的多源放大 whipsaw）；把探索性 IC 当统计裁决。
+**停止条件**：未过独立预注册 OOS 门即启用 v2 / 接 live test2 / 改情感权重 / 外溢到 official signal·仓位·scheduler；不机械堆源充数（无 dedup/materiality 的多源放大 whipsaw）；把探索性 IC 当统计裁决；**顺序纪律：金字塔触发层/域共享未落地前不得开正文级全量扩样本**（顺序反了成本先爆）；`weight_sentiment=0.4` 系 stock-sage 初始快照继承默认、从未被推导——**由 M54 OOS 结果重定，中途不手调**（保测试可比性）。
 
 ---
 
