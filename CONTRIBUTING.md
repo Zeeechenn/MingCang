@@ -1,6 +1,6 @@
 # Contributing to MingCang
 
-> **注意**：本项目目前为个人量化研究工具，代码已 MIT 开源。欢迎 issue 反馈和 PR 贡献，但合并决策由维护者把关。
+> **注意**：本项目目前为个人量化研究工具，源码按 PolyForm Noncommercial License 1.0.0 开放给非商业使用。欢迎 issue 反馈和 PR 贡献，但合并决策由维护者把关；商业使用、商业集成、商业托管或再销售需另行取得授权。
 
 ---
 

@@ -8,13 +8,12 @@ version = "0.5.2"
 description = "明仓 / MingCang：个人 A 股研究循环工作台——进口假设、证伪、归因、记忆更新"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "PolyForm Noncommercial License 1.0.0" }
 authors = [{ name = "zeeechenn" }]
 keywords = ["quant", "trading", "a-share", "llm", "fastapi"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Office/Business :: Financial :: Investment",
     "Framework :: FastAPI",

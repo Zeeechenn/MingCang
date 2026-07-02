@@ -6,6 +6,14 @@
 
 ---
 
+## [Unreleased]
+
+### Changed / 变更
+- 将当前仓库授权从 MIT License 调整为 PolyForm Noncommercial License 1.0.0；当前及后续版本允许非商业使用、修改与分发，不再允许未经授权的商业使用。
+- 同步更新 README / README_EN badge 与授权说明、`pyproject.toml` 项目元数据、`CONTRIBUTING.md` 贡献说明。
+
+---
+
 ## [v0.5.2] De-personalize track analyst and archive M51 plan / 去人格化重命名与 M51 方案归档（2026-06-15）
 
 重构 + 文档，non-promoting，功能行为不变；未改 official signal / 仓位 / scheduler / test2 / production weights。

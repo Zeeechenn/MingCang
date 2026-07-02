@@ -11,7 +11,7 @@
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
 ![Agent](https://img.shields.io/badge/agent--ready-Pi%20%7C%20Claude%20Code%20%7C%20Codex%20%7C%20Cursor-8957e5)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
 
 **📖 Online docs**: <https://zeeechenn.github.io/MingCang/>
 
@@ -345,6 +345,14 @@ As of 0.5.0, public docs, the Pi terminal, installer, launcher, MCP tool example
 - Positioning shifted to "amplify human judgment, gated by forward evidence," adding thesis-import channels and a falsification scoreboard;
 - A ready-to-use `mingcang` Pi terminal shell was added to lower the barrier to entry;
 - A/HK/US read-only global data was expanded, with stronger data-quality and price-adjustment guards.
+
+---
+
+## License
+
+Current versions of MingCang are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE): personal research, study, experimentation, and noncommercial organizational use are permitted, along with noncommercial modification and distribution. Unauthorized commercial use, commercial integration, commercial hosting, and resale are not permitted. Contact the maintainer for commercial licensing.
+
+Copies previously received under the MIT License remain governed by the license text that accompanied those copies. The current repository and future versions are no longer released under MIT.
 
 ---
 
