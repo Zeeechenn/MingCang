@@ -3,6 +3,7 @@
 // ============================================================
 import React from 'react';
 import { Badge, Card, Markdown, Metric, PageHead, ScoreBar, fmt, recTone, toast, useStore } from './shared';
+import { packBodyCoverage, packToMarkdown, toResearchReportPack } from './report-pack';
 const { useState: useRepState, useMemo: useRepMemo, useEffect: useRepEffect } = React;
 
 const ROLE_TONE = (score) => (score > 10 ? 'up' : score < -10 ? 'down' : '');
@@ -264,6 +265,12 @@ function ReportGateSnapshot({ status }: any) {
 
 // ---------- 深度研究 · 完整报告 ----------
 export function DeepResearchReport({ report }: any) {
+  const pack = toResearchReportPack(report);
+  const coverage = packBodyCoverage(pack);
+  const copyPackMarkdown = () => {
+    navigator.clipboard?.writeText(packToMarkdown(pack));
+    toast('研究报告包 Markdown 已复制');
+  };
   return (
     <div className="grid" style={{ gap: 14 }}>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -272,7 +279,9 @@ export function DeepResearchReport({ report }: any) {
         </Badge>
         <Badge tone={recTone(report.stance)}>{report.stance}</Badge>
         <Badge tone="badge-dim">置信 {report.confidence.toFixed(2)}</Badge>
+        <Badge tone="badge-accent">pack v1 · {coverage.populated}/{coverage.total}</Badge>
         <span className="t-faint" style={{ fontSize: 12 }}>{report.symbols.join(' · ')} · {report.as_of}</span>
+        <button className="btn btn-small" type="button" onClick={copyPackMarkdown}>复制报告包</button>
       </div>
       {report.gate_reasons && report.gate_reasons.length > 0 && (
         <div className="badge badge-warn" style={{ padding: '8px 13px', whiteSpace: 'normal', borderRadius: 11, fontSize: 12.5 }}>⚠ {report.gate_reasons.join(' / ')}</div>

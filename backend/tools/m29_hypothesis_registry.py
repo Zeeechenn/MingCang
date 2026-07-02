@@ -29,6 +29,7 @@ REQUIRED_HYPOTHESIS_FIELDS = {
     "split",
     "sample_gates",
     "promotion_gate",
+    "overfit_guard",
     "multiple_comparison",
     "stop_conditions",
     "forbidden_actions",
@@ -50,6 +51,21 @@ def promotion_gate() -> dict[str, Any]:
         "requires_fresh_oos_forward": True,
         "requires_no_data_quality_blockers": True,
         "requires_human_confirmation": True,
+    }
+
+
+def overfit_guard() -> dict[str, Any]:
+    return {
+        "requires_deflated_sharpe": True,
+        "deflated_sharpe_min": 0.95,
+        "requires_pbo": True,
+        "pbo_max": 0.5,
+        "must_report_trial_count": True,
+        "trial_count_source": "declared_candidate_family_and_parameter_grid",
+        "statistics_modules": [
+            "backend.backtest.statistics.deflated_sharpe.deflated_sharpe",
+            "backend.backtest.statistics.probability_overfitting.pbo",
+        ],
     }
 
 
@@ -96,6 +112,7 @@ def _base_hypothesis(
             "min_quantile_buckets": 5,
         },
         "promotion_gate": promotion_gate(),
+        "overfit_guard": overfit_guard(),
         "multiple_comparison": {
             "method": "bonferroni_or_explicit_warning_required",
             "n_candidates_declared": 1,
@@ -244,8 +261,10 @@ def validate_registry(report: dict[str, Any], *, strict: bool = True) -> list[st
             errors.append(f"{hid} must define sample_gates")
         if not hypothesis.get("multiple_comparison"):
             errors.append(f"{hid} must define multiple_comparison")
+        if not hypothesis.get("overfit_guard"):
+            errors.append(f"{hid} must define overfit_guard")
         gate = hypothesis.get("promotion_gate") or {}
-        expected_gate = {
+        expected_gate: dict[str, Any] = {
             "ic_min": settings.qlib_train_ic_floor,
             "icir_min": settings.qlib_train_icir_floor,
             "require_monotonic": settings.qlib_train_require_monotonic,
@@ -257,6 +276,18 @@ def validate_registry(report: dict[str, Any], *, strict: bool = True) -> list[st
         for key, expected in expected_gate.items():
             if gate.get(key) != expected:
                 errors.append(f"{hid} promotion_gate.{key} must be {expected!r}")
+        guard = hypothesis.get("overfit_guard") or {}
+        expected_guard: dict[str, Any] = {
+            "requires_deflated_sharpe": True,
+            "deflated_sharpe_min": 0.95,
+            "requires_pbo": True,
+            "pbo_max": 0.5,
+            "must_report_trial_count": True,
+            "trial_count_source": "declared_candidate_family_and_parameter_grid",
+        }
+        for key, expected in expected_guard.items():
+            if guard.get(key) != expected:
+                errors.append(f"{hid} overfit_guard.{key} must be {expected!r}")
         source_text = " ".join(hypothesis.get("source_m27_clues") or [])
         if any(source in source_text for source in FORBIDDEN_PRODUCTION_SOURCES):
             if hypothesis.get("candidate_type") != "shadow_research_candidate":
@@ -321,6 +352,14 @@ def report_to_markdown(report: dict[str, Any]) -> str:
             f"  - ic_min: {gate['ic_min']}",
             f"  - icir_min: {gate['icir_min']}",
             f"  - require_monotonic: {gate['require_monotonic']}",
+            "",
+            "- overfit_guard:",
+        ])
+        guard = hypothesis["overfit_guard"]
+        lines.extend([
+            f"  - deflated_sharpe_min: {guard['deflated_sharpe_min']}",
+            f"  - pbo_max: {guard['pbo_max']}",
+            f"  - must_report_trial_count: {guard['must_report_trial_count']}",
             "",
         ])
     lines.extend(["## Global Stop Conditions", ""])

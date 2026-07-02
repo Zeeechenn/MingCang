@@ -34,6 +34,25 @@ def test_promotion_gate_matches_settings():
         assert gate["requires_fresh_oos_forward"] is True
 
 
+def test_registry_requires_overfit_guard_for_every_hypothesis():
+    from backend.tools import m29_hypothesis_registry as tool
+
+    report = tool.build_registry()
+
+    for hypothesis in report["hypotheses"]:
+        guard = hypothesis["overfit_guard"]
+        assert guard["requires_deflated_sharpe"] is True
+        assert guard["deflated_sharpe_min"] == 0.95
+        assert guard["requires_pbo"] is True
+        assert guard["pbo_max"] == 0.5
+        assert guard["must_report_trial_count"] is True
+        assert guard["trial_count_source"] == "declared_candidate_family_and_parameter_grid"
+        assert guard["statistics_modules"] == [
+            "backend.backtest.statistics.deflated_sharpe.deflated_sharpe",
+            "backend.backtest.statistics.probability_overfitting.pbo",
+        ]
+
+
 def test_legacy_m27_sources_are_shadow_only():
     from backend.tools import m29_hypothesis_registry as tool
 
@@ -80,6 +99,22 @@ def test_validation_rejects_incomplete_promotion_contract():
     assert "regime_low_vol_alpha_v1 promotion_gate.requires_human_confirmation must be True" in errors
 
 
+def test_validation_rejects_incomplete_overfit_guard():
+    from backend.tools import m29_hypothesis_registry as tool
+
+    report = tool.build_registry()
+    guard = report["hypotheses"][0]["overfit_guard"]
+    guard["requires_deflated_sharpe"] = False
+    guard["pbo_max"] = 0.8
+    guard.pop("must_report_trial_count")
+
+    errors = tool.validate_registry(report)
+
+    assert "regime_low_vol_alpha_v1 overfit_guard.requires_deflated_sharpe must be True" in errors
+    assert "regime_low_vol_alpha_v1 overfit_guard.pbo_max must be 0.5" in errors
+    assert "regime_low_vol_alpha_v1 overfit_guard.must_report_trial_count must be True" in errors
+
+
 def test_validation_rejects_side_effect_flags_and_missing_stop_conditions():
     from backend.tools import m29_hypothesis_registry as tool
 
@@ -104,3 +139,7 @@ def test_markdown_renders_hypothesis_ids_and_stop_conditions():
     assert "top_decile_entry_timing_v1" in markdown
     assert "stop_conditions" in markdown
     assert "ic_min: 0.04" in markdown
+    assert "overfit_guard" in markdown
+    assert "deflated_sharpe_min: 0.95" in markdown
+    assert "pbo_max: 0.5" in markdown
+    assert "must_report_trial_count: True" in markdown

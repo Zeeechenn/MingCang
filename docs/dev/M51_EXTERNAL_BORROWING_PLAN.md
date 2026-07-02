@@ -124,15 +124,16 @@
 
 ## 7. 里程碑与排期
 
-### M51 Research Report Pack / MingCang-GAIA Seed（研究轨，立即可推进）
+### M51 Research Report Pack / MingCang-GAIA Seed（研究轨，已启动）
 
 范围仅 Phase 1–3，全程 non-promoting。
-- 近期 1–2 周：报告包 schema + deep research 稳定章节 + 报告头显式 gate/source/coverage warning + 5–10 个最小测试（blocked 不落盘、warning 显示、禁止语气）。
+- 2026-07-02 当前：报告包 schema 的前端归一 adapter 已落地为 `research_report_pack.v1`，Reports 页可展示 pack 覆盖度并复制 Markdown；D1 统计门合约也已接入 M29 registry。下一步是把 Report Viewer / Evidence Card 做成更完整的前端体验，而不是重写 deep_research。
+- 近期 1–2 周：深化 Report Viewer / Evidence Card + 报告头显式 gate/source/coverage warning；后端仍沿用 deep_research / ResearchReportGate / falsification / ai_supply_chain / research_case，不新建分析器。
 - 中期 2–4 周：Report Viewer / Evidence Card 前端入口 + 首批 20–30 个 MingCang-GAIA fixtures + 本地/CI eval summary + Markdown/HTML 导出。
 - 后续 1–2 月：扩到 50 任务 + report diff + ReviewCase 回填闭环。
 
 ### 量化轨：不新建里程碑，作为 M29 续作的小 graft
-- D1（统计门补强）随时插入 M29 续作，工作量小、风险低、先做。
+- D1（统计门补强）已先行插入 M29 registry 合约：每个候选必须报告 Deflated Sharpe / PBO / trial-count，复用既有 `backend/backtest/statistics/`，不改算法、不恢复 quant。
 - D2 / D4 合并为**数据覆盖补全里程碑**（归口 M12），P2，触发条件驱动；启动前必须先补披露日/资金流/财报覆盖。
 - D3 归口 ATLAS，随 ATLAS 推进。
 
