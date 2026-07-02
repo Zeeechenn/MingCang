@@ -10,41 +10,12 @@
 
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
-| M54 新闻层 v2（多源可插拔·正文级·多信号综合评分） | 阶段0–5b 已建 + 两轮预注册 OOS（06-29/06-30）。**第二轮同窗三腿：v2 相对排序显著胜 legacy（h3d Δ=+0.074 / h5d Δ=+0.099，均超 +0.02 门；v2 正 IC、legacy 负）——「读正文≫读标题」首次正向支持**；但 IC天 12/8<20 绝对门未过 → 规则3 不晋级，生产维持 legacy。唯一硬门=横截面薄（50 支）。2026-07-02 增补 token 经济学约束（L0-L3 金字塔/域共享/预算护栏/前端推送模型，见 M54 节）。spec `docs/dev/M54_NEWS_LAYER_V2_DESIGN.md` + `docs/dev/M54_OOS_PREREGISTER.md` §7-8 | ① 先落地金字塔 L0/L1/L2 + 预算护栏（扩样本前置）② 扩 universe ~100-300 支采集/回填 ③ 再预注册第三轮同窗三腿 | 未过独立预注册 OOS 即启用/接 live test2/改情感权重/外溢 official signal·仓位·scheduler；金字塔未落地前不开正文级全量扩样本；weight_sentiment 由 OOS 重定、中途不手调；探索性 IC 当裁决 |
+| M54 新闻层 v2（多源可插拔·正文级·多信号综合评分） | 阶段0–7 已建（token 金字塔 `661deaa`）+ **三轮预注册 OOS（06-29/06-30/07-02）**。**第三轮（100支，claude-sonnet-4-6）推翻第二轮乐观结论**：h3d legacy 反超 v2（Δ=-0.064，legacy IC+0.118 > v2 IC+0.054），仅 h5d 仍支持 v2（Δ=+0.081）——两 horizon 不一致，按预注册规则3 判**第二轮"v2胜出"为小样本假象**，v2 信号设计需回炉，生产维持 legacy。三轮一致证实 IC天(14/9)由非重叠时间窗口数决定、与横截面宽度无关（50→100支仅12/8→14/9）——**下一步不再扩股票数**。v2-pyramid 保真度未达标（两 horizon 均劣于 v2-full ≥0.01 门，幅度远超预期，疑不止阈值问题）。详见 `docs/dev/M54_OOS_PREREGISTER.md` §10 | ① 诊断第二轮为何未复现（是否为有利子样本／新增50支拖累信号）② 按规则2 改向前采集扩窗口（IC天是唯一瓶颈，已证与横截面无关）③ 独立诊断 pyramid 触发逻辑损伤幅度异常 | 未过独立预注册 OOS 即启用/接 live test2/改情感权重/外溢 official signal·仓位·scheduler；不再扩横截面掩盖 IC天瓶颈；weight_sentiment 由 OOS 重定、中途不手调；不事后挑解释掩盖方向消失 |
+| M56 AI 产业预警雷达 | planned 2026-07-02 / observe-only / non-promoting：把 AI capex、算力租赁、HBM、AI 信贷、数据中心约束、repo leverage、AI 龙头估值杀等八类指标做成独立行业风险观察层，不是个股 alpha 或仓位引擎。**呈现为报告内观察章节，非首页一级卡**（历史校验前不上前端权重） | **Phase 0a 数据可得性前置门：先摸 8 指标可稳定获取的时序，能稳定拿到 ≥5 个才立项开工，否则砍成轻量版**；Phase 0b spec + schema；Phase 1 手动/周度报告；Phase 2 快照持久化 + Evidence Card；Phase 3 只在历史校验后接入 `market_regime` 轻度注释 | 数据可得性未过前置门即进入 Phase 1；不直接改 official signal / 个股 scoring / 情感权重 / 仓位 / scheduler / test2；不得把缺数据指标伪装成中性 0；不得在未有历史命中记录前作为买卖建议或首页一级卡 |
 | M51 外部项目借鉴优化 | 已启动 / non-promoting：D1 已把 DSR/PBO/trial-count 作为 `m29_hypothesis_registry` 的过拟合防线合约；研究轨已落 `research_report_pack.v1` 前端归一 adapter + Reports Markdown copy。详案 `docs/dev/M51_EXTERNAL_BORROWING_PLAN.md` | 下一步深化 Report Viewer / Evidence Card（不重写 deep_research），再在明确 scoped 时做 MingCang-GAIA seed；M29 续作只在 readiness true 后跑 forward shadow | non-promoting；不新建平行回测/因子/审计/数据校验系统；不改 official signal/仓位/scheduler/test2/weights |
-| M55 Serenity 收敛进 ATLAS + s-skill 优点归口 | **Phase 0-3 done 2026-07-02（`e45bbb1`，1274 passed / 生产 diff=0）** / observe-only·non-promoting：M50 的 `serenity_chokepoint.analyze()` 事实休眠（default-off + 零 CLI/web/pipeline 入口，仅 tests/gate 类型注解引用），SKILL.md 生产影响≈0。按 M51 graft-not-parallel 原则收敛进 ATLAS 脊柱（theme_hypothesis_engine/forward_thesis/review_loop/dossier），并把 ZadAnthony/muxuuu/fadewalk 三个外部 Serenity skill 优点归口 ATLAS 各模块。详案 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md` | Phase 0 spec：优点→ATLAS 归口映射 + serenity 六步 vs ATLAS 逐条边界比对 + README 诚实口径修正 | 层纯度红线（fadewalk 资金流禁入研究层）；不改 official signal/仓位/scheduler/test2/weights；blocked 报告不落盘；不新建平行轨；生产 signal diff=0 |
-| M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 complete/released；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card（已并入 M51 Phase 2）；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
 | M29 Forward Evidence | 2026-06-12：价格回填完成（100支×7天，700行），baseline 1d/3d/5d artifacts 已建；positive delta 9/11+8/10+8/10 windows，non-promoting。M51 D1 统计门合约已补强：DSR/PBO/trial-count 必须报告 | 先刷新/确认 2026-06-12 之后 close-complete 价格覆盖，再重跑 readiness；只有 readiness true 才追加下一窗口 1d/3d/5d shadow 和 residual attribution | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
 | M44 Atlas 合并 | complete / dormant：`9820143` 已在 `origin/main`；Atlas/test4 Stage 2b signal-overlay shadow starter 可用；`ATLAS_ENABLED=false` | 只用 `backend.tools.atlas_test4_stage2b_shadow` 做 non-promoting shadow accrual；M51 D3（paper-only 双解锁 + 审计审查）归口此处 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
 | 后置/低优先 | M24.3 / M25 / M21.4 / M12 / M10.5 / M4 / M5（M51 D2/D4 数据覆盖+披露日 PIT 归口 M12） | 只在触发条件满足时启动 | 不从历史摘要推出新的生产行为 |
-
----
-
-## M50 Serenity 瓶颈研究 skill + UZI 强制报告门【Phase 0-3 released / next batch optional / non-promoting】
-
-Goal: 补两块研究方法真空 —— Serenity 风格供应链瓶颈拆解 + 证据分层纪律（借鉴 赛道研究员"SKILL.md + 结构化 LLM 输出"的工程模式，但**不接入长期标签聚合**），以及 UZI 风格的**输出侧强制报告门**（检查不过的报告物理上写不出）。两者配套：Serenity 产检查项，Gate 负责强制执行。全程 observe-only / source-gated / non-promoting。来源是两份外部 skill 学习报告（Serenity 系列 S1–S8 + UZI）。
-
-Key design constraints（已对代码核实）:
-
-- **Serenity 不复用 `role="track"`、不返回 `LongTermReport`、不进 `LongTermTeam._aggregate_score`**。`LongTermReport` 强制带 `score`/`label_vote`，且 `team.py` 把 track(赛道研究员)/quality(piotroski)/boom(jingqi)/flow(QFII) 加权合成长期标签——Serenity 一旦走 track 槽就会污染长期标签，违背 non-promoting。改出独立 `SerenityChokepointReport`：`chokepoint_layer` / `chain_layers[]` / `evidence_tier` / `source_refs[]` / `substitute_risk` / `quick_filter_pass` / `falsification_questions[]` / `bear_case` / `research_priority_band`（枚举 `够查`/`暂缓`/`证据不足`，**非数字**）。不出 score/vote。
-- **ResearchReportGate** 落 `backend/research/research_report_gate.py`，沿用 M46.5/M47 的 `pass/warning/blocked` 口径。必须在 `deep_research.py` 的 `write_text()` **之前**执行（当前顺序 `_render_report()`→`write_text()`→`_persist_report()`；放 persist 前文件已落盘，达不到"物理上发不出"）。blocked 时不 `write_text` / 不 `record_decision_run` / 不 `remember_deep_research` / 不建 memory candidate。
-- **Gate 作用域 = 所有 deep research 报告**：以 `DeepResearchReport` + audits 为基线检查，Serenity 字段有则加严、无则按现有字段判（不假设 Serenity 一定跑过）。
-- **共享 module**：`source_tier` 枚举 + forbidden-wording 词表，被 Serenity 与 Gate 同时 import。与输入侧 `FORBIDDEN_TEMPLATE_KEYS` 职责切开——前者查输入字段名，后者查最终文本措辞，同一检查不两处写。
-- Serenity 调用方：主入口在 `deep_research.py` 内 `write_text()` 前；旁路入口为独立 CLI/tool 供单主题人工试跑，结果只回显不写 DB。
-
-Phases:
-
-0. ✅ done — 纯文档/prompt，零代码：`serenity-chokepoint/SKILL.md`（瓶颈分层 / quick filter 分层 / source tier / A股 source playbook / 贝叶斯追踪 / 反方先行 QA）+ Gate 检查清单 spec + 共享定义；固态电池主题人工试跑通过（证据/叙事/风险分清、零买卖语气、媒体-only 判 blocked）。
-1. ✅ done — 独立 Serenity 结构化器（flag 默认 False，不写 DB，不接 LongTermTeam）+ `research_evidence_defs.py` + `research_report_gate.py` + `deep_research` 写前挂点；50 M50 测试 green（schema 不生成 score/vote、Gate blocked 不落盘、聚合隔离均覆盖）。
-   - ✅ Phase 1 收尾 done：① 数据覆盖最终定为 **warning（永不 blocked）**——gate 接真实 prices/financials，纯主题(symbols=[])不罚，理由见 spec §3；② blocked 报告经新增 `DeepResearchReport.gate_status` 字段区分（不靠 path.exists）。70 M50 测试 green、lint/mypy clean。
-2. ✅ done — 扩 `ai_supply_chain_template.py`：加 `chain_layers` / `source_tier` / `substitute_risk` / `source_freshness`；新合法字段**不得进** `FORBIDDEN_TEMPLATE_KEYS`；`observe_only/signal_impact/not_a_buy_score` 仍不可覆盖。
-3. ✅ done — M45 importer 现有 source gate **增强（非重写）**：加 `source_tier`（execute 不能只有 social）、`evidence_level != needs_check`；`source_kind=derived_summary`/`handoff_context` 仍只能 dry-run。`m45_track_hook_update` 继承 importer gate；`m45_falsification_scoreboard` 同步相同 source-tier / evidence-level guard，避免 M45 旁路漂移。
-
-Not in this batch: research_priority 数字分（用档位防漂移）、TradingAgents 多 agent/checkpoint（重、撞 dormant Atlas、ReviewCase 已覆盖闭环）、QuantDinger action scope 细分（audit 字段加厚/可复现快照留 P2 顺手）、UZI 评委团人格、前端 evidence cards（P2）、Buffett 质量门（P1 下一批，做时须与 piotroski 交叉引用防双重扣分）。
-
-Stop conditions: 不改 official signal / 仓位 / 止盈止损 / scheduler / test2 / production weights；不进长期标签加权；不写 trusted memory（除非 ReviewCase + 人工确认）；blocked 报告不得落盘或 promotion；本地开发不加多余确认门。
-
-> 完整 S1–S7 协同 / C1–C6 冲突矩阵与逐 Phase 验收在工作规划文档维护，本节只保留里程碑级承重点。
 
 ---
 
@@ -64,6 +35,7 @@ Goal: 把外部金融开源项目（FinGenius/FinRobot/FinGPT/FinGAIA 研究系 
 - **量化轨（小 graft，归口现有 owner，不新建里程碑）**：D1（P1）已在 `m29_hypothesis_registry` 合约层补 Deflated Sharpe / PBO / trial-count（复用 `backend/backtest/statistics/` 既有实现，不改算法）；D2/D4（P2）真实披露日 PIT + 100–300×3–5y 规模化验证，**本质是数据覆盖里程碑**（瓶颈是 financial 10/70、news 0/70，非引擎），归口 M12，数据补全前禁止规模化回测；D3（P2）paper-only 双解锁 token + 审计审查，归口 ATLAS。
 - **明确不做**：alpha101 遗传挖矿、QuantDinger 执行层、把 Alpha101 的 101 因子塞进 `FEATURE_COLS`（只可作一次性 null-benchmark 电池跑一遍 m29 注册表，不进生产特征）。
 - **新增借鉴对象：AI Berkshire（2026-07-02，用户判定 7/10 值得借鉴、不整套搬）**——Claude Code/Codex 投研 skill 集（四视角并行研究/固定报告结构/财务交叉验证/报告抽检/论文追踪/新闻异动归因）。只取 4 个小 graft，落点均为现有模块：① **报告 checklist/章节骨架** → `research_report_pack.v1` + dossier（只借结构不搬代码）；② **财务双源交叉验证**（关键财务数据 ≥2 独立来源、误差超阈标记）→ `ResearchReportGate` warning 检查项 + `research_evidence_defs`（与 M55 定性/数字分轨同族）；③ **报告抽检** → 按比例触发 M55 已建的 `review_loop.run_independent_review`（零新建）；④ **新闻异动归因卡**（事件时间线+四路主因+是否触发论文重审）→ M54 输出形态 + `forward_thesis` 触发字段。**不进门**：其 70% 年化战绩（作者自述，不作可迁移 alpha 证据）、价格区间/建仓比例/投资建议（违反明仓边界）、整套安装（造第二研究流程，违反 graft-not-parallel）。
+- **新增借鉴对象：小红书美股投研 skill-pack 形态（2026-07-03，observe-only，原 M57 并入此处 / 不单开里程碑）**——源帖《美股投资者必装的10个AI投研工具（附使用指南）》`https://www.xiaohongshu.com/explore/6a379a330000000008026078`。只借"把重复投研动作封装成可复用 skill、按用户类型组合成长线研究/交易观察/内容报告三套 pack"的**产品形态**，不装同名美股 skills、不另建平行投研栈。落点：① **产品形态** → Reports/dossier 前端提供三套 skill-pack 入口而非孤立工具名，输出统一落 `research_report_pack.v1` 并显示 evidence ledger / gate status / as-of / freshness（承接上文 Report Viewer/Evidence Card 深化，不重写 deep_research）；② **A 股适配卡（先做贴近 M54/M50/M55 且不引入新交易假设的三张）**：`disclosure-change`（公告/年报/会计政策/风险因素/订单披露变化，不照搬 SEC/EDGAR）、`earnings-delta`（收入/毛利/现金流/应收/存货变化解释）、`fact-check-card`（L1-L4 质检+来源层级+缺数/过期显式提示）；`valuation-scenario`（DCF 只做情景/敏感性、不出目标价或仓位）仅 observe-only。**不进门**：`CANSLIM/VCP`、sector-rotation、flow 类只能作 M29/M32 hypothesis inputs 先注册再 shadow，不进 official signal；不引入目标价/建仓比例/荐股话术；不把 SEC/13F/EDGAR 机械映射成 A 股信号；资金流不入研究层打分。
 
 改动顺序纪律：先做最小 graft（D1、Phase 1）并跑 `make verify`（基线 backend 1214 passed / 5 skipped）转绿，再碰 D2/D4 这类数据层改动。
 
@@ -71,51 +43,44 @@ Stop conditions: 任何改动触及 official signal / 仓位 / scheduler / test2
 
 ---
 
-## M55 Serenity 收敛进 ATLAS 研究脊柱 + s-skill 优点归口【planned 2026-07-02 / observe-only / non-promoting】
+## M56 AI 产业预警雷达【planned 2026-07-02 / observe-only / non-promoting】
 
-Goal: M50 交付的 `serenity_chokepoint.analyze()` **事实休眠**——`long_term_serenity_enabled=False` 且全仓无 CLI/web/pipeline 入口调用它（仅 tests + gate 类型注解引用），`.pi/skills/serenity-chokepoint/SKILL.md` 生产影响≈0。同时 `backend/research/`（18 模块）已有成熟 ATLAS 脊柱（theme_hypothesis_engine / forward_thesis / review_loop / dossier / thesis_ledger / stress_test），其证据分层 / 证伪 / 假设追踪与 serenity 六步高度重叠。本里程碑按 **M51「graft-not-parallel」** 原则：把 serenity 六步降级为跑在 ATLAS 脊柱上的**方法论透镜**（不再是独立平行 analyzer），消除重复；并把三个外部 Serenity skill（ZadAnthony / muxuuu / fadewalk，对比结论见 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`）的优点**归口到 ATLAS 各模块**，而非堆进即将退役的独立分析器。
+Goal: 建一个独立的 AI 产业风险雷达，把“AI 内存墙 / 算力投资周期 / 融资泡沫传导”放在宏观与产业观察层，而不是塞进单股买卖分。它回答的是：AI 繁荣是否仍由真实需求驱动，还是开始转向 capex 过热、算力价格松动、信用链条脆弱与估值杀扩散。
 
-Key constraints（对代码核实）:
+核心指标（八点紧盯）：
 
-- **README 诚实口径先修**：公开面「Serenity 灰度中」与代码（default-off + 零入口）不符，踩自定诚实红线（[[project_mingcang_growth]]）。Phase 1 先修为与代码一致的表述（方法论就绪 / 待激活）。
-- **保留 M50 真资产**：`research_report_gate.py`（已接 `deep_research.py:838` 写前、default ON）+ `research_evidence_defs.py`（SourceTier / 禁词，已被 M45 tools 复用）继续做共享地基，本里程碑不动其对外契约。
-- **serenity_chokepoint.analyze() 瘦身 / 退役**：必须保持 `test_serenity_chokepoint` 隔离不变量——no score/vote 字段、不 import backend.decision/LongTermTeam、非 LongTermReport 子类。
-- **层纯度红线**：fadewalk 的资金流维度（龙虎榜 / 主力净流入 / 北向 / 筹码）**禁入研究层**——属信号 / 择时层，`qfii_flow_analyst` 已管；如用只作 observe-only 事件线索且强制 source-gating，不给分、不进档。
-- **弃**：zad 的估值引擎（A/B 法 + PT + 仓位 + 预期空间数字）违反 observe-only，不引入。
+- Hyperscaler capex / revenue 是否继续抬升，且收入转化跟不上投资强度。
+- AI lab ARR / revenue 是否追不上算力、云服务、芯片采购或融资承诺。
+- GPU 租赁价格是否持续下滑，提示算力供需从短缺转向宽松。
+- HBM 涨价是否开始挤压下游毛利，而不是全链共振。
+- AI 相关公司债、CDS、私募信贷赎回或折价融资是否恶化。
+- 数据中心项目是否被电力、地方反对、融资成本或审批卡住。
+- Treasury repo haircut / basis trade 压力是否从低位回升，提示杠杆资金链收紧。
+- 美股 AI 龙头是否出现“业绩还好但估值杀”的走势，并向 A 股 AI 链情绪传导。
 
-优点归口映射（spec 逐条展开）:
+边界：
 
-| 来源优点 | 归口 ATLAS 模块 | 处理 |
-|---|---|---|
-| zad 独立 reviewer sub-agent | `review_loop.py` | 合并强化，不重造 |
-| zad 中文表达规范（禁黑话 / 加粗≤25） | `dossier` 全局输出规范 | 所有研报受益 |
-| zad 发现硬门 + 定性/数字分轨 | `research_report_gate` 检查项 | 从 SKILL.md 文字劝导 → 门强制（additive） |
-| zad 14 判据 / 10 红旗颗粒度 | `theme_hypothesis_engine` / `forward_thesis` | 选择性吸收 |
-| muxuuu 工程打包（refs/validate/evals） | ATLAS 自有 test 套件 | 转化可测性，不做独立 skill 包 |
-| fadewalk 资金流维度 | —— | 弃 / 隔离（层纯度） |
+- **观察章节，不是首页一级卡**：呈现为报告/dashboard 内的 AI 产业风险观察章节；历史校验（Phase 3）通过前不做首页一级风险卡、不上前端权重。Phase 1 不回写 official signal、不改个股 scoring、不调 sentiment/quant 权重、不碰仓位。
+- **缺数据显式暴露**：每个指标必须带 source/as-of/freshness/confidence。没有可靠数据时标 `missing_or_proxy`，不得用 0 或“中性”掩盖。
+- **周期节奏分层**：周度完整报告；日度轻量观察只看市场价格/信用/估值杀/重大新闻；重大事件触发临时刷新。不得一开始接生产 scheduler。
+- **归口**：报告呈现可复用 M51 `research_report_pack.v1` / Evidence Card；新闻与事件材料可复用 M54 L0-L2 管线；若未来用于风险修正，只能作为 `market_regime` 的轻度注释/折扣层，并且 default-off。
 
 Phases:
 
-0. spec（纸面 / `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`）：优点→ATLAS 归口映射 + serenity 六步 vs ATLAS 逐条边界比对（合 / 退役 / 保留独立）+ observe-only 边界。
-1. 无悔：README 诚实口径修正；发现硬门 / 定性数字分轨从 SKILL.md 下沉为 gate 检查项（additive、default-safe）。
-2. 归口 landing：中文表达规范 → dossier；reviewer → review_loop；serenity `analyze()` 瘦身 / 退役；SKILL.md 转方法论文档。
-3. 回归：`PYTHONPATH=. pytest -q` 转绿 + 确认生产 signal diff=0（`git diff --name-only` 不含 signal/decision/scheduler/test2/weights）。
+0a. **数据可得性前置门（blocking）**：先对八指标逐一摸底可稳定获取的时序/代理源（可得性、频率、滞后、成本）。**能稳定拿到 ≥5 个才立项进 Phase 0b/1**；否则砍成只覆盖可靠指标的轻量版，或暂缓。缺失 3 个以上不得开工，避免建成常态化半空、信噪比低的"雷达"。
+0b. spec（纸面）：定义 `AIIndustryWarningReport` / `AIWarningIndicator` schema、八指标数据源清单（含 0a 的可得性结论）、代理指标、刷新频率、风险等级（green/yellow/orange/red）和缺数口径。
+1. 手动报告：实现本地 CLI/tool 手动跑周报，输出整体风险等级、八指标证据表、变化项、对 A 股 AI 链的 watch implications；只写报告/快照，不写 signal。
+2. Evidence Card：把最近一次报告接到 Reports / dashboard，显示 as-of、source freshness、confidence、missing 指标和风险变化。
+3. 历史校验：保留每期快照，评估预警等级与 AI 链指数/代表股票后续 1d/5d/20d 回撤、波动、估值收缩的关系；未通过历史校验不得接入交易判断。
+4. 可选 regime overlay：仅在 Phase 3 有足够命中记录后，default-off 接入 `market_regime`，对 AI 链正向信号加“宏观拥挤/泡沫风险”注释或轻度风险折扣；启用必须用户显式确认。
 
-Stop conditions: 同 M50/M51（不改 official signal / 仓位 / 止盈止损 / scheduler / test2 / production weights；不进长期标签加权；blocked 报告不落盘；不新建平行轨）+ 层纯度红线（资金流不入研究层）+ 生产 signal diff=0。
+Stop conditions: 直接生成买卖建议；直接调仓或改 position sizing；改 official signal / scheduler / test2 / production weights；把海外 AI 龙头或宏观融资指标机械映射成 A 股个股结论；没有 source/as-of/confidence 的指标进入总分；用新闻热度替代真实价格/信用/财务证据。
 
 ---
 
 ## M29 Alpha Reset / Forward Evidence Engine【active / non-promoting】
 
-Production remains `new_framework`, `WEIGHT_QUANT=0.0`, Kronos disabled. No candidate has passed the promotion gate:
-
-- IC >= 0.04
-- ICIR >= 0.40
-- monotonic buckets
-- non-overlapping / stride evidence
-- sufficient fresh forward sample
-- no cache, fallback, provenance, or data-quality blockers
-- human confirmation
+Production remains `new_framework`, `WEIGHT_QUANT=0.0`, Kronos disabled. No candidate has passed the promotion gate — **the canonical gate list is `STATUS.md` → Active Decision Layer** (single source of truth; not restated here to avoid drift). Additionally, per M51 D1 every candidate must report DSR/PBO/trial-count before promotion review.
 
 Current execution:
 
@@ -154,12 +119,13 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 
 ---
 
-## M54 新闻层 v2（多源可插拔 · 正文级 · 多信号综合评分）【阶段0–5b 已建 / 两轮预注册 OOS：方向胜出·样本不足 / observe-only】
+## M54 新闻层 v2（多源可插拔 · 正文级 · 多信号综合评分）【阶段0–7 已建 / 三轮预注册 OOS：第三轮推翻第二轮乐观结论 / observe-only】
 
-> **状态刷新（2026-07-02）**：阶段0–5b 代码全部建完（正文入库/适配器 seam/聚类/分级抽取/确定性融合/端到端编排/OOS harness+预注册），iFinD+Tavily 适配器已接（阶段6 partial）。两轮干净 OOS 已跑（判据先落盘）：
-> - **第一轮 06-29**（东财内容独力）：IC天 12/8 « 20，gate_blocked，规则3 不晋级。
-> - **第二轮 06-30**（+iFinD 正文，同窗同样本同模型三腿对照）：**v2 相对排序显著胜 legacy——h3d Δ=+0.074、h5d Δ=+0.099（均远超 +0.02 显著门），v2 正 IC、legacy 负 IC**。这是「读正文 ≫ 读标题」核心假设的首次正向支持（对比 M52 标题级全负）。但 IC天 12/8 < 20、非单调 → 绝对门未过，**规则3 强形态：方向确立、样本不足、不晋级，生产维持 legacy**。
-> - **唯一硬门 = 横截面薄**（50 支 → IC天 8-12，与内容覆盖无关）。**下一步：扩 universe 至 ~100-300 支 → 再预注册 → 同窗三腿重跑**；过绝对门后按预注册规则1 走用户显式授权 + epoch-reset 才可上 live。详见 `docs/dev/M54_OOS_PREREGISTER.md` §7-8。
+> **状态刷新（2026-07-02，第三轮后）**：阶段0–7 代码全部建完（正文入库/适配器 seam/聚类/分级抽取/确定性融合/端到端编排/OOS harness+预注册/token 金字塔 `661deaa`）。三轮干净 OOS 已跑（判据先落盘，不事后改）：
+> - **第一轮 06-29**（东财内容独力，50支）：IC天 12/8 « 20，gate_blocked，规则3 不晋级。
+> - **第二轮 06-30**（+iFinD 正文，50支，同窗同样本同模型codex三腿对照）：v2 相对排序显著胜 legacy——h3d Δ=+0.074、h5d Δ=+0.099，v2 正 IC、legacy 负 IC。规则3 强形态：方向确立、样本不足、不晋级，生产维持 legacy。
+> - **第三轮 07-02（100支，claude-sonnet-4-6，扩容后）：结论反转**——h3d 上 **legacy 反超 v2**（Δ=-0.064，legacy IC+0.118 vs v2 IC+0.054），仅 h5d 仍支持 v2（Δ=+0.081）。两 horizon 不一致，按预注册规则3 字面判定：**第二轮"v2胜出"判为小样本假象**，v2 信号设计需回炉，生产继续维持 legacy。v2-pyramid 保真度也未达标（两 horizon 均劣于 v2-full，幅度远超 -0.01 门，疑不止阈值问题）。
+> - **横截面扩容三轮一致证伪**：IC天由 12/8（50支）→14/9（100支，第三轮三腿一致），扩了一倍股票数只挪 2 天——**确定性结论：IC天由非重叠时间窗口数决定，与横截面宽度基本无关，下一步不再扩股票数**。详见 `docs/dev/M54_OOS_PREREGISTER.md` §9-10。
 
 ### Token 经济学约束（2026-07-02 增补 · 扩样本前必须先落地）
 
@@ -194,9 +160,9 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 
 **完整 spec**：`docs/dev/M54_NEWS_LAYER_V2_DESIGN.md`（架构/schema/管线/融合/降级/路线A·B·C/验证门控/回填可行性/实施6阶段/开放决策）。
 
-**第一动作（2026-07-02 刷新）**：~~阶段0 可行性验~~（已完成）→ 现为：① 先落地 L0/L1/L2 金字塔与预算护栏（扩样本的前置，防 OOS 第三轮成本爆炸）；② 扩 universe 至 ~100-300 支做内容采集/回填；③ 再预注册第三轮，同窗三腿重跑。
+**第一动作（2026-07-02 第三轮后刷新）**：~~扩 universe 至 100-300 支~~（已做，证伪"扩横截面"路径）→ 现为：① 诊断第二轮为何未复现（是否第二轮50支恰为有利子样本、或新增50支拖累信号——需对比两轮子样本的具体差异，而非直接归因样本量）；② 按预注册规则2 改**向前采集扩窗口**（IC天是唯一瓶颈，三轮已证与横截面无关，不再扩股票数）；③ 独立诊断 v2-pyramid 触发逻辑损伤幅度异常（不只当阈值调参处理）。
 
-**停止条件**：未过独立预注册 OOS 门即启用 v2 / 接 live test2 / 改情感权重 / 外溢到 official signal·仓位·scheduler；不机械堆源充数（无 dedup/materiality 的多源放大 whipsaw）；把探索性 IC 当统计裁决；**顺序纪律：金字塔触发层/域共享未落地前不得开正文级全量扩样本**（顺序反了成本先爆）；`weight_sentiment=0.4` 系 stock-sage 初始快照继承默认、从未被推导——**由 M54 OOS 结果重定，中途不手调**（保测试可比性）。
+**停止条件**：未过独立预注册 OOS 门即启用 v2 / 接 live test2 / 改情感权重 / 外溢到 official signal·仓位·scheduler；不机械堆源充数（无 dedup/materiality 的多源放大 whipsaw）；把探索性 IC 当统计裁决；**不再扩横截面掩盖 IC天瓶颈**（三轮已证无效）；`weight_sentiment=0.4` 系 stock-sage 初始快照继承默认、从未被推导——**由 M54 OOS 结果重定，中途不手调**（保测试可比性）；**不事后挑解释掩盖方向消失**（第三轮 h3d 反转是真实结果，不因模型/窗口差异找借口否定规则3 的触发）。
 
 ---
 
@@ -204,6 +170,8 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 
 Detailed history is intentionally not repeated here. Read `CHANGELOG.md` for:
 
+- M55 Serenity 收敛进 ATLAS 研究脊柱 + s-skill 优点归口（Phase 0-3 done 2026-07-02 `e45bbb1`，1274 passed / 生产 diff=0；详见 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`）.
+- M50 Serenity 瓶颈研究 skill + ResearchReportGate 强制报告门（Phase 0-3 released / non-promoting；详见 `docs/dev/m50_research_report_gate_spec.md`）.
 - M46 onboarding/demo clarity and user-discovery follow-up.
 - M46.5–M48 correctness floor (lookahead one-time audit + key-number display tests), standing `lookahead-check` + data-trust visibility, and frontend TS/API/primitive reliability.
 - v0.5.1 context sanitization and status surface hardening.
