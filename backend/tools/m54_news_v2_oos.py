@@ -409,21 +409,51 @@ def _load_prices(
         db.close()
 
 
-def _forward_return(prices: dict[str, float], signal_date: str, horizon: int) -> float | None:
-    """Return horizon-day forward return for a symbol's price dict, or None."""
-    sorted_dates = sorted(prices.keys())
+def _build_trading_calendar(prices_by_symbol: dict[str, dict[str, float]]) -> list[str]:
+    """Union of every symbol's available price dates, sorted -- a market trading calendar.
+
+    Built from the same 100-symbol universe fetched by ``_load_prices``, so it is
+    self-consistent with no external dependency: any date on which at least one
+    symbol in the universe has a bar counts as a trading day.
+    """
+    all_dates: set[str] = set()
+    for date_map in prices_by_symbol.values():
+        all_dates.update(date_map.keys())
+    return sorted(all_dates)
+
+
+def _forward_return(
+    prices: dict[str, float],
+    signal_date: str,
+    horizon: int,
+    calendar: Sequence[str],
+) -> float | None:
+    """Return horizon-day forward return, aligned to ``calendar`` positions, or None.
+
+    ``calendar`` is a shared market trading-day calendar (see
+    ``_build_trading_calendar``), not this symbol's own price-date list. Walking
+    the symbol's own dates by index silently stretches the horizon across any
+    gap in that symbol's series (e.g. a trading halt) -- see
+    M54_OOS_PREREGISTER.md §12 bug-3. Locating both endpoints by calendar
+    position and then requiring an exact-date bar for each (no nearest-available
+    fallback) fixes that: a gap now yields None instead of a mislabeled horizon.
+    """
     try:
-        idx = sorted_dates.index(signal_date)
+        pos = calendar.index(signal_date)
     except ValueError:
-        candidates = [d for d in sorted_dates if d >= signal_date]
+        candidates = [d for d in calendar if d >= signal_date]
         if not candidates:
             return None
-        idx = sorted_dates.index(candidates[0])
-    target_idx = idx + horizon
-    if target_idx >= len(sorted_dates):
+        pos = calendar.index(candidates[0])
+    target_pos = pos + horizon
+    if target_pos >= len(calendar):
         return None
-    base = prices[sorted_dates[idx]]
-    fwd = prices[sorted_dates[target_idx]]
+    base_date = calendar[pos]
+    target_date = calendar[target_pos]
+    base = prices.get(base_date)
+    fwd = prices.get(target_date)
+    if base is None or fwd is None:
+        return None
     if base <= 0:
         return None
     ret = fwd / base - 1.0
@@ -435,11 +465,12 @@ def _price_coverage_check(
     prices_by_symbol: dict[str, dict[str, float]],
     window_dates: list[str],
     horizon: int,
+    calendar: Sequence[str],
 ) -> dict[str, Any]:
     """Coverage of the horizon-day forward price for the tail of the signal window.
 
     Reuses ``_forward_return`` so "covered" means exactly what the scoring loop
-    means by it (same trading-day lookup, same None-on-missing semantics) --
+    means by it (same calendar-aligned lookup, same None-on-missing semantics) --
     not a separate/approximate calendar check.
     """
     missing: list[list[str]] = []
@@ -449,7 +480,7 @@ def _price_coverage_check(
         for symbol in symbols:
             total += 1
             prices = prices_by_symbol.get(symbol, {})
-            if _forward_return(prices, sig_date, horizon) is not None:
+            if _forward_return(prices, sig_date, horizon, calendar) is not None:
                 covered += 1
             else:
                 missing.append([symbol, sig_date])
@@ -664,11 +695,14 @@ def run_oos(
         _install_mock_provider()
 
     prices_by_symbol = _load_prices(symbols, start, end, session_factory=session_factory)
+    trading_calendar = _build_trading_calendar(prices_by_symbol)
 
     max_horizon = max(HORIZONS)
     all_signal_dates = _iter_signal_dates(start, end)
     tail_dates = all_signal_dates[-max_horizon:] if all_signal_dates else []
-    price_coverage = _price_coverage_check(symbols, prices_by_symbol, tail_dates, max_horizon)
+    price_coverage = _price_coverage_check(
+        symbols, prices_by_symbol, tail_dates, max_horizon, trading_calendar
+    )
     if require_price_coverage > 0:
         coverage_pct = price_coverage["coverage_pct"]
         actual_pct = 0.0 if coverage_pct is None else coverage_pct * 100
@@ -772,7 +806,9 @@ def run_oos(
                 }
                 prices = prices_by_symbol.get(symbol, {})
                 for horizon in HORIZONS:
-                    row[f"fwd_{horizon}d"] = _forward_return(prices, sig_date, horizon)
+                    row[f"fwd_{horizon}d"] = _forward_return(
+                        prices, sig_date, horizon, trading_calendar
+                    )
                 records.append(row)
     finally:
         if owns_db:

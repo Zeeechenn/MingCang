@@ -550,3 +550,72 @@ def test_m54_news_v2_oos_require_price_coverage_raises_on_gap(test_db, monkeypat
         "2026-01-09",
     ]
     assert result["meta"]["require_price_coverage"] == 0.0
+
+
+def test_m54_news_v2_oos_forward_return_gap_yields_none_not_stretched_horizon(test_db):
+    """bug-3: a symbol with a price gap must not have its horizon silently
+    stretched by walking its own (gap-shortened) date list. D0/D1/D3 has a
+    hole at D2 in this symbol's own series. The calendar (built from the
+    union across symbols, per _build_trading_calendar) does include D2 because
+    a different symbol traded that day. With horizon=2 from D1, the true
+    2nd-calendar-day target is D3 -- so this particular symbol/gap combo
+    happens to still resolve. To exercise the actual gap-swallowing failure
+    mode we pick a horizon that lands exactly on the missing D2 bar for this
+    symbol: horizon=1 from D1 must target D2 (calendar position), find no bar
+    for this symbol on D2, and return None -- NOT silently fall through to D3
+    (which is what the old index-based logic would have done, since D3 was
+    this symbol's very next available price row)."""
+    from backend.tools import m54_news_v2_oos as tool
+
+    d0, d1, d2, d3 = "2026-02-02", "2026-02-03", "2026-02-04", "2026-02-05"
+
+    # gappy: no bar on d2 (e.g. a trading halt for this symbol).
+    gappy_prices = {d0: 10.0, d1: 11.0, d3: 13.0}
+    # a second symbol trades on d2, so the union calendar includes it.
+    other_prices = {d0: 20.0, d1: 21.0, d2: 22.0, d3: 23.0}
+    calendar = tool._build_trading_calendar({"GAPPY": gappy_prices, "OTHER": other_prices})
+    assert calendar == [d0, d1, d2, d3]
+
+    # Old (pre-fix) behaviour would walk GAPPY's own sorted dates [d0, d1, d3]:
+    # idx(d1)=1, target_idx=1+1=2 -> d3 (wrong: that is a 2-trading-day gap,
+    # not 1). The fixed function must instead resolve horizon=1 from d1 to the
+    # calendar's very next day, d2 -- and since GAPPY has no bar on d2, return
+    # None rather than silently substituting d3's price.
+    assert tool._forward_return(gappy_prices, d1, 1, calendar) is None
+
+    # Sanity: OTHER (no gap) resolves the same horizon/date cleanly and
+    # matches the true 1-calendar-day-ahead value (d1 -> d2).
+    assert tool._forward_return(other_prices, d1, 1, calendar) == pytest.approx(22.0 / 21.0 - 1.0)
+
+    # horizon=2 from d1 lands on d3 (in-calendar position d1+2=d3) for both
+    # symbols, since GAPPY does have a bar on d3 -- this is the correctly
+    # "long way around the gap" answer, not a mislabeled 3-calendar-day span.
+    assert tool._forward_return(gappy_prices, d1, 2, calendar) == pytest.approx(13.0 / 11.0 - 1.0)
+
+
+def test_m54_news_v2_oos_forward_return_no_gap_uses_correct_nth_calendar_day(test_db):
+    """No-gap symbol: horizon-day forward return must select exactly the Nth
+    calendar day and compute the correct ratio."""
+    from backend.tools import m54_news_v2_oos as tool
+
+    dates = ["2026-02-02", "2026-02-03", "2026-02-04", "2026-02-05", "2026-02-06"]
+    prices = {d: 10.0 + i for i, d in enumerate(dates)}  # 10, 11, 12, 13, 14
+    calendar = tool._build_trading_calendar({"CLEAN": prices})
+    assert calendar == dates
+
+    # horizon=3 from dates[0] ("2026-02-02", price 10.0) must land on
+    # dates[3] ("2026-02-05", price 13.0), i.e. the 3rd calendar day forward.
+    got = tool._forward_return(prices, dates[0], 3, calendar)
+    assert got == pytest.approx(13.0 / 10.0 - 1.0)
+
+    # horizon=1 from dates[1] ("2026-02-03", price 11.0) -> dates[2] (12.0).
+    got2 = tool._forward_return(prices, dates[1], 1, calendar)
+    assert got2 == pytest.approx(12.0 / 11.0 - 1.0)
+
+    # signal_date not itself in calendar/prices (weekend) falls back to the
+    # first calendar date >= signal_date, per the existing >= fallback.
+    got3 = tool._forward_return(prices, "2026-02-01", 1, calendar)
+    assert got3 == pytest.approx(11.0 / 10.0 - 1.0)
+
+    # horizon runs past the end of the calendar -> None.
+    assert tool._forward_return(prices, dates[-1], 1, calendar) is None
