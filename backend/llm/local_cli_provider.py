@@ -96,6 +96,13 @@ class LocalCLIProvider(LLMProvider):
         if settings.local_cli_prefer_codex:
             return self._complete_with_codex(full_prompt)
 
+        # Clean single-model guard: when LOCAL_CLI_NO_CODEX_FALLBACK=true, a Claude
+        # failure (quota/timeout) must NOT silently fall back to Codex — that would
+        # pollute a single-model (sonnet) OOS leg with codex scores. Failures return {}
+        # (recorded as missing/neutral, uncached upstream) + a greppable marker.
+        # Default-off, so production is unaffected.
+        no_codex_fallback = os.environ.get("LOCAL_CLI_NO_CODEX_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+
         try:
             claude = subprocess.run(
                 ["claude", "-p", "--model", _model_for_tier(model_tier), "--output-format", "text"],
@@ -110,6 +117,9 @@ class LocalCLIProvider(LLMProvider):
             if data:
                 return data
             # Claude 可用但输出非 JSON（格式错误），尝试 Codex 兜底
+            if no_codex_fallback:
+                logger.warning("OOS_LLM_FAILED LocalCLIProvider Claude: 输出非 JSON，已禁用 codex 兜底")
+                return {}
             return self._complete_with_codex(full_prompt)
         except subprocess.TimeoutExpired:
             # 超时 = CLI 挂住（配额耗尽/限速）。
@@ -117,12 +127,17 @@ class LocalCLIProvider(LLMProvider):
             # 然后抛 _FatalResult 告知 _cli_retry 不再重试，避免 3×90s 放大。
             logger.warning(
                 "LocalCLIProvider Claude: 超时（%ds），prompt_len=%d；"
-                "可能是日配额耗尽，尝试 Codex 兜底后不再重试",
+                "可能是日配额耗尽",
                 self._timeout, len(full_prompt),
             )
+            if no_codex_fallback:
+                logger.warning("OOS_LLM_FAILED LocalCLIProvider Claude: 超时且已禁用 codex 兜底")
+                raise _FatalResult({}) from None
             raise _FatalResult(self._complete_with_codex(full_prompt)) from None
         except FileNotFoundError:
             logger.warning("LocalCLIProvider: `claude` 命令未找到，尝试 Codex CLI")
+            if no_codex_fallback:
+                raise _FatalResult({}) from None
             return self._complete_with_codex(full_prompt)
         except Exception as e:
             logger.warning("LocalCLIProvider: 调用异常: %s", e)
