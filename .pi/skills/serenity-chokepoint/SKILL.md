@@ -10,6 +10,8 @@ license: MIT
 
 这套框架蒸馏自公开的 Serenity 系列方法论（供应链瓶颈研究、证据分层、跨市场来源纪律、反确认偏误），**剥离了博主人格、收益神话和买卖话术**，改造成明仓 observe-only / source-gated / non-promoting 的研究模板。
 
+**它现在是什么**：这不是一个独立平行的 analyzer，而是跑在明仓 ATLAS 研究脊柱（`backend/research/`：theme_hypothesis_engine / forward_thesis / review_loop / dossier 等）上的**方法论透镜**——六步拆解思路收敛进 ATLAS 各模块使用，而不是自成一套单独流程。收敛背景与逐条归口映射见 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`。
+
 **它和 [[track-analyst]] 的分工**：赛道研究员框架回答"这个赛道方向对不对、现在能不能买"（海外领先指标 + 周期vs结构性 + 入场时机）；本框架回答"这条产业链里**哪一层是真瓶颈、证据够不够硬、什么能证伪它**"。两者互补，不重复。
 
 **适用范围**：任何由需求冲击驱动的产业链主题（A 股为主，但来源纪律跨市场）。
@@ -47,6 +49,8 @@ license: MIT
 
 **结论格式**：给出 `chain_layers[]`（每层：层名 / 物理约束 / 已知供应商 / 证据等级 / 待答问题），并指出 `scarce_layer`（当前最稀缺的一层 + 证据）。
 
+**发现硬门（discovery gate）**：拆链不是把公开产业链栈逐层抄一遍。至少要指出 **1 跳市场/卖方尚未普遍映射的关系或候选瓶颈**（线索来源：官网供应商增删 / 电话会失言 / 生态 PPT / RFQ / 收购继承 等，标 `social_lead` 或冷门 `filing`），否则视为"没有发现"。**边界**：这类推断关系只能进**定性**判断（帮定位瓶颈卡在哪一层），**绝不能据此抬高任何可量化结论**（份额 / 规模 / 缺口率仍须 `filing/official` 及以上一手源）——与本框架"社媒只能 lead"和 observe-only 硬边界一致。若链里没有一跳是非共识、或只有 1 跳、或全靠现成结论 → `research_priority_band` 至少降一档。
+
 ---
 
 ## 第二步：快速预筛（quick filter）
@@ -78,6 +82,8 @@ license: MIT
 | `social_lead` | 社媒/KOL/传闻 | **仅 lead，不能作唯一证据** |
 
 **结论格式**：`evidence_tier`（本论题最强证据落在哪一级）+ `source_refs[]`（带 locator：公告标题/日期/章节/页码/表格位置）。
+
+> **定性/数字分轨**：`social_lead` / OSINT 推断关系可作**定位瓶颈层的定性线索**，但任何**可量化结论**（份额 / TAM / 缺口率 / 扩产周期数字）必须由 `filing/official/primary` 支撑；无一手源的数字只写"数量级/方向"或标 `[未核实]`，不给假精确。
 
 ---
 
@@ -132,7 +138,7 @@ license: MIT
 
 | 档位 | 含义 |
 |---|---|
-| `够查` | 真瓶颈特征明显 + 证据等级 ≥ filing/official + quick filter 全过 + 证伪条件清晰 → 值得继续深查 |
+| `够查` | 真瓶颈特征明显 + 证据等级 ≥ filing/official + quick filter 全过 + 证伪条件清晰 + **过发现硬门（≥1 跳非共识关系/候选）** → 值得继续深查 |
 | `暂缓` | 方向有意思但证据等级不足（停在 ir/industry）或 outside voice < 3 → 先补源再说 |
 | `证据不足` | 只有 social_lead / 媒体叙事，或 quick filter 未过 → 不投入深查，仅记录线索 |
 

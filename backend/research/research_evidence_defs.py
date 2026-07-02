@@ -107,6 +107,41 @@ FORBIDDEN_REPORT_WORDING: list[tuple[str, bool]] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# QUANT_CLAIM_PATTERNS — M55 Phase 1 (定性/数字分轨纪律，映射表 #4)
+# ---------------------------------------------------------------------------
+# Serenity SKILL.md discipline: OSINT / social_lead inferences may only feed
+# *qualitative* judgement; any *quantifiable* conclusion (market share, TAM,
+# supply gap ratio, capacity-expansion timeline in numbers) must be backed by
+# a filing/official/primary tier source.  This is a text-scan proxy only —
+# it flags the presence of a quantitative-sounding claim; the caller (gate)
+# decides whether the backing evidence tier is strong enough.
+QUANT_CLAIM_PATTERNS: list[str] = [
+    r"份额\s*\d",
+    r"市占率\s*\d",
+    r"占有率\s*\d",
+    r"TAM\s*[\d￥$]",
+    r"缺口率\s*\d",
+    r"扩产周期\s*\d",
+    r"产能\s*\d+\s*(万|亿|GW|片|吨)",
+    r"market share\s*\d",
+]
+
+
+def scan_quant_claims(text: str) -> list[str]:
+    """Scan text for quantitative-conclusion patterns (定性/数字分轨 proxy).
+
+    Returns the list of matched patterns. Pure scanner — callers decide
+    whether the backing evidence tier satisfies the primary-source
+    requirement; this function does not know about SourceTier itself.
+    """
+    hits: list[str] = []
+    for pattern in QUANT_CLAIM_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            hits.append(pattern)
+    return hits
+
+
 def scan_forbidden_wording(text: str) -> list[str]:
     """Scan rendered report text for forbidden wording.
 
@@ -124,3 +159,65 @@ def scan_forbidden_wording(text: str) -> list[str]:
             severity = "strong" if is_strong else "warning"
             hits.append(f"{pattern}:{severity}")
     return hits
+
+
+# ---------------------------------------------------------------------------
+# FORBIDDEN_JARGON_TERMS — M55 中文表达规范归口（zad SKILL.md「中文表达规范」节）
+# ---------------------------------------------------------------------------
+# Readability-only convention, observe-only: never touches score / label /
+# trading fields. Two things a finished MingCang research report must never
+# leak to a reader:
+#   1. internal method labels / template scaffolding names (only the system's
+#      own prompt authors understand these — a reader sees jargon, not signal)
+#   2. bracket/metadata evidence-tier markers that belong in the analyst's
+#      working notes, not the prose (spelled-out Chinese, e.g. "这条供货关系
+#      来自官网供应商名单、未经公司确认", is what should ship instead).
+# NOTE: `[未核实]` / `[推断]` / `[推测]` as *inline missing-data flags* are an
+# intentional, separate convention (see research_report_gate docstrings) and
+# are NOT included here — this list only targets internal jargon leakage.
+FORBIDDEN_JARGON_TERMS: tuple[str, ...] = (
+    # zad SKILL.md internal shorthand / metadata labels — never print verbatim.
+    "信念档",
+    "五连判",
+    "用户头",
+    "Serenity 头",
+    "硬否",
+    "不具身",
+    "量价双控",
+    "单股报告结构",
+    "赛道报告结构",
+    "逆向链显形",
+    "发现硬门",
+    "无现成赛道地图",
+    "精度降级",
+    "同源同日",
+    "份额跨层法",
+    # bracket-form evidence-tier / methodology tags — spell them out in prose
+    # instead of printing the tag itself.
+    "OSINT 推断",
+    "已证实供货关系",
+    "纯推测",
+)
+
+
+MAX_BOLD_MARKERS = 25
+
+
+def scan_forbidden_jargon(text: str) -> list[str]:
+    """Scan rendered report text for internal jargon / template-label leakage.
+
+    Pure scanner (M55 中文表达规范归口, mapping table item "术语三分 + 禁生造词").
+    Returns the list of matched terms; the caller decides severity (this
+    convention is readability-only and should never escalate past warning).
+    """
+    return [term for term in FORBIDDEN_JARGON_TERMS if term in text]
+
+
+def count_bold_markers(text: str) -> int:
+    """Count Markdown bold spans (``**...**``) in rendered report text.
+
+    M55 中文表达规范归口 排版克制条:全篇加粗建议控制在 ``MAX_BOLD_MARKERS`` 处
+    以内,超过则每行都加粗=等于没重点。Pure counter; caller decides whether to
+    warn.
+    """
+    return len(re.findall(r"\*\*[^*\n]+\*\*", text))

@@ -12,6 +12,7 @@
 |---|---|---|---|
 | M54 新闻层 v2（多源可插拔·正文级·多信号综合评分） | 设计定稿 2026-06-28 / 路线A / observe-only 待实施。承接 M52 收口（标题级新闻情感干净 OOS 证伪，详见工作分支 `codex/m52-news-sentiment-on-m51`）+ 决定性发现：东财/Anspire 正文一直被入库口丢弃（`news.py:146`/`:411`），M52 全程只用 26 字标题；库内 96% 是 Anspire、Tavily 仅 4%、iFinD MCP 已是第一兜底。目标两者并重：多源可插拔统一 schema 拉正文（"源无关"=处理源无关）+ 正文级多信号综合评分跑赢 legacy（default-off 靠独立 OOS）。核心：分级读正文 + source_diversity 反兆易 whipsaw + 确定性可审计融合(新闻⊕真实资金流) + 缺失显式降级不污染。完整 spec `docs/dev/M54_NEWS_LAYER_V2_DESIGN.md` | 阶段0：实测东财/Anspire 能否取历史正文（定一期 OOS 时间线）+ `news` 表加 content/provider 列 + 入库口停止丢 content | 未过独立预注册 OOS 即启用/接 live test2/改情感权重/外溢 official signal·仓位·scheduler；不机械堆源放大 whipsaw；探索性 IC 当裁决 |
 | M51 外部项目借鉴优化 | 已启动 / non-promoting：D1 已把 DSR/PBO/trial-count 作为 `m29_hypothesis_registry` 的过拟合防线合约；研究轨已落 `research_report_pack.v1` 前端归一 adapter + Reports Markdown copy。详案 `docs/dev/M51_EXTERNAL_BORROWING_PLAN.md` | 下一步深化 Report Viewer / Evidence Card（不重写 deep_research），再在明确 scoped 时做 MingCang-GAIA seed；M29 续作只在 readiness true 后跑 forward shadow | non-promoting；不新建平行回测/因子/审计/数据校验系统；不改 official signal/仓位/scheduler/test2/weights |
+| M55 Serenity 收敛进 ATLAS + s-skill 优点归口 | planned 2026-07-02 / observe-only·non-promoting：M50 的 `serenity_chokepoint.analyze()` 事实休眠（default-off + 零 CLI/web/pipeline 入口，仅 tests/gate 类型注解引用），SKILL.md 生产影响≈0。按 M51 graft-not-parallel 原则收敛进 ATLAS 脊柱（theme_hypothesis_engine/forward_thesis/review_loop/dossier），并把 ZadAnthony/muxuuu/fadewalk 三个外部 Serenity skill 优点归口 ATLAS 各模块。详案 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md` | Phase 0 spec：优点→ATLAS 归口映射 + serenity 六步 vs ATLAS 逐条边界比对 + README 诚实口径修正 | 层纯度红线（fadewalk 资金流禁入研究层）；不改 official signal/仓位/scheduler/test2/weights；blocked 报告不落盘；不新建平行轨；生产 signal diff=0 |
 | M50 Serenity 瓶颈 skill + 强制报告门 | Phase 0-3 complete/released；non-promoting | 下一步只在明确需要时开下一批质量门或前端 evidence card（已并入 M51 Phase 2）；否则回到 M29 evidence ops / 用户反馈 | 不接长期标签加权、不改 official signal/仓位/scheduler/test2、blocked 报告不落盘 |
 | M29 Forward Evidence | 2026-06-12：价格回填完成（100支×7天，700行），baseline 1d/3d/5d artifacts 已建；positive delta 9/11+8/10+8/10 windows，non-promoting。M51 D1 统计门合约已补强：DSR/PBO/trial-count 必须报告 | 先刷新/确认 2026-06-12 之后 close-complete 价格覆盖，再重跑 readiness；只有 readiness true 才追加下一窗口 1d/3d/5d shadow 和 residual attribution | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
 | M44 Atlas 合并 | complete / dormant：`9820143` 已在 `origin/main`；Atlas/test4 Stage 2b signal-overlay shadow starter 可用；`ATLAS_ENABLED=false` | 只用 `backend.tools.atlas_test4_stage2b_shadow` 做 non-promoting shadow accrual；M51 D3（paper-only 双解锁 + 审计审查）归口此处 | 任何 official signal / test2 / scheduler / shared-infra drift 先停下归因 |
@@ -66,6 +67,40 @@ Goal: 把外部金融开源项目（FinGenius/FinRobot/FinGPT/FinGAIA 研究系 
 改动顺序纪律：先做最小 graft（D1、Phase 1）并跑 `make verify`（基线 backend 1214 passed / 5 skipped）转绿，再碰 D2/D4 这类数据层改动。
 
 Stop conditions: 任何改动触及 official signal / 仓位 / scheduler / test2 / production weights；blocked 报告落盘；eval 或回测结果被用于自动提升信号或可信记忆；出现第二个回测/因子/审计/数据校验系统；数据覆盖未补全即启动规模化回测。
+
+---
+
+## M55 Serenity 收敛进 ATLAS 研究脊柱 + s-skill 优点归口【planned 2026-07-02 / observe-only / non-promoting】
+
+Goal: M50 交付的 `serenity_chokepoint.analyze()` **事实休眠**——`long_term_serenity_enabled=False` 且全仓无 CLI/web/pipeline 入口调用它（仅 tests + gate 类型注解引用），`.pi/skills/serenity-chokepoint/SKILL.md` 生产影响≈0。同时 `backend/research/`（18 模块）已有成熟 ATLAS 脊柱（theme_hypothesis_engine / forward_thesis / review_loop / dossier / thesis_ledger / stress_test），其证据分层 / 证伪 / 假设追踪与 serenity 六步高度重叠。本里程碑按 **M51「graft-not-parallel」** 原则：把 serenity 六步降级为跑在 ATLAS 脊柱上的**方法论透镜**（不再是独立平行 analyzer），消除重复；并把三个外部 Serenity skill（ZadAnthony / muxuuu / fadewalk，对比结论见 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`）的优点**归口到 ATLAS 各模块**，而非堆进即将退役的独立分析器。
+
+Key constraints（对代码核实）:
+
+- **README 诚实口径先修**：公开面「Serenity 灰度中」与代码（default-off + 零入口）不符，踩自定诚实红线（[[project_mingcang_growth]]）。Phase 1 先修为与代码一致的表述（方法论就绪 / 待激活）。
+- **保留 M50 真资产**：`research_report_gate.py`（已接 `deep_research.py:838` 写前、default ON）+ `research_evidence_defs.py`（SourceTier / 禁词，已被 M45 tools 复用）继续做共享地基，本里程碑不动其对外契约。
+- **serenity_chokepoint.analyze() 瘦身 / 退役**：必须保持 `test_serenity_chokepoint` 隔离不变量——no score/vote 字段、不 import backend.decision/LongTermTeam、非 LongTermReport 子类。
+- **层纯度红线**：fadewalk 的资金流维度（龙虎榜 / 主力净流入 / 北向 / 筹码）**禁入研究层**——属信号 / 择时层，`qfii_flow_analyst` 已管；如用只作 observe-only 事件线索且强制 source-gating，不给分、不进档。
+- **弃**：zad 的估值引擎（A/B 法 + PT + 仓位 + 预期空间数字）违反 observe-only，不引入。
+
+优点归口映射（spec 逐条展开）:
+
+| 来源优点 | 归口 ATLAS 模块 | 处理 |
+|---|---|---|
+| zad 独立 reviewer sub-agent | `review_loop.py` | 合并强化，不重造 |
+| zad 中文表达规范（禁黑话 / 加粗≤25） | `dossier` 全局输出规范 | 所有研报受益 |
+| zad 发现硬门 + 定性/数字分轨 | `research_report_gate` 检查项 | 从 SKILL.md 文字劝导 → 门强制（additive） |
+| zad 14 判据 / 10 红旗颗粒度 | `theme_hypothesis_engine` / `forward_thesis` | 选择性吸收 |
+| muxuuu 工程打包（refs/validate/evals） | ATLAS 自有 test 套件 | 转化可测性，不做独立 skill 包 |
+| fadewalk 资金流维度 | —— | 弃 / 隔离（层纯度） |
+
+Phases:
+
+0. spec（纸面 / `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`）：优点→ATLAS 归口映射 + serenity 六步 vs ATLAS 逐条边界比对（合 / 退役 / 保留独立）+ observe-only 边界。
+1. 无悔：README 诚实口径修正；发现硬门 / 定性数字分轨从 SKILL.md 下沉为 gate 检查项（additive、default-safe）。
+2. 归口 landing：中文表达规范 → dossier；reviewer → review_loop；serenity `analyze()` 瘦身 / 退役；SKILL.md 转方法论文档。
+3. 回归：`PYTHONPATH=. pytest -q` 转绿 + 确认生产 signal diff=0（`git diff --name-only` 不含 signal/decision/scheduler/test2/weights）。
+
+Stop conditions: 同 M50/M51（不改 official signal / 仓位 / 止盈止损 / scheduler / test2 / production weights；不进长期标签加权；blocked 报告不落盘；不新建平行轨）+ 层纯度红线（资金流不入研究层）+ 生产 signal diff=0。
 
 ---
 

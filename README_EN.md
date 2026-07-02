@@ -90,7 +90,7 @@ MingCang **encodes mature research methodologies into reusable analyst modules**
 | 📈 **Prosperity analyst** | Kaiyuan Securities "Prosperity Investing" 7×34 framework | Δ marginal change: acceleration of profit / revenue / ROE |
 | 🔗 **Supply-chain analyst** | industry-chain · five-layer framework | tech/hardware sectors: supply-chain check → overseas leading indicators → cyclical vs structural → hype filter → overbought filter |
 
-> Three analysts → weighted blend → **one-veto** fusion → long-term label (Hold-worthy / Overvalued / Stand by / Avoid), **on by default, each toggleable.** A **supply-chain chokepoint analyst (Serenity, observe-only, in beta)**, QFII flow, and more are being added.
+> Three analysts → weighted blend → **one-veto** fusion → long-term label (Hold-worthy / Overvalued / Stand by / Avoid), **on by default, each toggleable.** A **supply-chain chokepoint research methodology (Serenity)** is ready and observe-only, but disabled by default (`long_term_serenity_enabled=False`) with no production entry point yet — it is not currently rolled out into the long-term label. QFII flow and more frameworks are under evaluation.
 >
 > Note: this is a **long-term research layer** separate from the **daily signal (plain formula)** — it never changes the daily signal directly. These frameworks are also exposed as **skills / CLI / MCP**, callable from Claude Code / Codex / Cursor.
 

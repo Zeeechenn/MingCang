@@ -1,4 +1,12 @@
-"""Per-symbol research dossier aggregation."""
+"""Per-symbol research dossier aggregation.
+
+This module returns structured JSON, not rendered prose, so it does not
+enforce report *wording* itself. Rendered report text (Markdown surfaced to
+readers) is checked by `backend.research.research_report_gate`, which
+includes the M55 中文表达规范归口 check (`_check_zh_style`, warning-only,
+readability-only — internal-jargon leakage + bold-marker overuse; see
+`research_evidence_defs.FORBIDDEN_JARGON_TERMS` / `count_bold_markers`).
+"""
 from __future__ import annotations
 
 import json

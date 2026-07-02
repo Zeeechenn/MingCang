@@ -1,32 +1,26 @@
-"""Tests for backend/research/serenity_chokepoint.py — M50 Phase 1.
+"""Tests for backend/research/serenity_chokepoint.py — M50 Phase 1 / M55 retirement.
 
-Validates:
-- SerenityChokepointReport has no score/label_vote/trading fields
-- No LongTermTeam aggregation path is called
-- flag default False → analyze() returns None without calling LLM or writing DB
-- Schema tool definition has no forbidden keys
+M55 retired the independent LLM-driven pipeline (`_SERENITY_TOOL` schema +
+the structured-LLM body of `analyze()`) per
+`docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md` section ④. What is validated
+here now:
+
+- `SerenityChokepointReport` has no score/label_vote/trading fields and is
+  not a `LongTermReport` subclass (isolation invariants carried forward
+  unchanged from M50).
+- `analyze()` is a deprecated no-op: it always returns None and never
+  touches settings, LLM readiness, providers, or the DB, regardless of the
+  `long_term_serenity_enabled` flag.
+- No forbidden aggregation/signal imports.
+- SKILL.md loader / `_PROJECT_ROOT` plumbing still resolves correctly.
 """
 from unittest.mock import MagicMock
 
 import pytest
 
 
-class TestSerenitySchemaNoTradingFields:
-    """Serenity tool schema must not contain scoring / trading fields."""
-
-    def test_tool_schema_has_no_forbidden_keys(self):
-        from backend.research.serenity_chokepoint import _SERENITY_TOOL
-
-        schema_props = set(
-            _SERENITY_TOOL["input_schema"]["properties"].keys()
-        )
-        forbidden = {
-            "score", "label_vote", "buy_score", "position_pct",
-            "price_target", "stop_loss", "take_profit", "composite_score",
-            "direction", "entry_signal", "recommendation",
-        }
-        overlap = forbidden & schema_props
-        assert not overlap, f"Serenity schema must not contain: {overlap}"
+class TestSerenityReportNoTradingFields:
+    """Serenity report dataclass must not contain scoring / trading fields."""
 
     def test_report_dataclass_has_no_trading_fields(self):
         from dataclasses import fields
@@ -52,22 +46,29 @@ class TestSerenitySchemaNoTradingFields:
         )
 
 
-class TestSerenityDisabledByDefault:
-    """When long_term_serenity_enabled=False, analyze() returns None, no LLM, no DB."""
+class TestSerenityAnalyzeRetired:
+    """M55: analyze() is a deprecated no-op — always None, never touches LLM/DB."""
 
     def test_analyze_returns_none_when_disabled(self, monkeypatch):
         from backend.config import settings
         monkeypatch.setattr(settings, "long_term_serenity_enabled", False)
 
         from backend.research.serenity_chokepoint import analyze
-        result = analyze("光模块供应链", ["300308"], db=None)
+        with pytest.deprecated_call():
+            result = analyze("光模块供应链", ["300308"], db=None)
         assert result is None
 
-    def test_analyze_does_not_call_llm_when_disabled(self, monkeypatch):
+    def test_analyze_returns_none_even_when_enabled(self, monkeypatch):
+        """Retired: flag no longer matters — analyze() always returns None."""
         from backend.config import settings
-        monkeypatch.setattr(settings, "long_term_serenity_enabled", False)
+        monkeypatch.setattr(settings, "long_term_serenity_enabled", True)
 
-        # Patch get_provider at the module where serenity_chokepoint resolves it
+        from backend.research.serenity_chokepoint import analyze
+        with pytest.deprecated_call():
+            result = analyze("光模块供应链", ["300308"], db=None)
+        assert result is None
+
+    def test_analyze_does_not_call_llm(self, monkeypatch):
         call_tracker = []
 
         def fake_get_provider():
@@ -77,47 +78,39 @@ class TestSerenityDisabledByDefault:
         monkeypatch.setattr("backend.llm.get_provider", fake_get_provider)
 
         from backend.research.serenity_chokepoint import analyze
-        analyze("光模块供应链", ["300308"], db=None)
-        # If disabled, get_provider should never be called
-        assert not call_tracker, "get_provider should not be called when disabled"
+        with pytest.deprecated_call():
+            analyze("光模块供应链", ["300308"], db=None)
+        assert not call_tracker, "get_provider must never be called — analyze() is retired"
 
-    def test_analyze_does_not_write_db_when_disabled(self, monkeypatch):
-        """When disabled, analyze() must not write anything to DB."""
-        from backend.config import settings
-        monkeypatch.setattr(settings, "long_term_serenity_enabled", False)
-
+    def test_analyze_does_not_write_db(self, monkeypatch):
+        """analyze() must not write anything to DB — it is a pure no-op."""
         mock_db = MagicMock()
 
         from backend.research.serenity_chokepoint import analyze
-        result = analyze("光模块供应链", [], db=mock_db)
+        with pytest.deprecated_call():
+            result = analyze("光模块供应链", [], db=mock_db)
 
         assert result is None
-        # DB should have no writes
         mock_db.add.assert_not_called()
         mock_db.commit.assert_not_called()
 
+    def test_analyze_emits_deprecation_warning(self):
+        from backend.research.serenity_chokepoint import analyze
 
-class TestSerenityEnabledWithLLMUnavailable:
-    """When enabled but LLM unavailable, analyze() returns None."""
+        with pytest.warns(DeprecationWarning):
+            analyze("光模块供应链", ["300308"], db=None)
 
-    def test_returns_none_when_llm_not_usable(self, monkeypatch):
-        from backend.config import settings
-        monkeypatch.setattr(settings, "long_term_serenity_enabled", True)
 
-        # runtime_readiness is imported inside the function from backend.llm
-        # patch at the module level where it gets resolved
-        monkeypatch.setattr(
-            "backend.llm.runtime_readiness",
-            lambda s: {"usable": False, "reason": "no API key"},
-        )
-        monkeypatch.setattr(
-            "backend.llm.get_provider",
-            lambda: MagicMock(),
-        )
+class TestSerenityIndependentPipelineRemoved:
+    """M55: the duplicate independent-analyzer pipeline must be gone."""
 
+    def test_serenity_tool_schema_removed(self):
         import backend.research.serenity_chokepoint as sc_mod
-        result = sc_mod.analyze("光模块供应链", ["300308"], db=None)
-        assert result is None
+
+        assert not hasattr(sc_mod, "_SERENITY_TOOL"), (
+            "_SERENITY_TOOL (independent structured-LLM schema) must be "
+            "removed per M55 retirement — it duplicated the ATLAS spine"
+        )
 
 
 class TestSerenityNoAggregationImports:
@@ -213,46 +206,4 @@ class TestSerenityProjectRootPath:
         first = SKILL_MD_CANDIDATES[0]
         assert first.exists(), (
             f"Primary SKILL.md candidate not found at {first} — check _PROJECT_ROOT"
-        )
-
-
-class TestSerenityEvidenceTierFromSourceTier:
-    """F10 fix: evidence_tier schema enum must be derived from SourceTier."""
-
-    def test_evidence_tier_enum_matches_source_tier(self):
-        from backend.research.research_evidence_defs import SourceTier
-        from backend.research.serenity_chokepoint import _SERENITY_TOOL
-
-        schema_enum = _SERENITY_TOOL["input_schema"]["properties"]["evidence_tier"]["enum"]
-        expected = [t.value for t in SourceTier]
-        assert schema_enum == expected, (
-            f"evidence_tier enum {schema_enum!r} must equal SourceTier values {expected!r}"
-        )
-
-
-class TestSerenityLLMOrderingF7:
-    """F7 fix: runtime_readiness must be checked before get_provider is called."""
-
-    def test_get_provider_not_called_when_llm_not_usable(self, monkeypatch):
-        from backend.config import settings
-        monkeypatch.setattr(settings, "long_term_serenity_enabled", True)
-
-        monkeypatch.setattr(
-            "backend.llm.runtime_readiness",
-            lambda s: {"usable": False, "reason": "no API key"},
-        )
-
-        get_provider_calls = []
-
-        def fake_get_provider():
-            get_provider_calls.append("called")
-            return MagicMock()
-
-        monkeypatch.setattr("backend.llm.get_provider", fake_get_provider)
-
-        import backend.research.serenity_chokepoint as sc_mod
-        result = sc_mod.analyze("光模块供应链", ["300308"], db=None)
-        assert result is None
-        assert not get_provider_calls, (
-            "get_provider must NOT be called when runtime_readiness reports not usable"
         )

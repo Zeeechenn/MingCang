@@ -386,3 +386,244 @@ def test_promote_memory_raises_on_rejected_candidate(test_db):
     reject_memory_candidate(test_db, c["id"], confirmed_by="human_reviewer")
     with pytest.raises(ValueError):
         promote_memory(test_db, c["id"], confirmed_by="human_reviewer")
+
+
+# ── run_independent_review (M55 Phase 2 graft) ───────────────────────────────
+
+def test_run_independent_review_passes_clean_report():
+    from backend.research.review_loop import run_independent_review
+    claims = [
+        {
+            "description": "营收结构",
+            "label": "已证实",
+            "source_ref": "10-K 2026",
+            "evidence_tier": "filing",
+            "independently_reverified": True,
+        },
+        {
+            "description": "backlog",
+            "label": "已证实",
+            "source_ref": "8-K 2026-06-20",
+            "evidence_tier": "filing",
+            "fast_changing": True,
+            "independently_reverified": True,
+        },
+        {
+            "description": "供应商推断",
+            "label": "我的推断",
+            "source_ref": None,
+            "evidence_tier": "social_lead",
+            "independently_reverified": True,
+        },
+    ]
+    verdict = run_independent_review(
+        claims=claims,
+        bear_before_bull=True,
+        falsification_questions=["若下季度 backlog 环比转负则证伪"],
+        catering_check_passed=True,
+    )
+    assert verdict.status == "pass"
+    assert verdict.findings == []
+    assert verdict.degraded is False
+
+
+def test_run_independent_review_flags_unsourced_verified_claim():
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(
+        claims=[
+            {"description": "净利润", "label": "已证实", "source_ref": None, "evidence_tier": None}
+        ],
+        falsification_questions=["x"],
+    )
+    assert verdict.status == "revise"
+    assert any("编造/取数" in f and "净利润" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_weak_tier_labeled_verified():
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(
+        claims=[
+            {
+                "description": "市占率",
+                "label": "已证实",
+                "source_ref": "微博帖子",
+                "evidence_tier": "social_lead",
+            }
+        ],
+        falsification_questions=["x"],
+    )
+    assert verdict.status == "revise"
+    assert any("primary/official/filing" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_reverse_mislabel():
+    """A well-sourced claim mislabeled as inference/guess must also be flagged."""
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(
+        claims=[
+            {
+                "description": "客户集中度",
+                "label": "我的推断",
+                "source_ref": "10-K 客户段",
+                "evidence_tier": "filing",
+            }
+        ],
+        falsification_questions=["x"],
+    )
+    assert verdict.status == "revise"
+    assert any("反向" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_stale_fast_changing_field():
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(
+        claims=[
+            {
+                "description": "backlog",
+                "label": "已证实",
+                "source_ref": "8-K 旧",
+                "evidence_tier": "filing",
+                "fast_changing": True,
+                "independently_reverified": False,
+            }
+        ],
+        falsification_questions=["x"],
+    )
+    assert verdict.status == "revise"
+    assert any("时效守门" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_below_reverify_floor():
+    from backend.research.review_loop import run_independent_review
+    claims = [
+        {
+            "description": f"claim{i}",
+            "label": "已证实",
+            "source_ref": "10-K",
+            "evidence_tier": "filing",
+            "independently_reverified": False,
+        }
+        for i in range(3)
+    ]
+    verdict = run_independent_review(claims=claims, falsification_questions=["x"])
+    assert verdict.status == "revise"
+    assert any("门槛" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_material_omission():
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(
+        falsification_questions=["x"],
+        omission_checklist={"监管调查": True, "重大客户变化": False},
+    )
+    assert verdict.status == "revise"
+    assert any("重大遗漏" in f and "重大客户变化" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_bear_after_bull():
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(
+        bear_before_bull=False,
+        falsification_questions=["x"],
+    )
+    assert verdict.status == "revise"
+    assert any("顺序倒置" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_empty_falsification_questions():
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(falsification_questions=[])
+    assert verdict.status == "revise"
+    assert any("证伪问题" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_directional_hint_without_counter_pressure():
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(
+        falsification_questions=["x"],
+        user_directional_hint=True,
+        counter_pressure_applied=False,
+    )
+    assert verdict.status == "revise"
+    assert any("反确认偏误" in f for f in verdict.findings)
+
+    ok = run_independent_review(
+        falsification_questions=["x"],
+        user_directional_hint=True,
+        counter_pressure_applied=True,
+    )
+    assert ok.status == "pass"
+
+
+def test_run_independent_review_flags_catering():
+    from backend.research.review_loop import run_independent_review
+    verdict = run_independent_review(
+        falsification_questions=["x"],
+        catering_check_passed=False,
+    )
+    assert verdict.status == "revise"
+    assert any("迎合检查" in f for f in verdict.findings)
+
+
+def test_run_independent_review_flags_jargon_leak_and_bold_overuse():
+    from backend.research.review_loop import run_independent_review
+    text = "这条链的信念档很高，" + "**重点**" * 30
+    verdict = run_independent_review(
+        falsification_questions=["x"],
+        rendered_text=text,
+    )
+    assert verdict.status == "revise"
+    assert any("黑话泄漏" in f for f in verdict.findings)
+    assert any("加粗标记" in f for f in verdict.findings)
+
+
+def test_run_independent_review_degraded_path_tags_findings():
+    from backend.research.review_loop import DEGRADED_REVIEW_TAG, run_independent_review
+    verdict = run_independent_review(
+        falsification_questions=[],
+        sub_agent_available=False,
+    )
+    assert verdict.status == "revise"
+    assert verdict.degraded is True
+    assert all(f.startswith(DEGRADED_REVIEW_TAG) for f in verdict.findings)
+
+
+def test_run_independent_review_no_score_or_vote_fields():
+    """Non-promoting invariant: verdict must never carry a score/vote field."""
+    from backend.research.review_loop import run_independent_review
+    from dataclasses import fields
+    verdict = run_independent_review(falsification_questions=["x"])
+    field_names = {f.name for f in fields(verdict)}
+    assert "score" not in field_names
+    assert "vote" not in field_names
+    assert verdict.status in ("pass", "revise")
+
+
+# ── attach_independent_review (M55 Phase 2 graft) ────────────────────────────
+
+def test_attach_independent_review_merges_into_review_payload(test_db):
+    from backend.research.review_loop import attach_independent_review, run_independent_review
+    rc = _rc(test_db, review_payload={"recommendation": "HOLD"})
+    verdict = run_independent_review(falsification_questions=["x"])
+    result = attach_independent_review(test_db, rc["id"], verdict, reviewer="opus_reviewer")
+    assert result["review_payload"]["independent_review"]["status"] == "pass"
+    assert result["review_payload"]["independent_review"]["reviewer"] == "opus_reviewer"
+    # Original payload field survives the merge.
+    assert result["review_payload"]["recommendation"] == "HOLD"
+
+
+def test_attach_independent_review_raises_on_missing_case(test_db):
+    from backend.research.review_loop import attach_independent_review, run_independent_review
+    verdict = run_independent_review(falsification_questions=["x"])
+    with pytest.raises(ValueError, match="not found"):
+        attach_independent_review(test_db, 9999, verdict, reviewer="opus_reviewer")
+
+
+def test_attach_independent_review_is_audited(test_db):
+    from backend.memory.audit_log import audit_search
+    from backend.research.review_loop import attach_independent_review, run_independent_review
+    rc = _rc(test_db)
+    verdict = run_independent_review(falsification_questions=["x"])
+    attach_independent_review(test_db, rc["id"], verdict, reviewer="opus_reviewer")
+    hits = audit_search(test_db, "review_loop.attach_independent_review")
+    assert len(hits) >= 1
