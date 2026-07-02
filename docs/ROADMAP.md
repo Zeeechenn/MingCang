@@ -10,7 +10,7 @@
 
 | 工作线 | 当前状态 | 第一动作 | 停止条件 |
 |---|---|---|---|
-| M54 新闻层 v2（多源可插拔·正文级·多信号综合评分） | 阶段0–7 已建（token 金字塔 `661deaa`）+ **三轮预注册 OOS（06-29/06-30/07-02）**。**第三轮（100支，claude-sonnet-4-6）推翻第二轮乐观结论**：h3d legacy 反超 v2（Δ=-0.064，legacy IC+0.118 > v2 IC+0.054），仅 h5d 仍支持 v2（Δ=+0.081）——两 horizon 不一致，按预注册规则3 判**第二轮"v2胜出"为小样本假象**，v2 信号设计需回炉，生产维持 legacy。三轮一致证实 IC天(14/9)由非重叠时间窗口数决定、与横截面宽度无关（50→100支仅12/8→14/9）——**下一步不再扩股票数**。v2-pyramid 保真度未达标（两 horizon 均劣于 v2-full ≥0.01 门，幅度远超预期，疑不止阈值问题）。详见 `docs/dev/M54_OOS_PREREGISTER.md` §10 | ① 诊断第二轮为何未复现（是否为有利子样本／新增50支拖累信号）② 按规则2 改向前采集扩窗口（IC天是唯一瓶颈，已证与横截面无关）③ 独立诊断 pyramid 触发逻辑损伤幅度异常 | 未过独立预注册 OOS 即启用/接 live test2/改情感权重/外溢 official signal·仓位·scheduler；不再扩横截面掩盖 IC天瓶颈；weight_sentiment 由 OOS 重定、中途不手调；不事后挑解释掩盖方向消失 |
+| M54 新闻层 v2（多源可插拔·正文级·多信号综合评分） | 阶段0–7 已建（token 金字塔 `661deaa`）+ **三轮预注册 OOS + 第三轮取证复核**。**第三轮 h3d（唯一干净 horizon；h5d 因价格回填污染作废）子样本分解**：原50支（=前两轮 universe）v2 仍领先 legacy（Δ+0.012，第二轮**复现**）；全100 反转（Δ-0.064）**完全由新增50支驱动**（那批 legacy 强，Δ-0.092）——是 **universe 异质性**（v2 正文级优势不覆盖新增名字），非"v2 不行"。pyramid 负 IC 是测量假象：仅触发的839窗口上 pyramid 反略强于 v2-full（Δh3d+0.055），触发率34%=**省约66% LLM**。三轮证实 IC天(14/9)由时间窗口数定、与横截面无关。详见 `docs/dev/M54_OOS_PREREGISTER.md` §10-11 | **先修两 harness bug 再跑第四轮**：①打分前冻结价格快照（杜绝 h5d 漂移）②`PYRAMID_NOT_TRIGGERED` 纳入 IC 排除。再：③主攻新增50支异质性诊断（v2 对什么股票有效）④向前采集扩窗口过 IC天门 | 未过独立预注册 OOS 即启用/接 live test2/改情感权重/外溢 official signal·仓位·scheduler；不再扩横截面掩盖 IC天瓶颈；weight_sentiment 由 OOS 重定、中途不手调；**跑数前必须确认窗口末段价格全覆盖 + 新降级flag同步进 harness 排除**（第三轮教训） |
 | M56 AI 产业预警雷达 | planned 2026-07-02 / observe-only / non-promoting：把 AI capex、算力租赁、HBM、AI 信贷、数据中心约束、repo leverage、AI 龙头估值杀等八类指标做成独立行业风险观察层，不是个股 alpha 或仓位引擎。**呈现为报告内观察章节，非首页一级卡**（历史校验前不上前端权重） | **Phase 0a 数据可得性前置门：先摸 8 指标可稳定获取的时序，能稳定拿到 ≥5 个才立项开工，否则砍成轻量版**；Phase 0b spec + schema；Phase 1 手动/周度报告；Phase 2 快照持久化 + Evidence Card；Phase 3 只在历史校验后接入 `market_regime` 轻度注释 | 数据可得性未过前置门即进入 Phase 1；不直接改 official signal / 个股 scoring / 情感权重 / 仓位 / scheduler / test2；不得把缺数据指标伪装成中性 0；不得在未有历史命中记录前作为买卖建议或首页一级卡 |
 | M51 外部项目借鉴优化 | 已启动 / non-promoting：D1 已把 DSR/PBO/trial-count 作为 `m29_hypothesis_registry` 的过拟合防线合约；研究轨已落 `research_report_pack.v1` 前端归一 adapter + Reports Markdown copy。详案 `docs/dev/M51_EXTERNAL_BORROWING_PLAN.md` | 下一步深化 Report Viewer / Evidence Card（不重写 deep_research），再在明确 scoped 时做 MingCang-GAIA seed；M29 续作只在 readiness true 后跑 forward shadow | non-promoting；不新建平行回测/因子/审计/数据校验系统；不改 official signal/仓位/scheduler/test2/weights |
 | M29 Forward Evidence | 2026-06-12：价格回填完成（100支×7天，700行），baseline 1d/3d/5d artifacts 已建；positive delta 9/11+8/10+8/10 windows，non-promoting。M51 D1 统计门合约已补强：DSR/PBO/trial-count 必须报告 | 先刷新/确认 2026-06-12 之后 close-complete 价格覆盖，再重跑 readiness；只有 readiness true 才追加下一窗口 1d/3d/5d shadow 和 residual attribution | 会恢复 quant、改 production profile、接 checkpoint、写真实 `sentiment_cache` 或调额外付费服务时先确认 |
@@ -124,7 +124,7 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 > **状态刷新（2026-07-02，第三轮后）**：阶段0–7 代码全部建完（正文入库/适配器 seam/聚类/分级抽取/确定性融合/端到端编排/OOS harness+预注册/token 金字塔 `661deaa`）。三轮干净 OOS 已跑（判据先落盘，不事后改）：
 > - **第一轮 06-29**（东财内容独力，50支）：IC天 12/8 « 20，gate_blocked，规则3 不晋级。
 > - **第二轮 06-30**（+iFinD 正文，50支，同窗同样本同模型codex三腿对照）：v2 相对排序显著胜 legacy——h3d Δ=+0.074、h5d Δ=+0.099，v2 正 IC、legacy 负 IC。规则3 强形态：方向确立、样本不足、不晋级，生产维持 legacy。
-> - **第三轮 07-02（100支，claude-sonnet-4-6，扩容后）：结论反转**——h3d 上 **legacy 反超 v2**（Δ=-0.064，legacy IC+0.118 vs v2 IC+0.054），仅 h5d 仍支持 v2（Δ=+0.081）。两 horizon 不一致，按预注册规则3 字面判定：**第二轮"v2胜出"判为小样本假象**，v2 信号设计需回炉，生产继续维持 legacy。v2-pyramid 保真度也未达标（两 horizon 均劣于 v2-full，幅度远超 -0.01 门，疑不止阈值问题）。
+> - **第三轮 07-02（100支，claude-sonnet-4-6，扩容后）+ 当晚取证复核（§11 修订 §10）**：全100 h3d 上 legacy 反超 v2（Δ-0.064），**但子样本分解后真相不同**——原50支（=前两轮 universe）v2 仍领先（Δ+0.012，第二轮**复现**），反转**完全来自新增50支**（legacy 在那批强，Δ-0.092）。这是 **universe 异质性**，不是"v2 方向存疑"。h5d 本轮因价格回填时间差污染（fetched_at 证据）**作废**，只 h3d 干净。pyramid 负 IC 是测量假象（66% 未触发窗口 fallback 污染 IC）；仅触发窗口上 pyramid 反略强于 v2-full，触发率34%省约66% LLM。⚠️ §10 当日"信号回炉/方向存疑"措辞被 §11 判定**下重了**，保留作审计痕迹。
 > - **横截面扩容三轮一致证伪**：IC天由 12/8（50支）→14/9（100支，第三轮三腿一致），扩了一倍股票数只挪 2 天——**确定性结论：IC天由非重叠时间窗口数决定，与横截面宽度基本无关，下一步不再扩股票数**。详见 `docs/dev/M54_OOS_PREREGISTER.md` §9-10。
 
 ### Token 经济学约束（2026-07-02 增补 · 扩样本前必须先落地）
@@ -160,7 +160,7 @@ Stop before any production change, checkpoint wiring, Kronos long training, true
 
 **完整 spec**：`docs/dev/M54_NEWS_LAYER_V2_DESIGN.md`（架构/schema/管线/融合/降级/路线A·B·C/验证门控/回填可行性/实施6阶段/开放决策）。
 
-**第一动作（2026-07-02 第三轮后刷新）**：~~扩 universe 至 100-300 支~~（已做，证伪"扩横截面"路径）→ 现为：① 诊断第二轮为何未复现（是否第二轮50支恰为有利子样本、或新增50支拖累信号——需对比两轮子样本的具体差异，而非直接归因样本量）；② 按预注册规则2 改**向前采集扩窗口**（IC天是唯一瓶颈，三轮已证与横截面无关，不再扩股票数）；③ 独立诊断 v2-pyramid 触发逻辑损伤幅度异常（不只当阈值调参处理）。
+**第一动作（2026-07-02 取证复核后刷新，取代前版）**：~~扩横截面~~（已证伪）、~~诊断"哪50支拖累"~~（已答：新增50支，且原50支 v2 仍领先）→ 现为按序：① **修两个 harness bug**（这是跑第四轮的前置，否则又是脏数据）：(a) 打分前冻结价格快照或跑前确认窗口末段价格全覆盖，杜绝 h5d 价格漂移；(b) `PYRAMID_NOT_TRIGGERED` 纳入 harness IC 排除逻辑（与 DEGRADED 同待遇）；② **主攻新增50支异质性诊断**——正文级为什么在那批名字上不灵（NEWS_THIN 占比 / 行业分布 / 还是 legacy 高方差虚高），直接指向"v2 对什么股票有效"；③ 向前采集扩窗口过 IC天门（排在 ①② 之后）；④ pyramid 结论转正：省66%成本且触发窗口不损信号，harness 排除 bug 修复后第四轮可设 pyramid 为默认跑法。
 
 **停止条件**：未过独立预注册 OOS 门即启用 v2 / 接 live test2 / 改情感权重 / 外溢到 official signal·仓位·scheduler；不机械堆源充数（无 dedup/materiality 的多源放大 whipsaw）；把探索性 IC 当统计裁决；**不再扩横截面掩盖 IC天瓶颈**（三轮已证无效）；`weight_sentiment=0.4` 系 stock-sage 初始快照继承默认、从未被推导——**由 M54 OOS 结果重定，中途不手调**（保测试可比性）；**不事后挑解释掩盖方向消失**（第三轮 h3d 反转是真实结果，不因模型/窗口差异找借口否定规则3 的触发）。
 
