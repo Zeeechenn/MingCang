@@ -17,7 +17,7 @@ import sqlite3
 import statistics
 from collections import Counter
 from dataclasses import asdict, dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -31,6 +31,8 @@ from backend.tools.m58_grid_backtest import regime_from_pool_equal_weight, resol
 
 OUTPUT_JSON = Path("/private/tmp/m58_exit_sweep_report.json")
 OUTPUT_MD = Path("/private/tmp/m58_exit_sweep_report.md")
+HOLDOUT_ADJUDICATION_JSON = Path("/private/tmp/m58_holdout_adjudication.json")
+HOLDOUT_ADJUDICATION_MD = Path("/private/tmp/m58_holdout_adjudication.md")
 START_DATE = "2021-05-21"
 TEST2_START = "2026-05-12"
 TEST2_END = "2026-07-02"
@@ -104,6 +106,19 @@ class EntryEvent:
 
 def iter_exit_variants() -> list[ExitVariant]:
     return [ExitVariant(mult, mode) for mult in TRAILING_MULTS for mode in PROFIT_MODES]  # type: ignore[arg-type]
+
+
+# M58 holdout adjudication (one-time, leader-authorized). This shortlist was
+# fixed on non-holdout evidence BEFORE the holdout window was opened: A) the
+# v2 four-year large-sample sweep and B) the test2 14-variant ledger. It must
+# not grow, shrink, or be substituted after holdout results are seen --
+# `run_holdout_adjudication` refuses any other variant list at call time.
+HOLDOUT_ADJUDICATION_VARIANTS: tuple[ExitVariant, ...] = (
+    ExitVariant(2.5, "none"),  # current baseline: trailing x2.5, no profit-taking overlay
+    ExitVariant(3.0, "none"),
+    ExitVariant(3.5, "drawdown_10"),
+    ExitVariant(2.5, "drawdown_10"),
+)
 
 
 def _is_locked_limit_bar(row: PriceRow) -> bool:
@@ -651,6 +666,184 @@ def run_large_sample_sweep(
     }
 
 
+def _max_price_date(con: sqlite3.Connection) -> str:
+    row = con.execute("SELECT MAX(date) AS max_date FROM prices").fetchone()
+    if row is None or row["max_date"] is None:
+        raise RuntimeError("prices table is empty; cannot resolve holdout end")
+    return str(row["max_date"])
+
+
+def holdout_window(*, db_path: Path, today: date | None = None) -> tuple[str, str]:
+    """Resolve the one-time M58 holdout adjudication window.
+
+    ``start`` is the day after the existing v2 non-holdout cutoff, and ``end``
+    is the latest date present in ``prices``. The cutoff itself comes from
+    ``resolve_effective_end(..., include_holdout=False)`` -- the same,
+    unmodified function the v2 sweep uses -- so this boundary matches the v2
+    report exactly. This does not touch or weaken
+    ``resolve_effective_end``'s ``include_holdout=True`` guard, which still
+    raises ``NotImplementedError`` for any other caller.
+    """
+    cutoff = resolve_effective_end(None, include_holdout=False, today=today)
+    start = (date.fromisoformat(cutoff) + timedelta(days=1)).isoformat()
+    con = _connect_readonly(db_path)
+    try:
+        end = _max_price_date(con)
+    finally:
+        con.close()
+    return start, end
+
+
+def run_holdout_adjudication(
+    *,
+    db_path: Path,
+    variants: list[ExitVariant] | None = None,
+    limit_symbols: int | None = None,
+) -> dict[str, Any]:
+    """Run the one-time, leader-authorized M58 exit-parameter holdout adjudication.
+
+    This is the only path in this module that evaluates dates after the v2
+    non-holdout cutoff. It is deliberately narrow:
+
+    - the variant list is locked to ``HOLDOUT_ADJUDICATION_VARIANTS`` -- the
+      4-variant shortlist fixed on non-holdout evidence (A: v2 four-year
+      large-sample sweep; B: test2 14-variant ledger) *before* this window was
+      opened. Passing any other list raises ``ValueError`` rather than
+      silently running it -- this is a one-time adjudication, not a general
+      holdout-unlock mechanism.
+    - the window is always ``holdout_window(db_path=db_path)`` -- the day
+      after the v2 cutoff through the latest date in ``prices``. There is no
+      parameter to widen or narrow it.
+    - every other convention (entry stream: point-in-time tech_score > 20
+      executed at next open, 3-position cap, compounding equity sizing, 0.4%
+      round-trip cost, trigger-vs-fill slippage accounting) is inherited
+      unchanged from ``_build_entry_events`` / ``simulate_exit`` /
+      ``_simulate_portfolio`` / ``_metrics_for_outcomes`` -- the same helpers
+      ``run_large_sample_sweep`` uses, untouched.
+    """
+    if variants is not None and list(variants) != list(HOLDOUT_ADJUDICATION_VARIANTS):
+        raise ValueError(
+            "holdout adjudication is locked to the pre-registered 4-variant "
+            "shortlist (trailing x2.5/none, x3.0/none, x3.5/drawdown_10, "
+            "x2.5/drawdown_10); no other variant list is permitted"
+        )
+    variants = list(HOLDOUT_ADJUDICATION_VARIANTS)
+
+    from paper_trading.test2_ab_models import DEFAULT_MAX_POSITIONS
+
+    max_positions = DEFAULT_MAX_POSITIONS
+    start, end = holdout_window(db_path=db_path)
+
+    con = _connect_readonly(db_path)
+    try:
+        stocks = _eligible_symbols(con, min_days=MIN_TRADING_DAYS, limit_symbols=limit_symbols)
+        prices = _load_price_frame(con, [row["symbol"] for row in stocks], end=end)
+    finally:
+        con.close()
+    if prices.empty:
+        raise RuntimeError("no eligible prices for M58 holdout adjudication")
+
+    names = {row["symbol"]: row["name"] for row in stocks}
+    entries, rows_by_symbol, skipped = _build_entry_events(prices, start=start, end=end, names=names)
+    outcomes_by_variant: dict[str, list[tuple[EntryEvent, ExitOutcome]]] = {variant.key: [] for variant in variants}
+
+    for event in entries:
+        rows = rows_by_symbol[event.symbol]
+        path = rows[event.entry_index:]
+        if path:
+            entry = path[0]
+            path[0] = PriceRow(
+                symbol=entry.symbol,
+                date=entry.date,
+                open=event.entry_price,
+                high=entry.high,
+                low=entry.low,
+                close=entry.close,
+                atr14=event.entry_atr,
+            )
+        for variant in variants:
+            try:
+                outcomes_by_variant[variant.key].append((event, simulate_exit(path, variant)))
+            except ValueError:
+                skipped["exit_missing_atr"] = skipped.get("exit_missing_atr", 0) + 1
+
+    results = [
+        _metrics_for_outcomes(variant, outcomes_by_variant[variant.key], max_positions=max_positions)
+        for variant in variants
+    ]
+    results.sort(
+        key=lambda row: (row["return_drawdown_ratio"] if row["return_drawdown_ratio"] is not None else -math.inf, row["net_return_pct"]),
+        reverse=True,
+    )
+    baseline_key = ExitVariant(CURRENT_TRAILING_ATR_MULT, "none").key
+    return {
+        "meta": {
+            "schema_version": "m58_exit_sweep.holdout_adjudication.v1",
+            "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "mode": "holdout_adjudication",
+            "authorization": "leader-authorized one-time holdout open (M58 exit-parameter adjudication)",
+            "start": start,
+            "end": end,
+            "shortlist_locked": True,
+            "min_trading_days": MIN_TRADING_DAYS,
+            "max_positions": max_positions,
+            "position_sizing": "current_total_equity / max_positions, resized at each admission (compounding)",
+            "eligible_symbol_count": len(stocks),
+            "evaluated_symbol_count": int(prices["symbol"].nunique()),
+            "entry_threshold": ENTRY_THRESHOLD,
+            "initial_atr_mult": INITIAL_ATR_MULT,
+            "cost_round_trip": ROUND_TRIP_COST,
+            "baseline_variant": baseline_key,
+            "shortlist": [variant.key for variant in variants],
+        },
+        "trial_count": len(variants),
+        "skipped": skipped,
+        "entry_count": len(entries),
+        "results": results,
+    }
+
+
+def write_holdout_adjudication_report(
+    report: dict[str, Any],
+    *,
+    json_path: Path = HOLDOUT_ADJUDICATION_JSON,
+    md_path: Path = HOLDOUT_ADJUDICATION_MD,
+) -> tuple[Path, Path]:
+    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    md_path.write_text(_holdout_adjudication_markdown(report), encoding="utf-8")
+    return json_path, md_path
+
+
+def _holdout_adjudication_markdown(report: dict[str, Any]) -> str:
+    meta = report["meta"]
+    lines = [
+        "# M58 Exit-Parameter Holdout Adjudication (one-time)",
+        "",
+        f"- authorization: {meta['authorization']}",
+        f"- window: {meta['start']} ~ {meta['end']} (holdout only)",
+        f"- shortlist_locked: {meta['shortlist_locked']}",
+        f"- eligible_symbol_count: {meta['eligible_symbol_count']}",
+        f"- entry_count: {report['entry_count']}",
+        f"- trial_count: {report['trial_count']}",
+        f"- max_positions: {meta.get('max_positions')}",
+        f"- position_sizing: {meta.get('position_sizing')}",
+        "",
+        "| rank | variant | net_return | max_dd | ret/dd | trades | skip_cap | avg_hold | stop% | take% | trailing% | violation |",
+        "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    for idx, row in enumerate(report["results"], 1):
+        pct = row.get("exit_reason_pct", {})
+        lines.append(
+            f"| {idx} | {row['variant']['label']} | {row['net_return_pct']:+.2f}% | "
+            f"{row['max_drawdown_pct']:+.2f}% | {row['return_drawdown_ratio']} | "
+            f"{row['trades']} | {row.get('skipped_position_cap', 0)} | "
+            f"{row['avg_hold_days']:.2f} | {pct.get('stop_loss', 0.0):.2f}% | "
+            f"{pct.get('take_profit', 0.0):.2f}% | {pct.get('trailing', 0.0):.2f}% | "
+            f"{'YES' if row['drawdown_violation'] else 'no'} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def run_test2_comparison(
     large_sample_report: dict[str, Any],
     *,
@@ -1001,7 +1194,44 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--json-out", type=Path, default=OUTPUT_JSON)
     parser.add_argument("--md-out", type=Path, default=OUTPUT_MD)
+    parser.add_argument(
+        "--holdout-adjudication",
+        action="store_true",
+        help=(
+            "One-time, leader-authorized run of the fixed 4-variant exit-parameter "
+            "shortlist over the holdout window only (v2 cutoff + 1 day through the "
+            "latest date in prices). Mutually exclusive with every other sweep flag "
+            "except --db-path and --limit-symbols."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.holdout_adjudication:
+        if (
+            args.start != START_DATE
+            or args.end is not None
+            or args.include_holdout
+            or args.skip_test2
+            or args.full_test2_grid
+            or args.json_out != OUTPUT_JSON
+            or args.md_out != OUTPUT_MD
+        ):
+            parser.error(
+                "--holdout-adjudication runs a fixed window and a fixed 4-variant "
+                "shortlist; it cannot be combined with --start/--end/--include-holdout/"
+                "--skip-test2/--full-test2-grid/--json-out/--md-out"
+            )
+        holdout_report = run_holdout_adjudication(db_path=args.db_path, limit_symbols=args.limit_symbols)
+        json_path, md_path = write_holdout_adjudication_report(holdout_report)
+        summary = {
+            "json": str(json_path),
+            "md": str(md_path),
+            "window": {"start": holdout_report["meta"]["start"], "end": holdout_report["meta"]["end"]},
+            "trial_count": holdout_report["trial_count"],
+            "results": holdout_report["results"],
+        }
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 0
 
     test2_variants = None
     if args.full_test2_grid:

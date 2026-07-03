@@ -117,6 +117,66 @@ def test_holdout_unlock_is_refused_like_m58_grid_backtest():
 
 
 # ---------------------------------------------------------------------------
+# M58 holdout adjudication (one-time, leader-authorized). The shortlist is
+# fixed on non-holdout evidence before the holdout window opens, so the mode
+# must refuse any other variant list and must compute its window from the
+# same `resolve_effective_end` cutoff the v2 sweep already uses.
+# ---------------------------------------------------------------------------
+
+
+def test_holdout_adjudication_locked_shortlist_is_exactly_four_variants():
+    expected = {
+        ("2.5", "none"),
+        ("3", "none"),
+        ("3.5", "drawdown_10"),
+        ("2.5", "drawdown_10"),
+    }
+    actual = {(f"{v.trailing_atr_mult:g}", v.profit_mode) for v in m58.HOLDOUT_ADJUDICATION_VARIANTS}
+    assert actual == expected
+    assert len(m58.HOLDOUT_ADJUDICATION_VARIANTS) == 4
+
+
+def test_holdout_adjudication_rejects_any_other_variant_list():
+    with pytest.raises(ValueError, match="locked to the pre-registered"):
+        m58.run_holdout_adjudication(
+            db_path=m58.default_sqlite_path(),
+            variants=[m58.ExitVariant(2.0, "none")],
+        )
+
+    with pytest.raises(ValueError, match="locked to the pre-registered"):
+        # Same four variants plus one extra -- still rejected; the list must
+        # match exactly, growing it is exactly the "look at a few more while
+        # we're at it" data-snooping move this lock exists to prevent.
+        m58.run_holdout_adjudication(
+            db_path=m58.default_sqlite_path(),
+            variants=[*m58.HOLDOUT_ADJUDICATION_VARIANTS, m58.ExitVariant(3.25, "none")],
+        )
+
+
+def test_holdout_window_starts_day_after_v2_cutoff_and_ends_at_max_price_date(tmp_path):
+    db_path = tmp_path / "holdout_window.sqlite"
+    _seed_synthetic_price_db(db_path, n_symbols=1, n_days=5)
+    con = sqlite3.connect(db_path)
+    con.execute("DELETE FROM prices")
+    con.executemany(
+        "INSERT INTO prices (symbol, date, open, high, low, close, volume, atr14) "
+        "VALUES (?, ?, 1, 1, 1, 1, 1, 1)",
+        [("T000", d) for d in ("2025-07-04", "2025-12-31", "2026-07-03")],
+    )
+    con.commit()
+    con.close()
+
+    start, end = m58.holdout_window(db_path=db_path, today=date(2026, 7, 3))
+
+    # resolve_effective_end(None, include_holdout=False, today=2026-07-03) == "2025-07-03"
+    # (see test_holdout_unlock_is_refused_like_m58_grid_backtest above), so the
+    # holdout window must start the very next day and run to the latest date
+    # actually present in `prices` -- not some other requested end.
+    assert start == "2025-07-04"
+    assert end == "2026-07-03"
+
+
+# ---------------------------------------------------------------------------
 # Regression tests for the M58 harness bug: the large-sample sweep grouped
 # every trade in the whole universe by exit date, averaged same-day exits,
 # and compounded that list as if it were one sequential single-position
