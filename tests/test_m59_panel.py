@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 
 
@@ -375,3 +376,101 @@ def test_m59_panel_research_reference_ok_path_never_scored(tmp_path):
     # Reference-only: none of these fields feed composite_score or recommendation.
     assert candidate["composite_score"] == 72.5
     assert candidate["recommendation"] == "买入"
+
+
+def test_m59_panel_watchtower_followups_missing_when_no_file(tmp_path):
+    """M60 wiring: panel must say `missing` explicitly, never silently show an empty section."""
+    from backend.tools.m59_panel import build_panel, render_markdown
+
+    db_path = tmp_path / "no_watchtower.sqlite"
+    with _init_minimal_db(db_path):
+        pass
+
+    empty_output_dir = tmp_path / "no_watchtower_output"
+    panel = build_panel(
+        db_path=db_path,
+        as_of="2026-07-03",
+        universe_path=tmp_path / "missing.json",
+        watchtower_output_dir=empty_output_dir,
+    )
+
+    followups = panel["watchtower_followups"]
+    assert followups["items"] == []
+    assert followups["source_file"] is None
+    assert any("missing:no_watchtower_output_in" in flag for flag in followups["flags"])
+    assert "待 LLM 确认层" in followups["note"]
+    assert "missing" in render_markdown(panel)
+
+
+def test_m59_panel_watchtower_followups_reads_latest_watchtower_file(tmp_path):
+    from backend.tools.m59_panel import build_panel, render_markdown
+
+    db_path = tmp_path / "with_watchtower.sqlite"
+    with _init_minimal_db(db_path):
+        pass
+
+    output_dir = tmp_path / "watchtower_out"
+    output_dir.mkdir()
+    # Older file must be ignored in favor of the latest one (sorted by filename).
+    (output_dir / "m60_watchtower_2026-07-01.json").write_text(
+        json.dumps({"as_of": "2026-07-01", "triggers": [{"symbol": "OLD", "themes": ["x"], "trigger_type": "news_trigger", "value": None, "price": {"close": 1}}]}),
+        encoding="utf-8",
+    )
+    (output_dir / "m60_watchtower_2026-07-03.json").write_text(
+        json.dumps(
+            {
+                "as_of": "2026-07-03",
+                "triggers": [
+                    {
+                        "symbol": "603259",
+                        "themes": ["innovative_drug"],
+                        "trigger_type": "new_high_breakout",
+                        "value": 55.5,
+                        "price": {"date": "2026-07-03", "close": 55.5},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    panel = build_panel(
+        db_path=db_path,
+        as_of="2026-07-03",
+        universe_path=tmp_path / "missing.json",
+        watchtower_output_dir=output_dir,
+    )
+
+    followups = panel["watchtower_followups"]
+    assert followups["source_file"].endswith("m60_watchtower_2026-07-03.json")
+    assert followups["as_of"] == "2026-07-03"
+    assert len(followups["items"]) == 1
+    assert followups["items"][0]["symbol"] == "603259"
+    assert followups["items"][0]["followup_note"] == "触发≠买入,待 LLM 确认层(Phase 2)"
+    assert "跟进候选" in render_markdown(panel)
+
+
+def test_m59_panel_watchtower_followups_no_trigger_today_is_explicit(tmp_path):
+    from backend.tools.m59_panel import build_panel
+
+    db_path = tmp_path / "no_trigger.sqlite"
+    with _init_minimal_db(db_path):
+        pass
+
+    output_dir = tmp_path / "watchtower_out"
+    output_dir.mkdir()
+    (output_dir / "m60_watchtower_2026-07-03.json").write_text(
+        json.dumps({"as_of": "2026-07-03", "triggers": []}), encoding="utf-8"
+    )
+
+    panel = build_panel(
+        db_path=db_path,
+        as_of="2026-07-03",
+        universe_path=tmp_path / "missing.json",
+        watchtower_output_dir=output_dir,
+    )
+
+    followups = panel["watchtower_followups"]
+    assert followups["items"] == []
+    assert followups["source_file"] is not None
+    assert "watchtower_no_trigger_today" in followups["flags"]

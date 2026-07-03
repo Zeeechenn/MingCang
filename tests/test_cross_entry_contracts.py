@@ -7,6 +7,8 @@ import uuid
 from pathlib import Path
 
 AGENT_HEALTH_KEYS = {"ok", "agent_mode", "project_root", "memory", "positions", "watchlist"}
+# CLI health 额外带人话摘要字段(2026-07-03 UX 批次,小白实测驱动);pi 上下文入口不带
+AGENT_CLI_HEALTH_KEYS = AGENT_HEALTH_KEYS | {"summary"}
 PROJECT_CONTEXT_KEYS = {
     "agent_mode",
     "project_root",
@@ -35,6 +37,9 @@ STOCK_CONTEXT_KEYS = {
     "copilot",
     "layered_memory",
     "memory_context",
+    # tracked/hint: 2026-07-03 UX 批次新增——未追踪股票不再返回全 null 假象
+    "tracked",
+    "hint",
 }
 WEB_DATA_COVERAGE_KEYS = {
     "generated_at",
@@ -120,7 +125,7 @@ def test_agent_cli_read_commands_keep_json_contracts(tmp_path):
     assert project.returncode == 0, project.stderr
     assert memory.returncode == 0, memory.stderr
     assert stock.returncode == 0, stock.stderr
-    _assert_exact_keys(json.loads(health.stdout), AGENT_HEALTH_KEYS)
+    _assert_exact_keys(json.loads(health.stdout), AGENT_CLI_HEALTH_KEYS)
     _assert_exact_keys(json.loads(project.stdout), PROJECT_CONTEXT_KEYS)
     _assert_exact_keys(json.loads(memory.stdout), MEMORY_SNAPSHOT_KEYS)
     _assert_exact_keys(json.loads(stock.stdout), STOCK_CONTEXT_KEYS)

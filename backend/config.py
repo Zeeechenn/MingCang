@@ -304,6 +304,19 @@ class Settings(BaseSettings):
     # keep following atlas_enabled and stay L0-off, unchanged.
     research_l0_recall_enabled: bool = True
 
+    # M60 Watchtower Phase 1: postmarket detection thresholds. Zero-LLM,
+    # deterministic, read-only against prices/news; consumed only by
+    # backend.tools.m60_watchtower — never gates the production signal chain.
+    watchtower_lookback_days: int = 250            # trailing window for the return/volume distribution
+    watchtower_price_z_threshold: float = 2.0      # |z| over the trailing daily-return distribution
+    watchtower_price_percentile: float = 0.90      # trigger when |today's return| exceeds this percentile of trailing |returns|
+    watchtower_volume_ratio_threshold: float = 2.0 # today volume / trailing 20d average volume
+    watchtower_volume_lookback_days: int = 20      # trailing window for the volume-ratio denominator
+    watchtower_new_high_lookback_days: int = 20    # N-day new-high breakout window
+    watchtower_news_lookback_days: int = 3         # news window fed into backend.data.news_trigger.decide_trigger
+    watchtower_sector_resonance_min_ratio: float = 0.5    # >=50% of a theme's priced members must move the same (up) direction
+    watchtower_sector_resonance_min_avg_pct: float = 1.5  # and those up-moving members must average >1.5% gain
+
     # Agent local/remote guardrails. Local desktop use is trusted; remote writes
     # require an API key, explicit write enablement, and optional action allowlist.
     mingcang_agent_mode: str = "local"

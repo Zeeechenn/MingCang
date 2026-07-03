@@ -49,6 +49,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m60_watchtower",
+        "category": "stable",
+        "purpose": "M60 Phase 1 postmarket watchtower: scan the Phase 0 observation watchlist for price/volume anomaly, sector resonance, and M54 news-L1 triggers (zero LLM, deterministic).",
+        "read_write_boundary": "Read-only against prices/news via the configured SQLite database in mode=ro; writes only the requested JSON/Markdown artifacts under --output-dir (default /private/tmp), never the database.",
+        "recommended_entrypoint": "python3 -m backend.tools.m60_watchtower",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m31_cache_benchmark",
         "category": "stable",
         "purpose": "Measure M31 cache-layer latency for L1/L2 and describe L3 policy without calling it.",

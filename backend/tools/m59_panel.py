@@ -16,6 +16,9 @@ from backend.config import default_sqlite_path
 from backend.tools.m58_grid_backtest import regime_from_pool_equal_weight
 
 DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
+# M60 Watchtower Phase 1 writes m60_watchtower_*.json/.md here; the panel only
+# reads the latest one, it never triggers a scan itself.
+DEFAULT_WATCHTOWER_OUTPUT_DIR = Path("/private/tmp")
 BUY_RECOMMENDATIONS = {"买", "买入", "强买", "考虑买入", "watch/考虑买入"}
 
 # 2026-07-03 网格证伪:动量末档(bottom20%)在下行市反向(弱股反弹),不能当避雷器用,
@@ -633,6 +636,62 @@ def _build_review_attribution(con: sqlite3.Connection, as_of: str) -> dict[str, 
     return {"items": items, "note": note, "flags": ["llm_layer:not_implemented"]}
 
 
+def _find_latest_watchtower_file(output_dir: Path) -> Path | None:
+    if not output_dir.exists():
+        return None
+    candidates = sorted(output_dir.glob("m60_watchtower_*.json"))
+    return candidates[-1] if candidates else None
+
+
+def _build_watchtower_followups(watchtower_output_dir: Path) -> dict[str, Any]:
+    """M60 Phase 1 wiring: surface the latest watchtower scan as read-only followup candidates.
+
+    Never generates its own triggers — only reads the most recent
+    ``m60_watchtower_*.json`` file written by ``backend.tools.m60_watchtower``.
+    When no such file exists yet, this explicitly reports ``missing`` rather
+    than silently showing an empty section.
+    """
+    latest_file = _find_latest_watchtower_file(watchtower_output_dir)
+    if latest_file is None:
+        return {
+            "items": [],
+            "source_file": None,
+            "as_of": None,
+            "note": "触发≠买入,待 LLM 确认层(Phase 2)",
+            "flags": [f"missing:no_watchtower_output_in:{watchtower_output_dir}"],
+        }
+    try:
+        payload = json.loads(latest_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {
+            "items": [],
+            "source_file": str(latest_file),
+            "as_of": None,
+            "note": "触发≠买入,待 LLM 确认层(Phase 2)",
+            "flags": [f"invalid:watchtower_json:{exc.msg}"],
+        }
+    triggers = payload.get("triggers") if isinstance(payload, dict) else None
+    items = []
+    for trigger in triggers or []:
+        items.append(
+            {
+                "symbol": trigger.get("symbol"),
+                "themes": trigger.get("themes"),
+                "trigger_type": trigger.get("trigger_type"),
+                "value": trigger.get("value"),
+                "price": trigger.get("price"),
+                "followup_note": "触发≠买入,待 LLM 确认层(Phase 2)",
+            }
+        )
+    return {
+        "items": items,
+        "source_file": str(latest_file),
+        "as_of": payload.get("as_of") if isinstance(payload, dict) else None,
+        "note": "触发≠买入,待 LLM 确认层(Phase 2)",
+        "flags": [] if items else (["watchtower_no_trigger_today"] if isinstance(payload, dict) else ["invalid:watchtower_payload"]),
+    }
+
+
 def _build_summary(
     buy_candidates: dict[str, Any],
     position_health: dict[str, Any],
@@ -670,6 +729,7 @@ def build_panel(
     db_path: str | Path | None = None,
     as_of: str | None = None,
     universe_path: str | Path = DEFAULT_UNIVERSE_PATH,
+    watchtower_output_dir: str | Path = DEFAULT_WATCHTOWER_OUTPUT_DIR,
 ) -> dict[str, Any]:
     """Return a postmarket_panel.v1 payload without writing the database."""
     resolved_db = Path(db_path) if db_path is not None else default_sqlite_path()
@@ -689,6 +749,7 @@ def build_panel(
             "position_health": position_health,
             "risk_warnings": risk_warnings,
             "review_attribution": _build_review_attribution(con, resolved_as_of),
+            "watchtower_followups": _build_watchtower_followups(Path(watchtower_output_dir)),
         }
 
 
@@ -782,6 +843,22 @@ def render_markdown(panel: dict[str, Any]) -> str:
     for item in buffer_ranking["items"]:
         lines.append(f"| {item['symbol']} | {item.get('distance_to_stop_loss_pct')} |")
     lines.extend(["", "## ④ 复盘归因", panel["review_attribution"]["note"]])
+
+    followups = panel.get("watchtower_followups", {})
+    lines.extend(["", "## ⑤ 跟进候选(观察哨)", followups.get("note", "")])
+    if followups.get("source_file") is None:
+        lines.append(f"missing: {', '.join(followups.get('flags') or ['no_watchtower_output'])}")
+    elif not followups.get("items"):
+        lines.append(f"来源: {followups.get('source_file')} (as_of={followups.get('as_of')}) — 今日清单内无触发")
+    else:
+        lines.append(f"来源: {followups.get('source_file')} (as_of={followups.get('as_of')})")
+        lines.append("| symbol | theme | 触发类型 | 数值 |")
+        lines.append("|---|---|---|---:|")
+        for item in followups["items"]:
+            themes = item.get("themes") or []
+            lines.append(
+                f"| {item.get('symbol')} | {','.join(themes)} | {item.get('trigger_type')} | {item.get('value')} |"
+            )
     return "\n".join(lines)
 
 
@@ -790,10 +867,16 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--db", type=Path, default=None, help="SQLite DB path; defaults to configured MingCang DB")
     parser.add_argument("--as-of", default=None, help="Panel date YYYY-MM-DD; defaults to latest signal date")
     parser.add_argument("--universe", type=Path, default=DEFAULT_UNIVERSE_PATH)
+    parser.add_argument("--watchtower-output-dir", type=Path, default=DEFAULT_WATCHTOWER_OUTPUT_DIR)
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     args = parser.parse_args(argv)
 
-    panel = build_panel(db_path=args.db, as_of=args.as_of, universe_path=args.universe)
+    panel = build_panel(
+        db_path=args.db,
+        as_of=args.as_of,
+        universe_path=args.universe,
+        watchtower_output_dir=args.watchtower_output_dir,
+    )
     if args.format == "markdown":
         print(render_markdown(panel))
     else:
