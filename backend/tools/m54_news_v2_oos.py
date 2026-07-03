@@ -10,7 +10,8 @@ import argparse
 import json
 import math
 import os
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -19,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.analysis.sentiment import analyze_news
+from backend.config import settings
 from backend.data.database import SessionLocal
 from backend.data.news_fusion import DEGRADED
 from backend.data.news_layer_v2 import PYRAMID_NOT_TRIGGERED, news_v2_score_from_db
@@ -52,6 +54,31 @@ Variant = Literal["v2", "legacy-fast", "legacy-capable"]
 
 def _set_oos_namespace(ns: str = DEFAULT_OOS_NS) -> None:
     os.environ["SENTIMENT_CACHE_NS"] = ns
+
+
+@contextmanager
+def _pyramid_override(pyramid: bool | None) -> Iterator[None]:
+    """Temporarily force ``settings.news_v2_pyramid_enabled`` for one v2-leg
+    score call, then restore the prior value.
+
+    ``None`` (default) leaves the configured value untouched. This is what
+    keeps the v2-full leg explicitly selectable as a non-pyramid comparison
+    arm even after M54 §12-13 (docs/dev/M54_OOS_PREREGISTER.md) flipped the
+    project default to pyramid-on: pass ``pyramid=False`` to force the
+    pre-pyramid path regardless of the ambient default, or ``pyramid=True`` to
+    force pyramid-on regardless. Never touches anything outside this process's
+    in-memory settings object; restored in a ``finally`` so a raised exception
+    can't leak the override into later calls.
+    """
+    if pyramid is None:
+        yield
+        return
+    original = settings.news_v2_pyramid_enabled
+    settings.news_v2_pyramid_enabled = pyramid
+    try:
+        yield
+    finally:
+        settings.news_v2_pyramid_enabled = original
 
 
 def _ensure_score_cache_schema(db: Session) -> None:
@@ -687,6 +714,7 @@ def run_oos(
     session_factory: SessionFactory = SessionLocal,
     mock: bool = False,
     require_price_coverage: float = 0.0,
+    pyramid: bool | None = None,
 ) -> dict[str, Any]:
     active_ns = ns or _default_ns_for_variant(variant)
     cache_tier = tier if variant == "v2" else _legacy_tier_for_variant(variant)
@@ -757,13 +785,14 @@ def run_oos(
                 if score is None:
                     cache_misses += 1
                     if variant == "v2":
-                        signal = news_v2_score_from_db(
-                            symbol,
-                            as_of,
-                            lookback_days,
-                            active_db,
-                            tier=tier,
-                        )
+                        with _pyramid_override(pyramid):
+                            signal = news_v2_score_from_db(
+                                symbol,
+                                as_of,
+                                lookback_days,
+                                active_db,
+                                tier=tier,
+                            )
                         score = _score_from_signal(signal)
                     else:
                         score = _legacy_score_from_db(
@@ -849,6 +878,8 @@ def run_oos(
             "skipped_not_triggered": skipped_not_triggered,
             "price_coverage": price_coverage,
             "require_price_coverage": require_price_coverage,
+            "pyramid_override": pyramid,
+            "pyramid_effective_default": settings.news_v2_pyramid_enabled,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
     }
@@ -894,6 +925,19 @@ def _parse_args() -> argparse.Namespace:
             "never raise. See M54_OOS_PREREGISTER §11 bug (a)."
         ),
     )
+    parser.add_argument(
+        "--pyramid",
+        choices=("default", "on", "off"),
+        default="default",
+        help=(
+            "Override settings.news_v2_pyramid_enabled for this run's v2 leg. "
+            "'default' uses the configured value (project default is now True, "
+            "M54 §12-13); 'on'/'off' force it explicitly so the non-pyramid "
+            "v2-full leg stays selectable as a comparison arm even with the "
+            "pyramid default flipped on. No effect on legacy-fast/legacy-capable "
+            "legs, which never consult this flag."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -901,6 +945,7 @@ def main() -> None:
     args = _parse_args()
     stocks = _load_universe(args.universe, limit=args.limit)
     symbols = [stock["symbol"] for stock in stocks]
+    pyramid = {"default": None, "on": True, "off": False}[args.pyramid]
     result = run_oos(
         symbols,
         args.start,
@@ -914,6 +959,7 @@ def main() -> None:
         out=args.out,
         mock=args.mock,
         require_price_coverage=args.require_price_coverage,
+        pyramid=pyramid,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

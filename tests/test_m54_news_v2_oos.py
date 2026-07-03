@@ -309,6 +309,63 @@ def test_m54_news_v2_oos_routes_v2_variant(test_db, monkeypatch):
     assert result["meta"]["oos_namespace"] == "oos_news_v2"
 
 
+def test_m54_news_v2_oos_pyramid_override_forces_flag_then_restores(test_db, monkeypatch):
+    """M54 §12-13: settings.news_v2_pyramid_enabled default flipped to True.
+
+    --pyramid off/on must still let the v2-full leg force the flag explicitly
+    for one run (comparison arm), and must restore whatever the ambient value
+    was afterwards -- never leak the override into later calls."""
+    from backend.config import settings
+    from backend.tools import m54_news_v2_oos as tool
+
+    symbols = ["000001"]
+    _add_price_bars(test_db, symbols, "2026-01-05")
+    observed: list[bool] = []
+
+    def fake_score(symbol, as_of, lookback_days, db, *, tier="capable", flow_value=None):
+        observed.append(settings.news_v2_pyramid_enabled)
+        return NewsSignalV2(
+            composite=0.1,
+            news_score=0.1,
+            flow_score=None,
+            confidence=0.8,
+            degradation_flags=[],
+            contributing_clusters=["c1"],
+        )
+
+    monkeypatch.setattr(tool, "news_v2_score_from_db", fake_score)
+    monkeypatch.setattr(settings, "news_v2_pyramid_enabled", True)
+
+    tool.run_oos(
+        symbols,
+        "2026-01-05",
+        "2026-01-05",
+        lookback_days=1,
+        variant="v2",
+        db=test_db,
+        session_factory=lambda: test_db,
+        pyramid=False,
+    )
+
+    assert observed == [False]
+    assert settings.news_v2_pyramid_enabled is True  # restored after the run
+
+    observed.clear()
+    tool.run_oos(
+        symbols,
+        "2026-01-06",
+        "2026-01-06",
+        lookback_days=1,
+        variant="v2",
+        db=test_db,
+        session_factory=lambda: test_db,
+        pyramid=None,
+        ns="oos_pyramid_default_probe",
+    )
+
+    assert observed == [True]  # pyramid=None leaves the ambient default alone
+
+
 def test_m54_news_v2_oos_legacy_fast_uses_titles_and_isolated_ns(
     test_db, monkeypatch
 ):

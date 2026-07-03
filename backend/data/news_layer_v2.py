@@ -3,10 +3,15 @@
 M54 阶段7 event pyramid: score_news_v2()/news_v2_score_from_db() are the sole
 insertion points. The pyramid (L1 deterministic trigger gating, L2 scope-based
 shared digest caching, L2/7c LLM token budget guardrail) only activates when
-``settings.news_v2_pyramid_enabled`` is True; when False (default) both
-functions fall through byte-identical to the pre-pyramid path
-(cluster_evidence -> extract_clusters -> fuse_signal, no trigger/scope/budget
-logic at all). This module never touches backend/analysis/sentiment.py or any
+``settings.news_v2_pyramid_enabled`` is True; when False both functions fall
+through byte-identical to the pre-pyramid path (cluster_evidence ->
+extract_clusters -> fuse_signal, no trigger/scope/budget logic at all).
+
+Default is True as of M54 §12-13 (docs/dev/M54_OOS_PREREGISTER.md) -- the
+pyramid became the default v2-pipeline runner (owner-authorized token
+optimization) once it was shown to save ~66% LLM spend with no signal loss on
+its own triggered windows, independent of the still-open v2-vs-legacy verdict.
+This module never touches backend/analysis/sentiment.py or any
 production/test1/test2 weight.
 """
 from __future__ import annotations

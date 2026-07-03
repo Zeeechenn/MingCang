@@ -259,10 +259,21 @@ class Settings(BaseSettings):
     # M54 news adapter seam. Order defines priority; default keeps legacy source choice unchanged.
     news_adapters_enabled: list[str] = Field(default_factory=lambda: ["eastmoney"])
     # M54 阶段7 event pyramid orchestration switch (news_layer_v2 only; legacy
-    # backend/analysis/sentiment.py is untouched). default False keeps the v2
-    # orchestrator byte-identical to pre-pyramid behavior (score_news_v2 falls
-    # straight through to extract_clusters()+fuse_signal()).
-    news_v2_pyramid_enabled: bool = False
+    # backend/analysis/sentiment.py is untouched). When False, the v2
+    # orchestrator falls straight through to extract_clusters()+fuse_signal()
+    # (pre-pyramid behavior).
+    #
+    # M54 §12-13 (docs/dev/M54_OOS_PREREGISTER.md): the pyramid's own value
+    # (trigger-gated LLM spend, ~66% token savings, no signal loss on its own
+    # triggered windows) is independently established and owner-authorized to
+    # ship as the v2-pipeline default ahead of the still-open v2-vs-legacy
+    # verdict (blocked on IC days: 14/9 vs the 20-day gate as of §13). Default
+    # is now True for that reason. This flag is read only by the M54 v2
+    # observe-only stack (news_layer_v2.py / m54_news_v2_oos.py /
+    # m54_daily_accrual.py) -- no production scoring chain
+    # (backend/analysis/sentiment.py, official signal, scheduler, test2)
+    # reads it, so flipping this default does not change any live signal.
+    news_v2_pyramid_enabled: bool = True
     # When the pyramid is enabled, gate LLM spend behind the deterministic L1
     # trigger (backend.data.news_trigger.decide_trigger); untriggered symbols
     # skip LLM scoring and reuse cached/title-only results with an explicit

@@ -81,6 +81,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m54_daily_accrual",
+        "category": "evidence",
+        "purpose": "Daily M54 news_layer_v2 forward accrual: idempotent same-day content fetch + pyramid scoring + v2 score-cache write, plus cumulative IC-day gate progress toward the 20-day门 (M54_OOS_PREREGISTER §12-13).",
+        "read_write_boundary": "Writes deduplicated news rows and m54_oos_score_cache rows only; --report-only is fully read-only (no fetch/scoring/LLM spend).",
+        "recommended_entrypoint": "python3 -m backend.tools.m54_daily_accrual",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.backfill_coverage",
         "category": "maintenance",
         "purpose": "Backfill missing financial rows, fresh news rows, and short price history coverage gaps.",
