@@ -21,11 +21,12 @@ archive in `CHANGELOG.md`.
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
-| recent completed (v0.3.3–v0.5.1, M45–M50) | complete: productization, frontend glass-shell + TypeScript migration, MingCang naming finalization, context sanitization, M45 source-gated research positioning, M46–M48 correctness/discovery/reliability floor, M49 tools registry, M50 Serenity + ResearchReportGate. Detail in `docs/ROADMAP.md` Completed Index and `CHANGELOG.md` |
-| paper trading test2 v1 | ended 2026-07-02 by explicit user close-out; treatment ledger: 10 trades, 60% win rate, +19.53% position-weighted net return; direction-only evidence, not a statistical promotion gate |
-| M51 external borrowing | started, non-promoting: D1 overfit guard is grafted into `m29_hypothesis_registry` (DSR/PBO/trial-count contract); report-pack v1 adapter exists in frontend and Reports can copy normalized Markdown. Remaining: fuller Report Viewer/Evidence Card, MingCang-GAIA, D2-D4 data/PIT work |
-| M44 / Atlas | complete and dormant: `9820143` is in `origin/main`; Atlas/test4 Stage 2b signal-overlay shadow starter exists; `ATLAS_ENABLED=false` |
-| M29 | baseline 1d/3d/5d forward artifacts created 2026-06-12; positive delta 9/11 + 8/10 + 8/10 windows; non-promoting; DSR/PBO/trial-count registry guard added; next: refresh/confirm post-06-12 price coverage, then rerun readiness before any forward shadow |
+| quant_score provenance | LGBM served through 2026-06-05; since the 2026-06-06 rename the model file was never migrated to `~/.mingcang/models/`, so `quant_score` has silently been the `placeholder_v0` momentum fallback (0.6×mom5 + 0.4×mom20). Fixed 2026-07-03: missing model now emits an explicit one-time warning and `quant_model` provenance is persisted per signal into `decision_runs.input_snapshot_json` (regression: `tests/test_quant_model_degradation.py`). Momentum fallback deliberately kept serving (M26 gates failed → `keep_quant_disabled`; LGBM in-service ICIR ≈ 0.07); production composite unaffected (`WEIGHT_QUANT=0.0`). Caveat: the Saturday 09:00 `job_train_model` cron would write a fresh model and flip serving back to LGBM if the scheduler daemon runs |
+| completed history | v0.3.3–v0.5.2 / M45–M55: see `CHANGELOG.md` (not restated here) |
+| paper trading test2 | v1 ended 2026-07-02 (10 trades, 60% win, +19.53% weighted); **v2 started 2026-07-03**: exit params unchanged per M21.4 decision C (single-variable), direction-only evidence as before |
+| M51 external borrowing | suspended 2026-07-03 (star-growth strategy deferred); landed pieces kept in service: D1 DSR/PBO/trial-count contract in `m29_hypothesis_registry`, report-pack v1 adapter |
+| M44 / Atlas | **archived REJECT 2026-07-03**: Gate-B historical backfill verdict REJECT (delta -0.59pp), relaxed gate variants all worse, Stage 2b overlay 8.0% vs baseline 27.95%. Research-artifacts-as-signal-filter line falsified. L0-L4 memory / cases / review loop / evidence ledger kept as infrastructure for M57 (no scoring role); evidence accrual stopped; `ATLAS_ENABLED=false` permanent |
+| M29 | mechanism (hypothesis registry / readiness / evidence ledger) folded into M58 as infrastructure; no standalone line |
 | remote agent mode | opt-in only; read-only by default |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
@@ -54,19 +55,18 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 ## Active Work
 
-| Workstream | First action | Stop condition |
-|---|---|---|
-| M51 external borrowing | Continue from the small graft now in place: deepen the report-pack viewer/Evidence Card from `research_report_pack.v1`, then seed MingCang-GAIA only when scoped. D1 overfit guard is done at registry-contract level; D2/D4 remain data/PIT work under M12 | Graft into existing modules only; never build a parallel backtest/factor/audit/data-validation system; do not touch official signal, positions, scheduler, test2, or production weights |
-| M50 research gate follow-up | Phase 0-3 is complete/released; only start next-batch quality gates or frontend evidence cards when explicitly scoped (folded into M51 Phase 2) | Do not connect Serenity, source tiers, or importer metadata to official signals, labels, scheduler, test2, positions, or production weights |
-| M29 forward evidence ops | Refresh/confirm close-complete post-2026-06-12 price coverage, run `backend.tools.m29_forward_readiness`, then extend the next 1d/3d/5d shadow window only if readiness is true | Stop if fresh coverage is incomplete, artifacts are partial, or a change would re-enable quant / Kronos / production scoring |
-| M45 research-positioning follow-up | Use dry-run-first importer / scoreboard only with direct source fidelity | Do not promote trusted memory, official signals, production profile, scheduler, test2, stops, sizing, or positions |
-| M32 hypothesis bridge | Start only after review data is thick enough; current local DB has only a small seed set (`review_cases=2`, `forward_theses=2` as of 2026-06-09) | Output falsifiable theses, not Strong Buy labels |
-| M44 Atlas | Use `backend.tools.atlas_test4_stage2b_shadow` only for non-promoting signal-overlay shadow accrual | Stop on any official-signal / test2 / scheduler / shared-infra drift |
+Per-workstream first action and stop condition live in `docs/ROADMAP.md` — the
+single source of truth for sequencing; this file only carries the state snapshot
+above. Live lines as of 2026-07-03 (direction reset: composite-score fusion abandoned,
+function-slot decomposition adopted): **M58** decision-formula rebuild (core),
+**M54** news v2 forward accrual (pyramid default, verdict gated on IC-days>20),
+**M57** memory self-evolution (MVP), **M59** post-market action panel
+(LLM-discretion productization). Everything else is archived — see the
+ROADMAP archive index.
 
-For detailed current sequencing, read `docs/ROADMAP.md`. For Atlas/M44 detail,
-read `docs/ATLAS_MERGE.md`. For older milestone history, read `CHANGELOG.md`
-only when the task actually asks for releases, audit trail, or historical
-verification.
+For Atlas/M44 detail read `docs/ATLAS_MERGE.md`. For older milestone history read
+`CHANGELOG.md` only when the task actually asks for releases, audit trail, or
+historical verification.
 
 ## Validation Snapshot
 
