@@ -57,6 +57,13 @@ Same day, full batch:
 
 > Tiered calls with ATR stop/target levels; no price predictions, no "buy / guaranteed gains." News sentiment is scored by an LLM reading the day's news.
 
+## MingCang in 30 seconds
+
+- **What it does**: every day it scans the stocks you follow, gives a tiered call (small starter / watch / stand by / avoid), pre-computes stop-loss/target levels, and scores the day's news sentiment; every judgment and outcome gets saved for next time.
+- **What it doesn't do**: it doesn't predict price moves, doesn't place orders, and doesn't decide for you — AI only "scans wider and pokes holes," the buy/sell call is always yours.
+- **Where your data lives**: everything runs on your own machine; prices/news/positions never leave it. It only reaches the network when you turn on a feature like news search.
+- **How to start**: run `make demo` below for a no-install trial; once it clicks, install `mingcang` via [Quick start](#quick-start) for daily use.
+
 ## Test 1: paper-trading results
 
 ```
@@ -75,39 +82,7 @@ Same day, full batch:
 
 > 7 trades all closed: 2 winners, 5 stops; stops averaged −5.33% (max −9.20%), position-weighted total +3.79%. Paper-trading replay, not real money, history not rewritten.
 >
-> Mechanism: see the [research-to-decision loop](#architecture-the-research-to-decision-loop) below.
-
-<details>
-<summary><b>🔬 One layer deeper than the signal: research-framework analysts + data layer (click to expand)</b></summary>
-
-### A built-in team of research-framework analysts
-
-MingCang **encodes mature research methodologies into reusable analyst modules** that each judge a stock from a different angle, then fuses them:
-
-| Analyst | Methodology source | Looks at |
-|---|---|---|
-| 📊 **Piotroski F-Score** | classic academic 9 factors | financial quality: profitability / leverage / efficiency |
-| 📈 **Prosperity analyst** | Kaiyuan Securities "Prosperity Investing" 7×34 framework | Δ marginal change: acceleration of profit / revenue / ROE |
-| 🔗 **Supply-chain analyst** | industry-chain · five-layer framework | tech/hardware sectors: supply-chain check → overseas leading indicators → cyclical vs structural → hype filter → overbought filter |
-
-> Three analysts → weighted blend → **one-veto** fusion → long-term label (Hold-worthy / Overvalued / Stand by / Avoid), **on by default, each toggleable.** A **supply-chain chokepoint research methodology (Serenity)** is ready and observe-only, but disabled by default (`long_term_serenity_enabled=False`) with no production entry point yet — it is not currently rolled out into the long-term label. QFII flow and more frameworks are under evaluation.
->
-> Note: this is a **long-term research layer** separate from the **daily signal (plain formula)** — it never changes the daily signal directly. These frameworks are also exposed as **skills / CLI / MCP**, callable from Claude Code / Codex / Cursor.
-
-### The data layer: not just reading an API key
-
-The signals and judgments above sit on an **audited data foundation**, not raw key reads:
-
-| Capability | What it does |
-|---|---|
-| 🔀 **Multi-source + auto-fallback** | a provider registry; on failure it switches to a backup source with cooldowns |
-| ⏳ **Point-in-Time (PIT)** | backtests read data as-of the decision date — no "cheating" with future data |
-| 🧪 **Quality gates + coverage reports** | price-quality checks, data-coverage and source-reliability reports, auto-alerts on dirty data |
-| 🗃️ **Cache & freshness policy** | a declarative contract for when remote data may be fetched |
-
-> No matter how good the signals are, **dirty data makes it all a castle in the air.** This foundation keeps every judgment above standing on reproducible, lookahead-free data.
-
-</details>
+> Mechanism: see the research-to-decision loop in [Deep dive](#deep-dive) below.
 
 ---
 
@@ -139,42 +114,20 @@ make demo        # seed mock data, then start backend + frontend
 
 Open <http://127.0.0.1:5173>. The first screen is the new MingCang terminal: you can ask for stock research, review candidates, watchlist actions, and governance drafts in natural language. The navigation opens the decision pulse, stock dossiers, review dossiers, research copilot, position discipline, source health, and governance console. The demo database also includes sample stocks, a long-term thesis, a review case, and one pending memory-promotion candidate for the full loop in the [User Guide](docs_public/USER_GUIDE.md). The backend health check is at <http://127.0.0.1:8000/health>, and the interactive API docs (Swagger UI) are at <http://127.0.0.1:8000/docs>. Press `Ctrl+C` to stop the demo.
 
+> The demo DB and the real DB are two separate datasets: the demo only has three sample stocks (Kweichow Moutai, Zhongji Innolight, Ping An). Once you switch to a real environment and look up those same tickers, you may get empty signals/labels if they aren't in your own tracked pool — that's expected, just use your own watchlist symbols instead.
+
 ![MingCang frontend preview: decision pulse dossier](docs/assets/screenshot-watchlist.png)
 
----
+Already have a Python environment and want the real commands instead of the demo?
 
-## Architecture: the research-to-decision loop
-
-0.3.0 rebuilds the whole research model into a **case-based loop**: four "cases" wire research, signal, position, and review into one loop across five layers (L0–L4). Each case answers exactly one question, and they link to each other and stay auditable.
-
-![MingCang research-to-decision architecture](docs/assets/architecture.svg)
-
+```bash
+git clone https://github.com/Zeeechenn/MingCang.git
+cd MingCang
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"                            # install dependencies
+python3 -m backend.agent.cli health --pretty       # health check: DB, deps, permissions
+python3 -m backend.tools.m59_panel                 # post-market panel: signals, position health, risk alerts
 ```
-Import (data + news + your judgment + external theses)
-        │
-        ▼
-  ResearchCase ──▶ SignalCase ──▶ PositionCase ──▶ ReviewCase
-   why study it?    tradable now?   why hold / when exit?  what did it teach?
-        ▲                                                     │
-        └──────────── memory update (outcome-gated, human-confirmed) ◀───┘
-```
-
-| Layer | Name | Question | Boundary |
-|---|---|---|---|
-| **L0** | Memory / Knowledge Base | What have I learned before? | User rules, reviewed lessons, research memory; LLM output defaults to `pending` and cannot self-promote to trusted |
-| **L1** | Evidence | What reliable evidence exists? | Source/time/PIT/quality-aware evidence cards; packaging only, no scoring |
-| **L2** | Thesis | Is this worth studying? | `ResearchCase`, `ForwardThesis`, theme hypotheses; advisory, never overrides official action |
-| **L3** | Signal / Position | Tradable now? How to enter/exit? | `SignalCase` / `PositionCase` proposals and shadow output; doesn't touch real positions directly |
-| **L4** | Review / Promotion / Calibration | What did the outcome teach? | `ReviewCase` attribution → memory-promotion candidate; trusted promotion stays human-gated |
-
-### How the pieces fuse together
-
-- **Single-stock research** → the `ResearchCase → SignalCase → PositionCase` path: `mingcang stock <symbol>` gives you the official signal, news, labels, and the research copilot's shadow conclusion in one shot.
-- **Long-term / theme research** → lives in **L2 (Thesis)**: external analyst, institutional, and prosperity/financial-framework judgments are imported as a `ForwardThesis` (with invalidation conditions, follow-up metrics, review cadence) and tracked as slow evidence — never a shortcut to a buy score.
-- **Where data comes from** → **L1 (Evidence) + the data layer**: A-share prices/financials/QFII, news sentiment, A/HK/US read-only global data, all in local SQLite, never the cloud; a Provider Guard enforces freshness and adjustment-basis sanity.
-- **What memory is for** → **L0 + L4**: rules, lessons, and research indexes are stored in layers; only ReviewCase-attributed, human-confirmed outcomes promote from `pending` to trusted, then feed back as context for the next judgment — that's why the loop grows.
-
-> **Status**: this case-based loop has landed but is **dormant by default** — the skeleton comes first with zero production-signal change, activating layer by layer as the forward-evidence gate clears. Production signals remain technical 0.6 + sentiment 0.4 + ATR 2.5 trailing stop; quant stays off pending evidence.
 
 ---
 
@@ -292,6 +245,72 @@ Core MCP tools:
 
 ---
 
+## Deep dive
+
+Everything above covers daily use. This section is for readers who want to know how it actually runs under the hood — it uses some internal terms; skip it and you can still use the product fine.
+
+### Research-framework analysts + data layer
+
+MingCang **encodes mature research methodologies into reusable analyst modules** that each judge a stock from a different angle, then fuses them:
+
+| Analyst | Methodology source | Looks at |
+|---|---|---|
+| 📊 **Piotroski F-Score** | classic academic 9 factors | financial quality: profitability / leverage / efficiency |
+| 📈 **Prosperity analyst** | Kaiyuan Securities "Prosperity Investing" 7×34 framework | Δ marginal change: acceleration of profit / revenue / ROE |
+| 🔗 **Supply-chain analyst** | industry-chain · five-layer framework | tech/hardware sectors: supply-chain check → overseas leading indicators → cyclical vs structural → hype filter → overbought filter |
+
+> Three analysts → weighted blend → **one-veto** fusion → long-term label (Hold-worthy / Overvalued / Stand by / Avoid), **on by default, each toggleable.** A **supply-chain chokepoint research methodology (Serenity)** is ready and **observe-only** (research-observation only — it never feeds a trade or a score, strictly read-only), but disabled by default (`long_term_serenity_enabled=False`) with no production entry point yet — it is not currently rolled out into the long-term label. QFII flow and more frameworks are under evaluation.
+>
+> Note: this is a **long-term research layer** separate from the **daily signal (plain formula)** — it never changes the daily signal directly. These frameworks are also exposed as **skills / CLI / MCP**, callable from Claude Code / Codex / Cursor.
+
+The signals and judgments above sit on an **audited data foundation**, not raw key reads:
+
+| Capability | What it does |
+|---|---|
+| 🔀 **Multi-source + auto-fallback** | a provider registry; on failure it switches to a backup source with cooldowns |
+| ⏳ **Point-in-Time (PIT)** | backtests read data as-of the decision date — no "cheating" with future data (PIT = only using data that was actually available at that point in time) |
+| 🧪 **Quality gates + coverage reports** | price-quality checks, data-coverage and source-reliability reports, auto-alerts on dirty data |
+| 🗃️ **Cache & freshness policy** | a declarative contract for when remote data may be fetched |
+
+> No matter how good the signals are, **dirty data makes it all a castle in the air.** This foundation keeps every judgment above standing on reproducible, lookahead-free data.
+
+### Architecture: the research-to-decision loop
+
+0.3.0 rebuilds the whole research model into a **case-based loop**: four "cases" wire research, signal, position, and review into one loop across five layers (L0–L4). Each case answers exactly one question, and they link to each other and stay auditable.
+
+![MingCang research-to-decision architecture](docs/assets/architecture.svg)
+
+```
+Import (data + news + your judgment + external theses)
+        │
+        ▼
+  ResearchCase ──▶ SignalCase ──▶ PositionCase ──▶ ReviewCase
+   why study it?    tradable now?   why hold / when exit?  what did it teach?
+        ▲                                                     │
+        └──────────── memory update (outcome-gated, human-confirmed) ◀───┘
+```
+
+| Layer | Name | Question | Boundary |
+|---|---|---|---|
+| **L0** | Memory / Knowledge Base | What have I learned before? | User rules, reviewed lessons, research memory; LLM output defaults to `pending` and cannot self-promote to trusted |
+| **L1** | Evidence | What reliable evidence exists? | Source/time/PIT/quality-aware evidence cards; packaging only, no scoring |
+| **L2** | Thesis | Is this worth studying? | `ResearchCase`, `ForwardThesis`, theme hypotheses; advisory, never overrides official action |
+| **L3** | Signal / Position | Tradable now? How to enter/exit? | `SignalCase` / `PositionCase` proposals and shadow output; doesn't touch real positions directly |
+| **L4** | Review / Promotion / Calibration | What did the outcome teach? | `ReviewCase` attribution → memory-promotion candidate; trusted promotion stays human-gated |
+
+In plain terms, the four "cases" are: first record "why this is worth studying" (ResearchCase), then judge "is it tradable now" (SignalCase), then after trading record "why hold / when to exit" (PositionCase), then once the outcome lands review "what this taught us" (ReviewCase) — the four link end-to-end into one loop.
+
+### How the pieces fuse together
+
+- **Single-stock research** → the `ResearchCase → SignalCase → PositionCase` path: `mingcang stock <symbol>` gives you the official signal, news, labels, and the research copilot's shadow conclusion in one shot.
+- **Long-term / theme research** → lives in **L2 (Thesis)**: external analyst, institutional, and prosperity/financial-framework judgments are imported as a `ForwardThesis` (with invalidation conditions, follow-up metrics, review cadence) and tracked as slow evidence — never a shortcut to a buy score.
+- **Where data comes from** → **L1 (Evidence) + the data layer**: A-share prices/financials/QFII, news sentiment, A/HK/US read-only global data, all in local SQLite, never the cloud; a Provider Guard enforces freshness and adjustment-basis sanity.
+- **What memory is for** → **L0 + L4**: rules, lessons, and research indexes are stored in layers; only ReviewCase-attributed, human-confirmed outcomes promote from `pending` to trusted, then feed back as context for the next judgment — that's why the loop grows.
+
+> **Status**: this case-based loop has landed but is **dormant by default** — the skeleton comes first with zero production-signal change, activating layer by layer as the forward-evidence gate clears. Production signals remain technical 0.6 + sentiment 0.4 + ATR 2.5 trailing stop; quant stays off pending evidence.
+
+---
+
 ## Configuration
 
 <details>
@@ -330,6 +349,7 @@ Keep `.env`, databases, personal trading records, and real keys out of Git.
 | [AGENTS.md](AGENTS.md) | Agent usage rules and safety boundaries |
 | [PROJECT.md](PROJECT.md) | Codebase navigation and key file index |
 | [STATUS.md](STATUS.md) | Current production state, signal weights, test entry points |
+| PAPER_TRADING.md | Paper-trading track record entry point (**local-only file**: paper-trading records are personal data and stay out of the public repo; public readers: see the Test 1 / Test 2 sections above) |
 | [CHANGELOG.md](CHANGELOG.md) | Release history and completed work |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup and contribution flow |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full L0-L4 architecture and case-loop details (Chinese-first) |
@@ -370,7 +390,7 @@ In one line: **let AI amplify your judgment instead of guessing for you.** You a
 
 - **Judgment mainly comes from people and proven frameworks, not a model guessing prices.** The core is you, plus prosperity, financial-quality, and supply-chain frameworks; reading price action like tea leaves is a path we backtested and found has no edge.
 - **AI does just two things: widen breadth and poke holes.** Breadth means surfacing news and leads one person can't cover — always as "unverified guesses." Poking holes means challenging your assumptions, tracking invalidation conditions, and alarming before a loss.
-- **A new capability must prove itself on real results before it influences decisions.** This is also the current reality: the full research loop (L0–L4) has landed but is dormant by default, with the quant layer off; any stronger signal or model must first clear forward-evidence gates (IC / ICIR, independent samples, data quality) and your confirmation before it activates, layer by layer. Until then, production signals use a plain formula (technical 0.6 + sentiment 0.4 + ATR trailing stop).
+- **A new capability must prove itself on real results before it influences decisions.** This is also the current reality: the full research loop (L0–L4, see [Deep dive](#deep-dive)) has landed but is dormant by default, with the quant layer off; any stronger signal or model must first clear forward-evidence gates (IC / ICIR — statistical measures of whether a signal actually had predictive power historically, independent samples, data quality) and your confirmation before it activates, layer by layer. Until then, production signals use a plain formula (technical 0.6 + sentiment 0.4 + ATR trailing stop).
 - **Only outcome-verified lessons are remembered.** Whether a judgment was right is settled only after the outcome lands and the review passes — never recorded as truth just because it "sounds reasonable."
 
 **On the tool, what's coming next:**
