@@ -11,7 +11,7 @@
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-22c55e)
 ![Agent](https://img.shields.io/badge/agent--ready-Pi%20%7C%20Claude%20Code%20%7C%20Codex%20%7C%20Cursor-8957e5)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
 
 **📖 在线文档**：<https://zeeechenn.github.io/MingCang/>
 
@@ -380,6 +380,14 @@ MINGCANG_AGENT_REMOTE_WRITE_ACTIONS=
 - 定位转向"放大人的判断、用前向证据守门"，新增论题进口通道和证伪记分牌；
 - 新增开箱即用的 `mingcang` Pi 终端壳，降低使用门槛；
 - 扩展 A/HK/US 只读全球数据，强化数据质量与复权口径护栏。
+
+---
+
+## 许可证
+
+明仓当前版本采用 [PolyForm Noncommercial License 1.0.0](LICENSE)：允许个人研究、学习、实验和非商业组织使用、修改与分发；不允许未经授权的商业使用、商业集成、商业托管或再销售。商业合作或授权请先联系维护者。
+
+早期已经按 MIT License 获取的副本仍以其当时附带的许可文本为准；当前仓库和后续版本不再按 MIT 发布。
 
 ---
 

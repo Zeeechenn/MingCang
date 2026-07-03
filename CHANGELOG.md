@@ -6,6 +6,19 @@
 
 ---
 
+## [Unreleased]
+
+### Changed / 变更
+- 将当前仓库授权从 MIT License 调整为 PolyForm Noncommercial License 1.0.0；当前及后续版本允许非商业使用、修改与分发，不再允许未经授权的商业使用。
+- 同步更新 README / README_EN badge 与授权说明、`pyproject.toml` 项目元数据、`CONTRIBUTING.md` 贡献说明。
+- 压缩 `docs/ROADMAP.md`：把两个已彻底完成的里程碑（M50、M55）的完整详情段从活跃路线图下沉，活跃表只保留进行中/未启动/触发待命工作线；权威技术详情仍在 `docs/dev/m50_research_report_gate_spec.md` 与 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`，里程碑级承重点见下。目的：减少 fresh agent 每次读 ROADMAP 的上下文体积。
+
+### Completed milestone records / 完成里程碑归档（原在 ROADMAP 活跃段，现下沉）
+- **M50 Serenity 瓶颈研究 skill + 强制报告门（Phase 0-3 released / non-promoting）**：交付独立 `SerenityChokepointReport`（不复用 `role="track"`、不进 `LongTermTeam` 聚合、无 score/vote，只出 `chokepoint_layer`/`evidence_tier`/`research_priority_band` 等档位字段）；`ResearchReportGate`（`backend/research/research_report_gate.py`）在 `deep_research.py` `write_text()` **之前**强制执行，blocked 报告物理上不落盘、不 record_decision_run、不建 memory candidate；`source_tier` 枚举 + 禁词表作为 Serenity 与 Gate 共享 module；扩 `ai_supply_chain_template` 加 `chain_layers`/`source_tier`/`substitute_risk`/`source_freshness`；M45 importer/`m45_track_hook_update`/`m45_falsification_scoreboard` 的 source-tier + evidence-level guard 同步增强防旁路漂移。数据覆盖判 warning（永不 blocked），blocked 靠 `DeepResearchReport.gate_status` 区分。70 M50 测试 green、lint/mypy clean、生产 signal 零改。
+- **M55 Serenity 收敛进 ATLAS 研究脊柱 + s-skill 优点归口（Phase 0-3 done 2026-07-02 `e45bbb1`）**：把 `serenity_chokepoint.analyze()`（事实休眠：default-off + 零 CLI/web/pipeline 入口）六步降级为跑在既有 ATLAS 脊柱上的**方法论透镜**，消除独立平行 analyzer；三个外部 Serenity skill 优点归口——zad 独立 reviewer→`review_loop`、zad 中文表达规范→`dossier` 全局输出规范、zad 发现硬门+定性/数字分轨→`research_report_gate` 检查项（从 SKILL.md 文字劝导升为门强制、additive）、zad 14 判据/10 红旗→`theme_hypothesis_engine`/`forward_thesis` 选择性吸收、muxuuu 工程打包→ATLAS 自有 test 套件；fadewalk 资金流维度按**层纯度红线弃/隔离**（不入研究层）；zad 估值引擎（PT/仓位/预期空间数字）违反 observe-only 不引入；README 诚实口径修正（公开面「Serenity 灰度中」与代码 default-off 不符 → 改为方法论就绪/待激活）。保持 `test_serenity_chokepoint` 隔离不变量（no score/vote、不 import decision/LongTermTeam）。`PYTHONPATH=. pytest -q` 1274 passed、生产 signal diff=0。
+
+---
+
 ## [v0.5.2] De-personalize track analyst and archive M51 plan / 去人格化重命名与 M51 方案归档（2026-06-15）
 
 重构 + 文档，non-promoting，功能行为不变；未改 official signal / 仓位 / scheduler / test2 / production weights。
