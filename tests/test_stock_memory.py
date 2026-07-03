@@ -188,6 +188,99 @@ def test_build_memory_context_keeps_l0_dormant_by_default(test_db, monkeypatch):
     assert ctx["l0_context"]["trusted_memory"] == []
 
 
+def test_research_face_includes_l0_when_research_recall_enabled(test_db, monkeypatch):
+    """M57 Phase 0: research-facing entry points (stock context) get L0 recall
+    from research_l0_recall_enabled, independent of the dormant atlas_enabled
+    switch."""
+    from backend.agent.context import mingcang_stock_context
+    from backend.config import settings
+    from backend.memory.l0_memory import create_memory_atom, promote_atom
+
+    monkeypatch.setattr(settings, "atlas_enabled", False)
+    monkeypatch.setattr(settings, "research_l0_recall_enabled", True)
+    atom = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="thesis",
+        summary="研究面 L0 trusted thesis：订单兑现改善",
+        source_type="test",
+        source_ref="research-face-l0",
+        trust_state="pending",
+    )
+    promote_atom(test_db, atom["id"], confirmed_by="tester")
+
+    ctx = mingcang_stock_context(test_db, "300308")
+
+    assert "研究面 L0 trusted thesis：订单兑现改善" in ctx["memory_context"]["text"]
+    assert atom["id"] in ctx["memory_context"]["used_memory_atom_ids"]
+
+
+def test_research_face_excludes_l0_when_research_recall_disabled(test_db, monkeypatch):
+    """The switch also gates the off state: research_l0_recall_enabled=False
+    keeps L0 out of the research-facing context even though it defaults True."""
+    from backend.agent.context import mingcang_stock_context
+    from backend.config import settings
+    from backend.memory.l0_memory import create_memory_atom, promote_atom
+
+    monkeypatch.setattr(settings, "atlas_enabled", False)
+    monkeypatch.setattr(settings, "research_l0_recall_enabled", False)
+    atom = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="thesis",
+        summary="研究面开关关闭时不应出现的 L0 thesis",
+        source_type="test",
+        source_ref="research-face-l0-off",
+        trust_state="pending",
+    )
+    promote_atom(test_db, atom["id"], confirmed_by="tester")
+
+    ctx = mingcang_stock_context(test_db, "300308")
+
+    assert "研究面开关关闭时不应出现的 L0 thesis" not in ctx["memory_context"]["text"]
+    assert ctx["memory_context"]["used_memory_atom_ids"] == []
+
+
+def test_research_l0_recall_flag_does_not_affect_signal_path_memory_context(test_db, monkeypatch):
+    """M57 Phase 0: postmarket/signal-generation memory context calls
+    build_memory_context without include_l0, so it must keep following
+    atlas_enabled only. research_l0_recall_enabled=True must not leak L0 into
+    that call shape."""
+    from backend.config import settings
+    from backend.memory.l0_memory import create_memory_atom, promote_atom
+    from backend.memory.stock_memory import build_memory_context
+
+    monkeypatch.setattr(settings, "atlas_enabled", False)
+    monkeypatch.setattr(settings, "research_l0_recall_enabled", True)
+    atom = create_memory_atom(
+        test_db,
+        scope_type="stock",
+        scope_key="300308",
+        memory_type="thesis",
+        summary="信号面绝不应看到的 L0 thesis",
+        source_type="test",
+        source_ref="signal-face-l0",
+        trust_state="pending",
+    )
+    promote_atom(test_db, atom["id"], confirmed_by="tester")
+
+    # Same call shape as backend.jobs.postmarket._analyze_postmarket_stock:
+    # no include_l0 kwarg, task_type="postmarket_signal".
+    ctx = build_memory_context(
+        test_db,
+        symbol="300308",
+        query="300308 信号",
+        task_type="postmarket_signal",
+        record_usage=False,
+    )
+
+    assert "信号面绝不应看到的 L0 thesis" not in ctx["text"]
+    assert ctx["used_memory_atom_ids"] == []
+    assert ctx["l0_context"]["trusted_memory"] == []
+
+
 def test_build_memory_context_keeps_unrelated_global_preference_out_of_symbol_context(test_db):
     from backend.memory.ai_memory import remember
     from backend.memory.stock_memory import build_memory_context, create_stock_memory

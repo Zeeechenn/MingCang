@@ -152,12 +152,14 @@ def context_answer(
             parts.append("本窗口上下文：\n" + _sanitize_context_text(chat_context, max_lines=10))
     if symbol:
         try:
+            from backend.config import settings
             from backend.memory.stock_memory import build_memory_context
             memory_context = build_memory_context(
                 db,
                 symbol=symbol,
                 query=message,
                 task_type="chat",
+                include_l0=settings.research_l0_recall_enabled,
             )
         except Exception:
             memory_context = {"text": ""}
@@ -196,12 +198,14 @@ def long_term_answer(message: str, db: Session) -> AIChatResponse:
     save_label(label, db)
     findings = "；".join(label.key_findings[:3]) if label.key_findings else "暂无关键发现"
     try:
+        from backend.config import settings
         from backend.memory.stock_memory import build_memory_context
         memory_context = build_memory_context(
             db,
             symbol=stock.symbol,
             query=message,
             task_type="long_term_team",
+            include_l0=settings.research_l0_recall_enabled,
         )
     except Exception:
         memory_context = {"text": ""}

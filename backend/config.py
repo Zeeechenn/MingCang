@@ -285,6 +285,14 @@ class Settings(BaseSettings):
     # 调度器开关（false = 手动触发，不自动跑定时任务）
     scheduler_enabled: bool = False
 
+    # M57 Phase 0: research-facing L0 layered-memory recall. ATLAS is archived
+    # and atlas_enabled stays False forever, but research entry points (stock
+    # context, project context, chat/long-term-team research answers) should
+    # still get L0 recall by default. Scoring/signal/scheduler paths
+    # (postmarket signal generation, aggregator) do NOT read this flag — they
+    # keep following atlas_enabled and stay L0-off, unchanged.
+    research_l0_recall_enabled: bool = True
+
     # Agent local/remote guardrails. Local desktop use is trusted; remote writes
     # require an API key, explicit write enablement, and optional action allowlist.
     mingcang_agent_mode: str = "local"

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
 from backend.agent.security import agent_mode
+from backend.config import settings
 from backend.data.database import get_db
 from backend.memory.ai_memory import list_active
 from backend.memory.audit_log import audit_search, audit_write
@@ -264,7 +265,7 @@ def stock_memory_context(
         task_type=task_type,
         limit=limit,
         record_usage=False,
-        include_l0=True,
+        include_l0=settings.research_l0_recall_enabled,
     )
 
 

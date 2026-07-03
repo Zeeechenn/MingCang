@@ -203,8 +203,14 @@ def _research_copilot(db: Session, symbol: str) -> dict | None:
 def mingcang_stock_context(db: Session, symbol: str) -> dict:
     """Return the project context most useful before discussing one stock."""
     try:
+        from backend.config import settings
         from backend.memory.stock_memory import build_memory_context
-        memory_context = build_memory_context(db, symbol=symbol, task_type="stock_context")
+        memory_context = build_memory_context(
+            db,
+            symbol=symbol,
+            task_type="stock_context",
+            include_l0=settings.research_l0_recall_enabled,
+        )
     except Exception:
         memory_context = {"symbol": symbol, "task_type": "stock_context", "text": "",
                           "used_stock_memory_ids": [], "ai_memory_keys": []}
@@ -299,12 +305,14 @@ def mingcang_context(
     """Return the compact startup context coding agents should read first."""
     memory = mingcang_memory_snapshot(db, memory_dir=memory_dir)
     try:
+        from backend.config import settings
         from backend.memory.stock_memory import build_memory_context
         memory_context = build_memory_context(
             db,
             symbol=symbol,
             task_type="project_context",
             limit=6,
+            include_l0=settings.research_l0_recall_enabled,
         )
     except Exception:
         memory_context = {
@@ -345,6 +353,7 @@ def mingcang_memory_context(
 ) -> dict:
     """Return prompt-ready project memory for one stock or research task."""
     try:
+        from backend.config import settings
         from backend.memory.stock_memory import build_memory_context
 
         return build_memory_context(
@@ -353,6 +362,7 @@ def mingcang_memory_context(
             query=query,
             task_type=task_type,
             limit=limit,
+            include_l0=settings.research_l0_recall_enabled,
         )
     except Exception:
         return {
