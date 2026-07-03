@@ -202,6 +202,43 @@ def test_mingcang_context_includes_rules_memory_and_positions(test_db, sample_st
     assert "300308 若缩量上冲需降低仓位" in context["symbol_context"]["memory_context"]["text"]
 
 
+def test_mingcang_stock_context_tracked_flag_and_hint_for_unknown_symbol(test_db):
+    from backend.agent.context import mingcang_stock_context
+
+    context = mingcang_stock_context(test_db, "999999")
+
+    assert context["stock"] is None
+    assert context["tracked"] is False
+    assert context["hint"] == "该股票不在明仓数据库,可用 watchlist.add 添加后开始追踪"
+    # existing fields untouched
+    assert context["symbol"] == "999999"
+    assert context["latest_signal"] is None
+
+
+def test_mingcang_stock_context_tracked_flag_and_hint_for_inactive_symbol(test_db):
+    from backend.data.database import Stock
+    from backend.agent.context import mingcang_stock_context
+
+    test_db.add(Stock(symbol="300308", name="中际旭创", market="CN", industry="电子", active=False))
+    test_db.commit()
+
+    context = mingcang_stock_context(test_db, "300308")
+
+    assert context["stock"]["active"] is False
+    assert context["tracked"] is False
+    assert context["hint"] == "该股票在库但未激活追踪,可用 watchlist.add 重新激活后继续追踪"
+
+
+def test_mingcang_stock_context_tracked_true_for_active_symbol(test_db, sample_stocks):
+    from backend.agent.context import mingcang_stock_context
+
+    context = mingcang_stock_context(test_db, "300308")
+
+    assert context["stock"]["active"] is True
+    assert context["tracked"] is True
+    assert context["hint"] is None
+
+
 def test_legacy_context_aliases_are_not_exported():
     import backend.agent.context as context
 

@@ -41,6 +41,55 @@ def test_agent_cli_health_handles_uninitialized_database(tmp_path):
     assert payload["positions"] == {"open_count": 0, "symbols": []}
 
 
+def test_agent_cli_health_includes_plain_language_summary(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    db_url = f"sqlite:///{tmp_path / f'health-summary-{uuid.uuid4().hex}.db'}"
+
+    result = _run_cli(repo, db_url, "health")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["summary"] == "数据库正常,追踪0支,记忆0条,最新价格缺"
+
+
+def test_agent_cli_workflow_commands_include_dry_run_note(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    db_url = f"sqlite:///{tmp_path / f'workflow-note-{uuid.uuid4().hex}.db'}"
+
+    for command in ("premarket", "intraday", "postmarket", "weekend"):
+        result = _run_cli(repo, db_url, command)
+
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["note"] == (
+            "本命令返回工作流说明(dry-run),不执行、不返回真实信号。"
+            "看今日面板:python3 -m backend.tools.m59_panel;"
+            "查个股:stock-context <代码>"
+        )
+
+
+def test_agent_cli_help_annotates_equivalent_workflow_aliases():
+    repo = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, "-m", "backend.agent.cli", "--help"],
+        cwd=repo,
+        env={"PYTHONPATH": str(repo)},
+        text=True,
+        capture_output=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    for pair_text in (
+        "premarket 与 盘前 等价",
+        "intraday 与 盘中 等价",
+        "postmarket 与 盘后 等价",
+        "weekend 与 周末 等价",
+        "global-data 与 全球数据 等价",
+    ):
+        assert pair_text in result.stdout
+
+
 def test_agent_cli_context_commands_emit_json(tmp_path):
     repo = Path(__file__).resolve().parents[1]
     db_url = f"sqlite:///{tmp_path / f'context-{uuid.uuid4().hex}.db'}"

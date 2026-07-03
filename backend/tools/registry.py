@@ -241,6 +241,22 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m58_grid_backtest",
+        "category": "evidence",
+        "purpose": "M58 function-slot grid backtest (T/M families, weight lattice + rule forms, holdout locked).",
+        "read_write_boundary": "Read-only against prices; writes JSON/Markdown report artifacts under /private/tmp only.",
+        "recommended_entrypoint": "python3 -m backend.tools.m58_grid_backtest --grid",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.m58_exit_sweep",
+        "category": "evidence",
+        "purpose": "M58 exit-parameter sweep (trailing ATR grid x floating take-profit variants, portfolio-level, plus test2 ledger replay comparison).",
+        "read_write_boundary": "Read-only against prices and test2 ledger inputs; writes JSON/Markdown report artifacts under /private/tmp only.",
+        "recommended_entrypoint": "python3 -m backend.tools.m58_exit_sweep --full-test2-grid",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m58_lgbm_walkforward",
         "category": "evidence",
         "purpose": "M58 LGBM walk-forward closing test for the price-alpha quant family (rolling 250d train / 60d retrain).",

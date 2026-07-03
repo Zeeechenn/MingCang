@@ -28,6 +28,9 @@ REGIME_SHORT_WINDOW = 5
 REGIME_LONG_WINDOW = 20
 REGIME_FLAT_BAND = 0.02
 
+# 贴近止损阈值:距止损缓冲空间(distance_to_stop_loss_pct) <= 此值(%)时计入"贴近止损"人话摘要计数。
+STOP_LOSS_PROXIMITY_PCT = 5.0
+
 
 def _connect_readonly(db_path: Path) -> sqlite3.Connection:
     uri = f"file:{db_path.resolve()}?mode=ro"
@@ -630,6 +633,38 @@ def _build_review_attribution(con: sqlite3.Connection, as_of: str) -> dict[str, 
     return {"items": items, "note": note, "flags": ["llm_layer:not_implemented"]}
 
 
+def _build_summary(
+    buy_candidates: dict[str, Any],
+    position_health: dict[str, Any],
+    risk_warnings: dict[str, Any],
+) -> dict[str, Any]:
+    """Plain-language rollup for a quick read: candidates / positions near stop loss / risk hints."""
+    candidates_count = len(buy_candidates["items"])
+    position_items = position_health["items"]
+    position_count = len(position_items)
+    near_stop_loss = [
+        item
+        for item in position_items
+        if item.get("distance_to_stop_loss_pct") is not None
+        and item["distance_to_stop_loss_pct"] <= STOP_LOSS_PROXIMITY_PCT
+    ]
+    near_stop_loss_count = len(near_stop_loss)
+    risk_warning_count = len(risk_warnings["momentum_tail"]["items"])
+    text = (
+        f"今日候选{candidates_count}只/"
+        f"持仓{position_count}只其中{near_stop_loss_count}只贴近止损/"
+        f"风险提示{risk_warning_count}条"
+    )
+    return {
+        "candidates_count": candidates_count,
+        "position_count": position_count,
+        "near_stop_loss_count": near_stop_loss_count,
+        "near_stop_loss_symbols": [item["symbol"] for item in near_stop_loss],
+        "risk_warning_count": risk_warning_count,
+        "text": text,
+    }
+
+
 def build_panel(
     *,
     db_path: str | Path | None = None,
@@ -641,15 +676,18 @@ def build_panel(
     resolved_universe = Path(universe_path)
     with _connect_readonly(resolved_db) as con:
         resolved_as_of = _latest_as_of(con, as_of)
+        buy_candidates = _build_buy_candidates(con, resolved_as_of)
         position_health = _build_position_health(con, resolved_as_of)
+        risk_warnings = _build_risk_warnings(
+            con, resolved_as_of, resolved_universe, position_health["items"]
+        )
         return {
             "schema_version": "postmarket_panel.v1",
+            "summary": _build_summary(buy_candidates, position_health, risk_warnings),
             "header": _build_header(con, resolved_as_of),
-            "buy_candidates": _build_buy_candidates(con, resolved_as_of),
+            "buy_candidates": buy_candidates,
             "position_health": position_health,
-            "risk_warnings": _build_risk_warnings(
-                con, resolved_as_of, resolved_universe, position_health["items"]
-            ),
+            "risk_warnings": risk_warnings,
             "review_attribution": _build_review_attribution(con, resolved_as_of),
         }
 
@@ -677,6 +715,8 @@ def render_markdown(panel: dict[str, Any]) -> str:
         else market_reference.get("status", "missing")
     )
     lines = [
+        panel["summary"]["text"],
+        "",
         f"# M59 盘后操作面板 ({header['as_of']})",
         "",
         "## 页头",

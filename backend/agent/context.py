@@ -243,8 +243,19 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
         """,
         {"symbol": symbol},
     )
+    if stock is None:
+        tracked = False
+        hint = "该股票不在明仓数据库,可用 watchlist.add 添加后开始追踪"
+    elif not stock.active:
+        tracked = False
+        hint = "该股票在库但未激活追踪,可用 watchlist.add 重新激活后继续追踪"
+    else:
+        tracked = True
+        hint = None
     return {
         "symbol": symbol,
+        "tracked": tracked,
+        "hint": hint,
         "stock": {
             "name": stock.name,
             "market": stock.market,

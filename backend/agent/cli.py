@@ -93,13 +93,30 @@ def _normalize_global_options(argv: list[str]) -> list[str]:
     return [*globals_, *rest]
 
 
+def _latest_price_date(db) -> str | None:
+    from sqlalchemy import func
+    from sqlalchemy.exc import OperationalError
+
+    from backend.data.database import Price
+
+    try:
+        return db.query(func.max(Price.date)).scalar()
+    except OperationalError:
+        return None
+
+
 def _command_health(args: argparse.Namespace) -> dict:
     _read_guard(args)
 
     def _health(db):
         context = mingcang_context(db)
+        watchlist_count = context["watchlist"]["active_count"]
+        memory_count = context["memory"]["ai_memory_count"]
+        price_date = _latest_price_date(db) or "缺"
+        summary = f"数据库正常,追踪{watchlist_count}支,记忆{memory_count}条,最新价格{price_date}"
         return {
             "ok": True,
+            "summary": summary,
             "agent_mode": context["agent_mode"],
             "project_root": context["project_root"],
             "memory": context["memory"],
@@ -264,6 +281,11 @@ def _workflow_payload(args: argparse.Namespace, phase: str) -> dict:
     side_effects_if_executed = payload["side_effects_if_executed"]
     return {
         "ok": True,
+        "note": (
+            "本命令返回工作流说明(dry-run),不执行、不返回真实信号。"
+            "看今日面板:python3 -m backend.tools.m59_panel;"
+            "查个股:stock-context <代码>"
+        ),
         "phase": phase,
         "workflow": phase,
         "label": payload["label"],
@@ -344,7 +366,8 @@ def build_parser() -> argparse.ArgumentParser:
     global_data = subparsers.add_parser(
         "global-data",
         aliases=["全球数据"],
-        help="read M41 global data envelope by market, symbol, and intent",
+        help="read M41 global data envelope by market, symbol, and intent"
+        "（global-data 与 全球数据 等价，双别名同一命令）",
     )
     global_data.add_argument("symbol")
     global_data.add_argument("--market", choices=["CN", "HK", "US"], default="CN")
@@ -398,7 +421,7 @@ def build_parser() -> argparse.ArgumentParser:
     premarket = subparsers.add_parser(
         "premarket",
         aliases=["盘前"],
-        help="盘前一句话工作流：同步前检查与入口说明",
+        help="盘前一句话工作流：同步前检查与入口说明（premarket 与 盘前 等价，双别名同一命令）",
     )
     premarket.add_argument("--symbol", help="optional focus symbol")
     premarket.set_defaults(handler=_command_premarket)
@@ -406,7 +429,7 @@ def build_parser() -> argparse.ArgumentParser:
     intraday = subparsers.add_parser(
         "intraday",
         aliases=["盘中"],
-        help="盘中一句话工作流：只读本地缓存的快速个股入口",
+        help="盘中一句话工作流：只读本地缓存的快速个股入口（intraday 与 盘中 等价，双别名同一命令）",
     )
     intraday.add_argument("--symbol", help="optional focus symbol")
     intraday.set_defaults(handler=_command_intraday)
@@ -414,7 +437,7 @@ def build_parser() -> argparse.ArgumentParser:
     postmarket = subparsers.add_parser(
         "postmarket",
         aliases=["盘后"],
-        help="盘后一句话工作流：全市场信号与复盘报告入口",
+        help="盘后一句话工作流：全市场信号与复盘报告入口（postmarket 与 盘后 等价，双别名同一命令）",
     )
     postmarket.add_argument("--symbol", help="optional focus symbol")
     postmarket.set_defaults(handler=_command_postmarket)
@@ -422,7 +445,7 @@ def build_parser() -> argparse.ArgumentParser:
     weekend = subparsers.add_parser(
         "weekend",
         aliases=["周末"],
-        help="周末一句话工作流：长期标签刷新、周度反思与复盘报告入口",
+        help="周末一句话工作流：长期标签刷新、周度反思与复盘报告入口（weekend 与 周末 等价，双别名同一命令）",
     )
     weekend.add_argument("--symbol", help="optional focus symbol")
     weekend.set_defaults(handler=_command_weekend)

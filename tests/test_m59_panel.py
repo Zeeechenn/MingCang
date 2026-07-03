@@ -137,6 +137,15 @@ def test_m59_panel_schema_has_required_sections(tmp_path):
     assert panel["buy_candidates"]["items"][0]["llm_layer"] == "not_implemented"
     assert "买入候选" in render_markdown(panel)
 
+    # M59.1 plain-language summary: top-level JSON field + markdown header line.
+    assert "summary" in panel
+    assert panel["summary"]["candidates_count"] == 1
+    assert panel["summary"]["position_count"] == 0
+    assert panel["summary"]["near_stop_loss_count"] == 0
+    assert "今日候选1只" in panel["summary"]["text"]
+    markdown = render_markdown(panel)
+    assert markdown.splitlines()[0] == panel["summary"]["text"]
+
 
 def test_m59_panel_empty_database_does_not_crash(tmp_path):
     from backend.tools.m59_panel import build_panel
@@ -157,6 +166,39 @@ def test_m59_panel_empty_database_does_not_crash(tmp_path):
     assert "missing:table:signals" in panel["buy_candidates"]["flags"]
     assert "missing:table:prices" in panel["header"]["freshness"]["prices"]["status"]
     assert panel["header"]["market_reference"]["status"] == "missing:no_theme_level_record"
+    assert panel["summary"] == {
+        "candidates_count": 0,
+        "position_count": 0,
+        "near_stop_loss_count": 0,
+        "near_stop_loss_symbols": [],
+        "risk_warning_count": 0,
+        "text": "今日候选0只/持仓0只其中0只贴近止损/风险提示0条",
+    }
+
+
+def test_m59_panel_summary_counts_positions_near_stop_loss(tmp_path):
+    from backend.tools.m59_panel import build_panel
+
+    db_path = tmp_path / "near-stop.sqlite"
+    with _init_minimal_db(db_path) as con:
+        con.execute(
+            """
+            INSERT INTO positions(symbol, name, market, quantity, avg_cost, opened_at, stop_loss, take_profit, status)
+            VALUES ('300308', '中际旭创', 'CN', 100, 100, '2026-06-01', 98, 130, 'open')
+            """
+        )
+        # current price 100 vs stop_loss 98 -> distance_to_stop_loss_pct == 2.0, within 5% proximity band.
+        con.execute(
+            "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('300308', '2026-07-03', 100, 100, 100, 100, 1000)"
+        )
+
+    panel = build_panel(db_path=db_path, as_of="2026-07-03", universe_path=tmp_path / "missing.json")
+
+    assert panel["position_health"]["items"][0]["distance_to_stop_loss_pct"] == 2.0
+    assert panel["summary"]["position_count"] == 1
+    assert panel["summary"]["near_stop_loss_count"] == 1
+    assert panel["summary"]["near_stop_loss_symbols"] == ["300308"]
+    assert "持仓1只其中1只贴近止损" in panel["summary"]["text"]
 
 
 def test_m59_panel_bottom_20_momentum_cross_section(tmp_path):
