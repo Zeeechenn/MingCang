@@ -10,10 +10,23 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from backend.config import default_sqlite_path
+from backend.tools.m58_grid_backtest import regime_from_pool_equal_weight
 
 DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
 BUY_RECOMMENDATIONS = {"买", "买入", "强买", "考虑买入", "watch/考虑买入"}
+
+# 2026-07-03 网格证伪:动量末档(bottom20%)在下行市反向(弱股反弹),不能当避雷器用,
+# 仅上行/震荡市参考。regime 判定复用 m58 的池等权均线趋势函数,短窗5日 vs 长窗20日。
+MOMENTUM_TAIL_REGIME_NOTE = (
+    "动量末档在下行市反向(弱股反弹),经2026-07-03网格证伪:仅作上行/震荡市参考,"
+    "下行市失效,不能当避雷器用"
+)
+REGIME_SHORT_WINDOW = 5
+REGIME_LONG_WINDOW = 20
+REGIME_FLAT_BAND = 0.02
 
 
 def _connect_readonly(db_path: Path) -> sqlite3.Connection:
@@ -115,6 +128,104 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def _latest_long_term_label(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str, Any]:
+    """Return the latest still-valid long_term_labels row for symbol, reference-only."""
+    if not _table_exists(con, "long_term_labels"):
+        return {"label": None, "quality": None, "expires_at": None, "status": "missing:table:long_term_labels"}
+    cols = _columns(con, "long_term_labels")
+    if "symbol" not in cols:
+        return {"label": None, "quality": None, "expires_at": None, "status": "missing:columns:symbol"}
+    order_col = "date" if "date" in cols else ("created_at" if "created_at" in cols else None)
+    if order_col is None:
+        return {"label": None, "quality": None, "expires_at": None, "status": "missing:columns:date,created_at"}
+    where_expiry = ""
+    params: list[Any] = [symbol]
+    if "expires_at" in cols:
+        where_expiry = "AND (expires_at IS NULL OR expires_at >= ?)"
+        params.append(as_of)
+    select_cols = [column for column in ("label", "quality", "expires_at", order_col) if column in cols]
+    row = con.execute(
+        f"SELECT {', '.join(select_cols)} FROM long_term_labels WHERE symbol = ? {where_expiry} "
+        f"ORDER BY {order_col} DESC LIMIT 1",
+        params,
+    ).fetchone()
+    if row is None:
+        return {"label": None, "quality": None, "expires_at": None, "status": "missing:no_valid_label"}
+    data = dict(row)
+    return {
+        "label": data.get("label"),
+        "quality": data.get("quality"),
+        "expires_at": data.get("expires_at"),
+        "status": "ok",
+    }
+
+
+def _latest_research_pointer(con: sqlite3.Connection, symbol: str) -> dict[str, Any]:
+    """Return the most recent stock_memory_items research_pointer summary, reference-only."""
+    if not _table_exists(con, "stock_memory_items"):
+        return {"summary": None, "created_at": None, "status": "missing:table:stock_memory_items"}
+    cols = _columns(con, "stock_memory_items")
+    required = {"symbol", "memory_type", "summary", "created_at"}
+    missing = sorted(required - cols)
+    if missing:
+        return {"summary": None, "created_at": None, "status": f"missing:columns:{','.join(missing)}"}
+    row = con.execute(
+        """
+        SELECT summary, created_at
+        FROM stock_memory_items
+        WHERE symbol = ? AND memory_type = 'research_pointer'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (symbol,),
+    ).fetchone()
+    if row is None:
+        return {"summary": None, "created_at": None, "status": "missing:no_research_pointer"}
+    return {"summary": row["summary"], "created_at": row["created_at"], "status": "ok"}
+
+
+def _build_research_reference(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str, Any]:
+    """Deep/long-term research pointers for LLM discretion only; never scored (owner 2026-07-03 软联动裁决)."""
+    return {
+        "long_term_label": _latest_long_term_label(con, symbol, as_of),
+        "research_pointer": _latest_research_pointer(con, symbol),
+    }
+
+
+def _latest_market_reference(con: sqlite3.Connection) -> dict[str, Any]:
+    """Latest theme/market-level research pointer for the header line, reference-only."""
+    if _table_exists(con, "reports"):
+        cols = _columns(con, "reports")
+        title_col = "title" if "title" in cols else None
+        date_col = "created_at" if "created_at" in cols else ("date" if "date" in cols else None)
+        if title_col and date_col:
+            row = con.execute(
+                f"SELECT {title_col}, {date_col} FROM reports ORDER BY {date_col} DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                return {"title": row[0], "date": str(row[1]), "source_table": "reports", "status": "ok"}
+    if _table_exists(con, "stock_memory_items"):
+        cols = _columns(con, "stock_memory_items")
+        if {"symbol", "summary", "created_at"} <= cols:
+            row = con.execute(
+                """
+                SELECT summary, created_at
+                FROM stock_memory_items
+                WHERE symbol IS NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            if row:
+                return {
+                    "title": row["summary"],
+                    "date": str(row["created_at"]),
+                    "source_table": "stock_memory_items",
+                    "status": "ok",
+                }
+    return {"title": None, "date": None, "source_table": None, "status": "missing:no_theme_level_record"}
+
+
 def _build_header(con: sqlite3.Connection, as_of: str) -> dict[str, Any]:
     freshness = {
         "prices": _max_value(con, "prices", ["date", "fetched_at"]),
@@ -135,6 +246,7 @@ def _build_header(con: sqlite3.Connection, as_of: str) -> dict[str, Any]:
             "flag": "missing_index_ohlc",
             "note": "backend.analysis.timing.regime requires index OHLC; index_prices has close-only rows",
         },
+        "market_reference": _latest_market_reference(con),
     }
 
 
@@ -179,6 +291,7 @@ def _build_buy_candidates(con: sqlite3.Connection, as_of: str) -> dict[str, Any]
                 "llm_discretion": None,
                 "llm_layer": "not_implemented",
                 "missing": item_missing,
+                "research_reference": _build_research_reference(con, symbol, as_of),
             }
         )
     return {"items": items, "flags": flags}
@@ -237,6 +350,7 @@ def _build_position_health(con: sqlite3.Connection, as_of: str) -> dict[str, Any
                 "distance_to_stop_loss_pct": stop_distance,
                 "distance_to_take_profit_pct": take_distance,
                 "missing": missing,
+                "research_reference": _build_research_reference(con, symbol, as_of),
             }
         )
     return {"items": items, "flags": []}
@@ -288,7 +402,146 @@ def _momentum_score(series: list[tuple[str, float]]) -> tuple[float | None, floa
     return round(0.6 * mom5 + 0.4 * mom20, 6), round(mom5, 6), round(mom20, 6)
 
 
-def _build_risk_warnings(con: sqlite3.Connection, as_of: str, universe_path: Path) -> dict[str, Any]:
+def _pool_panel_frame(con: sqlite3.Connection, universe: list[dict[str, Any]], as_of: str) -> pd.DataFrame:
+    rows = []
+    for stock in universe:
+        symbol = str(stock["symbol"])
+        for trade_date, close in _price_series(con, symbol, as_of):
+            rows.append({"date": trade_date, "symbol": symbol, "close": close})
+    return pd.DataFrame(rows, columns=["date", "symbol", "close"])
+
+
+def _market_regime(con: sqlite3.Connection, universe: list[dict[str, Any]], as_of: str) -> dict[str, Any]:
+    """Pool equal-weight MA regime (short=5d vs long=20d), used to gate the momentum tail's reliability.
+
+    This is a fallback distinct from the header's HS300-index regime (which is
+    blocked on missing index OHLC): it reuses m58's
+    regime_from_pool_equal_weight over the same universe used for the momentum
+    tail, so ③ can honestly label whether its own risk signal is usable today.
+    """
+    method = (
+        f"pool_equal_weight_ma(short={REGIME_SHORT_WINDOW},long={REGIME_LONG_WINDOW},"
+        f"flat_band={REGIME_FLAT_BAND})"
+    )
+    panel = _pool_panel_frame(con, universe, as_of)
+    if panel.empty:
+        return {"value": "unknown", "method": method, "as_of_date": None, "flag": "missing:pool_price_data"}
+    regimes = regime_from_pool_equal_weight(
+        panel,
+        short_window=REGIME_SHORT_WINDOW,
+        long_window=REGIME_LONG_WINDOW,
+        flat_band=REGIME_FLAT_BAND,
+    )
+    if regimes.empty:
+        return {"value": "unknown", "method": method, "as_of_date": None, "flag": "missing:pool_price_data"}
+    latest = regimes.sort_values("date").iloc[-1]
+    return {"value": str(latest["regime"]), "method": method, "as_of_date": str(latest["date"])}
+
+
+def _build_concentration(position_items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Deterministic position-concentration risk info (test1 兆易/test2 天孚单点教训)."""
+    if not position_items:
+        return {
+            "items": [],
+            "max_position_symbol": None,
+            "max_position_weight_pct": None,
+            "top3_weight_pct": None,
+            "top3_symbols": [],
+            "position_count": 0,
+            "basis": "sum_of_open_position_market_value(quantity*current_price_or_avg_cost_fallback)",
+            "flags": ["no_open_positions"],
+        }
+    valued = []
+    for item in position_items:
+        quantity = item.get("quantity")
+        price = item.get("current_price")
+        avg_cost = item.get("avg_cost")
+        value = None
+        used_avg_cost_fallback = False
+        if quantity is not None:
+            if price is not None:
+                value = quantity * price
+            elif avg_cost is not None:
+                value = quantity * avg_cost
+                used_avg_cost_fallback = True
+        valued.append(
+            {
+                "symbol": item["symbol"],
+                "name": item.get("name"),
+                "value": value,
+                "used_avg_cost_fallback": used_avg_cost_fallback,
+            }
+        )
+    priced = [entry for entry in valued if entry["value"] is not None]
+    flags: list[str] = []
+    unpriced = [entry["symbol"] for entry in valued if entry["value"] is None]
+    if unpriced:
+        flags.append(f"missing:value_for:{','.join(unpriced)}")
+    if not priced:
+        return {
+            "items": [],
+            "max_position_symbol": None,
+            "max_position_weight_pct": None,
+            "top3_weight_pct": None,
+            "top3_symbols": [],
+            "position_count": len(position_items),
+            "basis": "sum_of_open_position_market_value(quantity*current_price_or_avg_cost_fallback)",
+            "flags": flags,
+        }
+    total = sum(entry["value"] for entry in priced)
+    for entry in priced:
+        entry["weight_pct"] = round(100 * entry["value"] / total, 2) if total else None
+    priced.sort(key=lambda entry: (-(entry["weight_pct"] or -1), entry["symbol"]))
+    top3 = priced[:3]
+    fallback_symbols = [entry["symbol"] for entry in priced if entry["used_avg_cost_fallback"]]
+    if fallback_symbols:
+        flags.append(f"used_avg_cost_fallback:{','.join(fallback_symbols)}")
+    return {
+        "items": [
+            {"symbol": entry["symbol"], "name": entry["name"], "weight_pct": entry["weight_pct"]}
+            for entry in priced
+        ],
+        "max_position_symbol": priced[0]["symbol"],
+        "max_position_weight_pct": priced[0]["weight_pct"],
+        "top3_weight_pct": round(sum(entry["weight_pct"] or 0 for entry in top3), 2),
+        "top3_symbols": [entry["symbol"] for entry in top3],
+        "position_count": len(position_items),
+        "basis": "sum_of_open_position_market_value(quantity*current_price_or_avg_cost_fallback)",
+        "flags": flags,
+    }
+
+
+def _build_stop_loss_buffer_ranking(position_items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Positions ranked by remaining buffer to stop loss, thinnest buffer first."""
+    with_distance = [item for item in position_items if item.get("distance_to_stop_loss_pct") is not None]
+    without_distance = [item for item in position_items if item.get("distance_to_stop_loss_pct") is None]
+    with_distance.sort(key=lambda item: (item["distance_to_stop_loss_pct"], item["symbol"]))
+    items = [
+        {
+            "symbol": item["symbol"],
+            "name": item.get("name"),
+            "distance_to_stop_loss_pct": item["distance_to_stop_loss_pct"],
+            "current_price": item.get("current_price"),
+            "stop_loss": item.get("stop_loss"),
+        }
+        for item in with_distance
+    ]
+    missing_symbols = [item["symbol"] for item in without_distance]
+    flags = [f"missing:distance_to_stop_loss_pct:{','.join(missing_symbols)}"] if missing_symbols else []
+    return {
+        "items": items,
+        "missing_symbols": missing_symbols,
+        "note": "按距止损缓冲空间升序排列,最薄的排最前",
+        "flags": flags,
+    }
+
+
+def _build_risk_warnings(
+    con: sqlite3.Connection,
+    as_of: str,
+    universe_path: Path,
+    position_items: list[dict[str, Any]],
+) -> dict[str, Any]:
     universe, flags = _load_universe(universe_path)
     positions = _open_position_symbols(con)
     complete: list[dict[str, Any]] = []
@@ -312,10 +565,27 @@ def _build_risk_warnings(con: sqlite3.Connection, as_of: str, universe_path: Pat
         )
     complete.sort(key=lambda item: (item["momentum_score"], item["symbol"]))
     n_tail = math.ceil(len(complete) * 0.2) if complete else 0
+
+    regime = _market_regime(con, universe, as_of)
+    if regime["value"] in ("up", "flat"):
+        regime_reliable: bool | None = True
+    elif regime["value"] == "down":
+        regime_reliable = False
+    else:
+        regime_reliable = None
+
     return {
-        "method": "placeholder_v0:0.6*mom5+0.4*mom20,bottom20pct",
-        "items": complete[:n_tail],
-        "missing_symbols": missing_symbols,
+        "section_name": "风险工程区",
+        "market_regime": regime,
+        "momentum_tail": {
+            "method": "placeholder_v0:0.6*mom5+0.4*mom20,bottom20pct",
+            "items": complete[:n_tail],
+            "missing_symbols": missing_symbols,
+            "regime_reliable": regime_reliable,
+            "note": MOMENTUM_TAIL_REGIME_NOTE,
+        },
+        "concentration": _build_concentration(position_items),
+        "stop_loss_buffer_ranking": _build_stop_loss_buffer_ranking(position_items),
         "flags": flags + (["missing:table:prices"] if not _table_exists(con, "prices") else []),
     }
 
@@ -371,18 +641,41 @@ def build_panel(
     resolved_universe = Path(universe_path)
     with _connect_readonly(resolved_db) as con:
         resolved_as_of = _latest_as_of(con, as_of)
+        position_health = _build_position_health(con, resolved_as_of)
         return {
             "schema_version": "postmarket_panel.v1",
             "header": _build_header(con, resolved_as_of),
             "buy_candidates": _build_buy_candidates(con, resolved_as_of),
-            "position_health": _build_position_health(con, resolved_as_of),
-            "risk_warnings": _build_risk_warnings(con, resolved_as_of, resolved_universe),
+            "position_health": position_health,
+            "risk_warnings": _build_risk_warnings(
+                con, resolved_as_of, resolved_universe, position_health["items"]
+            ),
             "review_attribution": _build_review_attribution(con, resolved_as_of),
         }
 
 
+def _format_research_reference(reference: dict[str, Any] | None) -> str:
+    if not reference:
+        return "missing"
+    label = reference.get("long_term_label") or {}
+    pointer = reference.get("research_pointer") or {}
+    label_text = (
+        f"{label.get('label')}/{label.get('quality')}(至{label.get('expires_at')})"
+        if label.get("status") == "ok"
+        else label.get("status", "missing")
+    )
+    pointer_text = pointer.get("summary") if pointer.get("status") == "ok" else pointer.get("status", "missing")
+    return f"标签:{label_text}; 研究指针:{pointer_text}"
+
+
 def render_markdown(panel: dict[str, Any]) -> str:
     header = panel["header"]
+    market_reference = header.get("market_reference") or {}
+    market_reference_line = (
+        f"{market_reference.get('title')} ({market_reference.get('date')})"
+        if market_reference.get("status") == "ok"
+        else market_reference.get("status", "missing")
+    )
     lines = [
         f"# M59 盘后操作面板 ({header['as_of']})",
         "",
@@ -392,25 +685,62 @@ def render_markdown(panel: dict[str, Any]) -> str:
         f"- 数据新鲜度 long_term_labels: {header['freshness']['long_term_labels']['value']} ({header['freshness']['long_term_labels']['status']})",
         f"- 降级 flag: {', '.join(header['degradation_flags'])}",
         f"- 市场 regime: {header['market_regime']['value']} ({header['market_regime']['flag']})",
+        f"- 行情参考: {market_reference_line}",
         "",
         "## ① 买入候选",
-        "| symbol | name | score | stop_loss | take_profit | llm_layer |",
-        "|---|---|---:|---:|---:|---|",
+        "| symbol | name | score | stop_loss | take_profit | llm_layer | 研究参考 |",
+        "|---|---|---:|---:|---:|---|---|",
     ]
     for item in panel["buy_candidates"]["items"]:
         lines.append(
             f"| {item['symbol']} | {item.get('name') or ''} | {item.get('composite_score')} | "
-            f"{item.get('stop_loss')} | {item.get('take_profit')} | {item.get('llm_layer')} |"
+            f"{item.get('stop_loss')} | {item.get('take_profit')} | {item.get('llm_layer')} | "
+            f"{_format_research_reference(item.get('research_reference'))} |"
         )
-    lines.extend(["", "## ② 持仓体检", "| symbol | current | stop distance % | take distance % | missing |", "|---|---:|---:|---:|---|"])
+    lines.extend(
+        [
+            "",
+            "## ② 持仓体检",
+            "| symbol | current | stop distance % | take distance % | missing | 研究参考 |",
+            "|---|---:|---:|---:|---|---|",
+        ]
+    )
     for item in panel["position_health"]["items"]:
         lines.append(
             f"| {item['symbol']} | {item.get('current_price')} | {item.get('distance_to_stop_loss_pct')} | "
-            f"{item.get('distance_to_take_profit_pct')} | {', '.join(item.get('missing') or [])} |"
+            f"{item.get('distance_to_take_profit_pct')} | {', '.join(item.get('missing') or [])} | "
+            f"{_format_research_reference(item.get('research_reference'))} |"
         )
-    lines.extend(["", "## ③ 避雷警示", "预警≠卖出指令", "| symbol | momentum | in_position |", "|---|---:|---|"])
-    for item in panel["risk_warnings"]["items"]:
+    risk = panel["risk_warnings"]
+    momentum_tail = risk["momentum_tail"]
+    concentration = risk["concentration"]
+    buffer_ranking = risk["stop_loss_buffer_ranking"]
+    lines.extend(
+        [
+            "",
+            "## ③ 风险工程区",
+            f"市场 regime: {risk['market_regime']['value']} ({risk['market_regime']['method']})",
+            f"动量末档:{momentum_tail['note']} (regime_reliable={momentum_tail['regime_reliable']})",
+            "预警≠卖出指令",
+            "| symbol | momentum | in_position |",
+            "|---|---:|---|",
+        ]
+    )
+    for item in momentum_tail["items"]:
         lines.append(f"| {item['symbol']} | {item.get('momentum_score')} | {item.get('in_position')} |")
+    lines.extend(
+        [
+            "",
+            f"持仓集中度:最大单仓 {concentration.get('max_position_symbol')} "
+            f"{concentration.get('max_position_weight_pct')}%,前三仓 {concentration.get('top3_weight_pct')}%",
+            "",
+            "止损缓冲排序(最薄在前):",
+            "| symbol | distance_to_stop_loss_pct |",
+            "|---|---:|",
+        ]
+    )
+    for item in buffer_ranking["items"]:
+        lines.append(f"| {item['symbol']} | {item.get('distance_to_stop_loss_pct')} |")
     lines.extend(["", "## ④ 复盘归因", panel["review_attribution"]["note"]])
     return "\n".join(lines)
 
