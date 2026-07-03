@@ -15,6 +15,9 @@ def test_default_registry_is_read_only_and_preregistered():
         "liquidity_turnover_state_v1",
         "post_event_drift_pure_polarity_v1",
         "top_decile_entry_timing_v1",
+        "m58_stop_loss_momentum_tail_v1",
+        "m58_stock_selection_technical_head_v1",
+        "m58_exit_trailing_atr_sweep_v1",
     }
     assert all(item["candidate_type"] == "shadow_research_candidate" for item in report["hypotheses"])
 

@@ -79,15 +79,30 @@ def _base_hypothesis(
     segments: list[dict[str, Any]] | None = None,
     sample_scope: dict[str, Any] | None = None,
     stop_conditions: list[str],
+    horizons: list[int] | None = None,
+    split_override: dict[str, Any] | None = None,
+    forbidden_interpretation_suffix: str | None = None,
+    extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    forbidden_interpretation = "not a production candidate and not evidence to restore weight_quant"
+    if forbidden_interpretation_suffix:
+        forbidden_interpretation = f"{forbidden_interpretation}; {forbidden_interpretation_suffix}"
+    split = {
+        "train_end_before_oos": True,
+        "requires_fresh_oos_forward": True,
+        "label_realized_before_target_start": True,
+        "requires_non_overlapping_stride_metrics": True,
+    }
+    if split_override:
+        split.update(split_override)
+    result = {
         "hypothesis_id": hypothesis_id,
         "status": "preregistered",
         "motivation": motivation,
         "source_m27_clues": source_m27_clues,
         "candidate_family": candidate_family,
         "candidate_type": "shadow_research_candidate",
-        "forbidden_interpretation": "not a production candidate and not evidence to restore weight_quant",
+        "forbidden_interpretation": forbidden_interpretation,
         "sample_scope": sample_scope
         or {
             "universe": "active_or_test3_or_declared_full_universe",
@@ -97,13 +112,8 @@ def _base_hypothesis(
         },
         "features": features,
         "segments": segments or [],
-        "horizons": [1, 3, 5, 20],
-        "split": {
-            "train_end_before_oos": True,
-            "requires_fresh_oos_forward": True,
-            "label_realized_before_target_start": True,
-            "requires_non_overlapping_stride_metrics": True,
-        },
+        "horizons": horizons or [1, 3, 5, 20],
+        "split": split,
         "sample_gates": {
             "min_symbols": 4,
             "min_validation_rows": 50,
@@ -131,6 +141,9 @@ def _base_hypothesis(
         ],
         "planned_artifacts": [],
     }
+    if extra_fields:
+        result.update(extra_fields)
+    return result
 
 
 def default_hypotheses() -> list[dict[str, Any]]:
@@ -228,6 +241,199 @@ def default_hypotheses() -> list[dict[str, Any]]:
                 "stop if rolling positive windows do not persist after new price data",
                 "stop if it is presented as a continuous production quant score",
             ],
+        ),
+        _base_hypothesis(
+            hypothesis_id="m58_stop_loss_momentum_tail_v1",
+            motivation=(
+                "M58 decision-formula rebuild diagnostic (2026-07-03): the momentum score "
+                "(0.6x5-day return + 0.4x20-day return, the current placeholder_v0 formula) "
+                "identifies weak stocks accurately but poorly discriminates strong stocks, so it "
+                "is naturally suited to a stop-loss/risk-control functional slot rather than a "
+                "stock-selection one. Same-day diagnostics show the bottom-20% cross-sectional "
+                "momentum bucket had a mean 5-day net return of -2.05pp, but that number is from a "
+                "single in-window computation and is not a cross-regime result; it must clear a "
+                "4-6 week forward shadow window before any adjudication."
+            ),
+            source_m27_clues=[
+                "m58_2026-07-03_diagnosis_momentum_placeholder_v0_bottom20_5d_mean_return_-2.05pp_single_window_in_window",
+                "m58_current_production_composite_0.6_technical_0.4_headline_sentiment_7week_icir_approx_-0.03_no_discrimination",
+            ],
+            candidate_family="m58_functional_slot_stop_loss_momentum_tail",
+            features=[
+                "momentum_score_placeholder_v0",
+                "momentum_5d",
+                "momentum_20d",
+                "cross_sectional_percentile_rank_bottom20",
+            ],
+            segments=[{"column": "regime_label", "values": ["declared_by_forward_window"]}],
+            sample_scope={
+                "universe": "active_or_test3_or_declared_full_universe",
+                "min_symbols": 4,
+                "min_validation_rows": 50,
+                "min_filtered_trades": 50,
+                "requires_multiple_regimes_covered": True,
+                "forward_shadow_weeks_min": 4,
+                "forward_shadow_weeks_max": 6,
+            },
+            horizons=[5],
+            stop_conditions=[
+                "stop if single-window/single-regime evidence (-2.05pp) is treated as sufficient; "
+                "requires cross-regime forward confirmation before adjudication",
+                "stop if bottom-20% underperformance disappears or reverses in any covered regime",
+                "stop if it is used to trigger an automatic sell/exit instruction rather than a "
+                "postmarket panel risk warning",
+                "stop if the forward shadow window is below 4 weeks or fewer than 2 distinct "
+                "regimes are observed",
+            ],
+            forbidden_interpretation_suffix=(
+                "must not be used as an automated sell/exit instruction; observe-only postmarket "
+                "panel risk warning pending cross-regime forward confirmation"
+            ),
+            extra_fields={
+                "functional_slot": "stop_loss_risk_control",
+                "validation_mode": "forward_shadow_4_to_6_weeks_cross_regime",
+                "requires_cross_regime_adjudication": True,
+                "intended_use": "postmarket_panel_risk_warning_only_not_a_sell_instruction",
+                "trial_count_ledger": {
+                    "declared_at_registration": 1,
+                    "note": (
+                        "first declared trial for this functional-slot hypothesis; increment "
+                        "honestly if additional momentum-tail parameterizations are tested before "
+                        "adjudication"
+                    ),
+                },
+            },
+        ),
+        _base_hypothesis(
+            hypothesis_id="m58_stock_selection_technical_head_v1",
+            motivation=(
+                "M58 decision-formula rebuild diagnostic (2026-07-03): the top-20% cross-sectional "
+                "technical-score bucket showed a higher mean 5-day net return than the pool average "
+                "(+0.96pp same-day diagnostic), but the edge is weak and drawn from a single "
+                "in-window computation and needs forward confirmation. Once M54 news-layer v2 "
+                "body-text-triggered signals clear their own adjudication (IC-days > 20), they will "
+                "be folded in as an enhancement into version 2 of this hypothesis; this registration "
+                "covers only the price-only technical-head signal itself."
+            ),
+            source_m27_clues=[
+                "m58_2026-07-03_diagnosis_technical_score_top20_5d_mean_return_+0.96pp_weak_single_window_in_window",
+                "m54_v2_headline_body_news_trigger_pending_own_adjudication_to_be_merged_as_enhancement_v2",
+            ],
+            candidate_family="m58_functional_slot_stock_selection_technical_head",
+            features=[
+                "technical_score",
+                "cross_sectional_percentile_rank_top20",
+                "momentum_5d",
+                "momentum_20d",
+            ],
+            segments=[{"column": "regime_label", "values": ["declared_by_forward_window"]}],
+            sample_scope={
+                "universe": "active_or_test3_or_declared_full_universe",
+                "min_symbols": 4,
+                "min_validation_rows": 50,
+                "min_filtered_trades": 50,
+                "requires_multiple_regimes_covered": True,
+                "forward_shadow_weeks_min": 4,
+                "forward_shadow_weeks_max": 6,
+            },
+            horizons=[5],
+            stop_conditions=[
+                "stop if the single-window +0.96pp edge is treated as confirmed without "
+                "cross-regime forward replication",
+                "stop if top-20% outperformance disappears or reverses in any covered regime",
+                "stop if the M54 v2 news-trigger enhancement is merged before M54 itself completes "
+                "its own IC-days > 20 adjudication",
+                "stop if the forward shadow window is below 4 weeks or fewer than 2 distinct "
+                "regimes are observed",
+            ],
+            forbidden_interpretation_suffix=(
+                "must not be presented as a confirmed buy signal before cross-regime forward "
+                "confirmation; the M54 v2 news enhancement must not be merged ahead of its own "
+                "adjudication"
+            ),
+            extra_fields={
+                "functional_slot": "stock_selection",
+                "validation_mode": "forward_shadow_4_to_6_weeks_cross_regime",
+                "requires_cross_regime_adjudication": True,
+                "planned_v2_enhancement": "m54_v2_news_trigger_pending_its_own_adjudication_not_yet_merged",
+                "trial_count_ledger": {
+                    "declared_at_registration": 1,
+                    "note": (
+                        "first declared trial for this functional-slot hypothesis (v1, price-only "
+                        "technical head); a v2 with the M54 news enhancement will be a separate "
+                        "declared trial after M54 completes its own adjudication"
+                    ),
+                },
+            },
+        ),
+        _base_hypothesis(
+            hypothesis_id="m58_exit_trailing_atr_sweep_v1",
+            motivation=(
+                "M58 decision-formula rebuild, Phase 1: the M21.4 post-mortem falsified the "
+                "'initial stop too tight' hypothesis (the v1 initial ATR stop at x2.0 was never "
+                "triggered; losses came from gap slippage, not initial stop width), so the exit "
+                "question narrows to trailing-ATR-multiple sensitivity and the gap-slippage cost "
+                "distribution. This hypothesis searches the x2.0-x3.5 trailing-multiple range for a "
+                "point that beats the current x2.5 baseline on net-return/max-drawdown ratio (with "
+                "a ~20% drawdown constraint); gap-slippage cost must be accounted for and reported "
+                "separately from the stop-width effect."
+            ),
+            source_m27_clues=[
+                "m21_4_verdict_initial_stop_too_tight_falsified_gap_slippage_is_the_real_cost_driver",
+                "exit_sweep_backtrader_eval_1490_day_large_sample_with_holdout_m21_4_adjudicated_channel",
+            ],
+            candidate_family="m58_functional_slot_exit_trailing_atr_parameter_grid",
+            features=[
+                "trailing_atr_multiple",
+                "gap_slippage_cost",
+                "max_drawdown",
+                "net_return_to_drawdown_ratio",
+            ],
+            segments=[{"column": "trailing_atr_multiple", "values": ["2.0", "2.5", "3.0", "3.5"]}],
+            sample_scope={
+                "universe": "exit_sweep_backtrader_eval_1490_day_channel_with_holdout",
+                "min_symbols": 4,
+                "min_validation_rows": 50,
+                "min_filtered_trades": 50,
+                "drawdown_constraint_max": 0.20,
+                "requires_gap_slippage_accounted_separately": True,
+            },
+            split_override={
+                "requires_fresh_oos_forward": False,
+                "validation_basis": "historical_large_sample_with_holdout_non_forward",
+                "holdout_required": True,
+            },
+            stop_conditions=[
+                "stop if a trailing multiple only wins because of a drawdown-constraint breach or a "
+                "thin trade sample (below the 50-filtered-trade gate)",
+                "stop if the net-return/drawdown improvement vanishes once gap-slippage cost is "
+                "accounted for",
+                "stop if the ~20% drawdown constraint is breached by the candidate multiple",
+                "stop if it is switched into production before user confirmation and before the "
+                "standard promotion_gate fresh forward OOS check required for any production switch",
+            ],
+            forbidden_interpretation_suffix=(
+                "this is a historical large-sample backtest-with-holdout result (M21.4-adjudicated "
+                "channel), not a forward validation result, and it still requires the standard "
+                "promotion_gate fresh forward OOS check before any production switch"
+            ),
+            extra_fields={
+                "functional_slot": "exit_take_profit_trailing_stop",
+                "validation_mode": "historical_large_sample_with_holdout_non_forward",
+                "requires_cross_regime_adjudication": True,
+                "validation_channel": (
+                    "exit_sweep_backtrader_eval_1490_day_incl_holdout_m21_4_adjudicated_channel"
+                ),
+                "gap_slippage_accounting": "must_be_recorded_and_reported_separately_from_stop_width_effect",
+                "trial_count_ledger": {
+                    "declared_at_registration": 1,
+                    "note": (
+                        "first declared trial in the x2.0-x3.5 trailing-ATR grid; each additional "
+                        "grid point evaluated (e.g. 2.0/2.5/3.0/3.5) must be counted and reported "
+                        "honestly before any promotion decision, per the M51 D1 statistics contract"
+                    ),
+                },
+            },
         ),
     ]
 
