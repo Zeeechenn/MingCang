@@ -403,6 +403,8 @@ def aggregate_v2(
 
     result = decision.to_signal_dict()
     result["rule_version"] = f"multi_agent_v2:{active_signal_weights().profile}"
+    # quant 模型溯源（lgbm_alpha_v1 / placeholder_v0）：降级必须在数据层可审计
+    result["quant_model"] = quant_result.get("model")
     if kronos_info:
         result["kronos"] = kronos_info
 
@@ -489,6 +491,7 @@ def save_signal(symbol: str, date: str, result: dict, db) -> None:
                 "breakdown": result.get("breakdown", {}),
                 "limit_status": result.get("limit_status", "normal"),
                 "news_audit": result.get("news_audit", []),
+                "quant_model": result.get("quant_model"),
             },
         )
     except Exception as e:

@@ -119,6 +119,18 @@ def _load_model() -> Any | None:
     stale feature-dim model doesn't spam logs on every inference call.
     """
     if not MODEL_PATH.exists():
+        # 2026-06-06 rebrand 曾因路径切换+模型未迁移触发无声降级近一个月：
+        # 文件缺失和加载失败一样属于降级，必须显式告警（一次，不刷屏）。
+        if _MODEL_CACHE["path_mtime"] != "missing":
+            _MODEL_CACHE["path_mtime"] = "missing"
+            _MODEL_CACHE["model"] = None
+            _MODEL_CACHE["feature_cols"] = None
+            _MODEL_CACHE["disabled_reason"] = "model_file_missing"
+            logger.warning(
+                "quant model file missing at %s — quant_score degrades to "
+                "momentum placeholder (placeholder_v0)",
+                MODEL_PATH,
+            )
         return None
 
     mtime = MODEL_PATH.stat().st_mtime
