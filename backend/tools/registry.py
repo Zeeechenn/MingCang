@@ -41,6 +41,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m59_panel",
+        "category": "stable",
+        "purpose": "Build the M59 postmarket operation panel as postmarket_panel.v1 JSON or Markdown.",
+        "read_write_boundary": "Read-only; opens the configured SQLite database in mode=ro and never writes tables.",
+        "recommended_entrypoint": "python3 -m backend.tools.m59_panel",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m31_cache_benchmark",
         "category": "stable",
         "purpose": "Measure M31 cache-layer latency for L1/L2 and describe L3 policy without calling it.",
