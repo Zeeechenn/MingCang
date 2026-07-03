@@ -576,6 +576,16 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--watchlist-dir", type=Path, default=None, help="Watchlist JSON directory")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Where to write JSON+Markdown output")
     parser.add_argument("--no-write", action="store_true", help="Print only; skip writing output files")
+    parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help=(
+            "Also run the Phase 2 LLM confirmation layer over today's triggers "
+            "(backend.research.watchtower_confirm). Off by default so a plain "
+            "scan never burns LLM tokens; each run makes at most one LLM call "
+            "per unique triggered symbol."
+        ),
+    )
     args = parser.parse_args(argv)
 
     report = build_watchtower_report(db_path=args.db, as_of=args.as_of, watchlist_dir=args.watchlist_dir)
@@ -590,6 +600,46 @@ def main(argv: list[str] | None = None) -> None:
         print(f"wrote {md_path}")
 
     print(markdown)
+
+    if args.confirm:
+        from backend.research.watchtower_confirm import (
+            build_confirmation_report,
+            render_markdown as render_confirm_markdown,
+            _default_output_paths as _confirm_output_paths,
+        )
+
+        db = None
+        close_db = False
+        try:
+            from backend.data.database import SessionLocal
+
+            db = SessionLocal()
+            close_db = True
+        except Exception:
+            db = None
+        try:
+            confirm_report = build_confirmation_report(
+                watchtower_report=report,
+                db_path=args.db,
+                watchlist_dir=args.watchlist_dir,
+                db=db,
+            )
+        finally:
+            if close_db and db is not None:
+                db.close()
+
+        confirm_markdown = render_confirm_markdown(confirm_report)
+        if not args.no_write:
+            confirm_json_path, confirm_md_path = _confirm_output_paths(
+                confirm_report["as_of"] or report["as_of"], args.output_dir
+            )
+            confirm_json_path.write_text(
+                json.dumps(confirm_report, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+            )
+            confirm_md_path.write_text(confirm_markdown, encoding="utf-8")
+            print(f"wrote {confirm_json_path}")
+            print(f"wrote {confirm_md_path}")
+        print(confirm_markdown)
 
 
 if __name__ == "__main__":

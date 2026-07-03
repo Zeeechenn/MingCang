@@ -474,3 +474,84 @@ def test_m59_panel_watchtower_followups_no_trigger_today_is_explicit(tmp_path):
     assert followups["items"] == []
     assert followups["source_file"] is not None
     assert "watchtower_no_trigger_today" in followups["flags"]
+
+
+def test_m59_panel_watchtower_confirm_missing_when_no_file(tmp_path):
+    """M60 Phase 2 wiring: panel must say `missing` explicitly, never silently show an empty section."""
+    from backend.tools.m59_panel import build_panel, render_markdown
+
+    db_path = tmp_path / "no_confirm.sqlite"
+    with _init_minimal_db(db_path):
+        pass
+
+    empty_output_dir = tmp_path / "no_confirm_output"
+    panel = build_panel(
+        db_path=db_path,
+        as_of="2026-07-03",
+        universe_path=tmp_path / "missing.json",
+        watchtower_output_dir=empty_output_dir,
+    )
+
+    confirm = panel["watchtower_confirm"]
+    assert confirm["items"] == []
+    assert confirm["source_file"] is None
+    assert any("missing:no_confirm_output_in" in flag for flag in confirm["flags"])
+    assert "跟进关注≠买入建议" in confirm["note"]
+    markdown = render_markdown(panel)
+    assert "确认层裁量" in markdown
+    assert "missing:no_confirm_output_in" in markdown
+
+
+def test_m59_panel_watchtower_confirm_reads_latest_confirm_file(tmp_path):
+    from backend.tools.m59_panel import build_panel, render_markdown
+
+    db_path = tmp_path / "with_confirm.sqlite"
+    with _init_minimal_db(db_path):
+        pass
+
+    output_dir = tmp_path / "watchtower_out"
+    output_dir.mkdir()
+    # Older file must be ignored in favor of the latest one (sorted by filename).
+    (output_dir / "m60_confirm_2026-07-01.json").write_text(
+        json.dumps({"as_of": "2026-07-01", "cards": [{"symbol": "OLD", "stance": "暂不跟进", "reasoning": "old"}]}),
+        encoding="utf-8",
+    )
+    (output_dir / "m60_confirm_2026-07-03.json").write_text(
+        json.dumps(
+            {
+                "as_of": "2026-07-03",
+                "cards": [
+                    {
+                        "symbol": "603259",
+                        "theme": "innovative_drug",
+                        "stance": "跟进关注",
+                        "reasoning": "板块共振叠加政策事件,主因判断为政策驱动。",
+                        "risks": ["追高风险"],
+                        "validation_question": "后续两日是否持续放量?",
+                        "thesis_status": "论点仍成立",
+                        "used_llm": True,
+                        "flags": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    panel = build_panel(
+        db_path=db_path,
+        as_of="2026-07-03",
+        universe_path=tmp_path / "missing.json",
+        watchtower_output_dir=output_dir,
+    )
+
+    confirm = panel["watchtower_confirm"]
+    assert confirm["source_file"].endswith("m60_confirm_2026-07-03.json")
+    assert confirm["as_of"] == "2026-07-03"
+    assert len(confirm["items"]) == 1
+    assert confirm["items"][0]["symbol"] == "603259"
+    assert confirm["items"][0]["stance"] == "跟进关注"
+    markdown = render_markdown(panel)
+    assert "确认层裁量" in markdown
+    assert "603259" in markdown
+    assert "板块共振叠加政策事件" in markdown

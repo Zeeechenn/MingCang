@@ -692,6 +692,66 @@ def _build_watchtower_followups(watchtower_output_dir: Path) -> dict[str, Any]:
     }
 
 
+def _find_latest_confirm_file(output_dir: Path) -> Path | None:
+    if not output_dir.exists():
+        return None
+    candidates = sorted(output_dir.glob("m60_confirm_*.json"))
+    return candidates[-1] if candidates else None
+
+
+def _build_watchtower_confirm(confirm_output_dir: Path) -> dict[str, Any]:
+    """M60 Phase 2 wiring: surface the latest LLM confirmation cards, read-only.
+
+    Never triggers an LLM call itself — only reads the most recent
+    ``m60_confirm_*.json`` file written by ``backend.research.watchtower_confirm``
+    (run manually via ``m60_watchtower --confirm``, off by default). Explicitly
+    reports ``missing`` when no such file exists yet, matching
+    ``_build_watchtower_followups``'s degrade-explicitly convention.
+    """
+    latest_file = _find_latest_confirm_file(confirm_output_dir)
+    if latest_file is None:
+        return {
+            "items": [],
+            "source_file": None,
+            "as_of": None,
+            "note": "跟进关注≠买入建议",
+            "flags": [f"missing:no_confirm_output_in:{confirm_output_dir}"],
+        }
+    try:
+        payload = json.loads(latest_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {
+            "items": [],
+            "source_file": str(latest_file),
+            "as_of": None,
+            "note": "跟进关注≠买入建议",
+            "flags": [f"invalid:confirm_json:{exc.msg}"],
+        }
+    cards = payload.get("cards") if isinstance(payload, dict) else None
+    items = []
+    for card in cards or []:
+        items.append(
+            {
+                "symbol": card.get("symbol"),
+                "theme": card.get("theme"),
+                "stance": card.get("stance"),
+                "reasoning": card.get("reasoning"),
+                "risks": card.get("risks"),
+                "validation_question": card.get("validation_question"),
+                "thesis_status": card.get("thesis_status"),
+                "used_llm": card.get("used_llm"),
+                "flags": card.get("flags"),
+            }
+        )
+    return {
+        "items": items,
+        "source_file": str(latest_file),
+        "as_of": payload.get("as_of") if isinstance(payload, dict) else None,
+        "note": "跟进关注≠买入建议",
+        "flags": [] if items else (["confirm_no_cards"] if isinstance(payload, dict) else ["invalid:confirm_payload"]),
+    }
+
+
 def _build_summary(
     buy_candidates: dict[str, Any],
     position_health: dict[str, Any],
@@ -730,10 +790,12 @@ def build_panel(
     as_of: str | None = None,
     universe_path: str | Path = DEFAULT_UNIVERSE_PATH,
     watchtower_output_dir: str | Path = DEFAULT_WATCHTOWER_OUTPUT_DIR,
+    confirm_output_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Return a postmarket_panel.v1 payload without writing the database."""
     resolved_db = Path(db_path) if db_path is not None else default_sqlite_path()
     resolved_universe = Path(universe_path)
+    resolved_confirm_dir = Path(confirm_output_dir) if confirm_output_dir is not None else Path(watchtower_output_dir)
     with _connect_readonly(resolved_db) as con:
         resolved_as_of = _latest_as_of(con, as_of)
         buy_candidates = _build_buy_candidates(con, resolved_as_of)
@@ -750,6 +812,7 @@ def build_panel(
             "risk_warnings": risk_warnings,
             "review_attribution": _build_review_attribution(con, resolved_as_of),
             "watchtower_followups": _build_watchtower_followups(Path(watchtower_output_dir)),
+            "watchtower_confirm": _build_watchtower_confirm(resolved_confirm_dir),
         }
 
 
@@ -859,6 +922,22 @@ def render_markdown(panel: dict[str, Any]) -> str:
             lines.append(
                 f"| {item.get('symbol')} | {','.join(themes)} | {item.get('trigger_type')} | {item.get('value')} |"
             )
+
+    confirm = panel.get("watchtower_confirm", {})
+    lines.extend(["", "### 确认层裁量(LLM,Phase 2)", confirm.get("note", "")])
+    if confirm.get("source_file") is None:
+        lines.append(f"missing: {', '.join(confirm.get('flags') or ['no_confirm_output'])}")
+    elif not confirm.get("items"):
+        lines.append(f"来源: {confirm.get('source_file')} (as_of={confirm.get('as_of')}) — 无确认卡")
+    else:
+        lines.append(f"来源: {confirm.get('source_file')} (as_of={confirm.get('as_of')})")
+        lines.append("| symbol | theme | stance | thesis_status | reasoning |")
+        lines.append("|---|---|---|---|---|")
+        for item in confirm["items"]:
+            lines.append(
+                f"| {item.get('symbol')} | {item.get('theme')} | {item.get('stance')} | "
+                f"{item.get('thesis_status')} | {item.get('reasoning')} |"
+            )
     return "\n".join(lines)
 
 
@@ -868,6 +947,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--as-of", default=None, help="Panel date YYYY-MM-DD; defaults to latest signal date")
     parser.add_argument("--universe", type=Path, default=DEFAULT_UNIVERSE_PATH)
     parser.add_argument("--watchtower-output-dir", type=Path, default=DEFAULT_WATCHTOWER_OUTPUT_DIR)
+    parser.add_argument(
+        "--confirm-output-dir",
+        type=Path,
+        default=None,
+        help="Where to look for m60_confirm_*.json; defaults to --watchtower-output-dir",
+    )
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     args = parser.parse_args(argv)
 
@@ -876,6 +961,7 @@ def main(argv: list[str] | None = None) -> None:
         as_of=args.as_of,
         universe_path=args.universe,
         watchtower_output_dir=args.watchtower_output_dir,
+        confirm_output_dir=args.confirm_output_dir,
     )
     if args.format == "markdown":
         print(render_markdown(panel))
