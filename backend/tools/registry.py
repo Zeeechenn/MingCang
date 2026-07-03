@@ -241,6 +241,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m58_lgbm_walkforward",
+        "category": "evidence",
+        "purpose": "M58 LGBM walk-forward closing test for the price-alpha quant family (rolling 250d train / 60d retrain).",
+        "read_write_boundary": "Read-only against prices; trained models stay in memory only and are never written to a serving model path; writes JSON/Markdown report artifacts only.",
+        "recommended_entrypoint": "python3 -m backend.tools.m58_lgbm_walkforward",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m27_alpha_diagnostic",
         "category": "evidence",
         "purpose": "Diagnose current alpha weakness before changing labels, factors, or production quant weight.",
