@@ -257,6 +257,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m58_exit_shadow",
+        "category": "evidence",
+        "purpose": "M58 exit-parameter shadow arm for test2 v2 (owner option B, 2026-07-03): replays the v2 ledger window with the current exit rule (trailing x2.5/none) vs the holdout-winning shadow candidate (trailing x3.5/drawdown_10) via the same m58_exit_sweep simulate_exit, for 4-6 weeks without changing production.",
+        "read_write_boundary": "Read-only against mingcang.db (mode=ro&immutable=1) and test2_universe.json; never opens test2_ab_state.json or any test2 ledger file for writing; writes only JSON/Markdown report artifacts and the append-only shadow-history JSONL under /private/tmp.",
+        "recommended_entrypoint": "python3 -m backend.tools.m58_exit_shadow",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m58_lgbm_walkforward",
         "category": "evidence",
         "purpose": "M58 LGBM walk-forward closing test for the price-alpha quant family (rolling 250d train / 60d retrain).",

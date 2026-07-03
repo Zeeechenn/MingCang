@@ -286,6 +286,89 @@ def simulate_exit(rows: list[PriceRow], variant: ExitVariant) -> ExitOutcome:
     )
 
 
+@dataclass(frozen=True)
+class TrailingState:
+    """As-of-now stop/floating-take-profit lines for an unresolved position.
+
+    ``simulate_exit`` only returns the *final* resolved outcome; it does not
+    expose the running highest-close / stop-line state for a path that has
+    not triggered an exit yet. This mirrors the same per-day update formulas
+    ``simulate_exit`` uses internally (highest close, ``max(initial_stop,
+    trailing_line)``, and the floating-take-profit drawdown line) to report
+    where those lines currently sit, for shadow/monitoring use on positions
+    that are still open. It does not duplicate exit-trigger detection --
+    ``still_open`` is simply whether ``simulate_exit`` on the same path
+    reached the end of the data without firing (``reason == "end"``).
+    """
+
+    as_of_date: str
+    highest_close: float
+    initial_stop: float
+    stop_line: float
+    drawdown_line: float | None
+    still_open: bool
+
+
+def current_trailing_state(rows: list[PriceRow], variant: ExitVariant) -> TrailingState:
+    entry = rows[0]
+    entry_atr = float(entry.atr14 or 0.0)
+    if entry_atr <= 0:
+        raise ValueError("entry atr14 must be positive")
+    initial_stop = entry.open - entry_atr * INITIAL_ATR_MULT
+    highest_close = entry.close
+    stop_line = initial_stop
+    drawdown_pct = _profit_drawdown_pct(variant.profit_mode)
+    drawdown_line: float | None = None
+    for row in rows[1:]:
+        if row.close > highest_close:
+            highest_close = row.close
+        trailing_line = highest_close - entry_atr * variant.trailing_atr_mult
+        stop_line = max(initial_stop, trailing_line)
+        if drawdown_pct is not None:
+            drawdown_line = highest_close * (1.0 - drawdown_pct)
+    outcome = simulate_exit(rows, variant)
+    return TrailingState(
+        as_of_date=rows[-1].date,
+        highest_close=round(highest_close, 4),
+        initial_stop=round(initial_stop, 4),
+        stop_line=round(stop_line, 4),
+        drawdown_line=round(drawdown_line, 4) if drawdown_line is not None else None,
+        still_open=outcome.reason == "end",
+    )
+
+
+def _price_rows_for_holding(
+    symbol: str,
+    entry_date: str,
+    entry_price: float,
+    stop_loss: float | None,
+    *,
+    price_dates: dict[str, list[str]],
+    prices: dict[tuple[str, str], Any],
+) -> list[PriceRow] | None:
+    """Build the entry-to-latest ``PriceRow`` path for one test2 holding.
+
+    test2 ``Signal``/``Holding`` records carry an absolute stop price but not
+    ATR, so the entry ATR distance is recovered from
+    ``(entry_price - stop_loss) / INITIAL_ATR_MULT`` -- the same convention
+    ``_replay_test2_with_variant`` has always used. Shared by the test2
+    replay and the M58 exit-parameter shadow tool so there is one
+    implementation of "what does this holding's price path look like".
+    """
+    dates = [d for d in price_dates.get(symbol, []) if d >= entry_date]
+    rows: list[PriceRow] = []
+    for d in dates:
+        bar = prices.get((symbol, d))
+        if bar:
+            rows.append(PriceRow(bar.symbol, bar.date, bar.open, bar.high, bar.low, bar.close, None))
+    if not rows or stop_loss is None:
+        return None
+    rows[0] = PriceRow(rows[0].symbol, rows[0].date, entry_price, rows[0].high, rows[0].low, rows[0].close, None)
+    entry_atr = max((entry_price - float(stop_loss)) / INITIAL_ATR_MULT, 0.0001)
+    rows[0] = PriceRow(rows[0].symbol, rows[0].date, rows[0].open, rows[0].high, rows[0].low, rows[0].close, entry_atr)
+    return rows
+
+
 def _connect_readonly(db_path: Path) -> sqlite3.Connection:
     resolved = db_path.expanduser().resolve()
     if not resolved.exists():
@@ -942,23 +1025,17 @@ def _replay_test2_with_variant(
         key = (framework_key, holding.symbol, holding.entry_signal_date, holding.entry_date)
         if key in scheduled:
             return scheduled[key]
-        dates = [d for d in price_dates.get(holding.symbol, []) if d >= holding.entry_date]
-        rows = []
-        for d in dates:
-            bar = prices.get((holding.symbol, d))
-            if bar:
-                rows.append(PriceRow(bar.symbol, bar.date, bar.open, bar.high, bar.low, bar.close, None))
-        if not rows:
+        rows = _price_rows_for_holding(
+            holding.symbol,
+            holding.entry_date,
+            holding.entry_price,
+            holding.stop_loss,
+            price_dates=price_dates,
+            prices=prices,
+        )
+        if rows is None:
             scheduled[key] = None
             return None
-        rows[0] = PriceRow(rows[0].symbol, rows[0].date, holding.entry_price, rows[0].high, rows[0].low, rows[0].close, None)
-        # test2 Signal carries absolute stop/take but not ATR.  Recover the
-        # current initial-stop ATR distance so the same exit function is used.
-        if holding.stop_loss is None:
-            scheduled[key] = None
-            return None
-        entry_atr = max((holding.entry_price - float(holding.stop_loss)) / INITIAL_ATR_MULT, 0.0001)
-        rows[0] = PriceRow(rows[0].symbol, rows[0].date, rows[0].open, rows[0].high, rows[0].low, rows[0].close, entry_atr)
         outcome = simulate_exit(rows, variant)
         if outcome.reason == "end":
             scheduled[key] = None
