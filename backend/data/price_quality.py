@@ -20,6 +20,10 @@ PriceQualityStatus = Literal["not_applicable", "unavailable", "passed", "warning
 # Validated on 8 years of A-share data: 0 false positives at K=3; minimum
 # contamination ratio observed is 3.41×.  Do NOT lower below 3.0 without
 # re-validating on the full universe.
+#
+# M58: the same threshold is reused symmetrically for the *down*-direction
+# splice check (close < median / K) — see DOWN_SPLICE_WINDOW below for why
+# the down-check uses a narrower preceding-closes window than the up-check.
 HFQ_JUMP_RATIO_THRESHOLD: float = 3.0
 
 
@@ -54,19 +58,56 @@ class PriceQualityGate:
 DEFAULT_PRICE_QUALITY_POLICY = PriceQualityPolicy()
 
 
+#  M58: window used for the *down-splice* half of the guard.  This is
+# intentionally smaller than the up-direction window (which uses all of
+# ``preceding_closes``, up to 10 per caller convention) because the down and
+# up directions are NOT symmetric once you account for real A-share limit
+# moves compounding over several days:
+#
+#   up-direction (validated safe up to a 10-row window, see
+#   HFQ_JUMP_RATIO_THRESHOLD comment above): a run of consecutive +20%
+#   limit-up days compounds as 1.2**k, and 1.2**6 / 1.1 ≈ 2.71 stays under the
+#   3x threshold even at a 10-row window.
+#
+#   down-direction: a run of consecutive -20% limit-down days compounds as
+#   0.8**k, which shrinks much faster in ratio terms.  Worked example (see
+#   tests): comparing the incoming close against the median of a *window of
+#   w* preceding closes drawn from a pure 0.8x/day decline gives
+#   ratio = 0.8**((w+1)//2) for odd w.  That ratio is:
+#     w=5  -> 0.8**3  = 0.512   (safely above 1/3 = 0.333)
+#     w=8  -> 0.8**4/0.9 ≈ 0.364 (still above 1/3, thin margin)
+#     w=9  -> 0.8**5  = 0.328   (BELOW 1/3 -> would misfire on a real,
+#                                 if rare, 20%-board delisting-risk crash)
+#     w=10 -> ratio ≈ 0.291     (BELOW 1/3 -> would misfire)
+#   So a 9-10 row window is NOT safe for the down-check at threshold=3.  A
+#   5-row window keeps a comfortable margin (0.512 vs 0.333) and — because the
+#   ratio at steady-state decline does not degrade further as the window
+#   slides forward (it only depends on the window length, not on how many
+#   total days the decline has run) — stays safe no matter how long a real
+#   consecutive limit-down streak lasts.  Do not widen this without
+#   re-deriving the bound above.
+DOWN_SPLICE_WINDOW: int = 5
+
+
 def check_adjustment_basis_jump(
     incoming_close: float,
     preceding_closes: Sequence[float],
     *,
     threshold: float = HFQ_JUMP_RATIO_THRESHOLD,
 ) -> bool:
-    """Return True when *incoming_close* looks like an hfq-scale contamination.
+    """Return True when *incoming_close* looks like an adjustment-basis splice.
 
-    A row is flagged when:
-      - at least 5 usable preceding closes are available (otherwise no
-        meaningful baseline exists — pass through and let the read-time gate
-        handle it later), AND
-      - incoming_close > threshold × median(preceding_closes).
+    A row is flagged when at least 5 usable preceding closes are available
+    (otherwise no meaningful baseline exists — pass through and let the
+    read-time gate handle it later), AND either:
+
+      - UP direction (M42): incoming_close > threshold × median(preceding
+        closes), using the full window the caller supplies (up to 10); or
+      - DOWN direction (M58): incoming_close < median(preceding closes) /
+        threshold, using only the most recent ``DOWN_SPLICE_WINDOW`` (5)
+        preceding closes — see the module-level comment on
+        ``DOWN_SPLICE_WINDOW`` for why the down-check uses a narrower window
+        than the up-check.
 
     This is a WRITE-TIME, point-in-time check operating on the incoming row
     before it is committed.  It does NOT require next-day data, so it is safe
@@ -75,22 +116,35 @@ def check_adjustment_basis_jump(
     Args:
         incoming_close: The ``close`` value of the candidate Price row.
         preceding_closes: The closes of the symbol's *existing* rows that
-            immediately precede the candidate date (caller supplies up to 10).
+            immediately precede the candidate date, oldest→newest (caller
+            supplies up to 10).
         threshold: Override the default ratio (useful for tests).
 
     Returns:
-        True  → row is flagged as a probable hfq contaminant; caller should
-                skip/reject it.
+        True  → row is flagged as a probable adjustment-basis contaminant
+                (either an hfq-scale up-splice or a down-splice); caller
+                should skip/reject it.
         False → row passes the guard.
     """
     usable = [c for c in preceding_closes if c and c > 0]
     if len(usable) < 5:
-        # Insufficient history — cannot distinguish genuine first-data from hfq.
+        # Insufficient history — cannot distinguish genuine first-data from
+        # a contaminated splice.
         return False
+
     med = median(usable)
     if med <= 0:
         return False
-    return incoming_close > threshold * med
+    if incoming_close > threshold * med:
+        return True
+
+    # M58: symmetric down-splice check, using only the closest DOWN_SPLICE_WINDOW
+    # preceding closes (see module comment for the safety derivation).
+    down_usable = usable[-DOWN_SPLICE_WINDOW:]
+    down_med = median(down_usable)
+    if down_med <= 0:
+        return False
+    return incoming_close < down_med / threshold
 
 
 def not_applicable_price_quality_gate() -> PriceQualityGate:

@@ -177,6 +177,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m58_remediate_adjustment_splice",
+        "category": "maintenance",
+        "purpose": "Detect (and, once confirmed safe, remediate) adjustment-basis-splice price rows idempotently.",
+        "read_write_boundary": "Dry-run by default and always safe; --execute backs up the target SQLite file before deleting flagged rows.",
+        "recommended_entrypoint": "python3 -m backend.tools.m58_remediate_adjustment_splice --db-url <sqlite-url>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m45_track_hook_update",
         "category": "maintenance",
         "purpose": "Adapt structured track-analyst hook updates into the M45 ForwardThesis import path.",

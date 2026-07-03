@@ -138,10 +138,11 @@ def backfill_if_needed(
             Price.date.in_(dates_to_replace),
         ).delete(synchronize_session=False)
 
-    # M42: build a rolling window of the last 10 *committed* closes for each
-    # candidate row so the write-time hfq guard has a baseline.  We initialise
-    # from existing DB rows (already committed) and extend with rows we have
-    # already accepted in this batch.  This means:
+    # M42/M58: build a rolling window of the last 10 *committed* closes for
+    # each candidate row so the write-time adjustment-jump guard (up-splice
+    # M42 + down-splice M58) has a baseline.  We initialise from existing DB
+    # rows (already committed) and extend with rows we have already accepted
+    # in this batch.  This means:
     #   - First N rows of a brand-new symbol have < 10 preceding closes →
     #     guard returns False (passes through) as documented in
     #     check_adjustment_basis_jump.
@@ -170,11 +171,13 @@ def backfill_if_needed(
     rejected = 0
     for date_str, row in df_factors.iterrows():
         close_val = float(row["close"])
-        # M42 write-time guard: reject probable hfq-contaminated rows.
+        # M42/M58 write-time guard: reject probable adjustment-basis-splice
+        # rows, both the up-direction hfq-scale jump (M42) and the symmetric
+        # down-direction splice (M58).
         if check_adjustment_basis_jump(close_val, preceding_closes):
             usable = [c for c in preceding_closes if c > 0]
             logger.warning(
-                "M42 hfq-jump guard: rejected %s %s close=%.4f "
+                "M42/M58 adjustment-jump guard: rejected %s %s close=%.4f "
                 "(preceding 10-day median=%.4f, threshold=%.1f×) — skipping row",
                 symbol, date_str, close_val,
                 _median(usable) if usable else 0,
