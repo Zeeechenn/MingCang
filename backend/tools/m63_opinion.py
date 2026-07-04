@@ -19,6 +19,7 @@ from typing import Any
 
 from backend.research.watchlist import WATCHLIST_DIR, load_watchlists
 from backend.tools.m63_daily import DEFAULT_QUEUE_PATH, _enqueue, load_queue, save_queue
+from backend.tools.m63_render import sanitize_trade_words
 
 DEFAULT_OPINIONS_PATH = Path.home() / ".mingcang" / "m63_opinions.jsonl"
 
@@ -153,7 +154,7 @@ def enqueue_opinion_changes(
         target = str(item.get("theme_key") or "").strip()
         if not target:
             continue
-        summary = str(item.get("summary") or "").strip()
+        summary = sanitize_trade_words(str(item.get("summary") or "").strip())[0]
         if _enqueue(
             queue,
             as_of=as_of,

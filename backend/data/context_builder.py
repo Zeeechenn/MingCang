@@ -523,7 +523,7 @@ def build_stock_context_pack(
                     component="context_builder",
                     category=section,
                     provider="context_builder",
-                    error=str(exc),
+                    error=f"failure:{exc}",
                     context={"symbol": symbol, "as_of": as_of_dt.isoformat(), "section": section},
                     db=session,
                 )

@@ -333,3 +333,31 @@ def test_piotroski_analyst_uses_normalized_denominator_for_vote_score_and_text(m
     assert report.score == 25.0
     assert "5/8" in report.key_findings[0]
     assert "股本历史缺失" in report.key_findings[0]
+
+
+def test_piotroski_analyst_zero_denominator_degrades_to_watch(monkeypatch):
+    import backend.agents.long_term.piotroski_analyst as analyst
+
+    monkeypatch.setattr(analyst.settings, "long_term_piotroski_enabled", True)
+    monkeypatch.setattr(analyst, "build_stock_context_pack", lambda *args, **kwargs: {})
+    monkeypatch.setattr(analyst, "render_context_text", lambda *args, **kwargs: "")
+    monkeypatch.setattr(analyst, "lookup_caveat", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        analyst,
+        "compute_piotroski_factors",
+        lambda symbol, db: {
+            "available": True,
+            "score": 0,
+            "score_denominator": 0,
+            "factors": {"roa_positive": None},
+            "report_period": "2026-03-31",
+            "comparison_period": "2025-03-31",
+            "raw": {},
+        },
+    )
+
+    report = analyst.analyze("300548", db=None)
+
+    assert report.label_vote == "观望"
+    assert report.score == 0
+    assert any("财务数据不足" in finding for finding in report.key_findings)

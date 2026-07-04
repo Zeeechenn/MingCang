@@ -248,7 +248,7 @@ def _build_m61_copilot_context_text(symbol: str, db, *, max_chars: int = 1600) -
             component="research_layer",
             category="copilot_context_pack",
             provider="context_builder",
-            error=str(exc),
+            error=f"failure:{exc}",
             context={"symbol": symbol},
             db=db,
         )

@@ -76,6 +76,16 @@ def _language_guard_hits(text: str) -> list[str]:
     return hits
 
 
+def sanitize_trade_words(text: str) -> tuple[str, int]:
+    """Replace trade wording in-place without the report footer; returns (text, hits)."""
+    sanitized = text
+    count = 0
+    for pattern in _LANGUAGE_GUARD_PATTERNS:
+        sanitized, replaced = _language_guard_pattern(pattern).subn("[操作词已屏蔽]", sanitized)
+        count += replaced
+    return sanitized, count
+
+
 def enforce_language_guard(text: str, mode: str = "strict") -> str:
     """Apply M63 wording guard in strict or sanitizing mode."""
     if mode not in {"strict", "sanitize"}:
@@ -86,11 +96,7 @@ def enforce_language_guard(text: str, mode: str = "strict") -> str:
     if mode == "strict":
         raise ValueError(f"M63 language guard blocked trade words: {', '.join(hits)}")
 
-    sanitized = text
-    count = 0
-    for pattern in _LANGUAGE_GUARD_PATTERNS:
-        sanitized, replaced = _language_guard_pattern(pattern).subn("[操作词已屏蔽]", sanitized)
-        count += replaced
+    sanitized, count = sanitize_trade_words(text)
     logger.warning("M63 language guard sanitized %s trade wording hit(s)", count)
     return sanitized.rstrip() + f"\n⚠️ 语言守卫：屏蔽 {count} 处交易动词\n"
 

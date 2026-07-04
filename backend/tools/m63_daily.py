@@ -821,7 +821,19 @@ def _panel_lines(panel: dict[str, Any] | None) -> list[str]:
     lines = [panel.get("summary", {}).get("text", "面板完成")]
     position_items = panel.get("position_health", {}).get("items", [])
     candidate_items = panel.get("buy_candidates", {}).get("items", [])
-    protective_count = sum(1 for item in position_items if item.get("protective_action"))
+    risk_actions: list[tuple[str, str]] = []
+    seen_actions: set[tuple[str, str]] = set()
+    for section in ("event_warnings", "momentum_tail", "concentration"):
+        for item in (panel.get("risk_warnings", {}).get(section, {}) or {}).get("items") or []:
+            action = str(item.get("protective_action") or "")
+            if not action or action.startswith("数据不足") or "维持观察" in action:
+                continue
+            key = (str(item.get("symbol") or ""), action)
+            if key in seen_actions:
+                continue
+            seen_actions.add(key)
+            risk_actions.append(key)
+    protective_count = sum(1 for item in position_items if item.get("protective_action")) + len(risk_actions)
     stop_flag_count = sum(1 for item in position_items if item.get("stop_flags"))
     quality_flag_count = sum(1 for item in candidate_items if item.get("quality_flags"))
     degraded_symbols = {
@@ -850,6 +862,8 @@ def _panel_lines(panel: dict[str, Any] | None) -> list[str]:
     for item in candidate_items[:8]:
         if item.get("quality_flags"):
             lines.append(f"候选 {item.get('symbol')} 质量旗标: {', '.join(item.get('quality_flags') or [])}(建议仓位上限减半)")
+    for symbol, action in risk_actions[:5]:
+        lines.append(f"风险警示 {symbol} → 保护动作: {action}")
     for item in panel.get("risk_warnings", {}).get("event_warnings", {}).get("items", [])[:8]:
         if isinstance(item, dict):
             lines.append(

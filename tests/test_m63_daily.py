@@ -548,13 +548,39 @@ def test_panel_lines_surface_hard_rule_fields():
                     }
                 ]
             },
-            "risk_warnings": {"event_warnings": {"items": []}},
+            "risk_warnings": {
+                "event_warnings": {
+                    "items": [
+                        {
+                            "symbol": "603986",
+                            "name": "兆易创新",
+                            "event_type": "解禁",
+                            "event_date": "2026-07-08",
+                            "protective_action": "解禁临近:建议临时压缩该仓位敞口",
+                        }
+                    ]
+                },
+                "momentum_tail": {
+                    "items": [
+                        {"symbol": "300476", "protective_action": "数据不足:无法给出动作"},
+                    ]
+                },
+                "concentration": {
+                    "items": [
+                        {"symbol": "300394", "protective_action": "集中度未超15%单仓阈值,维持观察"},
+                    ]
+                },
+            },
         }
     )
 
     text = "\n".join(lines)
-    assert "保护动作 1 条 / 止损贴身旗 1 条 / 质量旗 1 条 / 触发降级 1 条" in text
+    # 1 持仓保护动作 + 1 event_warnings 真动作;数据不足与"维持观察"不计数
+    assert "保护动作 2 条 / 止损贴身旗 1 条 / 质量旗 1 条 / 触发降级 1 条" in text
     assert "保护动作: 集中度超限" in text
+    assert "风险警示 603986 → 保护动作: 解禁临近" in text
+    assert "风险警示 300476" not in text
+    assert "风险警示 300394" not in text
     assert "旗标: 止损贴身" in text
     assert "质量旗标: missing:piotroski(建议仓位上限减半)" in text
 

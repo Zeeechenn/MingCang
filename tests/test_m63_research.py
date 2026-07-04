@@ -288,3 +288,27 @@ def test_opinion_no_llm_archive_path(tmp_path, capsys):
     assert "已存档,未分析(无LLM)" in captured.out
     assert result["analysis"] is None
     assert json.loads(opinions_path.read_text(encoding="utf-8").splitlines()[0])["text"] == "仅归档"
+
+
+def test_opinion_enqueue_sanitizes_trade_words(tmp_path, monkeypatch):
+    opinions_path = tmp_path / "opinions.jsonl"
+    queue_path = tmp_path / "queue.json"
+    analysis = {
+        "affected_themes": [
+            {"theme_key": "optical", "stance_change": "reversed", "summary": "建议立即买入光模块龙头"},
+        ]
+    }
+    monkeypatch.setattr(m63_opinion, "analyze_opinion", lambda opinion: analysis)
+
+    result = m63_opinion.run_opinion(
+        text="我觉得可以买入",
+        source="unit",
+        as_of="2026-07-05",
+        opinions_path=opinions_path,
+        queue_path=queue_path,
+    )
+
+    assert result["enqueued"], "观点变化应入队"
+    reason = result["enqueued"][0]["reason"]
+    assert "买入" not in reason
+    assert "[操作词已屏蔽]" in reason

@@ -63,6 +63,8 @@ def _ground_truth(symbol: str, as_of: str, db) -> dict[str, Any]:
     post = db.execute(
         "SELECT date, close FROM prices WHERE symbol=? AND date>? ORDER BY date", (symbol, as_of)
     ).fetchall()
+    # outcome-side 读取:此处故意取 as_of 之后的真实结局,仅用于事后裁决对照(answer_key
+    # 与两臂输入隔离)。禁止把该查询路径复用到任何 as_of 输入侧上下文,否则即时间穿越。
     news = db.execute(
         "SELECT published_at, title FROM news WHERE symbol=? AND published_at>? ORDER BY published_at LIMIT 40",
         (symbol, as_of + "T99"),
