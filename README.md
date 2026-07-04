@@ -92,7 +92,7 @@
 |---|---|
 | **研究一只票** | `mingcang stock 000001` 拉出信号、新闻、标签、研究 copilot 影子结论，并把你的判断记成一条 `ResearchCase` |
 | **跟踪一个长期主题/赛道** | 把成熟外部研究者、券商/机构、景气与财务质量框架的论题进口为 `ForwardThesis`，带失效条件和复盘节奏，长期持续跟踪 |
-| **盯住每天的信号和风险** | 技术因子 + LLM 新闻情感生成官方信号，ATR 移动止损保护浮盈，组合暴露和数据质量自动预警 |
+| **盯住每天的信号和风险** | 技术因子 + LLM 新闻情感生成官方信号，ATR 移动止损保护浮盈，面板展示 `protective_action`、止损 ATR 距离、组合暴露和数据质量 / 财务质量旗标 |
 | **复盘并积累经验** | 结果出来后做归因，证伪命中/错过都记分，经人工确认才促进成可信记忆，下次判断更有依据 |
 | **让 AI 帮你干上面这些** | 自带 `mingcang` Pi 终端，也可接 Claude Code / Codex / Cursor，通过 CLI / MCP 调用全部能力 |
 
@@ -128,7 +128,7 @@ cd MingCang
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"                            # 装依赖
 python3 -m backend.agent.cli health --pretty       # 健康检查：库、依赖、权限
-python3 -m backend.tools.m59_panel                 # 盘后面板：信号、持仓健康、风险预警
+python3 -m backend.tools.m59_panel                 # 盘后面板：信号、持仓健康、protective_action、ATR 止损和质量旗标
 ```
 
 ---
@@ -186,7 +186,7 @@ python3 -m backend.agent.cli action research.deep.run \
 
 ### 每天看一遍信号
 
-明仓按交易节奏分了日常、周末、研究和喂观点四类入口：
+明仓按交易节奏分了六个发布入口：盘前看、盘中记、盘后决、周末体检、研究 `<目标>`、喂观点：
 
 ```bash
 python3 -m backend.tools.m63_daily --mode premarket|intraday|postmarket
@@ -196,6 +196,7 @@ python3 -m backend.tools.m63_opinion --text '<观点内容>' --source manual --n
 ```
 
 Pi 终端里直接说"盘前扫一遍"、"收盘后复盘一下"即可。信号里包含当日建议、ATR 移动止损位、组合暴露和数据质量预警——明仓不替你下单，只给纪律。
+盘后面板会同步给出风险对应的 `protective_action`、止损贴身程度和财务 / 数据质量旗标，方便把裁量动作落到可检查规则。
 数据任务先查 `docs/data-sources/` 手册。
 
 ### 维护一个关注列表

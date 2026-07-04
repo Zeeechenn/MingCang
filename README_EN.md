@@ -92,7 +92,7 @@ Same day, full batch:
 |---|---|
 | **Research one stock** | `mingcang stock 000001` pulls signals, news, labels, and the research-copilot shadow conclusion, and records your judgment as a `ResearchCase` |
 | **Track a long-term theme/sector** | Import theses from external analysts, institutions, or prosperity frameworks as a `ForwardThesis` with invalidation conditions and a review cadence, tracked over time |
-| **Stay on top of daily signals & risk** | Technical factors + LLM news sentiment generate the official signal; ATR trailing stops protect gains; exposure and data-quality alerts fire automatically |
+| **Stay on top of daily signals & risk** | Technical factors + LLM news sentiment generate the official signal; ATR trailing stops protect gains; panels show `protective_action`, ATR stop distance, exposure, and data/financial-quality flags |
 | **Review and compound experience** | After outcomes land, attribute results; falsification hits/misses are scored; only human-confirmed lessons promote into trusted memory |
 | **Let AI do all of the above** | A built-in `mingcang` Pi terminal, plus Claude Code / Codex / Cursor via CLI / MCP |
 
@@ -126,7 +126,7 @@ cd MingCang
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"                            # install dependencies
 python3 -m backend.agent.cli health --pretty       # health check: DB, deps, permissions
-python3 -m backend.tools.m59_panel                 # post-market panel: signals, position health, risk alerts
+python3 -m backend.tools.m59_panel                 # post-market panel: signals, position health, protective_action, ATR stops, quality flags
 ```
 
 ---
@@ -184,16 +184,17 @@ python3 -m backend.agent.cli action research.deep.run \
 
 ### Check signals every day
 
-MingCang splits the trading rhythm into four one-line workflows:
+MingCang exposes six release workflows: pre-market read, intraday note, post-market decision, weekend health check, research `<target>`, and opinion intake:
 
 ```bash
-python3 -m backend.agent.cli premarket  --pretty   # pre-market: pre-sync checks and entry points
-python3 -m backend.agent.cli intraday   --pretty   # intraday: fast read-only local-cache stock lookups
-python3 -m backend.agent.cli postmarket --pretty   # post-market: full-market signals and review report
-python3 -m backend.agent.cli weekend    --pretty   # weekend: long-term label refresh and weekly reflection
+python3 -m backend.tools.m63_daily --mode premarket|intraday|postmarket
+python3 -m backend.tools.m63_weekly --no-llm
+python3 -m backend.tools.m63_research --target 300308 --no-llm
+python3 -m backend.tools.m63_opinion --text '<opinion text>' --source manual --no-llm
 ```
 
 In the Pi terminal just say "run the pre-market scan" or "review after close." Signals include the day's suggestion, the ATR trailing-stop level, portfolio exposure, and data-quality alerts — MingCang never places the order, it just enforces discipline.
+The post-market panel also renders risk-specific `protective_action`, stop-distance pressure, and financial/data-quality flags so discretionary action stays tied to checkable rules.
 
 ### Maintain a watchlist
 
