@@ -118,7 +118,11 @@ def test_seed_innovative_drug_file_is_valid():
     entries, errors = load_watchlists()
     assert errors == []
     innovative_drug = next(e for e in entries if e["theme_key"] == "innovative_drug")
-    assert innovative_drug["title"] == "创新药"
+    assert innovative_drug["title"] == "创新药/CXO"
     assert set(innovative_drug["symbols"]) == {"603259", "300759", "002821"}
-    assert innovative_drug["source_ref"] == "pending"
-    assert "待 owner 补充" in innovative_drug["thesis"] or "补充" in innovative_drug["thesis"]
+    # 2026-07-04 论点已回填(m61_p4 盲裁 PIT 重建):source_ref 不再是占位符,
+    # thesis 为真实论点——守护"已回填"状态,不许倒退回 pending。
+    assert innovative_drug["source_ref"] != "pending"
+    assert innovative_drug["source_ref"].strip()
+    assert "待 owner 补充" not in innovative_drug["thesis"]
+    assert innovative_drug["thesis"].strip()

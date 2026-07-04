@@ -5,7 +5,9 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from backend.config import settings
+from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.database import DecisionRun, LongTermLabel, NewsItem, ResearchState, Signal
+from backend.data.degradation import emit_degradation
 from backend.decision.harness import OFFICIAL_SIGNAL_RUN_TYPES
 from backend.decision.signal_policy import EXIT_RECS
 from backend.llm import get_provider, has_runtime_llm_provider
@@ -159,6 +161,55 @@ def _latest_long_term(symbol: str, db) -> dict | None:
     }
 
 
+_COPILOT_CONTEXT_SECTIONS = [
+    "announcements",
+    "research_reports",
+    "corporate_events",
+    "fund_flow",
+    "data_health",
+]
+
+
+def _compact_m61_context_pack(pack: dict, *, item_limit: int = 2, field_chars: int = 140) -> dict:
+    compact = dict(pack)
+    for section, value in list(compact.items()):
+        if not isinstance(value, dict):
+            continue
+        section_value = dict(value)
+        items = section_value.get("items")
+        if isinstance(items, list):
+            clipped: list[dict] = []
+            for item in items[:item_limit]:
+                if not isinstance(item, dict):
+                    clipped.append(item)
+                    continue
+                clipped.append({
+                    key: (val[:field_chars] if isinstance(val, str) and len(val) > field_chars else val)
+                    for key, val in item.items()
+                })
+            section_value["items"] = clipped
+        compact[section] = section_value
+    return compact
+
+
+def _build_m61_copilot_context_text(symbol: str, db, *, max_chars: int = 1600) -> str:
+    """Render extra M61 prompt context without changing copilot output schema."""
+    try:
+        pack = build_stock_context_pack(symbol, sections=_COPILOT_CONTEXT_SECTIONS, db=db)
+        pack = _compact_m61_context_pack(pack)
+        return render_context_text(pack, max_chars)
+    except Exception as exc:
+        emit_degradation(
+            component="research_layer",
+            category="copilot_context_pack",
+            provider="context_builder",
+            error=str(exc),
+            context={"symbol": symbol},
+            db=db,
+        )
+        return ""
+
+
 def _official_context(sig: Signal, decision: DecisionRun | None) -> dict:
     """Build official context dict.
 
@@ -228,11 +279,17 @@ def _bounded_shadow_position(official: dict, llm_card: dict) -> tuple[float, boo
     return shadow, conflict, note
 
 
-def _build_prompt(official: dict, news: list[dict], long_term: dict | None) -> str:
+def _build_prompt(
+    official: dict,
+    news: list[dict],
+    long_term: dict | None,
+    context_text: str = "",
+) -> str:
     payload = {
         "official_signal": official,
         "recent_news": news,
         "long_term_label": long_term,
+        "m61_context_text": context_text,
         "shadow_rules": {
             "official_signal_is_unchanged": True,
             "max_trial_position_pct": settings.new_signal_trial_pct,
@@ -250,6 +307,7 @@ def _build_prompt(official: dict, news: list[dict], long_term: dict | None) -> s
         )
     return (
         note
+        + "ctx=m61_p3\n"
         + "请基于以下本地证据生成精简副驾驶卡。"
         "官方信号和止盈止损不会被你修改；shadow_position_pct 只是影子建议。\n"
         + json.dumps(payload, ensure_ascii=False, sort_keys=True)
@@ -282,8 +340,9 @@ def generate_symbol_copilot(symbol: str, db) -> dict:
     official = _official_context(sig, decision)
     news = _latest_news(symbol, db)
     long_term = _latest_long_term(symbol, db)
+    context_text = _build_m61_copilot_context_text(symbol, db)
 
-    _copilot_prompt = _build_prompt(official, news, long_term)
+    _copilot_prompt = _build_prompt(official, news, long_term, context_text)
     data = get_provider().complete_structured(
         prompt=_copilot_prompt,
         tool=_COPILOT_TOOL,

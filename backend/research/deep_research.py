@@ -13,7 +13,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.config import BASE_DIR
+from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.database import FinancialMetric, NewsItem, Price, Stock
+from backend.data.degradation import emit_degradation
 from backend.data.news import RawNews
 from backend.data.news_audit import NewsAudit, audit_news_items
 from backend.research.agents import ResearchSection, build_research_sections
@@ -476,6 +478,81 @@ def _build_summary(topic: str, symbols: list[str], source_count: int, weak_count
     )
 
 
+_DEEP_CONTEXT_SECTIONS = [
+    "announcements",
+    "research_reports",
+    "corporate_events",
+    "holders",
+    "lhb",
+    "data_health",
+]
+
+
+def _compact_m61_context_pack(pack: dict, *, item_limit: int = 2, field_chars: int = 140) -> dict:
+    compact = dict(pack)
+    for section, value in list(compact.items()):
+        if not isinstance(value, dict):
+            continue
+        section_value = dict(value)
+        items = section_value.get("items")
+        if isinstance(items, list):
+            clipped: list[dict] = []
+            for item in items[:item_limit]:
+                if not isinstance(item, dict):
+                    clipped.append(item)
+                    continue
+                clipped.append({
+                    key: (val[:field_chars] if isinstance(val, str) and len(val) > field_chars else val)
+                    for key, val in item.items()
+                })
+            section_value["items"] = clipped
+        compact[section] = section_value
+    return compact
+
+
+def _topic_looks_sector_level(topic: str, symbols: list[str]) -> bool:
+    if len(symbols) != 1:
+        return True
+    return any(token in topic for token in ("行业", "产业链", "板块", "主题", "赛道", "sector"))
+
+
+def _build_m61_research_context_text(
+    *,
+    symbols: list[str],
+    db,
+    as_of_dt: datetime,
+    topic: str,
+    max_chars: int = 2000,
+) -> str:
+    """Render extra M61 research context without replacing legacy evidence."""
+    if not symbols:
+        return ""
+    sections = list(_DEEP_CONTEXT_SECTIONS)
+    if _topic_looks_sector_level(topic, symbols):
+        sections.insert(-1, "overseas")
+    per_symbol_budget = max(400, max_chars // max(1, len(symbols)))
+    chunks: list[str] = []
+    for symbol in symbols:
+        try:
+            pack = build_stock_context_pack(symbol, as_of=as_of_dt, sections=sections, db=db)
+            pack = _compact_m61_context_pack(pack)
+            text = render_context_text(pack, per_symbol_budget)
+        except Exception as exc:
+            emit_degradation(
+                component="research_layer",
+                category="deep_research_context_pack",
+                provider="context_builder",
+                error=str(exc),
+                context={"symbol": symbol, "topic": topic, "as_of": as_of_dt.isoformat()},
+                db=db,
+            )
+            continue
+        if text.strip():
+            chunks.append(text)
+    output = "\n\n".join(chunks)
+    return output[:max_chars]
+
+
 def _section_to_dict(section: ResearchSection) -> dict:
     """Serialize a ResearchSection for persistence and debate context."""
     return {
@@ -519,6 +596,7 @@ def _render_report(
     audits: list[NewsAudit],
     risk_flags: list[str],
     sections: list[ResearchSection],
+    context_text: str = "",
     iterations: list[dict] | None = None,
 ) -> str:
     """Render the deep research report as Markdown."""
@@ -533,6 +611,7 @@ def _render_report(
         f"- 日期：{as_of}",
         f"- 标的：{symbol_label}",
         "- 类型：手动专题研究，不进入日常盘后信号流水线",
+        "- 上下文版本：ctx=m61_p3",
         "",
         "## 核心结论",
         summary,
@@ -573,6 +652,9 @@ def _render_report(
             )
         else:
             lines.append(f"- {sym}：暂无财务指标数据")
+
+    if context_text:
+        lines.extend(["", "## M61 统一上下文", context_text])
 
     lines.extend(["", "## 风险复核"])
     if risk_flags:
@@ -802,6 +884,13 @@ def run_deep_research(
         weak_source_count=weak_count,
         risk_flags=risk_flags,
     )
+    context_text = _build_m61_research_context_text(
+        symbols=clean_symbols,
+        db=db,
+        as_of_dt=as_of_dt,
+        topic=topic,
+        max_chars=2000,
+    )
 
     out_dir = Path(output_dir) if output_dir is not None else default_output_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -818,6 +907,7 @@ def run_deep_research(
         risk_flags=risk_flags,
         iterations=iterations,
         sections=sections,
+        context_text=context_text,
     )
 
     # M50 Phase 1: build report object BEFORE write so gate can inspect it.
@@ -912,6 +1002,7 @@ def _persist_report(db, report: DeepResearchReport, audits: list[NewsAudit], *, 
             for audit in audits[:20]
         ],
         "sections": list(report.sections),
+        "context_version": "ctx=m61_p3",
         "gate_status": gate.status if gate is not None else "gate_disabled",
         "gate_warnings": gate.warnings if gate is not None else [],
     }
@@ -923,7 +1014,7 @@ def _persist_report(db, report: DeepResearchReport, audits: list[NewsAudit], *, 
             as_of=report.as_of,
             result=result,
             input_snapshot=input_snapshot,
-            notes=report.summary,
+            notes=f"{report.summary} ctx=m61_p3",
         )
     remember_deep_research(
         db,
