@@ -306,3 +306,47 @@ def test_m59_panel_adds_event_warning_position_fields_and_data_health(tmp_path, 
     assert "→ 动作:" in markdown
     assert "## 数据健康区" in markdown
     assert "m52_flow_floor | 1" in markdown
+
+
+def test_m59_panel_groups_consecutive_unlock_warnings(tmp_path, monkeypatch):
+    """小白测试修复(2026-07-05):同一解禁连续多日提示必须归并为一行日期段。"""
+    import backend.tools.m59_panel as m59_panel
+
+    db_path = tmp_path / "m61-panel-group.sqlite"
+    universe_path = tmp_path / "universe.json"
+    universe_path.write_text('{"stocks":[{"symbol":"603986","name":"兆易创新"}]}', encoding="utf-8")
+    with _init_panel_db(db_path) as con:
+        _seed_panel_rows(con)
+        # 4 条连续日解禁(同一解禁的每日提示) + 1 条孤立定增
+        for day in ("2026-07-06", "2026-07-07", "2026-07-08", "2026-07-09"):
+            con.execute(
+                "INSERT INTO corporate_events(symbol, event_type, title, event_date, provider)"
+                " VALUES ('603986', '解禁', ?, ?, 'unit')",
+                (f"兆易创新 解禁 {day.replace('-', '')}", day),
+            )
+        con.execute(
+            "INSERT INTO corporate_events(symbol, event_type, title, event_date, provider)"
+            " VALUES ('603986', '定增', '定增获批', '2026-07-15', 'unit')"
+        )
+        con.commit()
+    monkeypatch.setattr(m59_panel.flow_floor, "compute_s_flow_data", lambda raw: 0.42)
+
+    panel = m59_panel.build_panel(
+        db_path=db_path,
+        as_of="2026-07-04",
+        universe_path=universe_path,
+        watchtower_output_dir=tmp_path,
+    )
+    items = panel["risk_warnings"]["event_warnings"]["items"]
+    by_type = {item["event_type"]: item for item in items}
+    # 解禁:5 行原始数据(种子1条 7-20 + 本测试4条连续)归并为一条,日期段展示
+    unlock = by_type["解禁"]
+    assert unlock["consecutive_days"] == 5
+    assert unlock["event_date"] == "2026-07-06"
+    assert unlock["event_date_last"] == "2026-07-20"
+    assert "~" in unlock["line"] and "连续提示5天" in unlock["line"]
+    # 定增:孤立单条,单日期格式
+    placement = by_type["定增"]
+    assert placement["consecutive_days"] == 1
+    assert placement["line"].startswith("⚠️ 603986 兆易创新 定增 2026-07-15")
+    assert len(items) == 2

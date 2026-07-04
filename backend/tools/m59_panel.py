@@ -870,24 +870,38 @@ def _build_event_warnings(con: sqlite3.Connection, universe: list[dict[str, Any]
         """,
         [*symbols, as_of, as_of],
     ).fetchall()
-    items = []
+    # iFinD 事件源对进行中的解禁按日各返回一行(同一解禁连续多日提示)——
+    # 按 (symbol, event_type) 归并连续日期段,展示层去重(数据行不动)。
+    # 小白测试实证:同一解禁重复 6 行被读成 bug(2026-07-05 修)。
+    grouped: dict[tuple[str, str], list[sqlite3.Row]] = {}
     for row in rows:
-        symbol = str(row["symbol"])
+        grouped.setdefault((str(row["symbol"]), str(row["event_type"])), []).append(row)
+    items = []
+    for (symbol, event_type), group in grouped.items():
         name = universe_names.get(symbol) or names.get(symbol) or ""
-        event_date = _date_only(row["event_date"])
-        detail = row["detail"] or row["title"] or "-"
-        line = f"⚠️ {symbol} {name} {row['event_type']} {event_date} ({detail})"
+        dates = [_date_only(r["event_date"]) for r in group]
+        first_date, last_date = dates[0], dates[-1]
+        detail = group[-1]["detail"] or group[-1]["title"] or "-"
+        if len(group) >= 2:
+            date_display = f"{first_date}~{last_date}"
+            line = f"⚠️ {symbol} {name} {event_type} {date_display} (连续提示{len(group)}天)"
+        else:
+            date_display = first_date
+            line = f"⚠️ {symbol} {name} {event_type} {first_date} ({detail})"
         items.append(
             {
                 "symbol": symbol,
                 "name": name,
-                "event_type": row["event_type"],
-                "event_date": event_date,
+                "event_type": event_type,
+                "event_date": first_date,
+                "event_date_last": last_date,
+                "consecutive_days": len(group),
                 "detail": detail,
                 "line": line,
                 "protective_action": _event_protective_action(con, symbol, as_of),
             }
         )
+    items.sort(key=lambda item: (item["event_date"], item["symbol"]))
     return {"items": items, "flags": []}
 
 
