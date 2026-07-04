@@ -1248,3 +1248,31 @@ MVP 成功标准：
   - `backend/research/review_loop.py`
   - `backend/memory/stock_memory.py`
   - `backend/memory/summarizer.py`
+
+---
+
+## 附录 A：MemOS 深读增补（leader 调研，2026-07-05）
+
+对 MemTensor/MemOS（Apache-2.0）主仓与 memos-local-plugin 的深读结论，作为对 §3 借鉴表的增量。
+
+### A.1 总体裁决：概念归口，不引框架
+
+MemOS 完整部署依赖 Neo4j（图库）+ Qdrant（向量库）+ Redis（MemScheduler 队列），与明仓
+local-first / SQLite 单文件 / 小白可跑的定位冲突。按 M51/M55 先例：**只借鉴机制，不引入依赖**。
+其 memos-local-plugin（SQLite + FTS5 混合检索）是轻量参考实现，实现 Phase 2 检索时可参读。
+
+### A.2 五个具体增量（对既有 Phase 排期的补充）
+
+| # | MemOS 机制 | 明仓转译 | 落点 |
+|---|---|---|---|
+| 1 | 高层记忆指导低层"组织与遗忘" | 记忆条目强制 `as_of`/时效标注 + 衰减归档策略（药明教训：旧标签锚死新判断=记忆时效缺陷的实证） | Phase 1 表结构即带 `as_of`/`stale_after`；governance 的 archive 通道消费 |
+| 2 | FTS5+向量混合检索 | 只取 FTS5+标签过滤（SQLite 原生零依赖）；向量检索挂起，等"关键词召回不够用"的真实痛点出现再评 | Phase 2 recall |
+| 3 | 注入前 dedup+压缩省 token（其声称 35-72% 节省的来源） | ContextGovernor 注入前按 (主题,标的) 去重 + 超预算摘要化，命中率入 trace | Phase 1 ContextGovernor |
+| 4 | 自然语言反馈修正记忆（correct/delete by id） | 复用 agent CLI action 机制新增 `memory.correct`/`memory.archive`（走 --confirm 人工确认，符合 §4.1 不自动提升可信度） | Phase 1 末尾小件 |
+| 5 | MemCube 按用户/项目隔离 | 单用户场景转译为**按功能位命名空间隔离**：交易纪律 / 研究论点 / UX偏好 分仓，裁量上下文只召回对应仓，防无关记忆污染 | Phase 1 表结构带 `namespace` 字段 |
+
+### A.3 排期修订
+
+owner 2026-07-05 指示"接下来把记忆系统做好"——M57 MVP 启动时点从"M62 发布后"提前到当前窗口。
+Phase 1 = EvolutionTrace + TaskCapsule + ContextGovernor（含 A.2 的 #1/#3/#5 结构预埋 + #4 小件），
+profile miner 与 Phase 2 检索仍按原序。验收两道门不变（全量测试 + 记忆开/关盲裁对照）。

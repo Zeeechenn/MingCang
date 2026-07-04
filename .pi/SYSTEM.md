@@ -34,6 +34,28 @@ To discover safe project mutations before proposing them, read:
 python3 -m backend.agent.cli actions --pretty
 ```
 
+## Daily Routing (M63 six workflow entry points)
+
+When the user asks for daily/weekly routines, route to the M63 entry points
+instead of assembling ad-hoc pipelines (all run as
+`PYTHONPATH=. python3 -m backend.tools.<tool>`):
+
+```bash
+python3 -m backend.tools.m63_daily --mode premarket    # 盘前看(zero LLM)
+python3 -m backend.tools.m63_daily --mode intraday     # 盘中记(zero LLM)
+python3 -m backend.tools.m63_daily --mode postmarket   # 盘后决(唯一烧LLM触点)
+python3 -m backend.tools.m63_weekly --no-llm           # 周末体检+归因
+python3 -m backend.tools.m63_research --target <代码|主题>  # 随时研究
+python3 -m backend.tools.m63_opinion --text '<观点>' --source manual  # 喂观点
+```
+
+Notes: research queue lives at `~/.mingcang/m63_research_queue.json`; the M59
+panel inside postmarket carries hard-rule fields (protective_action,
+stop_flags, quality_flags, trigger_quality) — surface them when reporting. The
+M59 LLM discretion layer is gated by `M59_DISCRETION_ENABLED` (default off)
+and is reference-only. All human-facing report exits pass the M63 language
+guard; never bypass it by hand-assembling report text.
+
 ## Tool Boundary
 
 - Use MingCang CLI or the project-local `.pi/extensions/mingcang.ts` tools
