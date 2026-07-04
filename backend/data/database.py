@@ -16,6 +16,7 @@ from backend.data.models import (  # noqa: F401  re-exported for backward compat
     ChatSession,
     DecisionMemoryLayered,
     DecisionRun,
+    DegradationEvent,
     FinancialMetric,
     ForwardThesis,
     GateBObservation,

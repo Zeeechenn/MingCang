@@ -13,6 +13,9 @@ from backend.data.models.decision import (
     ResearchState,
     ReviewRun,
 )
+from backend.data.models.degradation import (
+    DegradationEvent,
+)
 from backend.data.models.market import (
     FinancialMetric,
     IndexPrice,
@@ -69,6 +72,7 @@ __all__ = [
     "ResearchState",
     "ReviewRun",
     "PendingAIAction",
+    "DegradationEvent",
     "DecisionMemoryLayered",
     "StockMemoryItem",
     "MemoryAtom",
