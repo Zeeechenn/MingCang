@@ -55,3 +55,34 @@ class LhbRecord(Base):
     sell_seats_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     provider: Mapped[str] = mapped_column(String)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class CorporateEvent(Base):
+    """Corporate event captured from normalized category providers."""
+
+    __tablename__ = "corporate_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    event_type: Mapped[str] = mapped_column(String)
+    title: Mapped[str] = mapped_column(String)
+    event_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider: Mapped[str] = mapped_column(String)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class HolderSnapshot(Base):
+    """Share capital and top-holder snapshot."""
+
+    __tablename__ = "holder_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    report_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    total_shares: Mapped[float | None] = mapped_column(Float, nullable=True)
+    float_shares: Mapped[float | None] = mapped_column(Float, nullable=True)
+    top10_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    holder_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    provider: Mapped[str] = mapped_column(String)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

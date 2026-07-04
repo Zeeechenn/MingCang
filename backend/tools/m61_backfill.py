@@ -7,7 +7,13 @@ import logging
 from datetime import date, timedelta
 from pathlib import Path
 
-from backend.data.category_fetchers import save_announcements, save_lhb, save_research_reports  # noqa: F401
+from backend.data.category_fetchers import (  # noqa: F401
+    save_announcements,
+    save_corporate_events,
+    save_holder_snapshots,
+    save_lhb,
+    save_research_reports,
+)
 from backend.data.category_registry import FetchRequest, fetch_by_category
 from backend.data.degradation import emit_degradation
 from backend.data.orm import Base
@@ -19,12 +25,18 @@ SAVE_HELPERS = {
     "announcements": save_announcements,
     "research_reports": save_research_reports,
     "lhb": save_lhb,
+    "corporate_events": save_corporate_events,
+    "holders": save_holder_snapshots,
 }
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Backfill M61 category provider data.")
-    parser.add_argument("--category", required=True, choices=("announcements", "research_reports", "lhb"))
+    parser.add_argument(
+        "--category",
+        required=True,
+        choices=("announcements", "research_reports", "lhb", "corporate_events", "holders"),
+    )
     parser.add_argument("--universe", required=True)
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
@@ -52,6 +64,23 @@ def _ten_day_windows(start: date, end: date) -> list[tuple[date, date]]:
     current = start
     while current <= end:
         window_end = min(current + timedelta(days=9), end)
+        windows.append((current, window_end))
+        current = window_end + timedelta(days=1)
+    return windows
+
+
+def _quarter_windows(start: date, end: date) -> list[tuple[date, date]]:
+    windows = []
+    current = start
+    while current <= end:
+        quarter_end_month = ((current.month - 1) // 3 + 1) * 3
+        next_month = quarter_end_month + 1
+        next_year = current.year
+        if next_month == 13:
+            next_month = 1
+            next_year += 1
+        quarter_end = date(next_year, next_month, 1) - timedelta(days=1)
+        window_end = min(quarter_end, end)
         windows.append((current, window_end))
         current = window_end + timedelta(days=1)
     return windows
@@ -150,6 +179,90 @@ def _backfill_stock_category(
     return inserted, degradations
 
 
+def _fetch_stock_category_once(
+    category: str,
+    stock: dict[str, str],
+    start: date,
+    end: date,
+    db,
+):
+    return fetch_by_category(
+        category,
+        FetchRequest(
+            symbol=stock["symbol"],
+            start=start,
+            end=end,
+            limit=50,
+            extra={"name": stock.get("name") or stock["symbol"]},
+        ),
+        db=db,
+    )
+
+
+def _backfill_corporate_events(
+    stocks: list[dict[str, str]],
+    start: date,
+    end: date,
+    db,
+) -> tuple[int, list[dict]]:
+    inserted = 0
+    degradations: list[dict] = []
+
+    for stock in stocks:
+        symbol = stock["symbol"]
+        try:
+            result = _fetch_stock_category_once("corporate_events", stock, start, end, db)
+            degradations.extend(result.degradations)
+            if not result.ok:
+                degradations.append(
+                    _record_degradation(
+                        "corporate_events",
+                        result.provider or "corporate_events",
+                        "fetch_failed",
+                        {"symbol": symbol, "start": start.isoformat(), "end": end.isoformat()},
+                        db,
+                    )
+                )
+                continue
+            if len(result.rows) < 10:
+                inserted += save_corporate_events(result.rows, db)
+                continue
+
+            for window_start, window_end in _quarter_windows(start, end):
+                split_result = _fetch_stock_category_once("corporate_events", stock, window_start, window_end, db)
+                degradations.extend(split_result.degradations)
+                if not split_result.ok:
+                    degradations.append(
+                        _record_degradation(
+                            "corporate_events",
+                            split_result.provider or "corporate_events",
+                            "fetch_failed",
+                            {
+                                "symbol": symbol,
+                                "start": window_start.isoformat(),
+                                "end": window_end.isoformat(),
+                            },
+                            db,
+                        )
+                    )
+                    continue
+                inserted += save_corporate_events(split_result.rows, db)
+        except Exception as exc:  # noqa: BLE001 - per-stock resilience
+            db.rollback()
+            error = f"{type(exc).__name__}: {exc}"
+            logger.warning("corporate_events backfill failed for %s: %s", symbol, error)
+            degradations.append(
+                _record_degradation(
+                    "corporate_events",
+                    "corporate_events",
+                    error,
+                    {"symbol": symbol, "start": start.isoformat(), "end": end.isoformat()},
+                    db,
+                )
+            )
+    return inserted, degradations
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -162,6 +275,8 @@ def main(argv: list[str] | None = None) -> int:
         Base.metadata.create_all(bind=db.get_bind())
         if args.category == "lhb":
             inserted, degradations = _backfill_lhb(stocks, start, end, db)
+        elif args.category == "corporate_events":
+            inserted, degradations = _backfill_corporate_events(stocks, start, end, db)
         else:
             inserted, degradations = _backfill_stock_category(args.category, stocks, start, end, db)
         print(

@@ -27,6 +27,8 @@ from backend.data.models.market import (
 )
 from backend.data.models.m61 import (
     Announcement,
+    CorporateEvent,
+    HolderSnapshot,
     LhbRecord,
     ResearchReport,
 )
@@ -73,6 +75,8 @@ __all__ = [
     "Announcement",
     "ResearchReport",
     "LhbRecord",
+    "CorporateEvent",
+    "HolderSnapshot",
     "Signal",
     "SentimentCache",
     "LongTermLabel",
