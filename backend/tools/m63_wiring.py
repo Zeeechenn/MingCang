@@ -26,6 +26,7 @@ WIRING_MAP: dict[str, WiringEntry] = {
     "backend.tools.gate_b_tracker": {"bucket": "manual_only", "reason": "Gate-B观察台账,验收/研究时人工触发"},
     "backend.tools.long_term_constraint_impact": {"bucket": "daily_postmarket", "reason": "长期标签与日信号约束影响读数"},
     "backend.tools.m59_panel": {"bucket": "daily_postmarket", "reason": "盘后核心面板"},
+    "backend.tools.m59_discretion": {"bucket": "daily_postmarket", "reason": "盘后LLM裁量参考层,灰度开关控制"},
     "backend.tools.m52_flow_floor": {"bucket": "daily_postmarket", "reason": "资金流融合库函数,由日常评分/面板间接使用"},
     "backend.tools.m61_backfill": {"bucket": "daily_postmarket", "reason": "盘后滴灌补数为主,深研也会调用"},
     "backend.tools.m63_render": {"bucket": "manual_only", "reason": "M63渲染库本体,由其他M63工具调用"},

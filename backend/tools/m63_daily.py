@@ -47,6 +47,7 @@ POSTMARKET_STEP_MODULES = {
     "backend.tools.m54_daily_accrual",
     "backend.tools.m58_exit_shadow",
     "backend.tools.m59_panel",
+    "backend.tools.m59_discretion",
     "backend.tools.m63_daily",
     "backend.tools.coverage_snapshot",
     "backend.tools.long_term_constraint_impact",
@@ -445,6 +446,12 @@ def _run_panel(as_of: str) -> dict[str, Any]:
     from backend.tools.m59_panel import build_panel
 
     return build_panel(as_of=as_of)
+
+
+def _run_discretion(panel: dict[str, Any], db_path: str | Path | None, as_of: str) -> dict[str, Any]:
+    from backend.tools.m59_discretion import build_discretion_cards
+
+    return build_discretion_cards(panel, db_path=db_path, as_of=as_of)
 
 
 def _run_second_entry_ledger(db_path: str | Path | None, as_of: str) -> dict[str, Any]:
@@ -862,6 +869,17 @@ def build_postmarket_report(
     steps.append(_step_result("m54_daily_accrual", overrides.get("m54_daily_accrual", lambda: _run_accrual(day, no_llm=no_llm))))
     steps.append(_step_result("m58_exit_shadow", overrides.get("m58_exit_shadow", _run_exit_shadow)))
     steps.append(_step_result("m59_panel", overrides.get("m59_panel", lambda: _run_panel(day))))
+    panel = next((step["result"] for step in steps if step["name"] == "m59_panel" and step["ok"]), None)
+    if panel is not None:
+        from backend.tools.m59_discretion import m59_discretion_enabled
+
+        if m59_discretion_enabled():
+            steps.append(
+                _step_result(
+                    "m59_discretion",
+                    overrides.get("m59_discretion", lambda: _run_discretion(panel, db_path, day)),
+                )
+            )
     watchtower = next((step["result"] for step in steps if step["name"] == "m60_watchtower" and step["ok"]), None)
     steps.append(
         _step_result(
@@ -879,7 +897,9 @@ def build_postmarket_report(
             ),
         )
     )
-    panel = next((step["result"] for step in steps if step["name"] == "m59_panel" and step["ok"]), None)
+    discretion = next((step["result"] for step in steps if step["name"] == "m59_discretion" and step["ok"]), None)
+    from backend.tools.m59_discretion import render_card_lines
+
     router = next((step["result"] for step in steps if step["name"] == "trigger_router" and step["ok"]), {})
     failures = [f"⚠️ {step['name']} 失败:{step['error']}" for step in steps if not step["ok"]]
     accrual = next((step["result"] for step in steps if step["name"] == "m54_daily_accrual" and step["ok"]), {})
@@ -889,6 +909,10 @@ def build_postmarket_report(
         ("盘后决", [f"日期:{day}", "定位:汇总盘后证据、触发队列和数据健康。"]),
         ("执行步骤", [f"{step['name']}:{'OK' if step['ok'] else 'FAIL'}" for step in steps] + failures),
         ("核心面板", _panel_lines(panel)),
+        (
+            "🧭 裁量参考区（LLM,仅供参考）",
+            render_card_lines(discretion),
+        ),
         ("观察哨卡片", _watchtower_lines(watchtower)),
         (
             "影子出场",

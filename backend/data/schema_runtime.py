@@ -62,6 +62,27 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_sentiment_cache_symbol_hash
             ON sentiment_cache(symbol, titles_hash)
         """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS m59_discretion_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                as_of TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                slot TEXT NOT NULL,
+                card_json TEXT NOT NULL,
+                inputs_digest TEXT NOT NULL,
+                provider TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(as_of, symbol, slot)
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_m59_discretion_cards_as_of
+            ON m59_discretion_cards(as_of)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_m59_discretion_cards_symbol
+            ON m59_discretion_cards(symbol)
+        """))
 
         position_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(positions)")).fetchall()]
         for col, ddl in {
