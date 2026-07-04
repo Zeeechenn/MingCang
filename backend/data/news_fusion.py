@@ -6,6 +6,7 @@ window; `DEGRADED` rows should not enter the primary IC sample.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,8 +14,11 @@ from importlib import import_module
 from operator import attrgetter
 from typing import Any
 
+from backend.data.degradation import emit_degradation
 from backend.data.news_clustering import EventCluster
 from backend.data.news_extraction import ClusterScore
+
+logger = logging.getLogger(__name__)
 
 FRESHNESS_HALFLIFE_DAYS = 3.0
 DIVERSITY_SATURATION = 3
@@ -239,7 +243,15 @@ def _resolve_flow_score(
 def _default_flow_provider(symbol: str, as_of: datetime) -> object | None:
     try:
         module = import_module("backend.tools.m52_flow_floor")
-    except Exception:
+    except Exception as exc:
+        logger.warning("default flow provider import failed for %s: %s", symbol, exc)
+        emit_degradation(
+            "news_fusion",
+            "fund_flow",
+            "m52_flow_floor",
+            f"import_failed: {exc}",
+            context={"symbol": symbol, "as_of": as_of.isoformat()},
+        )
         return None
 
     fetch_flow_data_pit = getattr(module, "fetch_flow_data_pit", None)
@@ -256,7 +268,20 @@ def _default_flow_provider(symbol: str, as_of: datetime) -> object | None:
             return compute_s_flow_data(raw_flow)
         except TypeError:
             continue
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "default flow provider compute failed for %s with %s: %s",
+                symbol,
+                sorted(fetch_kwargs),
+                exc,
+            )
+            emit_degradation(
+                "news_fusion",
+                "fund_flow",
+                "m52_flow_floor",
+                f"compute_failed: {exc}",
+                context={"symbol": symbol, "as_of": as_of.isoformat(), "fetch_kwargs": fetch_kwargs},
+            )
             return None
     return None
 

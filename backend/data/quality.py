@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func
 
 from backend.data.cache_policy import cache_policy_payload
-from backend.data.database import FinancialMetric, NewsItem, Price, Signal, Stock
+from backend.data.database import Announcement, FinancialMetric, NewsItem, Price, Signal, Stock
 from backend.data.market import register_default_market_providers
 from backend.data.market_capabilities import SUPPORTED_MARKETS, build_market_capability_catalog
 from backend.data.providers import get_provider_health, provider_fallback_chains
@@ -14,6 +14,13 @@ from backend.decision.market_policy import (
     is_production_signal_market,
     production_signal_policy_payload,
 )
+
+CAPABILITY_COVERAGE_COUNTERS = {
+    "quote": ("price_covered",),
+    "kline": ("price_covered", "two_year_price_covered"),
+    "fundamentals": ("financial_covered",),
+    "filings": ("filings_covered",),
+}
 
 
 def build_data_coverage_report(db) -> dict:
@@ -41,6 +48,12 @@ def build_data_coverage_report(db) -> dict:
             .scalar()
             or 0
         )
+        filings_count = (
+            db.query(func.count(Announcement.id))
+            .filter(Announcement.symbol == stock.symbol)
+            .scalar()
+            or 0
+        )
         rows.append({
             "symbol": stock.symbol,
             "name": stock.name,
@@ -51,6 +64,7 @@ def build_data_coverage_report(db) -> dict:
             "latest_price_date": price[2],
             "latest_financial_report": latest_fin[0] if latest_fin else None,
             "news_24h_count": int(news_count),
+            "filings_count": int(filings_count),
         })
 
     def _covered(key: str) -> int:
@@ -67,6 +81,7 @@ def build_data_coverage_report(db) -> dict:
             "two_year_price_covered": sum(1 for row in market_rows if row["price_rows"] >= 480),
             "financial_covered": sum(1 for row in market_rows if row.get("latest_financial_report")),
             "news_24h_covered": sum(1 for row in market_rows if row["news_24h_count"] > 0),
+            "filings_covered": sum(1 for row in market_rows if row["filings_count"] > 0),
             "signal_scope": "production" if is_production_signal_market(market) else "observe_only",
         }
     production_rows = [row for row in rows if is_production_signal_market(row.get("market"))]
@@ -79,6 +94,7 @@ def build_data_coverage_report(db) -> dict:
             "two_year_price_covered": sum(1 for row in rows_ if row["price_rows"] >= 480),
             "financial_covered": sum(1 for row in rows_ if row.get("latest_financial_report")),
             "news_24h_covered": sum(1 for row in rows_ if row["news_24h_count"] > 0),
+            "filings_covered": sum(1 for row in rows_ if row["filings_count"] > 0),
         }
 
     cache_policy = cache_policy_payload()
@@ -92,6 +108,7 @@ def build_data_coverage_report(db) -> dict:
             "two_year_price_covered": sum(1 for row in rows if row["price_rows"] >= 480),
             "financial_covered": _covered("latest_financial_report"),
             "news_24h_covered": sum(1 for row in rows if row["news_24h_count"] > 0),
+            "filings_covered": sum(1 for row in rows if row["filings_count"] > 0),
             "production_coverage": _coverage(production_rows),
             "observe_only_coverage": _coverage(observe_only_rows),
             "cache_policy": cache_policy,
