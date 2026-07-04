@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+### Added / 新增
+- **盲裁验收 harness**(`backend/tools/blind_adjudication.py`):判断类功能的常态化 A/B 验收工具——两臂回答确定性盲化(甲/乙)、DB 真实结局对照、多裁判(claude/codex 跨模型)结构化投票、answer_key 隔离、多数票汇总。M61 P4 判断门以此完成 10 案例×双模型 60 票终裁(净版 full 6 : starved 3 : 平 1,跨模型方向一致 9/10),裁决工件在 `paper_trading/m61_out/adjudication_h1_expansion_20260705.json`(本地运行数据,不入库)。`m61_judgment_gate` 增 `--cases-file` 支持外部历史案例集(半年窗口回放)。
+- **M59 裁量层四条硬规则**(规格 `docs/dev/M59_ADJUDICATION_RULES.md`,盲裁证据驱动):R1 每条风险警示强制带确定性保护动作(实算止损位/减仓比例);R2 观望类结论必须带可观测再评估触发,copilot 增 `reentry_trigger` 字段与 `trigger_quality` 降级标记;R3 持仓体检增 `atr14`/`stop_gap_atr`/`stop_flags`(止损贴身 <1.5×ATR 与动量股静态止盈标旗);R4 财务质量旗标(CFO<净利/流动比率<1/毛利率过薄)进候选区与体检并渲染仓位收缩建议。面板保持只读,不改官方信号。
+
+### Fixed / 修复
+- **统一上下文构建器公司事件 PIT 语义**:执行记录类事件(回购成交等)禁止出现在早于其发生日的历史上下文(时间穿越,盲裁裁判三票实证捕获);排期类事件(解禁/分红/除权/除息/股东大会,提前公告属时点可知)保留 +90 天前瞻。历史回放与判断门评测自此 PIT 干净。
+
 ### Changed / 变更
 - 将当前仓库授权从 MIT License 调整为 PolyForm Noncommercial License 1.0.0；当前及后续版本允许非商业使用、修改与分发，不再允许未经授权的商业使用。
 - 同步更新 README / README_EN badge 与授权说明、`pyproject.toml` 项目元数据、`CONTRIBUTING.md` 贡献说明。
