@@ -56,10 +56,10 @@ def _score_to_signal_score(score: int) -> float:
     return round((score - 4.5) / 4.5 * 100, 1)
 
 
-def _template_findings(factors: dict[str, bool], raw: dict) -> list[str]:
+def _template_findings(factors: dict[str, bool | None], raw: dict) -> list[str]:
     """无 LLM 时的模板化 key_findings（≤3 条）"""
     positive = [_FACTOR_LABELS[k] for k, v in factors.items() if v and k in _FACTOR_LABELS]
-    negative = [_FACTOR_LABELS[k] for k, v in factors.items() if not v and k in _FACTOR_LABELS]
+    negative = [_FACTOR_LABELS[k] for k, v in factors.items() if v is False and k in _FACTOR_LABELS]
     findings = []
     if positive:
         findings.append("✅ " + "; ".join(positive[:3]))
@@ -104,6 +104,7 @@ def analyze(symbol: str, db) -> LongTermReport:
 
     raw_payload = {
         "f_score": score,
+        "score_denominator": result.get("score_denominator", 9),
         "factors": factors,
         "report_period": result.get("report_period"),
         "comparison_period": result.get("comparison_period"),

@@ -28,6 +28,7 @@ from backend.data.models.market import (
 from backend.data.models.m61 import (
     Announcement,
     CorporateEvent,
+    FundFlow,
     HolderSnapshot,
     LhbRecord,
     ResearchReport,
@@ -77,6 +78,7 @@ __all__ = [
     "LhbRecord",
     "CorporateEvent",
     "HolderSnapshot",
+    "FundFlow",
     "Signal",
     "SentimentCache",
     "LongTermLabel",

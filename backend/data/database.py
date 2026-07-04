@@ -20,6 +20,7 @@ from backend.data.models import (  # noqa: F401  re-exported for backward compat
     DegradationEvent,
     FinancialMetric,
     ForwardThesis,
+    FundFlow,
     GateBObservation,
     HolderSnapshot,
     IndexPrice,

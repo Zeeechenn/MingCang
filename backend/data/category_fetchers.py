@@ -17,6 +17,7 @@ from backend.data.orm import _utcnow
 logger = logging.getLogger(__name__)
 
 REPORT_API_URL = "https://reportapi.eastmoney.com/report/list"
+EASTMONEY_FFLOW_URL = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get"
 EASTMONEY_HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Referer": "https://data.eastmoney.com/",
@@ -692,6 +693,73 @@ def fetch_lhb_akshare(request: FetchRequest) -> list[dict]:
     return rows
 
 
+def _eastmoney_secid(symbol: str) -> str:
+    prefix = "1" if symbol.startswith("6") else "0"
+    return f"{prefix}.{symbol}"
+
+
+def _parse_fflow_kline(kline: str, symbol: str, fetched_at: datetime) -> dict | None:
+    # Requested fields2 order: f51 date, f52 main, f53 small, f54 medium,
+    # f55 large, f56 super-large. Remaining f57-f61 fields are not persisted.
+    parts = [part.strip() for part in kline.split(",")]
+    if len(parts) < 6:
+        return None
+    trade_date = _parse_datetime(parts[0])
+    return {
+        "symbol": symbol,
+        "trade_date": trade_date,
+        "main_net": _to_float(parts[1]),
+        "small_net": _to_float(parts[2]),
+        "medium_net": _to_float(parts[3]),
+        "large_net": _to_float(parts[4]),
+        "super_large_net": _to_float(parts[5]),
+        "metric": "main_net",
+        "value": _to_float(parts[1]),
+        "currency": "CNY",
+        "source": "eastmoney_fflow",
+        "provider": "eastmoney_fflow",
+        "fetched_at": fetched_at,
+    }
+
+
+def fetch_fund_flow_eastmoney_fflow(request: FetchRequest) -> list[dict]:
+    if not request.symbol:
+        raise ValueError("symbol is required for eastmoney_fflow")
+    response = requests.get(
+        EASTMONEY_FFLOW_URL,
+        params={
+            "secid": _eastmoney_secid(request.symbol),
+            "klt": 101,
+            "lmt": 250,
+            "fields1": "f1,f2,f3",
+            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+        },
+        headers=EASTMONEY_HEADERS,
+        timeout=10,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data") if isinstance(payload, dict) else None
+    klines = data.get("klines") if isinstance(data, dict) else None
+    if not isinstance(klines, list):
+        raise ValueError("eastmoney_fflow missing data.klines")
+
+    fetched_at = _utcnow()
+    rows = []
+    for item in klines:
+        if not isinstance(item, str):
+            continue
+        row = _parse_fflow_kline(item, request.symbol, fetched_at)
+        if row is None:
+            continue
+        if request.start and row["trade_date"].date() < request.start:
+            continue
+        if request.end and row["trade_date"].date() > request.end:
+            continue
+        rows.append(row)
+    return rows
+
+
 def save_announcements(rows: list[dict], db) -> int:
     from backend.data.database import Announcement
 
@@ -860,6 +928,40 @@ def save_holder_snapshots(rows: list[dict], db) -> int:
     return inserted
 
 
+def save_fund_flows(rows: list[dict], db) -> int:
+    from backend.data.database import FundFlow
+
+    inserted = 0
+    for row in rows:
+        existing = (
+            db.query(FundFlow)
+            .filter(
+                FundFlow.symbol == row["symbol"],
+                FundFlow.trade_date == row["trade_date"],
+                FundFlow.provider == row["provider"],
+            )
+            .first()
+        )
+        if existing:
+            continue
+        db.add(
+            FundFlow(
+                symbol=row["symbol"],
+                trade_date=row["trade_date"],
+                main_net=row.get("main_net"),
+                super_large_net=row.get("super_large_net"),
+                large_net=row.get("large_net"),
+                medium_net=row.get("medium_net"),
+                small_net=row.get("small_net"),
+                provider=row.get("provider") or "unknown",
+                fetched_at=row.get("fetched_at") or _utcnow(),
+            )
+        )
+        inserted += 1
+    db.commit()
+    return inserted
+
+
 def _probe_ifind_notice() -> bool:
     if not settings.ifind_mcp_enabled or not settings.ifind_mcp_token:
         return False
@@ -911,6 +1013,29 @@ def _probe_akshare_lhb() -> bool:
         return False
 
 
+def _probe_eastmoney_fflow() -> bool:
+    try:
+        response = requests.get(
+            EASTMONEY_FFLOW_URL,
+            params={
+                "secid": "1.601869",
+                "klt": 101,
+                "lmt": 1,
+                "fields1": "f1,f2,f3",
+                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+            },
+            headers=EASTMONEY_HEADERS,
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        data = payload.get("data") if isinstance(payload, dict) else None
+        return bool(isinstance(data, dict) and data.get("klines"))
+    except Exception as exc:
+        logger.debug("eastmoney_fflow probe failed: %s", exc)
+        return False
+
+
 register_category_provider(
     CategoryProvider(
         name="ifind_notice",
@@ -935,6 +1060,15 @@ register_category_provider(
         category="lhb",
         fetch=fetch_lhb_akshare,
         probe=_probe_akshare_lhb,
+        priority=10,
+    )
+)
+register_category_provider(
+    CategoryProvider(
+        name="eastmoney_fflow",
+        category="fund_flow",
+        fetch=fetch_fund_flow_eastmoney_fflow,
+        probe=_probe_eastmoney_fflow,
         priority=10,
     )
 )

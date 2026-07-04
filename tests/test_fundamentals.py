@@ -4,7 +4,9 @@
 不依赖网络：用 fixture 直接喂入 FinancialMetric 数据。
 """
 
-from backend.data.database import FinancialMetric
+from datetime import datetime
+
+from backend.data.database import FinancialMetric, HolderSnapshot
 from backend.data.fundamentals import (
     compute_asset_turnover,
     compute_jingqi_deltas,
@@ -28,6 +30,18 @@ def _add_metric(db, symbol, report_date, **kwargs):
     db.add(m)
     db.commit()
     return m
+
+
+def _add_holder_snapshot(db, symbol, report_date, total_shares):
+    row = HolderSnapshot(
+        symbol=symbol,
+        report_date=datetime.fromisoformat(report_date),
+        total_shares=total_shares,
+        provider="test",
+    )
+    db.add(row)
+    db.commit()
+    return row
 
 
 # ── compute_roe / compute_asset_turnover ──────────────────────────────
@@ -89,6 +103,8 @@ def test_piotroski_perfect_9_factors(test_db):
                 gross_margin=40.0,   # 毛利率上升
                 operating_cf=150,    # CFO > NI (150>120)
                 asset_turnover=0.65) # 周转率上升
+    _add_holder_snapshot(test_db, "600519", "2023-09-30", 10000)
+    _add_holder_snapshot(test_db, "600519", "2024-09-30", 10000)
 
     result = compute_piotroski_factors("600519", test_db)
     assert result["available"] is True

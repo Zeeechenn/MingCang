@@ -1,7 +1,7 @@
 """M61 category data models."""
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, Text
+from sqlalchemy import DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.data.orm import Base, _utcnow
@@ -84,5 +84,28 @@ class HolderSnapshot(Base):
     float_shares: Mapped[float | None] = mapped_column(Float, nullable=True)
     top10_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     holder_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    provider: Mapped[str] = mapped_column(String)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class FundFlow(Base):
+    """Daily fund-flow snapshot from M61 category providers.
+
+    Net-flow amounts are stored in raw yuan.
+    """
+
+    __tablename__ = "fund_flows"
+    __table_args__ = (
+        UniqueConstraint("symbol", "trade_date", "provider", name="uq_fund_flow_symbol_date_provider"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    trade_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    main_net: Mapped[float | None] = mapped_column(Float, nullable=True)
+    super_large_net: Mapped[float | None] = mapped_column(Float, nullable=True)
+    large_net: Mapped[float | None] = mapped_column(Float, nullable=True)
+    medium_net: Mapped[float | None] = mapped_column(Float, nullable=True)
+    small_net: Mapped[float | None] = mapped_column(Float, nullable=True)
     provider: Mapped[str] = mapped_column(String)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

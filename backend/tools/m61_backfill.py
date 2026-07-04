@@ -4,12 +4,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import time
 from datetime import date, timedelta
 from pathlib import Path
 
 from backend.data.category_fetchers import (  # noqa: F401
     save_announcements,
     save_corporate_events,
+    save_fund_flows,
     save_holder_snapshots,
     save_lhb,
     save_research_reports,
@@ -27,6 +29,7 @@ SAVE_HELPERS = {
     "lhb": save_lhb,
     "corporate_events": save_corporate_events,
     "holders": save_holder_snapshots,
+    "fund_flow": save_fund_flows,
 }
 
 
@@ -35,7 +38,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--category",
         required=True,
-        choices=("announcements", "research_reports", "lhb", "corporate_events", "holders"),
+        choices=("announcements", "research_reports", "lhb", "corporate_events", "holders", "fund_flow"),
     )
     parser.add_argument("--universe", required=True)
     parser.add_argument("--start", required=True)
@@ -176,6 +179,8 @@ def _backfill_stock_category(
                         db,
                     )
                 )
+        if category == "fund_flow":
+            time.sleep(3)
     return inserted, degradations
 
 

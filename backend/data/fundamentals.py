@@ -29,7 +29,7 @@ from typing import Any
 
 import pandas as pd
 
-from backend.data.database import FinancialMetric, Stock
+from backend.data.database import FinancialMetric, HolderSnapshot, Stock
 
 logger = logging.getLogger(__name__)
 
@@ -339,14 +339,64 @@ def _roa(metric: FinancialMetric) -> float | None:
     return metric.net_profit / metric.total_assets
 
 
+def _parse_report_datetime(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None)
+    return datetime.strptime(value[:10], "%Y-%m-%d")
+
+
+def _add_months(value: datetime, months: int) -> datetime:
+    month = value.month - 1 + months
+    year = value.year + month // 12
+    month = month % 12 + 1
+    days_in_month = [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+                     31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return value.replace(year=year, month=month, day=min(value.day, days_in_month[month - 1]))
+
+
+def _no_new_shares_from_holders(symbol: str, as_of: datetime, db) -> bool | None:
+    latest = (
+        db.query(HolderSnapshot)
+        .filter(
+            HolderSnapshot.symbol == symbol,
+            HolderSnapshot.report_date <= as_of,
+            HolderSnapshot.total_shares.isnot(None),
+        )
+        .order_by(HolderSnapshot.report_date.desc())
+        .first()
+    )
+    if latest is None:
+        return None
+
+    window_start = _add_months(as_of, -15)
+    window_end = _add_months(as_of, -9)
+    target = _add_months(as_of, -12)
+    candidates = (
+        db.query(HolderSnapshot)
+        .filter(
+            HolderSnapshot.symbol == symbol,
+            HolderSnapshot.report_date >= window_start,
+            HolderSnapshot.report_date <= window_end,
+            HolderSnapshot.total_shares.isnot(None),
+        )
+        .all()
+    )
+    if not candidates:
+        return None
+
+    earlier = min(candidates, key=lambda row: abs((row.report_date - target).total_seconds()))
+    return bool(latest.total_shares <= earlier.total_shares * 1.02)
+
+
 def compute_piotroski_factors(symbol: str, db) -> dict:
     """
     9 因子 F-Score（盈利能力 4 + 杠杆流动性 3 + 经营效率 2）
 
     Returns:
         {
-          "score": int(0..9),
-          "factors": {factor_name: bool},
+          "score": int,
+          "score_denominator": int,
+          "factors": {factor_name: bool | None},
           "report_period": "2024-Q3",
           "comparison_period": "2023-Q3",
           "available": bool,
@@ -368,7 +418,7 @@ def compute_piotroski_factors(symbol: str, db) -> dict:
     if prev is None:
         prev = rows[1]   # fallback 最近一期
 
-    f = {}
+    f: dict[str, bool | None] = {}
     # 盈利能力
     roa_cur = _roa(cur)
     roa_prev = _roa(prev)
@@ -391,9 +441,7 @@ def compute_piotroski_factors(symbol: str, db) -> dict:
     f["current_ratio_improving"] = (cur.current_ratio is not None
                                     and prev.current_ratio is not None
                                     and cur.current_ratio > prev.current_ratio)
-    f["no_new_shares"] = (cur.shares_outstanding is not None
-                          and prev.shares_outstanding is not None
-                          and cur.shares_outstanding <= prev.shares_outstanding * 1.001)
+    f["no_new_shares"] = _no_new_shares_from_holders(symbol, _parse_report_datetime(cur.report_date), db)
 
     # 经营效率
     f["gross_margin_improving"] = (cur.gross_margin is not None
@@ -403,9 +451,11 @@ def compute_piotroski_factors(symbol: str, db) -> dict:
                                      and prev.asset_turnover is not None
                                      and cur.asset_turnover > prev.asset_turnover)
 
-    score = sum(1 for v in f.values() if v)
+    score = sum(1 for v in f.values() if v is True)
+    score_denominator = sum(1 for v in f.values() if v is not None)
     return {
         "score": score,
+        "score_denominator": score_denominator,
         "factors": f,
         "report_period": cur.report_date,
         "comparison_period": prev.report_date,
