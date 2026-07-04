@@ -49,8 +49,13 @@ TRIGGER_VOLUME_RATIO = "volume_ratio_anomaly"
 TRIGGER_NEW_HIGH = "new_high_breakout"
 TRIGGER_SECTOR_RESONANCE = "sector_resonance"
 TRIGGER_NEWS = "news_trigger"
-TRIGGER_LHB_APPEARANCE = "lhb_appearance"
-TRIGGER_FUND_FLOW_SURGE = "fund_flow_surge"
+TRIGGER_LHB_SPOTLIGHT = "lhb_spotlight"
+TRIGGER_FLOW_ANOMALY = "flow_anomaly"
+# Backward-compatible aliases for M61 P3 tests/imports; emitted trigger_type
+# values use the Phase 2.5 names above.
+TRIGGER_LHB_APPEARANCE = TRIGGER_LHB_SPOTLIGHT
+TRIGGER_FUND_FLOW_SURGE = TRIGGER_FLOW_ANOMALY
+CATEGORY_TRIGGER_DAMPER_TRADING_DAYS = 5
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +129,27 @@ def _news_rows(con: sqlite3.Connection, symbol: str, start: str, end: str) -> li
         (symbol, start, f"{end} 23:59:59"),
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+def _recent_trading_dates(con: sqlite3.Connection, symbol: str, as_of: str, limit: int) -> list[str]:
+    if not _table_exists(con, "prices") or not {"symbol", "date"} <= _columns(con, "prices"):
+        as_of_date = date.fromisoformat(as_of)
+        return [
+            date.fromordinal(as_of_date.toordinal() - offset).isoformat()
+            for offset in range(1, limit + 1)
+        ]
+    rows = con.execute(
+        """
+        SELECT DISTINCT date
+        FROM prices
+        WHERE symbol = ?
+          AND date(date) < date(?)
+        ORDER BY date(date) DESC
+        LIMIT ?
+        """,
+        (symbol, as_of, limit),
+    ).fetchall()
+    return [str(row["date"])[:10] for row in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -379,21 +405,46 @@ def _lhb_trigger_rows(con: sqlite3.Connection, symbol: str, as_of: str) -> list[
     return [dict(row) for row in rows]
 
 
-def compute_fund_flow_surge(
+def _has_recent_lhb_trigger(con: sqlite3.Connection, symbol: str, as_of: str) -> bool:
+    recent_dates = _recent_trading_dates(con, symbol, as_of, CATEGORY_TRIGGER_DAMPER_TRADING_DAYS)
+    if not recent_dates or not _table_exists(con, "lhb_records"):
+        return False
+    placeholders = ",".join("?" for _ in recent_dates)
+    row = con.execute(
+        f"""
+        SELECT 1
+        FROM lhb_records
+        WHERE symbol = ?
+          AND date(trade_date) IN ({placeholders})
+        LIMIT 1
+        """,
+        (symbol, *recent_dates),
+    ).fetchone()
+    return row is not None
+
+
+def compute_flow_anomaly(
     con: sqlite3.Connection,
     symbol: str,
     as_of: str,
     *,
-    min_rows: int = 25,
+    min_rows: int = 20,
     lookback_rows: int = 60,
-    recent_days: int = 5,
-    z_threshold: float = 2.0,
-) -> dict[str, Any] | None:
+    z_threshold: float = 2.5,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "triggered": False,
+        "coverage": "ok",
+        "rows_used": 0,
+        "z_score": None,
+    }
     if not _table_exists(con, "fund_flows"):
-        return None
+        result["coverage"] = "missing_table"
+        return result
     cols = _columns(con, "fund_flows")
     if not {"symbol", "trade_date", "main_net"} <= cols:
-        return None
+        result["coverage"] = "missing_columns"
+        return result
     rows = con.execute(
         """
         SELECT trade_date, main_net
@@ -406,32 +457,79 @@ def compute_fund_flow_surge(
         """,
         (symbol, as_of, lookback_rows),
     ).fetchall()
-    values = [float(row["main_net"]) for row in reversed(rows)]
-    if len(values) < min_rows or len(values) < recent_days * 2:
-        return None
+    ordered = [dict(row) for row in reversed(rows)]
+    values = [float(row["main_net"]) for row in ordered]
+    result["rows_used"] = len(values)
+    if not ordered or str(ordered[-1]["trade_date"])[:10] != as_of:
+        result["coverage"] = "missing_as_of"
+        return result
+    if len(values) < min_rows:
+        result["coverage"] = "insufficient_history"
+        return result
 
-    recent_sum = sum(values[-recent_days:])
-    historical = values[:-recent_days]
-    rolling_sums = [
-        sum(historical[idx : idx + recent_days])
-        for idx in range(0, len(historical) - recent_days + 1)
-    ]
-    if len(rolling_sums) < 2:
-        return None
-    mean = statistics.fmean(rolling_sums)
-    stdev = statistics.pstdev(rolling_sums)
+    as_of_main_net = values[-1]
+    historical = values[:-1]
+    mean = statistics.fmean(historical)
+    stdev = statistics.pstdev(historical)
     if stdev <= 0:
-        return None
-    z_score = (recent_sum - mean) / stdev
-    if abs(z_score) < z_threshold:
-        return None
-    return {
+        result["coverage"] = "zero_stdev"
+        return result
+    z_score = (as_of_main_net - mean) / stdev
+    result.update({
         "z_score": z_score,
-        "recent_5d_main_net_sum": recent_sum,
+        "as_of_main_net": as_of_main_net,
         "distribution_mean": mean,
         "distribution_stdev": stdev,
         "rows_used": len(values),
-    }
+        "z_threshold": z_threshold,
+        "triggered": abs(z_score) >= z_threshold,
+    })
+    return result
+
+
+def compute_fund_flow_surge(
+    con: sqlite3.Connection,
+    symbol: str,
+    as_of: str,
+    *,
+    min_rows: int = 20,
+    lookback_rows: int = 60,
+    z_threshold: float = 2.5,
+) -> dict[str, Any] | None:
+    flow = compute_flow_anomaly(
+        con,
+        symbol,
+        as_of,
+        min_rows=min_rows,
+        lookback_rows=lookback_rows,
+        z_threshold=z_threshold,
+    )
+    return flow if flow.get("triggered") else None
+
+
+def _has_recent_flow_anomaly(con: sqlite3.Connection, symbol: str, as_of: str) -> bool:
+    history_table = "m60_watchtower_trigger_history"
+    if not _table_exists(con, history_table):
+        return False
+    cols = _columns(con, history_table)
+    if not {"date", "target", "trigger_type"} <= cols:
+        return False
+    recent_dates = _recent_trading_dates(con, symbol, as_of, CATEGORY_TRIGGER_DAMPER_TRADING_DAYS)
+    if not recent_dates:
+        return False
+    placeholders = ",".join("?" for _ in recent_dates)
+    row = con.execute(
+        f"""
+        SELECT 1
+        FROM {history_table}
+        WHERE target = ?
+          AND trigger_type = ?
+          AND date(date) IN ({placeholders})
+        LIMIT 1
+        """,
+        (symbol, TRIGGER_FLOW_ANOMALY, *recent_dates),
+    ).fetchone()
+    return row is not None
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +569,7 @@ def build_watchtower_report(
             per_symbol_pv[symbol] = compute_price_volume_signals(history)
 
         triggers: list[dict[str, Any]] = []
+        fund_flow_insufficient_history_symbols: list[str] = []
 
         # a. price/volume anomaly + new high, per symbol
         for symbol in all_symbols:
@@ -524,32 +623,37 @@ def build_watchtower_report(
                         "price": price_snapshot,
                     }
                 )
-            for row in _lhb_trigger_rows(con, symbol, resolved_as_of):
-                reason = row.get("reason") or "未列明"
-                card = f"龙虎榜上榜: {reason}, 净买 {row.get('net_buy_amount')}"
-                triggers.append(
-                    {
-                        "symbol": symbol,
-                        "themes": themes,
-                        "trigger_type": TRIGGER_LHB_APPEARANCE,
-                        "value": row.get("net_buy_amount"),
-                        "detail": {
-                            "trade_date": row.get("trade_date"),
-                            "reason": row.get("reason"),
-                            "net_buy_amount": row.get("net_buy_amount"),
-                        },
-                        "card": card,
-                        "price": price_snapshot,
-                    }
-                )
-            flow = compute_fund_flow_surge(con, symbol, resolved_as_of)
-            if flow is not None:
+            lhb_rows = _lhb_trigger_rows(con, symbol, resolved_as_of)
+            if lhb_rows and not _has_recent_lhb_trigger(con, symbol, resolved_as_of):
+                for row in lhb_rows:
+                    reason = row.get("reason") or "未列明"
+                    card = f"龙虎榜上榜: {reason}, 净买 {row.get('net_buy_amount')}"
+                    triggers.append(
+                        {
+                            "symbol": symbol,
+                            "themes": themes,
+                            "trigger_type": TRIGGER_LHB_SPOTLIGHT,
+                            "value": row.get("net_buy_amount"),
+                            "detail": {
+                                "trade_date": row.get("trade_date"),
+                                "reason": row.get("reason"),
+                                "net_buy_amount": row.get("net_buy_amount"),
+                                "damper_trading_days": CATEGORY_TRIGGER_DAMPER_TRADING_DAYS,
+                            },
+                            "card": card,
+                            "price": price_snapshot,
+                        }
+                    )
+            flow = compute_flow_anomaly(con, symbol, resolved_as_of)
+            if flow.get("coverage") == "insufficient_history":
+                fund_flow_insufficient_history_symbols.append(symbol)
+            if flow.get("triggered") and not _has_recent_flow_anomaly(con, symbol, resolved_as_of):
                 z_score = flow["z_score"]
                 triggers.append(
                     {
                         "symbol": symbol,
                         "themes": themes,
-                        "trigger_type": TRIGGER_FUND_FLOW_SURGE,
+                        "trigger_type": TRIGGER_FLOW_ANOMALY,
                         "value": z_score,
                         "detail": flow,
                         "card": f"主力资金异动 z={z_score:.2f}",
@@ -614,6 +718,15 @@ def build_watchtower_report(
     triggers.sort(key=lambda t: (t["symbol"], t["trigger_type"]))
     triggered_symbols = sorted({t["symbol"] for t in triggers})
     no_trigger_symbols = [s for s in all_symbols if s not in triggered_symbols]
+    coverage = {
+        "fund_flow_insufficient_history_count": len(fund_flow_insufficient_history_symbols),
+        "fund_flow_insufficient_history_symbols": fund_flow_insufficient_history_symbols,
+        "text": (
+            f"资金流历史不足 {len(fund_flow_insufficient_history_symbols)} 支跳过"
+            if fund_flow_insufficient_history_symbols
+            else ""
+        ),
+    }
 
     return {
         "schema_version": "m60_watchtower.v1",
@@ -626,6 +739,7 @@ def build_watchtower_report(
             {"theme_key": e["theme_key"], "title": e["title"], "symbols": e["symbols"]} for e in entries
         ],
         "sector_resonance": resonance_by_theme,
+        "coverage": coverage,
         "triggers": triggers,
         "triggered_symbols": triggered_symbols,
         "no_trigger_symbols": no_trigger_symbols,
@@ -656,6 +770,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append("清单加载错误(未静默丢弃):")
         for error in report["watchlist_errors"]:
             lines.append(f"- {error}")
+    coverage_text = (report.get("coverage") or {}).get("text")
+    if coverage_text:
+        lines.append(f"coverage: {coverage_text}")
     for theme in report["themes"]:
         resonance = report["sector_resonance"].get(theme["theme_key"], {})
         lines.append(

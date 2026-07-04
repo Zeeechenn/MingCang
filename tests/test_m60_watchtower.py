@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import date, timedelta
 
 from backend.tools.m60_watchtower import (
     build_watchtower_report,
@@ -32,6 +33,31 @@ def _init_watchtower_db(path):
             url TEXT,
             published_at DATETIME,
             source TEXT
+        );
+        CREATE TABLE lhb_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            trade_date DATETIME,
+            reason TEXT,
+            net_buy_amount REAL,
+            provider TEXT
+        );
+        CREATE TABLE fund_flows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            trade_date DATETIME,
+            main_net REAL,
+            super_large_net REAL,
+            large_net REAL,
+            medium_net REAL,
+            small_net REAL,
+            provider TEXT
+        );
+        CREATE TABLE m60_watchtower_trigger_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            target TEXT,
+            trigger_type TEXT
         );
         """
     )
@@ -292,3 +318,197 @@ def test_build_watchtower_report_news_trigger_fires_on_announcement(tmp_path):
     assert "new_announcement_event" in news_triggers[0]["detail"]["reasons"] or (
         "policy_keyword_hit" in news_triggers[0]["detail"]["reasons"]
     )
+
+
+def test_build_watchtower_report_lhb_spotlight_fires_for_watchlist_symbol(tmp_path):
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        con.execute(
+            "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('A', '2026-07-05', 10, 10, 10, 10, 1000)"
+        )
+        con.execute(
+            """
+            INSERT INTO lhb_records(symbol, trade_date, reason, net_buy_amount, provider)
+            VALUES ('A', '2026-07-05 00:00:00', '日涨幅偏离值达7%', 12345678.0, 'unit')
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO lhb_records(symbol, trade_date, reason, net_buy_amount, provider)
+            VALUES ('OFF', '2026-07-05 00:00:00', '非关注面', 999.0, 'unit')
+            """
+        )
+
+    watchlist_dir = _write_watchlist(
+        tmp_path,
+        {
+            "theme_key": "lhb_theme",
+            "title": "龙虎榜主题",
+            "thesis": "test placeholder",
+            "symbols": ["A"],
+            "validation_conditions": ["x"],
+            "invalidation_conditions": ["y"],
+            "created_at": "2026-07-03",
+            "source_ref": "pending",
+        },
+    )
+
+    report = build_watchtower_report(db_path=db_path, as_of="2026-07-05", watchlist_dir=watchlist_dir)
+
+    triggers = [t for t in report["triggers"] if t["trigger_type"] == "lhb_spotlight"]
+    assert len(triggers) == 1
+    assert triggers[0]["symbol"] == "A"
+    assert triggers[0]["value"] == 12345678.0
+    assert triggers[0]["detail"]["net_buy_amount"] == 12345678.0
+    assert "龙虎榜上榜" in triggers[0]["card"]
+    assert all(t["symbol"] != "OFF" for t in report["triggers"])
+
+
+def test_build_watchtower_report_lhb_spotlight_damped_within_five_trading_days(tmp_path):
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        for day in range(1, 7):
+            con.execute(
+                "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('A', ?, 10, 10, 10, 10, 1000)",
+                (f"2026-07-0{day}",),
+            )
+        con.execute(
+            """
+            INSERT INTO lhb_records(symbol, trade_date, reason, net_buy_amount, provider)
+            VALUES ('A', '2026-07-03 00:00:00', '前次上榜', 100.0, 'unit')
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO lhb_records(symbol, trade_date, reason, net_buy_amount, provider)
+            VALUES ('A', '2026-07-06 00:00:00', '再次上榜', 200.0, 'unit')
+            """
+        )
+    watchlist_dir = _write_watchlist(
+        tmp_path,
+        {
+            "theme_key": "lhb_theme",
+            "title": "龙虎榜主题",
+            "thesis": "test placeholder",
+            "symbols": ["A"],
+            "validation_conditions": ["x"],
+            "invalidation_conditions": ["y"],
+            "created_at": "2026-07-03",
+            "source_ref": "pending",
+        },
+    )
+
+    report = build_watchtower_report(db_path=db_path, as_of="2026-07-06", watchlist_dir=watchlist_dir)
+
+    assert all(t["trigger_type"] != "lhb_spotlight" for t in report["triggers"])
+
+
+def test_build_watchtower_report_flow_anomaly_fires_and_reports_insufficient_history(tmp_path):
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        base = date(2026, 5, 1)
+        for symbol in ("A", "B", "C"):
+            for idx in range(60):
+                con.execute(
+                    "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES (?, ?, 10, 10, 10, 10, 1000)",
+                    (symbol, (base + timedelta(days=idx)).isoformat()),
+                )
+        for idx in range(60):
+            day = (base + timedelta(days=idx)).isoformat()
+            main_net = 1000.0 + (idx % 7) * 10.0 if idx < 59 else 5000.0
+            con.execute(
+                """
+                INSERT INTO fund_flows(symbol, trade_date, main_net, provider)
+                VALUES ('A', ?, ?, 'unit')
+                """,
+                (f"{day} 00:00:00", main_net),
+            )
+        for idx in range(60):
+            day = (base + timedelta(days=idx)).isoformat()
+            con.execute(
+                """
+                INSERT INTO fund_flows(symbol, trade_date, main_net, provider)
+                VALUES ('B', ?, ?, 'unit')
+                """,
+                (f"{day} 00:00:00", 1000.0 + (idx % 7) * 10.0),
+            )
+        for idx in range(19):
+            day = (base + timedelta(days=41 + idx)).isoformat()
+            con.execute(
+                """
+                INSERT INTO fund_flows(symbol, trade_date, main_net, provider)
+                VALUES ('C', ?, 1000.0, 'unit')
+                """,
+                (f"{day} 00:00:00",),
+            )
+
+    watchlist_dir = _write_watchlist(
+        tmp_path,
+        {
+            "theme_key": "flow_theme",
+            "title": "资金流主题",
+            "thesis": "test placeholder",
+            "symbols": ["A", "B", "C"],
+            "validation_conditions": ["x"],
+            "invalidation_conditions": ["y"],
+            "created_at": "2026-07-03",
+            "source_ref": "pending",
+        },
+    )
+
+    report = build_watchtower_report(db_path=db_path, as_of="2026-06-29", watchlist_dir=watchlist_dir)
+
+    triggers = [t for t in report["triggers"] if t["trigger_type"] == "flow_anomaly"]
+    assert len(triggers) == 1
+    assert triggers[0]["symbol"] == "A"
+    assert triggers[0]["detail"]["rows_used"] == 60
+    assert triggers[0]["detail"]["as_of_main_net"] == 5000.0
+    assert triggers[0]["value"] >= 2.5
+    assert report["coverage"]["fund_flow_insufficient_history_count"] == 1
+    assert report["coverage"]["fund_flow_insufficient_history_symbols"] == ["C"]
+    assert "资金流历史不足 1 支跳过" in render_markdown(report)
+
+
+def test_build_watchtower_report_flow_anomaly_damped_within_five_trading_days(tmp_path):
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        base = date(2026, 5, 1)
+        for idx in range(65):
+            day = (base + timedelta(days=idx)).isoformat()
+            con.execute(
+                "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('A', ?, 10, 10, 10, 10, 1000)",
+                (day,),
+            )
+            main_net = 1000.0 + (idx % 7) * 10.0
+            if idx == 64:
+                main_net = 5000.0
+            con.execute(
+                """
+                INSERT INTO fund_flows(symbol, trade_date, main_net, provider)
+                VALUES ('A', ?, ?, 'unit')
+                """,
+                (f"{day} 00:00:00", main_net),
+            )
+        con.execute(
+            """
+            INSERT INTO m60_watchtower_trigger_history(date, target, trigger_type)
+            VALUES ('2026-07-01', 'A', 'flow_anomaly')
+            """
+        )
+    watchlist_dir = _write_watchlist(
+        tmp_path,
+        {
+            "theme_key": "flow_theme",
+            "title": "资金流主题",
+            "thesis": "test placeholder",
+            "symbols": ["A"],
+            "validation_conditions": ["x"],
+            "invalidation_conditions": ["y"],
+            "created_at": "2026-07-03",
+            "source_ref": "pending",
+        },
+    )
+
+    report = build_watchtower_report(db_path=db_path, as_of="2026-07-04", watchlist_dir=watchlist_dir)
+
+    assert all(t["trigger_type"] != "flow_anomaly" for t in report["triggers"])
