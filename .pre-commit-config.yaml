@@ -19,6 +19,11 @@ repos:
 
   - repo: local
     hooks:
+      - id: release-hygiene
+        name: release hygiene guard
+        entry: python3 scripts/check_release_hygiene.py
+        language: system
+        pass_filenames: false
       - id: check-sensitive-paths
         name: block runtime data and secret-like files
         entry: python3 -m backend.tools.check_sensitive_paths

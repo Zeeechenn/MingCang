@@ -17,7 +17,7 @@ COVERAGE_FILE ?= /tmp/mingcang-coverage
 COVERAGE_XML ?= coverage.xml
 PIP_AUDIT_CACHE_DIR ?= /tmp/mingcang-pip-audit-cache
 
-.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-lint-summary frontend-format-check lint security dependency-audit fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
+.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-lint-summary frontend-format-check lint hygiene security dependency-audit fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
 
 help:
 	@echo "MingCang Makefile commands:"
@@ -33,6 +33,7 @@ help:
 	@echo "  frontend-lint-summary 跑前端 ESLint，汇总警告/错误数（非阻塞，已纳入 verify）"
 	@echo "  frontend-format-check 跑前端 Prettier 配置文件检查"
 	@echo "  lint         ruff 检查（不修复）"
+	@echo "  hygiene      发布卫生守卫（旧名词/个人路径/凭据模式）"
 	@echo "  security     ruff 安全规则快照（当前不作为硬门槛）"
 	@echo "  dependency-audit Python 依赖漏洞审计"
 	@echo "  fmt          ruff format + ruff fix"
@@ -93,6 +94,9 @@ frontend-format-check:
 lint:
 	$(RUFF) check backend tests --cache-dir $(RUFF_CACHE_DIR)
 
+hygiene:
+	$(PYTHON) scripts/check_release_hygiene.py
+
 security:
 	$(RUFF) check backend --select S --ignore S101,S311 --exit-zero --statistics --cache-dir $(RUFF_CACHE_DIR)
 
@@ -106,9 +110,9 @@ fmt:
 typecheck:
 	$(MYPY) backend --cache-dir $(MYPY_CACHE_DIR)
 
-check: lint typecheck test
+check: lint hygiene typecheck test
 
-verify: lint typecheck test frontend-test build frontend-lint-summary
+verify: lint hygiene typecheck test frontend-test build frontend-lint-summary
 
 demo:
 	@echo "=== MingCang Demo Mode ==="

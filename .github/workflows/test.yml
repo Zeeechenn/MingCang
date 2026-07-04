@@ -30,6 +30,9 @@ jobs:
       - name: Run backend lint
         run: make lint
 
+      - name: Run release hygiene guard
+        run: make hygiene
+
       - name: Run backend typecheck
         run: make typecheck
 
