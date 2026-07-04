@@ -270,15 +270,18 @@ def _workflow_payload(args: argparse.Namespace, phase: str) -> dict:
         },
         "weekend": {
             "label": "周末复盘",
-            "one_sentence": "周末刷新长期标签与周度反思、导出本周复盘报告；市场休市，不在盘中触发。",
+            "one_sentence": "周末跑固定体检:周归因、触发器审计、陈旧漂移扫描和R5升级队列；不自动全量重研。",
             "reused_entrypoints": [
-                "backend.scheduler.job_weekly_longterm",
-                "backend.scheduler.job_weekly_long_term_reflect",
-                "GET /api/export/postmarket-review.html",
-                "GET /api/export/reviews.csv",
+                "python3 -m backend.tools.m63_weekly",
+                "python3 -m backend.tools.m63_weekly --no-llm",
+                "backend.tools.m63_weekly.run_weekly",
             ],
-            "side_effects_if_executed": ["writes long_term_labels/reviews/memory", "may call LLM/data providers"],
-            "operator_command": "python3 -m backend.agent.cli weekend --pretty",
+            "side_effects_if_executed": [
+                "writes paper_trading/m63_out/weekly_<date>.md",
+                "updates ~/.mingcang/m63_research_queue.json with deduped R5 entries",
+                "may call one attribution LLM unless --no-llm is used",
+            ],
+            "operator_command": "python3 -m backend.tools.m63_weekly --no-llm",
         },
     }
     payload = workflows[phase]

@@ -97,6 +97,22 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m63_weekly",
+        "category": "stable",
+        "purpose": "M63-3 固定式周末体检 CLI: one optional LLM attribution call plus zero-LLM trigger audit, staleness/drift scan, R5 weekly-sweep queue escalation, and weekly report rendering.",
+        "read_write_boundary": "Reads configured SQLite, watchlist JSON, trigger history, and research queue; writes paper_trading/m63_out/weekly_<date>.md and deduped R5 entries to ~/.mingcang/m63_research_queue.json; --no-llm skips the only attribution LLM call.",
+        "recommended_entrypoint": "python3 -m backend.tools.m63_weekly --no-llm",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.m63_wiring",
+        "category": "stable",
+        "purpose": "M63-4 explicit wiring disposition map from retained tools registry modules to daily/research/weekly/trigger/manual buckets.",
+        "read_write_boundary": "Static library only; no database, filesystem, network, or LLM side effects.",
+        "recommended_entrypoint": "python3 -c 'from backend.tools.m63_wiring import WIRING_MAP; print(len(WIRING_MAP))'",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m61_source_health",
         "category": "evidence",
         "purpose": "M61 P1 源体检 harness:对(源×数据类别)矩阵做只读探针,输出六维打分卡(覆盖/回溯/完整率/时延/稳定/PIT),发牌表依据。",

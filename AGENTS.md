@@ -192,3 +192,11 @@ PYTHONPATH=. python3 -m backend.agent.cli health --pretty
 PYTHONPATH=. uvicorn backend.main:app --reload
 cd frontend && npm run dev
 ```
+
+## Daily Routing
+
+- 盘前/盘中/盘后 daily: `python3 -m backend.tools.m63_daily --mode premarket|intraday|postmarket`
+- 周末 weekly: `python3 -m backend.tools.m63_weekly --no-llm`
+- 研究 <目标> on-demand: `python3 -m backend.tools.m63_research --target <目标>`
+- 喂观点: `python3 -m backend.tools.m63_opinion --text '<观点内容>' --source manual`
+- 数据任务先查 `docs/data-sources/` 手册。

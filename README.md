@@ -186,16 +186,17 @@ python3 -m backend.agent.cli action research.deep.run \
 
 ### 每天看一遍信号
 
-明仓按交易节奏分了四个一句话工作流：
+明仓按交易节奏分了日常、周末、研究和喂观点四类入口：
 
 ```bash
-python3 -m backend.agent.cli premarket  --pretty   # 盘前：同步前检查与当日入口
-python3 -m backend.agent.cli intraday   --pretty   # 盘中：只读本地缓存的快速个股入口
-python3 -m backend.agent.cli postmarket --pretty   # 盘后：全市场信号与复盘报告
-python3 -m backend.agent.cli weekend    --pretty   # 周末：长期标签刷新与周度反思
+python3 -m backend.tools.m63_daily --mode premarket|intraday|postmarket
+python3 -m backend.tools.m63_weekly --no-llm
+python3 -m backend.tools.m63_research --target 300308 --no-llm
+python3 -m backend.tools.m63_opinion --text '<观点内容>' --source manual --no-llm
 ```
 
 Pi 终端里直接说"盘前扫一遍"、"收盘后复盘一下"即可。信号里包含当日建议、ATR 移动止损位、组合暴露和数据质量预警——明仓不替你下单，只给纪律。
+数据任务先查 `docs/data-sources/` 手册。
 
 ### 维护一个关注列表
 
