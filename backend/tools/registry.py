@@ -65,6 +65,22 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m63_render",
+        "category": "stable",
+        "purpose": "M63 shared human-readable report layer: plain-Chinese glossary, semantic notes, number formatting, section rendering, and premarket/intraday language guard.",
+        "read_write_boundary": "Library only; no database, filesystem, network, or LLM side effects.",
+        "recommended_entrypoint": "python3 -c 'from backend.tools.m63_render import render_report'  # library",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.m63_daily",
+        "category": "stable",
+        "purpose": "M63 daily touchpoints CLI: 盘前看/盘中记/盘后决 reports, trigger router, and research queue writing.",
+        "read_write_boundary": "Reads configured SQLite; writes paper_trading/m63_out reports and ~/.mingcang/m63_research_queue.json / m63_trigger_history.json; postmarket may call bounded data/LLM steps unless --no-llm is used.",
+        "recommended_entrypoint": "python3 -m backend.tools.m63_daily --mode postmarket --no-llm",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m61_source_health",
         "category": "evidence",
         "purpose": "M61 P1 源体检 harness:对(源×数据类别)矩阵做只读探针,输出六维打分卡(覆盖/回溯/完整率/时延/稳定/PIT),发牌表依据。",

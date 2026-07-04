@@ -127,6 +127,27 @@ def test_agent_cli_trading_rhythm_commands_are_dry_run_contract(tmp_path):
     assert not db_path.exists()
 
 
+def test_agent_cli_m63_workflow_wiring_replaces_legacy_postmarket(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    db_url = f"sqlite:///{tmp_path / f'm63-workflow-{uuid.uuid4().hex}.db'}"
+
+    expected = {
+        "premarket": ("盘前看", "python3 -m backend.tools.m63_daily --mode premarket"),
+        "intraday": ("盘中记", "python3 -m backend.tools.m63_daily --mode intraday"),
+        "postmarket": ("盘后决", "python3 -m backend.tools.m63_daily --mode postmarket"),
+    }
+    for command, (label, entrypoint) in expected.items():
+        result = _run_cli(repo, db_url, command)
+
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout)
+        assert payload["label"] == label
+        assert any(item.startswith(entrypoint) for item in payload["reused_entrypoints"])
+
+    postmarket = json.loads(_run_cli(repo, db_url, "postmarket").stdout)
+    assert "backend.scheduler.job_postmarket" not in postmarket["reused_entrypoints"]
+
+
 def test_agent_cli_memory_context_reads_project_memory(tmp_path):
     repo = Path(__file__).resolve().parents[1]
     db_url = f"sqlite:///{tmp_path / f'memory-context-{uuid.uuid4().hex}.db'}"
