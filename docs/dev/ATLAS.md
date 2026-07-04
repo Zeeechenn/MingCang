@@ -1,6 +1,6 @@
 # ATLAS — Future Trading Architecture Plan
 
-> Worktree: `/Users/zeeechenn/Documents/项目s/atlas`
+> Worktree: `../atlas` (sibling directory of this repo)
 > Branch: `codex/atlas`
 > Purpose: keep the current `main` workspace focused on M29-M32 while this worktree drafts the next architecture layer.
 

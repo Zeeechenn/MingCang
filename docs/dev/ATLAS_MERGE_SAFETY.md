@@ -1,7 +1,7 @@
 # ATLAS Merge-Safety Report (Gate A) - Phase 1 Rebase
 
 > Review timestamp: 2026-06-04.
-> Scope: `/Users/zeeechenn/Documents/项目s/atlas` on `codex/atlas`, rebased onto
+> Scope: `../atlas` (sibling directory of this repo) on `codex/atlas`, rebased onto
 > local 明仓 / MingCang `main` at `423bb1d9338b85467a5e96cf5c9a96df15dd641c`.
 > Question answered: can the rebased Atlas candidate proceed to architecture
 > review without production/test2/scheduler drift?

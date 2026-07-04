@@ -107,7 +107,7 @@ chat_sessions_count = 0
 |---|---|---|
 | DGM / Darwin Godel Machine | 自改代码必须用 benchmark 验证，每次变更有实验日志 | 明仓不能自改生产决策；可以自动生成候选 patch，但必须 `make verify` + 金融安全评测 + 人工确认 |
 | OpenEvolve | 进化循环 = 候选生成 + evaluator + 多目标评分 + 可视化 | 明仓的 evaluator 应是 recall precision、用户确认率、复盘命中率、风险提前发现率 |
-| MemSkill | 进化的不是记忆内容，而是“记忆技能”：提取什么、保留什么、如何召回 | 明仓应建立 `memory_skills`：比如“卖飞复盘提取规则”“财务偏好提取规则”“A老师观点跟踪规则” |
+| MemSkill | 进化的不是记忆内容，而是“记忆技能”：提取什么、保留什么、如何召回 | 明仓应建立 `memory_skills`：比如“卖飞复盘提取规则”“财务偏好提取规则”“赛道研究员观点跟踪规则” |
 | MemOS | L1 trace、L2 policy、L3 world model、crystallized skills、多用户隔离、反馈修正 | 明仓可做轻量版：Trace → Policy/Profile → Scenario/World Model → Skill Candidate |
 
 关键判断：明仓是金融研究系统，不能追求完全 autonomous self-modification。它应该追求“自动发现可复用经验，并以低风险方式提案”。
@@ -508,7 +508,7 @@ trust_state = "pending"
 
 - 用户多次拒绝追高建议；
 - 用户多次要求“只读、别写 DB”；
-- 用户多次确认 A老师/景气框架为优先 offense source；
+- 用户多次确认 赛道研究员/景气框架为优先 offense source；
 - 用户多次要求保留人工确认门。
 
 ### 7.2 研究方法 Profile
@@ -1242,9 +1242,9 @@ MVP 成功标准：
 - MemOS: <https://github.com/MemTensor/MemOS>
 - MemSkill: <https://github.com/ViktorAxelsen/MemSkill>
 - 明仓本地文件：
-  - `/Users/zeeechenn/mingcang/docs/adr/0001-amplifier-primary-source-gated.md`
-  - `/Users/zeeechenn/mingcang/docs/dev/MEMORY_SYSTEM_PLAN.md`
-  - `/Users/zeeechenn/mingcang/backend/memory/l0_memory.py`
-  - `/Users/zeeechenn/mingcang/backend/research/review_loop.py`
-  - `/Users/zeeechenn/mingcang/backend/memory/stock_memory.py`
-  - `/Users/zeeechenn/mingcang/backend/memory/summarizer.py`
+  - `docs/adr/0001-amplifier-primary-source-gated.md`
+  - `docs/dev/MEMORY_SYSTEM_PLAN.md`
+  - `backend/memory/l0_memory.py`
+  - `backend/research/review_loop.py`
+  - `backend/memory/stock_memory.py`
+  - `backend/memory/summarizer.py`
