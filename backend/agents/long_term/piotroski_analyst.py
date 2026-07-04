@@ -23,6 +23,7 @@ import logging
 
 from backend.agents.long_term.base import LongTermReport, VoteLabel
 from backend.config import settings
+from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.fundamentals import compute_piotroski_factors
 from backend.memory.bias_override import lookup_caveat
 
@@ -73,14 +74,20 @@ def _template_findings(factors: dict[str, bool | None], raw: dict) -> list[str]:
 
 def analyze(symbol: str, db) -> LongTermReport:
     """主入口"""
+    context_text = render_context_text(
+        build_stock_context_pack(symbol, sections=["financials", "holders"], db=db),
+        1800,
+    )
     if not settings.long_term_piotroski_enabled:
         return LongTermReport(
             role="quality", score=0, confidence=0,
             label_vote="观望", key_findings=["Piotroski 分析师已禁用"],
+            raw={"context_text": context_text},
         )
 
     result = compute_piotroski_factors(symbol, db)
     if not result.get("available"):
+        result["context_text"] = context_text
         return LongTermReport(
             role="quality", score=0, confidence=0,
             label_vote="观望",
@@ -108,6 +115,7 @@ def analyze(symbol: str, db) -> LongTermReport:
         "factors": factors,
         "report_period": result.get("report_period"),
         "comparison_period": result.get("comparison_period"),
+        "context_text": context_text,
     }
 
     # M9.横向 反偏差缓冲：查 ai_memory(scope=bias_override) 是否有针对本路投票

@@ -26,7 +26,9 @@ from pathlib import Path
 
 from backend.agents.long_term.base import LongTermReport
 from backend.config import settings
+from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.database import Price, Stock
+from backend.data.degradation import emit_degradation
 from backend.llm import get_provider, runtime_readiness
 
 logger = logging.getLogger(__name__)
@@ -153,7 +155,7 @@ def _compute_price_moves(symbol: str, db) -> dict:
 def _fetch_supply_chain_evidence(industry: str, name: str) -> list[str]:
     """用 Tavily 拉近 14 天供应链/海外关键词，失败返回空"""
     try:
-        from backend.data.news import fetch_titles_tavily
+        from backend.data.news import search_titles_tavily
     except ImportError:
         return []
 
@@ -161,13 +163,13 @@ def _fetch_supply_chain_evidence(industry: str, name: str) -> list[str]:
         return []
 
     queries = [
-        f"{industry} 锁单 OR 排产 OR 涨价 2026",
-        f"{name} 海外订单 OR Lumentum OR Corning OR Nvidia",
+        f"{name} {industry} 锁单 排产 交期 涨价 供应链 具体数据",
+        f"{name} {industry} 海外订单 backlog 扩产 锁单 Lumentum Corning Nvidia",
     ]
     titles: list[str] = []
     for q in queries:
         try:
-            t = fetch_titles_tavily(q, name, days=14)
+            t = search_titles_tavily(q, days=14, max_results=5)
             if t:
                 titles.extend(t[:5])
         except Exception as e:
@@ -176,7 +178,7 @@ def _fetch_supply_chain_evidence(industry: str, name: str) -> list[str]:
 
 
 def _build_prompt(symbol: str, name: str, industry: str | None,
-                  moves: dict, evidence: list[str]) -> str:
+                  moves: dict, evidence: list[str], context_text: str = "") -> str:
     """Build the user prompt for track-analyst five-layer analysis."""
     today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
     move_txt = ""
@@ -199,6 +201,7 @@ def _build_prompt(symbol: str, name: str, industry: str | None,
         evidence_txt = "\n\n近 14 天供应链/海外检索结果：\n" + "\n".join(
             f"- {t}" for t in evidence[:8]
         )
+    context_section = f"\n\n统一上下文包（只使用以下可见数据，不要编造缺失字段）：\n{context_text}" if context_text else ""
 
     industry_txt = f"行业：{industry}" if industry else "行业：未知（请基于公司名推断）"
     return (
@@ -208,8 +211,64 @@ def _build_prompt(symbol: str, name: str, industry: str | None,
         f"{industry_txt}"
         f"{move_txt}"
         f"{evidence_txt}\n\n"
+        f"{context_section}\n\n"
         f"输出 JSON 必须含 layer1-5 + score(-100~+100) + label_vote + key_findings(≤3条)。"
     )
+
+
+def _valid_track_payload(data: dict) -> bool:
+    return bool(
+        data
+        and data.get("label_vote") in ("值得持有", "估值偏高", "观望", "规避")
+        and data.get("score") is not None
+    )
+
+
+def _neutral_fallback(symbol: str, industry: str | None, moves: dict, evidence: list[str],
+                      context_text: str, reason: str, db) -> LongTermReport:
+    emit_degradation(
+        component="long_term_team",
+        category="llm",
+        provider="track",
+        error="llm_failed",
+        context={"symbol": symbol, "reason": reason},
+        db=db,
+    )
+    return LongTermReport(
+        role="track", score=0, confidence=0,
+        label_vote="观望",
+        key_findings=["LLM 调用失败，默认观望"],
+        raw={
+            "industry": industry,
+            "moves": moves,
+            "evidence_count": len(evidence),
+            "context_text": context_text,
+            "llm_failure_reason": reason,
+        },
+    )
+
+
+def _complete_track_assessment(prompt: str, system: str) -> dict:
+    provider = get_provider()
+    if hasattr(provider, "_timeout"):
+        provider._timeout = settings.local_cli_timeout_seconds
+    last: dict = {}
+    for attempt in range(2):
+        try:
+            data = provider.complete_structured(
+                prompt=prompt,
+                tool=_TRACK_TOOL,
+                system=system,
+                max_tokens=600,
+                model_tier="capable",
+            )
+        except Exception as e:
+            logger.warning("track_analyst LLM 调用失败 attempt=%d: %s", attempt + 1, e)
+            data = {}
+        if _valid_track_payload(data):
+            return data
+        last = data
+    return last
 
 
 def analyze(symbol: str, name: str, db) -> LongTermReport:
@@ -225,38 +284,24 @@ def analyze(symbol: str, name: str, db) -> LongTermReport:
     industry = stock.industry if stock else None
     moves = _compute_price_moves(symbol, db)
     evidence = _fetch_supply_chain_evidence(industry or "", name) if industry else []
+    context_text = render_context_text(
+        build_stock_context_pack(
+            symbol,
+            sections=["news", "announcements", "research_reports", "corporate_events"],
+            db=db,
+        ),
+        1800,
+    )
 
     system = _load_skill_system_prompt()
-    prompt = _build_prompt(symbol, name, industry, moves, evidence)
+    prompt = _build_prompt(symbol, name, industry, moves, evidence, context_text)
     readiness = runtime_readiness(settings)
     if not readiness["usable"]:
-        return LongTermReport(
-            role="track", score=0, confidence=0,
-            label_vote="观望",
-            key_findings=[f"LLM 调用失败，默认观望：{readiness['reason']}"],
-            raw={"industry": industry, "moves": moves, "evidence_count": len(evidence)},
-        )
+        return _neutral_fallback(symbol, industry, moves, evidence, context_text, readiness["reason"], db)
 
-    try:
-        data = get_provider().complete_structured(
-            prompt=prompt,
-            tool=_TRACK_TOOL,
-            system=system,
-            max_tokens=600,
-            model_tier="capable",
-        )
-    except Exception as e:
-        logger.warning("track_analyst LLM 调用失败 %s: %s", symbol, e)
-        data = {}
-
-    if not data:
-        # 失败兜底
-        return LongTermReport(
-            role="track", score=0, confidence=0,
-            label_vote="观望",
-            key_findings=["LLM 调用失败，默认观望"],
-            raw={"industry": industry, "moves": moves, "evidence_count": len(evidence)},
-        )
+    data = _complete_track_assessment(prompt, system)
+    if not _valid_track_payload(data):
+        return _neutral_fallback(symbol, industry, moves, evidence, context_text, "empty_or_parse_failed", db)
 
     score = float(data.get("score", 0))
     label_vote = data.get("label_vote", "观望")
@@ -285,6 +330,7 @@ def analyze(symbol: str, name: str, db) -> LongTermReport:
             "industry": industry,
             "moves": moves,
             "evidence_count": len(evidence),
+            "context_text": context_text,
             "layers": {k: data.get(k) for k in (
                 "layer1_supply_chain", "layer2_overseas",
                 "layer3_cycle_or_structural", "layer4_speculation_risk",

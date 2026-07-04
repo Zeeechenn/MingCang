@@ -25,6 +25,7 @@ from backend.agents.long_term.base import LabelQuality, LongTermLabel, LongTermR
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
+PROMPT_VERSION = "m61_p3"
 
 
 def _aggregate_score(reports: dict[str, LongTermReport]) -> float:
@@ -160,6 +161,7 @@ class LongTermTeam:
         final_label = _resolve_label(score, votes, layer5)
         findings = _merge_findings(reports)
         quality, constraint_eligible, quality_notes = _assess_label_quality(reports)
+        quality_notes = [*quality_notes, f"prompt_version={PROMPT_VERSION}"]
 
         today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
         expires = (datetime.now(UTC).replace(tzinfo=None) + timedelta(days=settings.long_term_label_ttl_days)) \
@@ -184,4 +186,5 @@ class LongTermTeam:
             quality=quality,
             constraint_eligible=constraint_eligible,
             quality_notes=quality_notes,
+            prompt_version=PROMPT_VERSION,
         )

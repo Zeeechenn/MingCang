@@ -26,6 +26,7 @@ import logging
 
 from backend.agents.long_term.base import LongTermReport, VoteLabel
 from backend.config import settings
+from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.fundamentals import compute_jingqi_deltas, list_peers
 
 logger = logging.getLogger(__name__)
@@ -123,16 +124,22 @@ def _build_findings(deltas: dict, pctile: dict, score: float) -> list[str]:
 
 def analyze(symbol: str, db) -> LongTermReport:
     """Run jingqi (boom) long-term analysis for a symbol."""
+    context_text = render_context_text(
+        build_stock_context_pack(symbol, sections=["research_reports", "lhb", "price"], db=db),
+        1800,
+    )
     if not settings.long_term_jingqi_enabled:
         return LongTermReport(
             role="boom", score=0, confidence=0,
             label_vote="观望", key_findings=["景气分析师已禁用"],
+            raw={"context_text": context_text},
         )
 
     peers = list_peers(symbol, db)
     deltas = compute_jingqi_deltas(symbol, db, peers=peers)
 
     if not deltas.get("available"):
+        deltas["context_text"] = context_text
         return LongTermReport(
             role="boom", score=0, confidence=0,
             label_vote="观望",
@@ -162,5 +169,6 @@ def analyze(symbol: str, db) -> LongTermReport:
             "transitions": deltas.get("transitions"),
             "report_period": deltas.get("report_period"),
             "peers_count": len(peers),
+            "context_text": context_text,
         },
     )

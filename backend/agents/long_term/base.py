@@ -37,6 +37,7 @@ class LongTermLabel:
     quality: LabelQuality = "degraded"
     constraint_eligible: bool = False
     quality_notes: list[str] = field(default_factory=list)
+    prompt_version: str = "legacy"
 
     def to_dict(self) -> dict:
         """Serialize label to dictionary."""
@@ -51,4 +52,5 @@ class LongTermLabel:
             "quality": self.quality,
             "constraint_eligible": self.constraint_eligible,
             "quality_notes": self.quality_notes,
+            "prompt_version": self.prompt_version,
         }

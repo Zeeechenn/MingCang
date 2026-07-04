@@ -514,8 +514,10 @@ def _section_lines(section: str, value: dict) -> list[str]:
                 ]}
             )
         )
+        denominator = piotroski.get("score_denominator")
+        na_count = 9 - denominator if isinstance(denominator, int) else "NA"
         lines.append(
-            f"Piotroski {piotroski.get('score')}/{piotroski.get('score_denominator')}: "
+            f"Piotroski {piotroski.get('score')}/{denominator} (N/A因子 {na_count}): "
             f"{json.dumps(piotroski.get('factors') or {}, ensure_ascii=False, sort_keys=True)}"
         )
     elif section in {"news", "announcements", "corporate_events", "lhb"}:

@@ -19,11 +19,19 @@ import logging
 
 from backend.agents.long_term.base import LongTermReport
 from backend.config import settings
+from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.qfii_holdings import get_qfii_history
 
 logger = logging.getLogger(__name__)
 
 ROLE = "flow"
+
+
+def _build_flow_context(symbol: str, db) -> tuple[str, bool]:
+    if db is None:
+        return "", False
+    pack = build_stock_context_pack(symbol, sections=["fund_flow", "lhb", "data_health"], db=db)
+    return render_context_text(pack, 1800), bool(pack.get("fund_flow", {}).get("empty"))
 
 
 def _holder_timelines(history: dict[str, list[dict]]) -> dict[str, list[tuple[str, int]]]:
@@ -123,6 +131,17 @@ def analyze(symbol: str, db=None, history: dict[str, list[dict]] | None = None) 
     db 参数为兼容 team 调用签名保留，未使用。
     history 注入用于测试；生产路径走 get_qfii_history 拉缓存/AkShare。
     """
+    context_text, fund_flow_absent = _build_flow_context(symbol, db)
+    if fund_flow_absent:
+        return LongTermReport(
+            role=ROLE,
+            score=0.0,
+            confidence=0.0,
+            label_vote="观望",
+            key_findings=["资金流数据缺失，资金面保持观望"],
+            raw={"reason": "fund_flow_absent", "context_text": context_text},
+        )
+
     if history is None:
         try:
             history = get_qfii_history(symbol, quarters=settings.qfii_flow_lookback_quarters)
@@ -138,7 +157,7 @@ def analyze(symbol: str, db=None, history: dict[str, list[dict]] | None = None) 
             confidence=0.0,
             label_vote="观望",
             key_findings=[],
-            raw={"reason": "无 QFII 进入前十大流通股东", "history": history},
+            raw={"reason": "无 QFII 进入前十大流通股东", "history": history, "context_text": context_text},
         )
 
     stats = _evaluate(history)
@@ -155,7 +174,7 @@ def analyze(symbol: str, db=None, history: dict[str, list[dict]] | None = None) 
             confidence=0.8,
             label_vote="规避",
             key_findings=findings,
-            raw={"stats": stats, "history": history},
+            raw={"stats": stats, "history": history, "context_text": context_text},
         )
 
     return LongTermReport(
@@ -164,5 +183,5 @@ def analyze(symbol: str, db=None, history: dict[str, list[dict]] | None = None) 
         confidence=0.0,
         label_vote="观望",
         key_findings=[],
-        raw={"stats": stats, "history": history, "reason": "未触发反向规避阈值"},
+        raw={"stats": stats, "history": history, "reason": "未触发反向规避阈值", "context_text": context_text},
     )

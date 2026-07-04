@@ -83,6 +83,7 @@ def _write_mirror(db) -> None:
                 "quality": getattr(r, "quality", "degraded") or "degraded",
                 "constraint_eligible": bool(getattr(r, "constraint_eligible", False)),
                 "quality_notes": json.loads(r.quality_notes_json) if getattr(r, "quality_notes_json", None) else [],
+                "prompt_version": "m61_p3" if "prompt_version=m61_p3" in (getattr(r, "quality_notes_json", "") or "") else "legacy",
             }
         mirror_path.parent.mkdir(parents=True, exist_ok=True)
         mirror_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -111,6 +112,7 @@ def get_active_label(symbol: str, db) -> LongTermLabel | None:
         quality=cast(LabelQuality, getattr(row, "quality", "degraded") or "degraded"),
         constraint_eligible=bool(getattr(row, "constraint_eligible", False)),
         quality_notes=_json_list(getattr(row, "quality_notes_json", None)),
+        prompt_version="m61_p3" if "prompt_version=m61_p3" in (getattr(row, "quality_notes_json", "") or "") else "legacy",
     )
 
 
@@ -138,6 +140,7 @@ def bulk_get_labels(symbols: list[str], db) -> dict[str, LongTermLabel]:
             quality=cast(LabelQuality, getattr(r, "quality", "degraded") or "degraded"),
             constraint_eligible=bool(getattr(r, "constraint_eligible", False)),
             quality_notes=_json_list(getattr(r, "quality_notes_json", None)),
+            prompt_version="m61_p3" if "prompt_version=m61_p3" in (getattr(r, "quality_notes_json", "") or "") else "legacy",
         )
         for sym, r in by_symbol.items()
     }
