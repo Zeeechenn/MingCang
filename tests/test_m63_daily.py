@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from backend.tools import m63_daily
-from backend.tools.m63_render import assert_no_trade_words, render_report
+from backend.tools.m63_render import assert_no_trade_words, enforce_language_guard, render_report
 
 
 def _db(tmp_path: Path) -> Path:
@@ -133,6 +133,16 @@ def test_premarket_renders_today_unlock_and_language_guard(tmp_path):
         assert_no_trade_words("今天买入并加仓")
 
 
+def test_language_guard_sanitize_replaces_and_counts_hits():
+    text = enforce_language_guard("强烈推荐，buy now，目标价 12", mode="sanitize")
+
+    assert "强烈推荐" not in text
+    assert "buy now" not in text
+    assert "目标价" not in text
+    assert text.count("[操作词已屏蔽]") == 3
+    assert "⚠️ 语言守卫：屏蔽 3 处交易动词" in text
+
+
 def test_intraday_proximity_alert_math(tmp_path):
     db_path = _db(tmp_path)
 
@@ -161,6 +171,7 @@ def test_postmarket_continues_past_failing_step(tmp_path):
         step_overrides={
             "m61_backfill_drip": lambda: (_ for _ in ()).throw(RuntimeError("boom")),
             "m60_watchtower": lambda: {"summary": {"text": "观察哨完成"}, "triggers": []},
+            "m60_second_entry": lambda: {"summary": {"entries": 0}},
             "m54_daily_accrual": lambda: {"skipped": True, "reason": "--no-llm"},
             "m58_exit_shadow": lambda: {"meta": {"window": {"start": "2026-07-01", "end": "2026-07-05"}}, "no_divergence_yet": True, "open_position_count": 1},
             "m59_panel": lambda: {"summary": {"text": "今日候选0只/持仓1只"}, "position_health": {"items": []}, "risk_warnings": {"event_warnings": {"items": []}}},
@@ -170,6 +181,57 @@ def test_postmarket_continues_past_failing_step(tmp_path):
 
     assert "⚠️ m61_backfill_drip 失败:RuntimeError: boom" in report["text"]
     assert "m59_panel:OK" in report["text"]
+
+
+def test_postmarket_runs_second_entry_after_watchtower(tmp_path):
+    db_path = _db(tmp_path)
+    queue_path = tmp_path / "queue.json"
+    history_path = tmp_path / "history.json"
+
+    report = m63_daily.build_postmarket_report(
+        db_path=db_path,
+        as_of="2026-07-05",
+        no_llm=True,
+        queue_path=queue_path,
+        history_path=history_path,
+        step_overrides={
+            "m61_backfill_drip": lambda: {},
+            "m60_watchtower": lambda: {"summary": {"text": "观察哨完成"}, "triggers": []},
+            "m60_second_entry": lambda: {"summary": {"entries": 0}},
+            "m54_daily_accrual": lambda: {"skipped": True, "reason": "--no-llm"},
+            "m58_exit_shadow": lambda: {"meta": {"window": {}}, "no_divergence_yet": True, "open_position_count": 1},
+            "m59_panel": lambda: {"summary": {"text": "面板"}, "position_health": {"items": []}, "risk_warnings": {"event_warnings": {"items": []}}},
+            "trigger_router": lambda: {"queue_path": str(queue_path), "history_path": str(history_path), "pending": []},
+        },
+    )
+
+    names = [step["name"] for step in report["steps"]]
+    assert names.index("m60_watchtower") < names.index("m60_second_entry")
+    assert "m60_second_entry:OK" in report["text"]
+
+
+def test_postmarket_final_text_uses_sanitize_language_guard(tmp_path):
+    db_path = _db(tmp_path)
+    result = m63_daily.build_postmarket_report(
+        db_path=db_path,
+        as_of="2026-07-05",
+        no_llm=True,
+        queue_path=tmp_path / "queue.json",
+        history_path=tmp_path / "history.json",
+        step_overrides={
+            "m61_backfill_drip": lambda: {},
+            "m60_watchtower": lambda: {"summary": {"text": "观察哨强烈推荐"}, "triggers": []},
+            "m60_second_entry": lambda: {},
+            "m54_daily_accrual": lambda: {"skipped": True, "reason": "--no-llm"},
+            "m58_exit_shadow": lambda: {"meta": {"window": {}}, "no_divergence_yet": True, "open_position_count": 1},
+            "m59_panel": lambda: {"summary": {"text": "面板"}, "position_health": {"items": []}, "risk_warnings": {"event_warnings": {"items": []}}},
+            "trigger_router": lambda: {"queue_path": str(tmp_path / "queue.json"), "history_path": str(tmp_path / "history.json"), "pending": []},
+        },
+    )
+
+    assert "强烈推荐" not in result["text"]
+    assert "[操作词已屏蔽]" in result["text"]
+    assert "语言守卫" in result["text"]
 
 
 def test_trigger_r1_enqueues_beyond_limit_and_auto_refreshes_first_n(tmp_path, monkeypatch):
@@ -417,6 +479,80 @@ def test_queue_file_round_trip(tmp_path):
     m63_daily.save_queue(queue, path)
 
     assert m63_daily.load_queue(path) == queue
+
+
+def test_queue_compaction_keeps_pending_and_recent_done_only_latest(tmp_path):
+    path = tmp_path / "queue.json"
+    queue = [
+        {
+            "id": "old",
+            "created_at": "2026-05-01",
+            "target": "300308",
+            "trigger_rule": "R2_major_event",
+            "status": "done",
+            "done_at": "2026-05-01",
+        },
+        {
+            "id": "recent-older",
+            "created_at": "2026-06-20",
+            "target": "300308",
+            "trigger_rule": "R2_major_event",
+            "status": "done",
+            "done_at": "2026-06-20",
+        },
+        {
+            "id": "recent-newer",
+            "created_at": "2026-07-01",
+            "target": "300308",
+            "trigger_rule": "R2_major_event",
+            "status": "done",
+            "done_at": "2026-07-01",
+        },
+        {
+            "id": "pending",
+            "created_at": "2026-05-01",
+            "target": "300394",
+            "trigger_rule": "R5_weekly_sweep",
+            "status": "pending",
+        },
+    ]
+
+    m63_daily.save_queue(queue, path)
+
+    saved = m63_daily.load_queue(path)
+    assert [item["id"] for item in saved] == ["pending", "recent-newer"]
+
+
+def test_panel_lines_surface_hard_rule_fields():
+    lines = m63_daily._panel_lines(
+        {
+            "summary": {"text": "面板"},
+            "buy_candidates": {
+                "items": [
+                    {"symbol": "300308", "quality_flags": ["missing:piotroski"]},
+                ]
+            },
+            "position_health": {
+                "items": [
+                    {
+                        "symbol": "300394",
+                        "current_price": 10,
+                        "distance_to_stop_loss_pct": 1.2,
+                        "research_reference": {"long_term_label": {"label": "观望"}},
+                        "protective_action": "集中度超限:建议降到15%以内",
+                        "stop_flags": ["止损贴身(<1.5×ATR,易被正常波动洗出)"],
+                    }
+                ]
+            },
+            "risk_warnings": {"event_warnings": {"items": []}},
+        }
+    )
+
+    text = "\n".join(lines)
+    assert "保护动作 1 条 / 止损贴身旗 1 条 / 质量旗 1 条" in text
+    assert "保护动作: 集中度超限" in text
+    assert "旗标: 止损贴身" in text
+    assert "质量旗标: missing:piotroski(建议仓位上限减半)" in text
 
 
 def test_glossary_footnote_only_lists_terms_present():

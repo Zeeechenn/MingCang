@@ -16,6 +16,7 @@ from typing import Any
 from backend.config import default_sqlite_path
 from backend.tools.m63_render import (
     assert_no_trade_words,
+    enforce_language_guard,
     format_cn_number,
     inject_semantic_notes,
     render_report,
@@ -38,6 +39,22 @@ R6_CHG_5D_PCT = 10.0
 R6_CHG_1D_PCT = 7.0
 R6_DAMPER_DAYS = 5
 R6_RULE = "R6_price_move"
+QUEUE_DONE_TTL_DAYS = 30
+POSTMARKET_STEP_MODULES = {
+    "backend.tools.m61_backfill",
+    "backend.tools.m60_watchtower",
+    "backend.tools.m60_second_entry",
+    "backend.tools.m54_daily_accrual",
+    "backend.tools.m58_exit_shadow",
+    "backend.tools.m59_panel",
+    "backend.tools.m63_daily",
+    "backend.tools.coverage_snapshot",
+    "backend.tools.long_term_constraint_impact",
+    "backend.tools.m52_flow_floor",
+}
+INTRADAY_STEP_MODULES = {
+    "backend.tools.m60_watchtower",
+}
 
 
 def _connect(db_path: str | Path | None = None) -> sqlite3.Connection:
@@ -430,6 +447,12 @@ def _run_panel(as_of: str) -> dict[str, Any]:
     return build_panel(as_of=as_of)
 
 
+def _run_second_entry_ledger(db_path: str | Path | None, as_of: str) -> dict[str, Any]:
+    from backend.tools.m60_second_entry import build_second_entry_ledger
+
+    return build_second_entry_ledger(db_path=db_path, as_of=as_of)
+
+
 def load_queue(path: Path = DEFAULT_QUEUE_PATH) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -442,7 +465,40 @@ def load_queue(path: Path = DEFAULT_QUEUE_PATH) -> list[dict[str, Any]]:
 
 def save_queue(queue: list[dict[str, Any]], path: Path = DEFAULT_QUEUE_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(queue, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(_compact_queue(queue), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _queue_date(value: Any) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _compact_queue(queue: list[dict[str, Any]], *, today: date | None = None) -> list[dict[str, Any]]:
+    anchors = [_queue_date(item.get("done_at")) for item in queue]
+    anchor = max([today or date.today(), *(item for item in anchors if item is not None)])
+    cutoff = anchor - timedelta(days=QUEUE_DONE_TTL_DAYS)
+    compacted: list[dict[str, Any]] = []
+    latest_done_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in queue:
+        if item.get("status") != "done":
+            compacted.append(item)
+            continue
+        done_at = _queue_date(item.get("done_at"))
+        if done_at is None or done_at < cutoff:
+            continue
+        key = (str(item.get("target") or ""), str(item.get("trigger_rule") or ""))
+        previous = latest_done_by_key.get(key)
+        if previous is None or done_at >= (_queue_date(previous.get("done_at")) or date.min):
+            latest_done_by_key[key] = item
+    latest_done_ids = {id(item) for item in latest_done_by_key.values()}
+    for item in queue:
+        if item.get("status") == "done" and id(item) in latest_done_ids:
+            compacted.append(item)
+    return compacted
 
 
 def _enqueue(
@@ -756,12 +812,27 @@ def _panel_lines(panel: dict[str, Any] | None) -> list[str]:
     if not panel:
         return ["面板:无结果"]
     lines = [panel.get("summary", {}).get("text", "面板完成")]
+    position_items = panel.get("position_health", {}).get("items", [])
+    candidate_items = panel.get("buy_candidates", {}).get("items", [])
+    protective_count = sum(1 for item in position_items if item.get("protective_action"))
+    stop_flag_count = sum(1 for item in position_items if item.get("stop_flags"))
+    quality_flag_count = sum(1 for item in candidate_items if item.get("quality_flags"))
+    if protective_count or stop_flag_count or quality_flag_count:
+        lines.append(f"保护动作 {protective_count} 条 / 止损贴身旗 {stop_flag_count} 条 / 质量旗 {quality_flag_count} 条")
     for item in panel.get("position_health", {}).get("items", [])[:8]:
         label = (item.get("research_reference") or {}).get("long_term_label") or {}
-        lines.append(
+        line = (
             f"持仓 {item.get('symbol')} 现价{format_cn_number(item.get('current_price'))} "
             f"距止损{item.get('distance_to_stop_loss_pct')}% 长期标签{label.get('label') or '-'}"
         )
+        if item.get("protective_action"):
+            line += f" → 保护动作: {item.get('protective_action')}"
+        if item.get("stop_flags"):
+            line += f" 旗标: {', '.join(item.get('stop_flags') or [])}"
+        lines.append(line)
+    for item in candidate_items[:8]:
+        if item.get("quality_flags"):
+            lines.append(f"候选 {item.get('symbol')} 质量旗标: {', '.join(item.get('quality_flags') or [])}(建议仓位上限减半)")
     for item in panel.get("risk_warnings", {}).get("event_warnings", {}).get("items", [])[:8]:
         if isinstance(item, dict):
             lines.append(
@@ -787,6 +858,7 @@ def build_postmarket_report(
     steps: list[dict[str, Any]] = []
     steps.append(_step_result("m61_backfill_drip", overrides.get("m61_backfill_drip", lambda: _run_backfill_drip(day))))
     steps.append(_step_result("m60_watchtower", overrides.get("m60_watchtower", lambda: __import__("backend.tools.m60_watchtower", fromlist=["build_watchtower_report"]).build_watchtower_report(db_path=db_path, as_of=day))))
+    steps.append(_step_result("m60_second_entry", overrides.get("m60_second_entry", lambda: _run_second_entry_ledger(db_path, day))))
     steps.append(_step_result("m54_daily_accrual", overrides.get("m54_daily_accrual", lambda: _run_accrual(day, no_llm=no_llm))))
     steps.append(_step_result("m58_exit_shadow", overrides.get("m58_exit_shadow", _run_exit_shadow)))
     steps.append(_step_result("m59_panel", overrides.get("m59_panel", lambda: _run_panel(day))))
@@ -851,6 +923,7 @@ def build_postmarket_report(
         sections,
         glossary_terms={"止损位", "止盈位", "ATR", "规避", "观望", "可关注", "动量", "解禁", "定增", "Piotroski"},
     )
+    text = enforce_language_guard(text, mode="sanitize")
     return {"ok": True, "mode": "postmarket", "date": day, "text": text, "steps": steps, "router": router}
 
 

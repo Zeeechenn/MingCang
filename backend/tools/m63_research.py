@@ -23,7 +23,7 @@ from backend.config import default_sqlite_path
 from backend.research.watchlist import REQUIRED_FIELDS, WATCHLIST_DIR, load_watchlists, validate_watchlist_entry
 from backend.tools import m61_backfill
 from backend.tools.m63_daily import DEFAULT_QUEUE_PATH, load_queue, save_queue
-from backend.tools.m63_render import render_report, strip_raw_json
+from backend.tools.m63_render import enforce_language_guard, render_report, strip_raw_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = REPO_ROOT / "paper_trading" / "m63_out"
@@ -445,7 +445,7 @@ def _render_research_report(
         ("观察哨", [f"{'更新' if (watchlist or {}).get('updated') else '创建'}:{(watchlist or {}).get('path', '未写入')}"]),
         ("数据健康", health),
     ]
-    return strip_raw_json(render_report(sections))
+    return enforce_language_guard(strip_raw_json(render_report(sections)), mode="sanitize")
 
 
 def _write_report(target: dict[str, Any], as_of: str, text: str) -> Path:

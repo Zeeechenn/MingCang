@@ -199,3 +199,28 @@ def test_weekly_llm_attribution_uses_one_structured_call(tmp_path, monkeypatch):
     assert calls[0]["week_price_changes"]
     assert result["attribution"]["lessons"] == ["只追踪覆盖过的急涨"]
     assert "只追踪覆盖过的急涨" in result["text"]
+
+
+def test_weekly_final_text_uses_sanitize_language_guard(tmp_path, monkeypatch):
+    from backend.tools import m63_weekly
+
+    db_path = _db(tmp_path / "m63.db")
+    universe = tmp_path / "universe.json"
+    _write_universe(universe)
+    monkeypatch.setattr(m63_daily, "DEFAULT_UNIVERSE_PATHS", (universe,))
+
+    result = m63_weekly.run_weekly(
+        db_path=db_path,
+        as_of="2026-07-05",
+        no_llm=False,
+        queue_path=tmp_path / "queue.json",
+        history_path=tmp_path / "history.json",
+        watchlist_dir=tmp_path / "empty-watchlists",
+        output_dir=tmp_path / "out",
+        exit_shadow_builder=lambda **_: {"trade_differences": []},
+        attribution_runner=lambda facts: {"lessons": ["强烈推荐"], "validated": [], "falsified": []},
+    )
+
+    assert "强烈推荐" not in result["text"]
+    assert "[操作词已屏蔽]" in result["text"]
+    assert "语言守卫" in result["text"]

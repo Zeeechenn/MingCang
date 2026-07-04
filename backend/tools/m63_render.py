@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import re
+import logging
 from collections.abc import Iterable, Sequence
 from typing import Any
 
+from backend.research.research_evidence_defs import FORBIDDEN_REPORT_WORDING
+
+logger = logging.getLogger(__name__)
 
 GLOSSARY: dict[str, str] = {
     "ATR": "平均真实波幅,用来估算一只股票平时每天大概波动多大。",
@@ -38,13 +42,62 @@ SEMANTIC_NOTES: dict[str, str] = {
 }
 
 LANGUAGE_GUARD_WORDS = ("买入", "卖出", "加仓", "清仓", "建仓")
+_LOCAL_LANGUAGE_GUARD_PATTERNS = (
+    "买入",
+    "卖出",
+    "加仓",
+    "清仓",
+    "建仓",
+    "满仓",
+    "梭哈",
+    "抄底",
+    "半仓",
+    "重仓",
+    "全仓买",
+    "强烈推荐",
+    "目标价",
+    "必涨",
+    "必跌",
+    r"\b(strong buy|buy now|sell now)\b",
+)
+_LANGUAGE_GUARD_PATTERNS = tuple(dict.fromkeys([*_LOCAL_LANGUAGE_GUARD_PATTERNS, *(pattern for pattern, _ in FORBIDDEN_REPORT_WORDING)]))
+
+
+def _language_guard_pattern(pattern: str) -> re.Pattern[str]:
+    flags = re.IGNORECASE if pattern.isascii() else 0
+    return re.compile(pattern, flags)
+
+
+def _language_guard_hits(text: str) -> list[str]:
+    hits: list[str] = []
+    for pattern in _LANGUAGE_GUARD_PATTERNS:
+        if _language_guard_pattern(pattern).search(text):
+            hits.append(pattern)
+    return hits
+
+
+def enforce_language_guard(text: str, mode: str = "strict") -> str:
+    """Apply M63 wording guard in strict or sanitizing mode."""
+    if mode not in {"strict", "sanitize"}:
+        raise ValueError(f"unknown language guard mode: {mode}")
+    hits = _language_guard_hits(text)
+    if not hits:
+        return text
+    if mode == "strict":
+        raise ValueError(f"M63 language guard blocked trade words: {', '.join(hits)}")
+
+    sanitized = text
+    count = 0
+    for pattern in _LANGUAGE_GUARD_PATTERNS:
+        sanitized, replaced = _language_guard_pattern(pattern).subn("[操作词已屏蔽]", sanitized)
+        count += replaced
+    logger.warning("M63 language guard sanitized %s trade wording hit(s)", count)
+    return sanitized.rstrip() + f"\n⚠️ 语言守卫：屏蔽 {count} 处交易动词\n"
 
 
 def assert_no_trade_words(text: str) -> None:
     """Reject direct trading verbs in premarket/intraday reports."""
-    found = [word for word in LANGUAGE_GUARD_WORDS if word in text]
-    if found:
-        raise ValueError(f"M63 language guard blocked trade words: {', '.join(found)}")
+    enforce_language_guard(text, mode="strict")
 
 
 def format_cn_number(value: Any) -> str:

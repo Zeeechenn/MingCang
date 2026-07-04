@@ -127,6 +127,30 @@ def test_pipeline_continues_past_failing_stage(tmp_path, monkeypatch):
     assert "标签:OK" in result["text"]
 
 
+def test_research_final_text_uses_sanitize_language_guard(tmp_path, monkeypatch):
+    monkeypatch.setattr(m63_research, "OUTPUT_DIR", tmp_path / "out")
+    monkeypatch.setattr(m63_research, "_latest_labels", lambda symbols: {})
+    monkeypatch.setattr(m63_research, "_run_backfill", lambda symbols, as_of: {"news": {"skipped": True}})
+    monkeypatch.setattr(m63_research, "_run_label_builder", lambda symbols, no_llm: {"skipped": True})
+    monkeypatch.setattr(
+        m63_research,
+        "_run_deep_research_stage",
+        lambda target, as_of, auto, no_llm: {"summary": "强烈推荐"},
+    )
+    monkeypatch.setattr(m63_research, "_run_copilot_stage", lambda symbols, no_llm: {"cards": []})
+    monkeypatch.setattr(
+        m63_research,
+        "_upsert_watchlist",
+        lambda target, as_of, deep_research: {"path": str(tmp_path / "watch.json"), "updated": False},
+    )
+
+    result = m63_research.run_research(target="300604", no_llm=True, as_of="2026-07-05")
+
+    assert "强烈推荐" not in result["text"]
+    assert "[操作词已屏蔽]" in result["text"]
+    assert "语言守卫" in result["text"]
+
+
 def test_from_queue_marks_done_on_success(tmp_path, monkeypatch):
     queue_path = tmp_path / "queue.json"
     queue_path.write_text(

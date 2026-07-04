@@ -16,7 +16,7 @@ from typing import Any
 from backend.config import default_sqlite_path
 from backend.research.watchlist import WATCHLIST_DIR, load_watchlists
 from backend.tools import m63_daily
-from backend.tools.m63_render import render_report, strip_raw_json
+from backend.tools.m63_render import enforce_language_guard, render_report, strip_raw_json
 
 OUTPUT_DIR = m63_daily.OUTPUT_DIR
 DEFAULT_QUEUE_PATH = m63_daily.DEFAULT_QUEUE_PATH
@@ -460,7 +460,7 @@ def run_weekly(
             or ["近7天未见 degradation_events 记录"],
         ),
     ]
-    text = strip_raw_json(render_report(sections))
+    text = enforce_language_guard(strip_raw_json(render_report(sections)), mode="sanitize")
     path = _write_report(day, text, output_dir=output_dir)
     print(text)
     print(f"wrote {path}")
