@@ -25,6 +25,11 @@ from backend.data.models.market import (
     Price,
     Stock,
 )
+from backend.data.models.m61 import (
+    Announcement,
+    LhbRecord,
+    ResearchReport,
+)
 from backend.data.models.memory import (
     DecisionMemoryLayered,
     MemoryAtom,
@@ -65,6 +70,9 @@ __all__ = [
     "IndexPrice",
     "MarketSnapshot",
     "FinancialMetric",
+    "Announcement",
+    "ResearchReport",
+    "LhbRecord",
     "Signal",
     "SentimentCache",
     "LongTermLabel",
