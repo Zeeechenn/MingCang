@@ -116,6 +116,16 @@ def _seed_context_rows(db, symbol: str = "603986") -> datetime:
         )
     )
     db.add(
+        CorporateEvent(
+            symbol=symbol,
+            event_type="监管",
+            title="未来监管",
+            event_date=as_of + timedelta(days=10),
+            detail="不应在历史上下文前瞻",
+            provider="unit",
+        )
+    )
+    db.add(
         LhbRecord(
             symbol=symbol,
             trade_date=as_of - timedelta(days=3),
@@ -161,9 +171,19 @@ def test_build_stock_context_pack_full_pack_has_all_sections(test_db, monkeypatc
     assert pack["news"]["items"][0]["content_preview"] == "正文" * 60
     assert pack["research_reports"]["eps_forecast_trend"] == "up"
     assert pack["corporate_events"]["items"][0]["title"] == "未来解禁"
+    assert [item["title"] for item in pack["corporate_events"]["items"]] == ["未来解禁"]
     assert pack["holders"]["share_trend"]["pct_change"] == pytest.approx(1.0)
     assert pack["fund_flow"] == {"s_flow": 0.25, "recent5_main_net": 14000.0}
     assert pack["long_term_label"]["label"] == "观望"
+
+
+def test_corporate_event_visible_as_of_matches_pit_type_gate():
+    from backend.data.context_builder import corporate_event_visible_as_of
+
+    assert corporate_event_visible_as_of("限售解禁", "2026-08-03", "2026-07-04")
+    assert corporate_event_visible_as_of("监管", "2026-07-03", "2026-07-04")
+    assert not corporate_event_visible_as_of("监管", "2026-07-12", "2026-07-04")
+    assert not corporate_event_visible_as_of("回购", "2026-07-10", "2026-07-04")
 
 
 def test_section_exception_isolated_and_degradation_emitted(test_db, monkeypatch):

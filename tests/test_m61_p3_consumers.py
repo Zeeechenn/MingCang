@@ -263,6 +263,12 @@ def _seed_panel_rows(con):
     )
     con.execute(
         """
+        INSERT INTO corporate_events(symbol, event_type, title, event_date, detail, provider)
+        VALUES ('603986', '监管', '监管提示', '2026-07-12', '未来监管不应前瞻', 'unit')
+        """
+    )
+    con.execute(
+        """
         INSERT INTO degradation_events(ts, component, category, provider, error, context_json)
         VALUES ('2026-07-04 10:00:00', 'm52_flow_floor', 'fund_flow', 'db', 'no_pit_data', '{"symbol":"603986"}')
         """
@@ -299,10 +305,12 @@ def test_m59_panel_adds_event_warning_position_fields_and_data_health(tmp_path, 
     health = panel["position_health"]["items"][0]
     assert health["piotroski"] == "8/9"
     assert health["s_flow"] == 0.42
-    assert health["next_event"] == "回购 2026-07-10"
+    assert health["next_event"] == "解禁 2026-07-20"
     assert panel["data_health"]["recent_degradations_by_component"] == {"m52_flow_floor": 1}
     assert "north_net_buy" in panel["data_health"]["active_fake_feature_flags"]
+    assert [item["event_type"] for item in panel["risk_warnings"]["event_warnings"]["items"]] == ["解禁"]
     assert "⚠️ 603986 兆易创新 解禁 2026-07-20 (解禁测试详情)" in markdown
+    assert "未来监管不应前瞻" not in markdown
     assert "→ 动作:" in markdown
     assert "## 数据健康区" in markdown
     assert "m52_flow_floor | 1" in markdown
@@ -345,8 +353,6 @@ def test_m59_panel_groups_consecutive_unlock_warnings(tmp_path, monkeypatch):
     assert unlock["event_date"] == "2026-07-06"
     assert unlock["event_date_last"] == "2026-07-20"
     assert "~" in unlock["line"] and "连续提示5天" in unlock["line"]
-    # 定增:孤立单条,单日期格式
-    placement = by_type["定增"]
-    assert placement["consecutive_days"] == 1
-    assert placement["line"].startswith("⚠️ 603986 兆易创新 定增 2026-07-15")
-    assert len(items) == 2
+    assert "定增" not in by_type
+    assert "监管" not in by_type
+    assert len(items) == 1

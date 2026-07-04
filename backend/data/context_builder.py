@@ -275,6 +275,13 @@ def _is_scheduled_event(event_type: str | None) -> bool:
     return any(keyword in (event_type or "") for keyword in _SCHEDULED_EVENT_KEYWORDS)
 
 
+def corporate_event_visible_as_of(event_type: str, event_date: str, as_of: str) -> bool:
+    """Return whether a corporate event is PIT-visible at the as_of date."""
+    if _is_scheduled_event(event_type):
+        return True
+    return str(event_date)[:10] <= str(as_of)[:10]
+
+
 def _build_corporate_events(symbol: str, as_of: datetime, db) -> dict:
     start = as_of - timedelta(days=30)
     end = as_of + timedelta(days=90)
@@ -287,7 +294,7 @@ def _build_corporate_events(symbol: str, as_of: datetime, db) -> dict:
     rows = [
         row
         for row in rows
-        if row.event_date <= as_of or _is_scheduled_event(row.event_type)
+        if corporate_event_visible_as_of(row.event_type or "", _iso(row.event_date), _iso(as_of))
     ]
     return _empty_if(
         not rows,

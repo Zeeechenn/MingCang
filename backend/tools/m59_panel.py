@@ -16,6 +16,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.config import default_sqlite_path
+from backend.data.context_builder import corporate_event_visible_as_of
 from backend.data.degradation import recent_degradations
 from backend.data.fundamentals import compute_piotroski_factors
 from backend.data.market_features import FAKE_FEATURE_FLAGS
@@ -547,7 +548,7 @@ def _next_event_display(con: sqlite3.Connection, symbol: str, as_of: str) -> str
     cols = _columns(con, "corporate_events")
     if not {"symbol", "event_type", "event_date"} <= cols:
         return "-"
-    row = con.execute(
+    rows = con.execute(
         """
         SELECT event_type, event_date
         FROM corporate_events
@@ -555,13 +556,13 @@ def _next_event_display(con: sqlite3.Connection, symbol: str, as_of: str) -> str
           AND date(event_date) >= date(?)
           AND date(event_date) <= date(?, '+90 day')
         ORDER BY date(event_date) ASC
-        LIMIT 1
         """,
         (symbol, as_of, as_of),
-    ).fetchone()
-    if row is None:
-        return "-"
-    return f"{row['event_type']} {_date_only(row['event_date'])}"
+    ).fetchall()
+    for row in rows:
+        if corporate_event_visible_as_of(str(row["event_type"]), str(row["event_date"]), as_of):
+            return f"{row['event_type']} {_date_only(row['event_date'])}"
+    return "-"
 
 
 def _build_position_health(con: sqlite3.Connection, as_of: str, db_session=None) -> dict[str, Any]:
@@ -870,6 +871,11 @@ def _build_event_warnings(con: sqlite3.Connection, universe: list[dict[str, Any]
         """,
         [*symbols, as_of, as_of],
     ).fetchall()
+    rows = [
+        row
+        for row in rows
+        if corporate_event_visible_as_of(str(row["event_type"]), str(row["event_date"]), as_of)
+    ]
     # iFinD 事件源对进行中的解禁按日各返回一行(同一解禁连续多日提示)——
     # 按 (symbol, event_type) 归并连续日期段,展示层去重(数据行不动)。
     # 小白测试实证:同一解禁重复 6 行被读成 bug(2026-07-05 修)。
