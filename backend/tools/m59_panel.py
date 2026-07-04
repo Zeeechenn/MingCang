@@ -40,6 +40,7 @@ REGIME_FLAT_BAND = 0.02
 
 # 贴近止损阈值:距止损缓冲空间(distance_to_stop_loss_pct) <= 此值(%)时计入"贴近止损"人话摘要计数。
 STOP_LOSS_PROXIMITY_PCT = 5.0
+MAX_POSITION_WEIGHT_PCT = 15.0
 
 
 def _connect_readonly(db_path: Path) -> sqlite3.Connection:
@@ -135,6 +136,73 @@ def _latest_price(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str,
         (symbol, as_of),
     ).fetchone()
     return dict(row) if row else None
+
+
+def _latest_open_position_stop(con: sqlite3.Connection, symbol: str) -> float | None:
+    if not _table_exists(con, "positions"):
+        return None
+    cols = _columns(con, "positions")
+    if not {"symbol", "stop_loss"} <= cols:
+        return None
+    status_clause = "AND COALESCE(status, 'open') = 'open'" if "status" in cols else ""
+    row = con.execute(
+        f"""
+        SELECT stop_loss
+        FROM positions
+        WHERE symbol = ? {status_clause}
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (symbol,),
+    ).fetchone()
+    return _safe_float(row["stop_loss"]) if row else None
+
+
+def _atr14(con: sqlite3.Connection, symbol: str, as_of: str) -> float | None:
+    if not _table_exists(con, "prices"):
+        return None
+    cols = _columns(con, "prices")
+    if not {"symbol", "date", "high", "low", "close"} <= cols:
+        return None
+    rows = con.execute(
+        """
+        SELECT date, high, low, close
+        FROM prices
+        WHERE symbol = ? AND date <= ?
+        ORDER BY date DESC
+        LIMIT 15
+        """,
+        (symbol, as_of),
+    ).fetchall()
+    if len(rows) < 15:
+        return None
+    ordered = [dict(row) for row in reversed(rows)]
+    true_ranges: list[float] = []
+    for idx in range(1, len(ordered)):
+        high = _safe_float(ordered[idx].get("high"))
+        low = _safe_float(ordered[idx].get("low"))
+        prev_close = _safe_float(ordered[idx - 1].get("close"))
+        if high is None or low is None or prev_close is None:
+            return None
+        true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    return round(sum(true_ranges) / len(true_ranges), 4) if true_ranges else None
+
+
+def _event_protective_action(con: sqlite3.Connection, symbol: str, as_of: str) -> str:
+    price = _latest_price(con, symbol, as_of)
+    current = _safe_float(price["close"]) if price else None
+    atr = _atr14(con, symbol, as_of)
+    missing = []
+    if current is None:
+        missing.append("price")
+    if atr is None:
+        missing.append("atr14")
+    if missing:
+        return f"数据不足,无法给出动作(缺:{','.join(missing)})"
+    current_stop = _latest_open_position_stop(con, symbol)
+    atr_stop = current - 1.5 * atr
+    raised_stop = max(current_stop, atr_stop) if current_stop is not None else atr_stop
+    return f"事件日前评估减仓;若持仓,止损上移至 {round(raised_stop, 2)}(=现价-1.5×ATR14)"
 
 
 def _pct(value: float | None) -> float | None:
@@ -377,10 +445,51 @@ def _build_buy_candidates(con: sqlite3.Connection, as_of: str) -> dict[str, Any]
                 "llm_discretion": None,
                 "llm_layer": "not_implemented",
                 "missing": item_missing,
+                "quality_flags": _quality_flags(con, symbol),
                 "research_reference": _build_research_reference(con, symbol, as_of),
             }
         )
     return {"items": items, "flags": flags}
+
+
+def _quality_flags(con: sqlite3.Connection, symbol: str) -> list[str]:
+    if not _table_exists(con, "financial_metrics"):
+        return []
+    cols = _columns(con, "financial_metrics")
+    required = {"symbol", "report_date"}
+    if not required <= cols:
+        return []
+    select_cols = [
+        "net_profit" if "net_profit" in cols else "NULL AS net_profit",
+        "operating_cf" if "operating_cf" in cols else "NULL AS operating_cf",
+        "current_ratio" if "current_ratio" in cols else "NULL AS current_ratio",
+        "gross_margin" if "gross_margin" in cols else "NULL AS gross_margin",
+    ]
+    row = con.execute(
+        f"""
+        SELECT {', '.join(select_cols)}
+        FROM financial_metrics
+        WHERE symbol = ?
+        ORDER BY report_date DESC
+        LIMIT 1
+        """,
+        (symbol,),
+    ).fetchone()
+    if row is None:
+        return []
+    data = dict(row)
+    flags: list[str] = []
+    operating_cf = _safe_float(data.get("operating_cf"))
+    net_profit = _safe_float(data.get("net_profit"))
+    current_ratio = _safe_float(data.get("current_ratio"))
+    gross_margin = _safe_float(data.get("gross_margin"))
+    if operating_cf is not None and net_profit is not None and operating_cf <= net_profit:
+        flags.append("CFO<净利")
+    if current_ratio is not None and current_ratio < 1:
+        flags.append("流动比率<1")
+    if gross_margin is not None and gross_margin < 10:
+        flags.append("毛利率过薄")
+    return flags
 
 
 def _piotroski_display(db_session, symbol: str) -> str:
@@ -479,6 +588,7 @@ def _build_position_health(con: sqlite3.Connection, as_of: str, db_session=None)
         current = _safe_float(price["close"]) if price else None
         stop_loss = _safe_float(data.get("stop_loss"))
         take_profit = _safe_float(data.get("take_profit"))
+        atr14 = _atr14(con, symbol, as_of)
         missing = []
         if current is None:
             missing.append("missing:price")
@@ -486,14 +596,27 @@ def _build_position_health(con: sqlite3.Connection, as_of: str, db_session=None)
             missing.append("missing:stop_loss")
         if take_profit is None:
             missing.append("missing:take_profit")
+        if atr14 is None:
+            missing.append("missing:atr14")
 
         stop_distance = None
         take_distance = None
+        stop_gap_atr = None
         if current not in (None, 0):
             if stop_loss is not None:
                 stop_distance = _pct((current - stop_loss) / current)
+                if atr14 not in (None, 0):
+                    stop_gap_atr = round((current - stop_loss) / atr14, 2)
             if take_profit is not None:
                 take_distance = _pct((take_profit - current) / current)
+
+        series = _price_series(con, symbol, as_of)
+        _, _, mom20 = _momentum_score(series)
+        stop_flags: list[str] = []
+        if stop_gap_atr is not None and stop_gap_atr < 1.5:
+            stop_flags.append("止损贴身(<1.5×ATR,易被正常波动洗出)")
+        if take_profit is not None and mom20 is not None and mom20 > 0.15:
+            stop_flags.append("动量股用静态止盈位,建议改ATR追踪")
 
         items.append(
             {
@@ -507,9 +630,13 @@ def _build_position_health(con: sqlite3.Connection, as_of: str, db_session=None)
                 "take_profit": take_profit,
                 "distance_to_stop_loss_pct": stop_distance,
                 "distance_to_take_profit_pct": take_distance,
+                "atr14": atr14,
+                "stop_gap_atr": stop_gap_atr,
+                "stop_flags": stop_flags,
                 "piotroski": _piotroski_display(db_session, symbol),
                 "s_flow": _s_flow_display(con, symbol, as_of),
                 "next_event": _next_event_display(con, symbol, as_of),
+                "quality_flags": _quality_flags(con, symbol),
                 "missing": missing,
                 "research_reference": _build_research_reference(con, symbol, as_of),
             }
@@ -659,7 +786,16 @@ def _build_concentration(position_items: list[dict[str, Any]]) -> dict[str, Any]
         flags.append(f"used_avg_cost_fallback:{','.join(fallback_symbols)}")
     return {
         "items": [
-            {"symbol": entry["symbol"], "name": entry["name"], "weight_pct": entry["weight_pct"]}
+            {
+                "symbol": entry["symbol"],
+                "name": entry["name"],
+                "weight_pct": entry["weight_pct"],
+                "protective_action": (
+                    f"集中度超限:建议减仓至{MAX_POSITION_WEIGHT_PCT}%以内"
+                    if (entry["weight_pct"] or 0) > MAX_POSITION_WEIGHT_PCT
+                    else f"集中度未超{MAX_POSITION_WEIGHT_PCT}%单仓阈值,维持观察"
+                ),
+            }
             for entry in priced
         ],
         "max_position_symbol": priced[0]["symbol"],
@@ -670,6 +806,14 @@ def _build_concentration(position_items: list[dict[str, Any]]) -> dict[str, Any]
         "basis": "sum_of_open_position_market_value(quantity*current_price_or_avg_cost_fallback)",
         "flags": flags,
     }
+
+
+def _momentum_protective_action(item: dict[str, Any], regime_reliable: bool | None) -> str:
+    if regime_reliable is False:
+        return "下行市动量末档失效,仅观察;若已持仓,观察触发:收盘跌破近5日低点即减半"
+    if item.get("in_position"):
+        return "动量降级:建议减仓至50%;若连续2日仍在末档,再降至25%"
+    return "动量末档候选:暂停新增仓位,等待脱离bottom20%后再评估"
 
 
 def _build_stop_loss_buffer_ranking(position_items: list[dict[str, Any]]) -> dict[str, Any]:
@@ -741,6 +885,7 @@ def _build_event_warnings(con: sqlite3.Connection, universe: list[dict[str, Any]
                 "event_date": event_date,
                 "detail": detail,
                 "line": line,
+                "protective_action": _event_protective_action(con, symbol, as_of),
             }
         )
     return {"items": items, "flags": []}
@@ -783,13 +928,16 @@ def _build_risk_warnings(
         regime_reliable = False
     else:
         regime_reliable = None
+    tail_items = complete[:n_tail]
+    for item in tail_items:
+        item["protective_action"] = _momentum_protective_action(item, regime_reliable)
 
     return {
         "section_name": "风险工程区",
         "market_regime": regime,
         "momentum_tail": {
             "method": "placeholder_v0:0.6*mom5+0.4*mom20,bottom20pct",
-            "items": complete[:n_tail],
+            "items": tail_items,
             "missing_symbols": missing_symbols,
             "regime_reliable": regime_reliable,
             "note": MOMENTUM_TAIL_REGIME_NOTE,
@@ -885,6 +1033,7 @@ def _build_watchtower_followups(watchtower_output_dir: Path) -> dict[str, Any]:
                 "trigger_type": trigger.get("trigger_type"),
                 "value": trigger.get("value"),
                 "price": trigger.get("price"),
+                "reentry_hint": trigger.get("reentry_hint") or trigger.get("reentry_trigger"),
                 "followup_note": "触发≠买入,待 LLM 确认层(Phase 2)",
             }
         )
@@ -943,6 +1092,7 @@ def _build_watchtower_confirm(confirm_output_dir: Path) -> dict[str, Any]:
                 "reasoning": card.get("reasoning"),
                 "risks": card.get("risks"),
                 "validation_question": card.get("validation_question"),
+                "reentry_hint": card.get("reentry_hint") or card.get("reentry_trigger"),
                 "thesis_status": card.get("thesis_status"),
                 "used_llm": card.get("used_llm"),
                 "flags": card.get("flags"),
@@ -974,16 +1124,35 @@ def _build_summary(
     ]
     near_stop_loss_count = len(near_stop_loss)
     risk_warning_count = len(risk_warnings["momentum_tail"]["items"])
+    tight_stop = [
+        item
+        for item in position_items
+        if any("止损贴身" in flag for flag in (item.get("stop_flags") or []))
+    ]
+    action_items = []
+    action_items.extend(risk_warnings.get("event_warnings", {}).get("items") or [])
+    action_items.extend(risk_warnings.get("momentum_tail", {}).get("items") or [])
+    action_items.extend(risk_warnings.get("concentration", {}).get("items") or [])
+    action_missing = [
+        item
+        for item in action_items
+        if str(item.get("protective_action") or "").startswith("数据不足")
+    ]
     text = (
         f"今日候选{candidates_count}只/"
         f"持仓{position_count}只其中{near_stop_loss_count}只贴近止损/"
-        f"风险提示{risk_warning_count}条"
+        f"ATR贴身止损{len(tight_stop)}只/"
+        f"风险提示{risk_warning_count}条/"
+        f"动作缺数据{len(action_missing)}条"
     )
     return {
         "candidates_count": candidates_count,
         "position_count": position_count,
         "near_stop_loss_count": near_stop_loss_count,
         "near_stop_loss_symbols": [item["symbol"] for item in near_stop_loss],
+        "tight_stop_count": len(tight_stop),
+        "tight_stop_symbols": [item["symbol"] for item in tight_stop],
+        "action_missing_count": len(action_missing),
         "risk_warning_count": risk_warning_count,
         "text": text,
     }
@@ -1085,28 +1254,37 @@ def render_markdown(panel: dict[str, Any]) -> str:
         f"- 行情参考: {market_reference_line}",
         "",
         "## ① 买入候选",
-        "| symbol | name | score | stop_loss | take_profit | llm_layer | 研究参考 |",
-        "|---|---|---:|---:|---:|---|---|",
+        "| symbol | name | score | stop_loss | take_profit | llm_layer | 质量 | 研究参考 |",
+        "|---|---|---:|---:|---:|---|---|---|",
     ]
     for item in panel["buy_candidates"]["items"]:
+        quality_flags = item.get("quality_flags") or []
+        quality_text = (
+            f"⚠质量: {', '.join(quality_flags)} → 建议仓位上限减半"
+            if quality_flags
+            else "-"
+        )
         lines.append(
             f"| {item['symbol']} | {item.get('name') or ''} | {item.get('composite_score')} | "
             f"{item.get('stop_loss')} | {item.get('take_profit')} | {item.get('llm_layer')} | "
+            f"{quality_text} | "
             f"{_format_research_reference(item.get('research_reference'))} |"
         )
     lines.extend(
         [
             "",
             "## ② 持仓体检",
-            "| symbol | current | stop distance % | take distance % | piotroski | s_flow | next_event | missing | 研究参考 |",
-            "|---|---:|---:|---:|---|---:|---|---|---|",
+            "| symbol | current | stop distance % | take distance % | 止损/ATR | piotroski | s_flow | next_event | missing | flags | 研究参考 |",
+            "|---|---:|---:|---:|---:|---|---:|---|---|---|---|",
         ]
     )
     for item in panel["position_health"]["items"]:
         lines.append(
             f"| {item['symbol']} | {item.get('current_price')} | {item.get('distance_to_stop_loss_pct')} | "
-            f"{item.get('distance_to_take_profit_pct')} | {item.get('piotroski')} | {item.get('s_flow')} | "
+            f"{item.get('distance_to_take_profit_pct')} | {item.get('stop_gap_atr')} | "
+            f"{item.get('piotroski')} | {item.get('s_flow')} | "
             f"{item.get('next_event')} | {', '.join(item.get('missing') or [])} | "
+            f"{'; '.join(item.get('stop_flags') or [])} | "
             f"{_format_research_reference(item.get('research_reference'))} |"
         )
     risk = panel["risk_warnings"]
@@ -1125,7 +1303,7 @@ def render_markdown(panel: dict[str, Any]) -> str:
     event_warnings = risk.get("event_warnings", {})
     if event_warnings.get("items"):
         for item in event_warnings["items"]:
-            lines.append(item.get("line", ""))
+            lines.append(f"{item.get('line', '')} → 动作: {item.get('protective_action')}")
     else:
         flags = event_warnings.get("flags") or []
         lines.append("暂无" + (f" ({', '.join(flags)})" if flags else ""))
@@ -1134,12 +1312,15 @@ def render_markdown(panel: dict[str, Any]) -> str:
             "",
             f"动量末档:{momentum_tail['note']} (regime_reliable={momentum_tail['regime_reliable']})",
             "预警≠卖出指令",
-            "| symbol | momentum | in_position |",
-            "|---|---:|---|",
+            "| symbol | momentum | in_position | 动作 |",
+            "|---|---:|---|---|",
         ]
     )
     for item in momentum_tail["items"]:
-        lines.append(f"| {item['symbol']} | {item.get('momentum_score')} | {item.get('in_position')} |")
+        lines.append(
+            f"| {item['symbol']} | {item.get('momentum_score')} | {item.get('in_position')} | "
+            f"{item.get('protective_action')} |"
+        )
     lines.extend(
         [
             "",

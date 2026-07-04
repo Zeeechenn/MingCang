@@ -167,14 +167,14 @@ def test_m59_panel_empty_database_does_not_crash(tmp_path):
     assert "missing:table:signals" in panel["buy_candidates"]["flags"]
     assert "missing:table:prices" in panel["header"]["freshness"]["prices"]["status"]
     assert panel["header"]["market_reference"]["status"] == "missing:no_theme_level_record"
-    assert panel["summary"] == {
-        "candidates_count": 0,
-        "position_count": 0,
-        "near_stop_loss_count": 0,
-        "near_stop_loss_symbols": [],
-        "risk_warning_count": 0,
-        "text": "今日候选0只/持仓0只其中0只贴近止损/风险提示0条",
-    }
+    assert panel["summary"]["candidates_count"] == 0
+    assert panel["summary"]["position_count"] == 0
+    assert panel["summary"]["near_stop_loss_count"] == 0
+    assert panel["summary"]["near_stop_loss_symbols"] == []
+    assert panel["summary"]["tight_stop_count"] == 0
+    assert panel["summary"]["action_missing_count"] == 0
+    assert panel["summary"]["risk_warning_count"] == 0
+    assert panel["summary"]["text"] == "今日候选0只/持仓0只其中0只贴近止损/ATR贴身止损0只/风险提示0条/动作缺数据0条"
 
 
 def test_m59_panel_summary_counts_positions_near_stop_loss(tmp_path):

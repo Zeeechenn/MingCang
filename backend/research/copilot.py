@@ -25,6 +25,11 @@ class CopilotInputError(RuntimeError):
 _SYSTEM_PROMPT = (
     "你是 MingCang 的 A 股研究副驾驶。你只输出影子研究意见，"
     "不得声称会修改官方信号，不得给投资保证。"
+    "任何『等待/观察』类结论必须附带可独立观测的触发条件"
+    "(具体价格位/均线/已公告的公开事件),禁止把内部标签更新、下季财报披露作为唯一触发。"
+    "给出的初始止损不得小于 1.5×ATR14;20日涨幅>15% 的动量股止盈必须用"
+    "ATR 追踪表述,禁止静态目标价一刀切。"
+    "存在 CFO<净利、流动比率<1、毛利率异常任一项时,建议仓位必须显式下调并说明。"
 )
 
 _COPILOT_TOOL = {
@@ -55,6 +60,10 @@ _COPILOT_TOOL = {
                 "description": "影子仓位比例，系统会按规则裁剪",
             },
             "position_note": {"type": "string", "description": "仓位理由"},
+            "reentry_trigger": {
+                "type": "string",
+                "description": "等待/观察类结论的可独立观测再评估触发条件",
+            },
         },
         "required": [
             "stance",
@@ -68,6 +77,24 @@ _COPILOT_TOOL = {
         ],
     },
 }
+
+_OBSERVE_WORDS = ("观望", "等待", "观察", "中性", "谨慎")
+_BAD_TRIGGER_WORDS = ("标签", "财报")
+_GOOD_TRIGGER_WORDS = (
+    "价格",
+    "收盘",
+    "均线",
+    "MA",
+    "ma",
+    "突破",
+    "跌破",
+    "公告",
+    "事件",
+    "解禁",
+    "减持",
+    "放量",
+    "缩量",
+)
 
 
 def _parse(raw: str | None, default):
@@ -84,6 +111,24 @@ def _float(value, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _trigger_quality(card: dict) -> str:
+    text = " ".join(
+        str(card.get(key) or "")
+        for key in ("stance", "summary_opinion", "position_note", "technical_read")
+    )
+    is_observe = any(word in text for word in _OBSERVE_WORDS)
+    if not is_observe:
+        return "ok"
+    trigger = str(card.get("reentry_trigger") or "").strip()
+    if not trigger:
+        return "degraded"
+    has_bad_only = any(word in trigger for word in _BAD_TRIGGER_WORDS)
+    has_good = any(word in trigger for word in _GOOD_TRIGGER_WORDS) or any(ch.isdigit() for ch in trigger)
+    if has_bad_only and not has_good:
+        return "degraded"
+    return "ok"
 
 
 def _latest_signal(symbol: str, db) -> Signal:
@@ -375,10 +420,12 @@ def generate_symbol_copilot(symbol: str, db) -> dict:
         "summary_opinion": str(data.get("summary_opinion", ""))[:180],
         "shadow_position_pct": shadow_position,
         "position_note": position_note[:180],
+        "reentry_trigger": str(data.get("reentry_trigger", ""))[:180],
         "risk_conflict": risk_conflict,
         "official": official,
         "long_term": long_term,
     }
+    card["trigger_quality"] = _trigger_quality(card)
 
     review = vet_skill_output({
         "skill_name": "research-copilot",
@@ -388,6 +435,7 @@ def generate_symbol_copilot(symbol: str, db) -> dict:
             "technical_read": card["technical_read"],
             "summary_opinion": card["summary_opinion"],
             "position_note": card["position_note"],
+            "reentry_trigger": card["reentry_trigger"],
             "risks": card["risks"],
             "validation_questions": card["validation_questions"],
         },

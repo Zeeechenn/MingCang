@@ -288,16 +288,14 @@ def test_m59_panel_adds_event_warning_position_fields_and_data_health(tmp_path, 
     )
     markdown = m59_panel.render_markdown(panel)
 
-    assert panel["risk_warnings"]["event_warnings"]["items"] == [
-        {
-            "symbol": "603986",
-            "name": "兆易创新",
-            "event_type": "解禁",
-            "event_date": "2026-07-20",
-            "detail": "解禁测试详情",
-            "line": "⚠️ 603986 兆易创新 解禁 2026-07-20 (解禁测试详情)",
-        }
-    ]
+    event_item = panel["risk_warnings"]["event_warnings"]["items"][0]
+    assert event_item["symbol"] == "603986"
+    assert event_item["name"] == "兆易创新"
+    assert event_item["event_type"] == "解禁"
+    assert event_item["event_date"] == "2026-07-20"
+    assert event_item["detail"] == "解禁测试详情"
+    assert event_item["line"] == "⚠️ 603986 兆易创新 解禁 2026-07-20 (解禁测试详情)"
+    assert "止损上移至" in event_item["protective_action"]
     health = panel["position_health"]["items"][0]
     assert health["piotroski"] == "8/9"
     assert health["s_flow"] == 0.42
@@ -305,5 +303,6 @@ def test_m59_panel_adds_event_warning_position_fields_and_data_health(tmp_path, 
     assert panel["data_health"]["recent_degradations_by_component"] == {"m52_flow_floor": 1}
     assert "north_net_buy" in panel["data_health"]["active_fake_feature_flags"]
     assert "⚠️ 603986 兆易创新 解禁 2026-07-20 (解禁测试详情)" in markdown
+    assert "→ 动作:" in markdown
     assert "## 数据健康区" in markdown
     assert "m52_flow_floor | 1" in markdown
