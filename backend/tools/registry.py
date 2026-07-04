@@ -81,6 +81,22 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m63_research",
+        "category": "stable",
+        "purpose": "M63-2 随时式 full-stack research CLI: resolve a symbol/theme, run bounded category backfill, labels, deep research, copilot refresh, watchlist upsert, and consolidated report rendering.",
+        "read_write_boundary": "Writes M61 category tables, paper_trading/watchlists/*.json, paper_trading/m63_out/research_*.md, and optionally marks ~/.mingcang/m63_research_queue.json entries done; LLM stages are skipped with --no-llm and deep research requires --auto or interactive confirmation.",
+        "recommended_entrypoint": "python3 -m backend.tools.m63_research --target 300604 --no-llm",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.m63_opinion",
+        "category": "stable",
+        "purpose": "M63-2 喂观点 CLI: archive raw user opinions, compare them against watchlist theses, and enqueue R4_opinion_change research tasks when stance changes.",
+        "read_write_boundary": "Always appends ~/.mingcang/m63_opinions.jsonl; with LLM available it may append deduped R4 entries to ~/.mingcang/m63_research_queue.json; --no-llm archives only.",
+        "recommended_entrypoint": "python3 -m backend.tools.m63_opinion --text '<观点内容>' --source manual --no-llm",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m61_source_health",
         "category": "evidence",
         "purpose": "M61 P1 源体检 harness:对(源×数据类别)矩阵做只读探针,输出六维打分卡(覆盖/回溯/完整率/时延/稳定/PIT),发牌表依据。",
