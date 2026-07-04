@@ -61,7 +61,8 @@ def _seed_research_context(db, symbol: str = "603986") -> datetime:
             symbol=symbol,
             event_type="产能",
             title="事件：先进产线投产",
-            event_date=as_of + timedelta(days=10),
+            # PIT 语义:非排期类事件只有 event_date <= as_of 才可见(见 context_builder)
+            event_date=as_of - timedelta(days=10),
             detail="新增产线进入试产。",
             provider="unit",
         )

@@ -109,7 +109,8 @@ def _seed_m61_context(db, symbol: str = "603986", *, fund_flow: bool = True) -> 
             symbol=symbol,
             event_type="扩产",
             title="先进封装扩产",
-            event_date=as_of + timedelta(days=20),
+            # PIT 语义:非排期类事件只有 event_date <= as_of 才可见(见 context_builder)
+            event_date=as_of - timedelta(days=20),
             detail="新增产线进入试产。",
             provider="unit",
         )

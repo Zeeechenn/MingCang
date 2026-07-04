@@ -15,6 +15,7 @@ from backend.data.database import (
     LhbRecord,
     LongTermLabel,
     NewsItem,
+    OverseasSnapshot,
     Price,
     ResearchReport,
     SessionLocal,
@@ -34,6 +35,7 @@ SECTION_ORDER = [
     "holders",
     "lhb",
     "fund_flow",
+    "overseas",
     "long_term_label",
     "data_health",
 ]
@@ -48,6 +50,7 @@ SECTION_LABELS = {
     "holders": "股东",
     "lhb": "龙虎榜",
     "fund_flow": "资金流",
+    "overseas": "海外领先指标",
     "long_term_label": "长期标签",
     "data_health": "数据健康",
 }
@@ -262,6 +265,16 @@ def _build_research_reports(symbol: str, as_of: datetime, db) -> dict:
     return _empty_if(not rows, payload)
 
 
+# PIT 语义按事件类型区分:排期类(解禁/分红)提前公告,event_date 晚于 as_of 也属
+# as_of 时点可知,允许前瞻展示;执行记录类(回购成交/监管处置)只有事后才可知,
+# 必须 event_date <= as_of,否则历史回放会时间穿越(2026-07-05 盲裁实证)。
+_SCHEDULED_EVENT_KEYWORDS = ("解禁", "分红", "除权", "除息", "股东大会")
+
+
+def _is_scheduled_event(event_type: str | None) -> bool:
+    return any(keyword in (event_type or "") for keyword in _SCHEDULED_EVENT_KEYWORDS)
+
+
 def _build_corporate_events(symbol: str, as_of: datetime, db) -> dict:
     start = as_of - timedelta(days=30)
     end = as_of + timedelta(days=90)
@@ -271,6 +284,11 @@ def _build_corporate_events(symbol: str, as_of: datetime, db) -> dict:
         .order_by(CorporateEvent.event_date.asc())
         .all()
     )
+    rows = [
+        row
+        for row in rows
+        if row.event_date <= as_of or _is_scheduled_event(row.event_type)
+    ]
     return _empty_if(
         not rows,
         {
@@ -387,6 +405,32 @@ def _build_fund_flow(symbol: str, as_of: datetime, db) -> dict:
     }
 
 
+def _build_overseas(symbol: str, as_of: datetime, db) -> dict:
+    rows = (
+        db.query(OverseasSnapshot)
+        .filter(OverseasSnapshot.symbol == symbol, OverseasSnapshot.snap_date <= as_of)
+        .order_by(OverseasSnapshot.snap_date.desc())
+        .limit(6)
+        .all()
+    )
+    return _empty_if(
+        not rows,
+        {
+            "items": [
+                {
+                    "name": row.name,
+                    "snap_date": _iso(row.snap_date),
+                    "close": row.close,
+                    "chg_pct_1d": row.chg_pct_1d,
+                    "chg_pct_20d": row.chg_pct_20d,
+                    "note": row.note,
+                }
+                for row in rows
+            ]
+        },
+    )
+
+
 def _build_long_term_label(symbol: str, as_of: datetime, db) -> dict:
     row = (
         db.query(LongTermLabel)
@@ -440,6 +484,7 @@ _SECTION_BUILDERS: dict[str, Callable[[str, datetime, Any], dict]] = {
     "holders": _build_holders,
     "lhb": _build_lhb,
     "fund_flow": _build_fund_flow,
+    "overseas": _build_overseas,
     "long_term_label": _build_long_term_label,
     "data_health": _build_data_health,
 }
@@ -537,6 +582,9 @@ def _section_lines(section: str, value: dict) -> list[str]:
         )
     elif section == "fund_flow":
         lines.append(f"S-flow {_format_value(value.get('s_flow'))}; 近5日主力净流入 {_format_value(value.get('recent5_main_net'))}")
+    elif section == "overseas":
+        for item in value.get("items", []):
+            lines.append(" - " + " | ".join(f"{k}={_format_value(v)}" for k, v in item.items() if v not in (None, "")))
     elif section == "long_term_label":
         lines.append(
             f"{value.get('date')}: {value.get('label')} score={_format_value(value.get('score'))} expires={value.get('expires_at')}"
