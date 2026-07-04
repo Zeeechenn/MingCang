@@ -187,10 +187,23 @@ def _call_llm(provider, prompt: str) -> tuple[str, dict[str, Any], str | None]:
     return "", result if "result" in locals() else {}, "LLM_FAILED_EMPTY_RESPONSE"
 
 
-def _selected_cases(case_ids: list[str] | None) -> list[dict[str, str]]:
+def _load_extra_cases(cases_file: Path | None) -> list[dict[str, str]]:
+    if cases_file is None:
+        return []
+    cases = json.loads(Path(cases_file).read_text(encoding="utf-8"))
+    required = {"id", "symbol", "name", "as_of", "question", "outcome_note"}
+    for case in cases:
+        missing = required - set(case)
+        if missing:
+            raise ValueError(f"case {case.get('id', '?')} missing fields: {sorted(missing)}")
+    return cases
+
+
+def _selected_cases(case_ids: list[str] | None, extra_cases: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
+    pool = CASES + (extra_cases or [])
     if not case_ids:
-        return CASES
-    known = {case["id"]: case for case in CASES}
+        return pool
+    known = {case["id"]: case for case in pool}
     unknown = [case_id for case_id in case_ids if case_id not in known]
     if unknown:
         raise ValueError(f"unknown case id(s): {', '.join(unknown)}")
@@ -205,6 +218,7 @@ def run_gate(
     out_dir: Path = DEFAULT_OUT_DIR,
     timestamp: str | None = None,
     provider_factory: Callable[[], Any] | None = None,
+    cases_file: Path | None = None,
 ) -> dict[str, Any]:
     own_session = db is None
     session = db or SessionLocal()
@@ -227,7 +241,7 @@ def run_gate(
     }
     try:
         provider = None if dry_run else provider_factory()
-        for case in _selected_cases(case_ids):
+        for case in _selected_cases(case_ids, _load_extra_cases(cases_file)):
             case_result = {
                 **case,
                 "status": "dry_run" if dry_run else "ok",
@@ -316,7 +330,8 @@ def _markdown(report: dict[str, Any]) -> str:
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the M61 Phase 4 judgment-gate harness.")
-    parser.add_argument("--cases", help="Comma-separated case ids. Defaults to all four cases.")
+    parser.add_argument("--cases", help="Comma-separated case ids. Defaults to all cases in the pool.")
+    parser.add_argument("--cases-file", type=Path, help="JSON file with extra case dicts (id/symbol/name/as_of/question/outcome_note) appended to the built-in pool.")
     parser.add_argument("--dry-run", action="store_true", help="Build and print prompts without LLM calls.")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     return parser.parse_args(argv)
@@ -325,7 +340,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     case_ids = [item.strip() for item in args.cases.split(",") if item.strip()] if args.cases else None
-    report = run_gate(case_ids=case_ids, dry_run=args.dry_run, out_dir=args.out_dir)
+    report = run_gate(case_ids=case_ids, dry_run=args.dry_run, out_dir=args.out_dir, cases_file=args.cases_file)
     if args.dry_run:
         for case in report["cases"]:
             for arm in ("starved", "full"):
