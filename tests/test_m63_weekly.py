@@ -70,7 +70,13 @@ def _db(path: Path) -> Path:
         con.execute(
             """
             INSERT INTO degradation_events(ts, component, category, provider, error, context_json)
-            VALUES ('2026-07-04T10:00:00', 'category_registry', 'fund_flow', 'unit', 'empty', '{}')
+            VALUES ('2026-07-04T10:00:00', 'category_registry', 'fund_flow', 'unit', 'coverage_gap:empty', '{}')
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO degradation_events(ts, component, category, provider, error, context_json)
+            VALUES ('2026-07-04T11:00:00', 'category_registry', 'quotes', 'unit', 'failure:source offline', '{}')
             """
         )
         con.commit()
@@ -152,7 +158,10 @@ def test_weekly_no_llm_detects_miss_stale_expiring_and_writes_report(tmp_path, m
     assert sum(item["target"] == "300308" and item["trigger_rule"] == "R5_weekly_sweep" for item in queue) == 1
     assert "长期标签临期" in result["text"]
     assert "陈旧主题" in result["text"]
-    assert "category_registry" in result["text"]
+    assert "真降级 1 条" in result["text"]
+    assert "category_registry/quotes/unit: failure:source offline" in result["text"]
+    assert "覆盖缺口 1 条" in result["text"]
+    assert "fund_flow=1" in result["text"]
     assert Path(result["output_path"]).exists()
 
     second = m63_weekly.run_weekly(

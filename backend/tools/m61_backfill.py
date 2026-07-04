@@ -91,9 +91,24 @@ def _quarter_windows(start: date, end: date) -> list[tuple[date, date]]:
     return windows
 
 
+def _is_coverage_gap(error: str | None) -> bool:
+    return str(error or "").startswith("coverage_gap:")
+
+
+def _failure(error: str) -> str:
+    text = str(error)
+    return text if text.startswith(("coverage_gap:", "failure:")) else f"failure:{text}"
+
+
+def _result_has_only_coverage_gaps(result) -> bool:
+    degradations = list(getattr(result, "degradations", []) or [])
+    return bool(degradations) and all(_is_coverage_gap(row.get("error")) for row in degradations)
+
+
 def _record_degradation(category: str, provider: str, error: str, context: dict, db) -> dict:
-    emit_degradation("m61_backfill", category, provider, error, context=context, db=db)
-    event = {"category": category, "provider": provider, "error": error}
+    reason = error if _is_coverage_gap(error) else _failure(error)
+    emit_degradation("m61_backfill", category, provider, reason, context=context, db=db)
+    event = {"category": category, "provider": provider, "error": reason}
     event.update(context)
     return event
 
@@ -149,6 +164,8 @@ def _backfill_stock_category(
                 )
                 degradations.extend(result.degradations)
                 if not result.ok:
+                    if _result_has_only_coverage_gaps(result):
+                        continue
                     degradations.append(
                         _record_degradation(
                             category,
@@ -229,6 +246,8 @@ def _backfill_corporate_events(
             result = _fetch_stock_category_once("corporate_events", stock, start, end, db)
             degradations.extend(result.degradations)
             if not result.ok:
+                if _result_has_only_coverage_gaps(result):
+                    continue
                 degradations.append(
                     _record_degradation(
                         "corporate_events",
@@ -247,6 +266,8 @@ def _backfill_corporate_events(
                 split_result = _fetch_stock_category_once("corporate_events", stock, window_start, window_end, db)
                 degradations.extend(split_result.degradations)
                 if not split_result.ok:
+                    if _result_has_only_coverage_gaps(split_result):
+                        continue
                     degradations.append(
                         _record_degradation(
                             "corporate_events",

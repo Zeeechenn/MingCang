@@ -82,7 +82,7 @@ def test_first_provider_raises_then_second_serves_and_records_degradation(test_d
     assert event.component == "category_registry"
     assert event.category == "sector"
     assert event.provider == "primary"
-    assert event.error == "source offline"
+    assert event.error == "failure:source offline"
 
 
 def test_all_providers_fail_without_exception():
@@ -158,10 +158,10 @@ def test_contract_validation_drops_bad_rows_and_records_degradation(test_db):
 
     assert result.ok is True
     assert len(result.rows) == 1
-    assert result.degradations[0]["error"] == "contract_violation"
+    assert result.degradations[0]["error"] == "failure:contract_violation"
     assert result.degradations[0]["dropped"] == 1
     event = test_db.query(DegradationEvent).one()
-    assert event.error == "contract_violation"
+    assert event.error == "failure:contract_violation"
 
 
 def test_all_rows_bad_falls_through_to_next_provider(test_db):
@@ -204,8 +204,152 @@ def test_all_rows_bad_falls_through_to_next_provider(test_db):
     assert result.ok is True
     assert result.provider == "good-contract"
     assert len(result.rows) == 1
-    assert result.degradations[0]["error"] == "contract_violation"
+    assert result.degradations[0]["error"] == "failure:contract_violation"
     assert result.degradations[0]["dropped"] == 1
+
+
+def test_empty_provider_records_coverage_gap_not_failure(test_db):
+    from backend.data.category_registry import (
+        CategoryProvider,
+        fetch_by_category,
+        register_category_provider,
+    )
+    from backend.data.degradation import DegradationEvent
+
+    register_category_provider(
+        CategoryProvider(
+            name="empty-provider",
+            category="quotes",
+            fetch=lambda request: [],
+            probe=lambda: True,
+        )
+    )
+
+    result = fetch_by_category("quotes", _request(), db=test_db)
+
+    assert result.ok is False
+    assert result.degradations[0]["error"] == "coverage_gap:empty"
+    event = test_db.query(DegradationEvent).one()
+    assert event.error == "coverage_gap:empty"
+
+
+def test_exception_provider_records_failure_prefix(test_db):
+    from backend.data.category_registry import (
+        CategoryProvider,
+        fetch_by_category,
+        register_category_provider,
+    )
+    from backend.data.degradation import DegradationEvent
+
+    register_category_provider(
+        CategoryProvider(
+            name="broken-provider",
+            category="quotes",
+            fetch=lambda request: (_ for _ in ()).throw(RuntimeError("source offline")),
+            probe=lambda: True,
+        )
+    )
+
+    result = fetch_by_category("quotes", _request(), db=test_db)
+
+    assert result.ok is False
+    assert result.degradations[0]["error"] == "failure:source offline"
+    event = test_db.query(DegradationEvent).one()
+    assert event.error == "failure:source offline"
+
+
+@pytest.mark.parametrize(
+    ("category", "row"),
+    [
+        ("research_reports", {"symbol": "600519", "title": "报告", "provider": "unit"}),
+        ("lhb", {"symbol": "600519", "provider": "unit"}),
+        ("corporate_events", {"symbol": "600519", "title": "事件", "provider": "unit"}),
+        ("holders", {"symbol": "600519", "provider": "unit"}),
+        ("overseas", {"symbol": "HSI", "name": "恒指", "provider": "unit"}),
+    ],
+)
+def test_new_m61_categories_enforce_contracts(category, row, test_db):
+    from backend.data.category_registry import (
+        CategoryProvider,
+        fetch_by_category,
+        register_category_provider,
+    )
+    from backend.data.degradation import DegradationEvent
+
+    register_category_provider(
+        CategoryProvider(
+            name="bad-contract",
+            category=category,
+            fetch=lambda request: [row],
+            probe=lambda: True,
+        )
+    )
+
+    result = fetch_by_category(category, _request(), db=test_db)
+
+    assert result.ok is False
+    assert result.degradations[0]["error"] == "failure:contract_violation"
+    event = test_db.query(DegradationEvent).one()
+    assert event.error == "failure:contract_violation"
+
+
+def test_fund_flow_uses_fetch_contract_shape(test_db):
+    from backend.data.category_registry import (
+        CategoryProvider,
+        fetch_by_category,
+        register_category_provider,
+    )
+
+    register_category_provider(
+        CategoryProvider(
+            name="fund-flow-fetch",
+            category="fund_flow",
+            fetch=lambda request: [
+                {
+                    "symbol": "600519",
+                    "trade_date": "2026-01-02",
+                    "metric": "main_net",
+                    "value": 100.0,
+                    "currency": "CNY",
+                    "source": "unit",
+                    "fetched_at": "2026-01-02T15:00:00",
+                }
+            ],
+            probe=lambda: True,
+        )
+    )
+
+    result = fetch_by_category("fund_flow", _request(), db=test_db)
+
+    assert result.ok is True
+    assert result.degradations == []
+
+
+def test_missing_schema_records_coverage_gap(monkeypatch, test_db):
+    from backend.data import category_registry
+    from backend.data.category_registry import (
+        CategoryProvider,
+        fetch_by_category,
+        register_category_provider,
+    )
+    from backend.data.degradation import DegradationEvent
+
+    monkeypatch.setitem(category_registry._CATEGORY_SCHEMA_KEYS, "news", "missing_unit_schema")
+    register_category_provider(
+        CategoryProvider(
+            name="news-provider",
+            category="news",
+            fetch=lambda request: [{"symbol": "600519", "title": "新闻", "provider": "unit"}],
+            probe=lambda: True,
+        )
+    )
+
+    result = fetch_by_category("news", _request(), db=test_db)
+
+    assert result.ok is False
+    assert result.degradations[0]["error"] == "coverage_gap:schema_missing"
+    event = test_db.query(DegradationEvent).one()
+    assert event.error == "coverage_gap:schema_missing"
 
 
 def test_list_capability_gaps_returns_all_categories():

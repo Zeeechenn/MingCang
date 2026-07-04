@@ -259,23 +259,65 @@ def _sector_concentration(con: sqlite3.Connection, watchlist_dir: Path | str) ->
     return []
 
 
-def _data_health(con: sqlite3.Connection, *, start: str, end: str) -> list[dict[str, Any]]:
+def _is_coverage_gap_reason(error: str | None) -> bool:
+    reason = str(error or "")
+    return reason.startswith("coverage_gap:") or reason in {"empty", "no_pit_data"}
+
+
+def _data_health(con: sqlite3.Connection, *, start: str, end: str) -> dict[str, Any]:
     if not m63_daily._table_exists(con, "degradation_events"):
-        return []
+        return {"failures": [], "coverage_gaps": [], "total_failures": 0, "total_coverage_gaps": 0}
     cols = m63_daily._columns(con, "degradation_events")
-    if not {"ts", "component"} <= cols:
-        return []
+    if not {"ts", "component", "category", "provider", "error"} <= cols:
+        return {"failures": [], "coverage_gaps": [], "total_failures": 0, "total_coverage_gaps": 0}
     rows = con.execute(
         """
-        SELECT component, COUNT(*) AS count
+        SELECT component, category, provider, error, COUNT(*) AS count
         FROM degradation_events
         WHERE date(ts) >= date(?) AND date(ts) <= date(?)
-        GROUP BY component
-        ORDER BY count DESC, component
+        GROUP BY component, category, provider, error
+        ORDER BY count DESC, component, category, provider, error
         """,
         (start, end),
     ).fetchall()
-    return [dict(row) for row in rows]
+    failures: list[dict[str, Any]] = []
+    coverage_by_category: Counter[str] = Counter()
+    for row in rows:
+        item = dict(row)
+        count = int(item.get("count") or 0)
+        if _is_coverage_gap_reason(item.get("error")):
+            coverage_by_category[str(item.get("category") or "unknown")] += count
+        else:
+            failures.append(item)
+    coverage_gaps = [
+        {"category": category, "count": count}
+        for category, count in sorted(coverage_by_category.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    return {
+        "failures": failures,
+        "coverage_gaps": coverage_gaps,
+        "total_failures": sum(int(row.get("count") or 0) for row in failures),
+        "total_coverage_gaps": sum(row["count"] for row in coverage_gaps),
+    }
+
+
+def _lines_data_health(data_health: dict[str, Any]) -> list[str]:
+    failures = list(data_health.get("failures") or [])
+    gaps = list(data_health.get("coverage_gaps") or [])
+    total_failures = int(data_health.get("total_failures") or 0)
+    total_gaps = int(data_health.get("total_coverage_gaps") or 0)
+    if not failures and not gaps:
+        return ["近7天未见 degradation_events 记录"]
+
+    lines: list[str] = [f"真降级 {total_failures} 条"]
+    lines.extend(
+        f"{row['component']}/{row['category']}/{row['provider']}: {row['error']} x{row['count']}"
+        for row in failures
+    )
+    lines.append(f"覆盖缺口 {total_gaps} 条")
+    if gaps:
+        lines.append("覆盖缺口汇总:" + ", ".join(f"{row['category']}={row['count']}" for row in gaps))
+    return lines
 
 
 def _exit_shadow_divergences(builder, *, db_path: str | Path | None, as_of: str) -> list[dict[str, Any]]:
@@ -456,8 +498,7 @@ def run_weekly(
         ),
         (
             "数据健康周报",
-            [f"{row['component']}: {row['count']}次降级" for row in data_health]
-            or ["近7天未见 degradation_events 记录"],
+            _lines_data_health(data_health),
         ),
     ]
     text = enforce_language_guard(strip_raw_json(render_report(sections)), mode="sanitize")

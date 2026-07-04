@@ -31,7 +31,7 @@ def fetch_flow_data_pit(symbol: str, as_of: datetime) -> list[dict[str, Any]] | 
                 component="m52_flow_floor",
                 category="fund_flow",
                 provider="db",
-                error="no_pit_data",
+                error="coverage_gap:no_pit_data",
                 context={"symbol": symbol, "as_of": as_of},
             )
             return None

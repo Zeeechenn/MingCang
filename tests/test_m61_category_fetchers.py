@@ -638,3 +638,39 @@ def test_backfill_continues_past_failing_stock(tmp_path, monkeypatch, test_db, c
     assert summary["inserted"] == 1
     assert len(summary["degradations"]) == 1
     assert summary["degradations"][0]["symbol"] == "000001"
+
+
+def test_backfill_does_not_turn_coverage_gap_into_fetch_failed(monkeypatch, test_db):
+    from backend.data.category_registry import FetchResult
+    from backend.tools import m61_backfill
+
+    def fake_fetch_by_category(category, request, db=None):
+        return FetchResult(
+            ok=False,
+            rows=[],
+            provider=None,
+            degradations=[
+                {
+                    "category": category,
+                    "provider": "unit",
+                    "error": "coverage_gap:empty",
+                    "symbol": request.symbol,
+                }
+            ],
+        )
+
+    recorded: list[dict] = []
+    monkeypatch.setattr(m61_backfill, "fetch_by_category", fake_fetch_by_category)
+    monkeypatch.setattr(m61_backfill, "_record_degradation", lambda *args, **kwargs: recorded.append(args) or {})
+
+    inserted, degradations = m61_backfill._backfill_stock_category(
+        "research_reports",
+        [{"symbol": "000001", "name": "平安银行"}],
+        date(2026, 6, 1),
+        date(2026, 6, 30),
+        test_db,
+    )
+
+    assert inserted == 0
+    assert recorded == []
+    assert [row["error"] for row in degradations] == ["coverage_gap:empty"]

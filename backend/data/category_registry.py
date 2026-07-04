@@ -31,7 +31,15 @@ _CATEGORY_SCHEMA_KEYS: dict[str, str] = {
     "quotes": "quote",
     "financials": "fundamentals",
     "announcements": "filings",
-    "fund_flow": "capital_flow",
+    "research_reports": "research_reports",
+    "fund_flow": "capital_flow_fetch",
+    "lhb": "lhb",
+    "corporate_events": "corporate_events",
+    "holders": "holders",
+    "sector": "sector",
+    "news": "news",
+    "f10": "f10",
+    "overseas": "overseas",
 }
 _LOGGED_MISSING_SCHEMAS: set[str] = set()
 
@@ -110,11 +118,27 @@ def _provider_in_cooldown(provider: CategoryProvider) -> bool:
     return True
 
 
+def _prefixed_reason(prefix: str, reason: str) -> str:
+    text = str(reason)
+    if text.startswith(("coverage_gap:", "failure:")):
+        return text
+    return f"{prefix}:{text}"
+
+
+def _coverage_gap(reason: str) -> str:
+    return _prefixed_reason("coverage_gap", reason)
+
+
+def _failure(reason: str) -> str:
+    return _prefixed_reason("failure", reason)
+
+
 def _degradation(provider: CategoryProvider, error: str, context: dict | None = None, db=None) -> dict:
+    reason = str(error)
     event = {
         "provider": provider.name,
         "category": provider.category,
-        "error": str(error),
+        "error": reason,
         "ts": time(),
     }
     if context:
@@ -123,7 +147,7 @@ def _degradation(provider: CategoryProvider, error: str, context: dict | None = 
         "category_registry",
         provider.category,
         provider.name,
-        str(error),
+        reason,
         context=context,
         db=db,
     )
@@ -163,7 +187,7 @@ def _schema_for_category(category: str) -> dict | None:
 def _row_satisfies_schema(row: dict, schema: dict) -> bool:
     required_fields = schema.get("required_fields") or []
     for field_name in required_fields:
-        if field_name not in row:
+        if row.get(field_name) in (None, "", []):
             return False
     pit_date_field = schema.get("pit_date_field")
     if pit_date_field and not row.get(pit_date_field):
@@ -174,7 +198,13 @@ def _row_satisfies_schema(row: dict, schema: dict) -> bool:
 def _validate_contract(category: str, provider: CategoryProvider, rows: list[dict], db=None) -> tuple[list[dict], dict | None]:
     schema = _schema_for_category(category)
     if schema is None:
-        return rows, None
+        event = _degradation(
+            provider,
+            _coverage_gap("schema_missing"),
+            context={"schema": _CATEGORY_SCHEMA_KEYS.get(category, category)},
+            db=db,
+        )
+        return [], event
 
     valid_rows = [row for row in rows if _row_satisfies_schema(row, schema)]
     dropped = len(rows) - len(valid_rows)
@@ -183,7 +213,7 @@ def _validate_contract(category: str, provider: CategoryProvider, rows: list[dic
 
     event = _degradation(
         provider,
-        "contract_violation",
+        _failure("contract_violation"),
         context={"dropped": dropped, "schema": _CATEGORY_SCHEMA_KEYS.get(category, category)},
         db=db,
     )
@@ -199,11 +229,11 @@ def fetch_by_category(category: str, request: FetchRequest, db=None) -> FetchRes
     for provider in _CATEGORY_PROVIDERS[category]:
         if provider.observe_only:
             _health(provider)["skipped"] += 1
-            event = _degradation(provider, "observe_only", db=db)
+            event = _degradation(provider, _failure("observe_only"), db=db)
             degradations.append(event)
             continue
         if _provider_in_cooldown(provider):
-            event = _degradation(provider, "cooling", db=db)
+            event = _degradation(provider, _failure("cooling"), db=db)
             degradations.append(event)
             continue
 
@@ -211,7 +241,7 @@ def fetch_by_category(category: str, request: FetchRequest, db=None) -> FetchRes
             rows = provider.fetch(request)
             if not rows:
                 _record_provider_failure(provider, "empty")
-                degradations.append(_degradation(provider, "empty", db=db))
+                degradations.append(_degradation(provider, _coverage_gap("empty"), db=db))
                 continue
 
             valid_rows, contract_event = _validate_contract(category, provider, rows, db=db)
@@ -226,7 +256,7 @@ def fetch_by_category(category: str, request: FetchRequest, db=None) -> FetchRes
         except Exception as exc:
             error = str(exc)
             _record_provider_failure(provider, error)
-            degradations.append(_degradation(provider, error, db=db))
+            degradations.append(_degradation(provider, _failure(error), db=db))
             continue
 
     return FetchResult(ok=False, rows=[], provider=None, degradations=degradations)
