@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### Upgrade notes / 升级说明
+- Schema 初始化仍由 `python3 backend/data/database.py` 幂等执行；项目现状是 SQLAlchemy `create_all` + runtime schema 补丁并行维护，历史评审记录已建议 Alembic，但本发布包不引入新的 Alembic 迁移要求。
+- 本次补齐的环境变量均已有 `backend/config.py` 默认值；`.env.example` 仅补公开配置面和占位符，未要求新增必填 key。
+- 已核对本次公开入口说明：`mingcang stock` 仍是只读 `stock-context`；M63 日常入口仍由 `m63_daily` 三个 mode 加 `m63_weekly` / `m63_research` / `m63_opinion` 承载，未发现破坏性 CLI 变更。
+
 ### Added / 新增
 - **盲裁验收 harness**(`backend/tools/blind_adjudication.py`):判断类功能的常态化 A/B 验收工具——两臂回答确定性盲化(甲/乙)、DB 真实结局对照、多裁判(claude/codex 跨模型)结构化投票、answer_key 隔离、多数票汇总。M61 P4 判断门以此完成 10 案例×双模型 60 票终裁(净版 full 6 : starved 3 : 平 1,跨模型方向一致 9/10),裁决工件在 `paper_trading/m61_out/adjudication_h1_expansion_20260705.json`(本地运行数据,不入库)。`m61_judgment_gate` 增 `--cases-file` 支持外部历史案例集(半年窗口回放)。
 - **M59 裁量层四条硬规则**(规格 `docs/dev/M59_ADJUDICATION_RULES.md`,盲裁证据驱动):R1 每条风险警示强制带确定性保护动作(实算止损位/减仓比例);R2 观望类结论必须带可观测再评估触发,copilot 增 `reentry_trigger` 字段与 `trigger_quality` 降级标记;R3 持仓体检增 `atr14`/`stop_gap_atr`/`stop_flags`(止损贴身 <1.5×ATR 与动量股静态止盈标旗);R4 财务质量旗标(CFO<净利/流动比率<1/毛利率过薄)进候选区与体检并渲染仓位收缩建议。面板保持只读,不改官方信号。
@@ -23,7 +28,10 @@
 ### Completed milestone records / 完成里程碑归档（原在 ROADMAP 活跃段，现下沉）
 - **M61 数据基建统筹改造(P0-P4,2026-07-04~05)**:数据源手册库7份+源体检harness+发牌表;中度重构七簇(品类无关注册表+数据合同接线、公告/研报/龙虎榜/公司事件/股东五品类落地、flow腿补建、Piotroski无增发因子修复、声明-验证CI强制关联、静默吞错清剿、统一stock context builder);消费端三件(长期标签/copilot+面板/观察哨)接统一上下文包;判断门盲裁终裁:10案例(半年窗口跨regime)×双模型60票,净版 full-context 6:starved 3:平1,跨模型方向一致9/10,判定=数据价值成立、纪律必须规则化;公司事件PIT语义修复;002821/300759盲区股历史回填;300759复权断点qfq重抓修复(-58%假断崖消除)。
 - **M59 裁量层四条硬规则(175623b)**:详见上方 Added 条目。
-- **M63 复盘编排全线闭环(16ab4be/54c6da5/59a6677/e0de4ea/d9cb2a4)**:六命令(盘前看/盘中记/盘后决/周末体检/研究<目标>/喂观点);三触点+三层研究(随时/触发R1-R6/固定周末体检);触发器进化闭环(周末体检漏网→新触发规则,R6价格异动触发首跑21条入队);人话报告层(术语字典+语义解释行);接线一致性测试(stable工具未接线=CI红);盘后入口甩掉旧LLM全池炸弹。
+- **M63 复盘编排全线闭环(16ab4be/54c6da5/59a6677/e0de4ea/d9cb2a4)**:六个工作流入口(盘前看/盘中记/盘后决/周末体检/研究<目标>/喂观点);底层 4 个模块命令(`m63_daily` 三 mode + weekly/research/opinion);三触点+三层研究(随时/触发R1-R6/固定周末体检);触发器进化闭环(周末体检漏网→新触发规则,R6价格异动触发首跑21条入队);人话报告层(术语字典+语义解释行);接线一致性测试(stable工具未接线=CI红);盘后入口甩掉旧LLM全池炸弹。
+- **M60 观察哨(0ec9fdd/fe93378/3b83917)**:已实现 Phase 0 观察清单 schema、Phase 1 盘后三类触发检测与面板跟进候选区、Phase 2 触发后带研究上下文的 LLM 确认层；Phase 2b 已新增第二时间入场影子台账，作为高位强势股二次入场盲区的 observe-only 记录面，不改官方信号。
+- **M58 出场通道(f7ba7ad/f0c852e/33e0bcc/d78d6b1/e43833b/e22eb86/eb5f297 等)**:已实现 exit_sweep 大样本通道、出场参数影子臂(日常对账现行 ×2.5 vs 候选 ×3.5/dd10)、网格回测 harness v1(T/M 两族 + 11 权重格点 + 门控/串联规则型)、LGBM walk-forward 关门测试，以及复权拼接污染修复工具(dry-run/备份/幂等)。
+- **M54 新闻层 v2(75afa70..026cdf9,约32提交)**:已实现 pluggable 多源正文采集、分级 cluster/signal、五层 token 金字塔、预算护栏与每日前向采集 CLI。按 `docs/dev/M54_OOS_PREREGISTER.md` §12-13 与后续 LEADER 口径，三个月 OOS 对纯新闻腿的判定为弱：h3d ICIR 0.167/19 天/分桶不单调，未过绝对门；pyramid 的省 token/触发窗口不损信号结论独立成立，但 v2-vs-legacy 仍需向前采集扩窗口。新闻+资金流融合回测延期至资金流滴灌攒够后再做，不把纯新闻腿结论外推到融合腿。
 - **M50 Serenity 瓶颈研究 skill + 强制报告门（Phase 0-3 released / non-promoting）**：交付独立 `SerenityChokepointReport`（不复用 `role="track"`、不进 `LongTermTeam` 聚合、无 score/vote，只出 `chokepoint_layer`/`evidence_tier`/`research_priority_band` 等档位字段）；`ResearchReportGate`（`backend/research/research_report_gate.py`）在 `deep_research.py` `write_text()` **之前**强制执行，blocked 报告物理上不落盘、不 record_decision_run、不建 memory candidate；`source_tier` 枚举 + 禁词表作为 Serenity 与 Gate 共享 module；扩 `ai_supply_chain_template` 加 `chain_layers`/`source_tier`/`substitute_risk`/`source_freshness`；M45 importer/`m45_track_hook_update`/`m45_falsification_scoreboard` 的 source-tier + evidence-level guard 同步增强防旁路漂移。数据覆盖判 warning（永不 blocked），blocked 靠 `DeepResearchReport.gate_status` 区分。70 M50 测试 green、lint/mypy clean、生产 signal 零改。
 - **M55 Serenity 收敛进 ATLAS 研究脊柱 + s-skill 优点归口（Phase 0-3 done 2026-07-02 `e45bbb1`）**：把 `serenity_chokepoint.analyze()`（事实休眠：default-off + 零 CLI/web/pipeline 入口）六步降级为跑在既有 ATLAS 脊柱上的**方法论透镜**，消除独立平行 analyzer；三个外部 Serenity skill 优点归口——zad 独立 reviewer→`review_loop`、zad 中文表达规范→`dossier` 全局输出规范、zad 发现硬门+定性/数字分轨→`research_report_gate` 检查项（从 SKILL.md 文字劝导升为门强制、additive）、zad 14 判据/10 红旗→`theme_hypothesis_engine`/`forward_thesis` 选择性吸收、muxuuu 工程打包→ATLAS 自有 test 套件；fadewalk 资金流维度按**层纯度红线弃/隔离**（不入研究层）；zad 估值引擎（PT/仓位/预期空间数字）违反 observe-only 不引入；README 诚实口径修正（公开面「Serenity 灰度中」与代码 default-off 不符 → 改为方法论就绪/待激活）。保持 `test_serenity_chokepoint` 隔离不变量（no score/vote、不 import decision/LongTermTeam）。`PYTHONPATH=. pytest -q` 1274 passed、生产 signal diff=0。
 

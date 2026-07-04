@@ -90,7 +90,7 @@ Same day, full batch:
 
 | You want to... | How MingCang plugs in |
 |---|---|
-| **Research one stock** | `mingcang stock 000001` pulls signals, news, labels, and the research-copilot shadow conclusion, and records your judgment as a `ResearchCase` |
+| **Research one stock** | `mingcang stock 000001` pulls the official signal, news, labels, and the research-copilot shadow conclusion as read-only research context |
 | **Track a long-term theme/sector** | Import theses from external analysts, institutions, or prosperity frameworks as a `ForwardThesis` with invalidation conditions and a review cadence, tracked over time |
 | **Stay on top of daily signals & risk** | Technical factors + LLM news sentiment generate the official signal; ATR trailing stops protect gains; panels show `protective_action`, ATR stop distance, exposure, and data/financial-quality flags |
 | **Review and compound experience** | After outcomes land, attribute results; falsification hits/misses are scored; only human-confirmed lessons promote into trusted memory |
@@ -184,7 +184,7 @@ python3 -m backend.agent.cli action research.deep.run \
 
 ### Check signals every day
 
-MingCang exposes six release workflows: pre-market read, intraday note, post-market decision, weekend health check, research `<target>`, and opinion intake:
+MingCang exposes six workflow entry points: pre-market read, intraday note, post-market decision, weekend health check, research `<target>`, and opinion intake. Under the hood these are 4 module commands, with `m63_daily` covering the pre-market / intraday / post-market modes:
 
 ```bash
 python3 -m backend.tools.m63_daily --mode premarket|intraday|postmarket
@@ -317,11 +317,30 @@ In plain terms, the four "cases" are: first record "why this is worth studying" 
 <details>
 <summary><b>Local and remote configuration</b></summary>
 
+Keep real keys only in your local `.env` or the deployment platform's secret manager. Do not commit them to Git. Start by copying `.env.example`:
+
 ```env
 AI_PROVIDER=local_cli
 DATABASE_URL=sqlite:////absolute/path/to/mingcang.db
 MINGCANG_AGENT_MODE=local
 ```
+
+### API keys
+
+The default local mode uses `AI_PROVIDER=local_cli`, preferring the logged-in local Codex CLI and requiring no cloud LLM key. Fill the keys below only when enabling the matching provider or feature:
+
+| Variable | Default | Fill when | Notes |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | empty | `AI_PROVIDER=anthropic` | Anthropic Claude runtime key; models are controlled by `ANTHROPIC_MODEL_FAST` / `ANTHROPIC_MODEL_CAPABLE`. |
+| `OPENAI_API_KEY` | empty | `AI_PROVIDER=openai` | OpenAI or compatible API key; DeepSeek, Moonshot, Tongyi Qianwen, Azure OpenAI, and similar gateways use this path. |
+| `OPENAI_BASE_URL` | empty | Using an OpenAI-compatible gateway | Empty means the official OpenAI endpoint; compatible providers use their own base URL. |
+| `TUSHARE_TOKEN` | empty | Tushare Pro A-share supplement is needed | Optional market-data provider; qfq daily fallback requires `TUSHARE_QFQ_ENABLED=true`. |
+| `TICKFLOW_API_KEY` | empty | `TICKFLOW_ENABLED=true` | TickFlow market-data key; enabled TickFlow becomes the preferred CN daily source. |
+| `IFIND_MCP_TOKEN` | empty | `IFIND_MCP_ENABLED=true` | iFinD MCP observe-only adapter token for explicit probes; not wired into the default ingestion chain. |
+| `TAVILY_API_KEY` | empty | Realtime news/search supplement is needed | Tavily supplements DB news when below `TAVILY_SUPPLEMENT_THRESHOLD`. |
+| `ANSPIRE_API_KEY` | empty | Deep research or strict event-news search | Anspire search key; window and limits are controlled by `ANSPIRE_NEWS_*`. |
+| `BARK_KEY` | empty | iOS Bark push is needed | Optional notification key; self-hosted services can override `BARK_SERVER`. |
+| `MINGCANG_AGENT_API_KEY` | empty | `MINGCANG_AGENT_MODE=remote` | Required for remote agent exposure; not needed in local mode. |
 
 Remote exposure is opt-in and read-only by default:
 

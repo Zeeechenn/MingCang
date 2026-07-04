@@ -308,7 +308,7 @@ def test_chat_context_answer_sanitizes_copilot_fields_for_ui(test_db, sample_sto
             "shadow_position_pct": 0.03,
             "risk_conflict": False,
             "official": {"recommendation": "观望", "composite_score": 31},
-            "risks": ["复核 /Users/example/mingcang/risk.md"],
+            "risks": ["复核 /path/to/mingcang/risk.md"],
             "validation_questions": ["读取 report_path=/private/tmp/question.json"],
         }, ensure_ascii=False),
     ))

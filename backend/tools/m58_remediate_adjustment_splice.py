@@ -69,12 +69,12 @@ Usage
 Dry-run (default — safe, no writes)::
 
     uv run python -m backend.tools.m58_remediate_adjustment_splice \\
-        --db-url sqlite:////Users/you/mingcang/mingcang.db
+        --db-url sqlite:////path/to/mingcang/mingcang.db
 
 Execute (backs up, then deletes primary-flagged rows)::
 
     uv run python -m backend.tools.m58_remediate_adjustment_splice \\
-        --db-url sqlite:////Users/you/mingcang/mingcang.db --execute
+        --db-url sqlite:////path/to/mingcang/mingcang.db --execute
 """
 from __future__ import annotations
 
