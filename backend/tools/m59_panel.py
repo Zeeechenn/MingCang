@@ -6,13 +6,20 @@ import argparse
 import json
 import math
 import sqlite3
+from collections import Counter
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from backend.config import default_sqlite_path
+from backend.data.degradation import recent_degradations
+from backend.data.fundamentals import compute_piotroski_factors
+from backend.data.market_features import FAKE_FEATURE_FLAGS
+from backend.tools import m52_flow_floor as flow_floor
 from backend.tools.m58_grid_backtest import regime_from_pool_equal_weight
 
 DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
@@ -40,6 +47,15 @@ def _connect_readonly(db_path: Path) -> sqlite3.Connection:
     con = sqlite3.connect(uri, uri=True)
     con.row_factory = sqlite3.Row
     return con
+
+
+def _open_readonly_orm_session(db_path: Path):
+    engine = create_engine(
+        f"sqlite:///file:{db_path.resolve()}?mode=ro&uri=true",
+        connect_args={"check_same_thread": False},
+    )
+    Session = sessionmaker(bind=engine)
+    return engine, Session()
 
 
 def _table_exists(con: sqlite3.Connection, table: str) -> bool:
@@ -132,6 +148,11 @@ def _safe_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _date_only(value: Any) -> str:
+    text = str(value)
+    return text[:10]
 
 
 def _latest_long_term_label(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str, Any]:
@@ -303,7 +324,79 @@ def _build_buy_candidates(con: sqlite3.Connection, as_of: str) -> dict[str, Any]
     return {"items": items, "flags": flags}
 
 
-def _build_position_health(con: sqlite3.Connection, as_of: str) -> dict[str, Any]:
+def _piotroski_display(db_session, symbol: str) -> str:
+    if db_session is None:
+        return "-"
+    try:
+        factors = compute_piotroski_factors(symbol, db_session)
+    except Exception:
+        return "-"
+    if not factors.get("available"):
+        return "-"
+    denominator = factors.get("score_denominator")
+    score = factors.get("score")
+    if score is None or denominator is None:
+        return "-"
+    return f"{score}/{denominator}"
+
+
+def _fund_flow_rows(con: sqlite3.Connection, symbol: str, as_of: str) -> list[dict[str, Any]] | None:
+    if not _table_exists(con, "fund_flows"):
+        return None
+    cols = _columns(con, "fund_flows")
+    required = {"symbol", "trade_date"}
+    if not required <= cols:
+        return None
+    value_cols = [column for column in ("main_net", "super_large_net", "large_net", "medium_net", "small_net") if column in cols]
+    if not value_cols:
+        return None
+    rows = con.execute(
+        f"""
+        SELECT trade_date, {', '.join(value_cols)}
+        FROM fund_flows
+        WHERE symbol = ? AND date(trade_date) <= date(?)
+        ORDER BY date(trade_date) DESC
+        LIMIT 65
+        """,
+        (symbol, as_of),
+    ).fetchall()
+    if not rows:
+        return None
+    return [dict(row) for row in reversed(rows)]
+
+
+def _s_flow_display(con: sqlite3.Connection, symbol: str, as_of: str) -> float | str:
+    try:
+        value = flow_floor.compute_s_flow_data(_fund_flow_rows(con, symbol, as_of))
+    except Exception:
+        return "-"
+    return "-" if value is None else round(float(value), 4)
+
+
+def _next_event_display(con: sqlite3.Connection, symbol: str, as_of: str) -> str:
+    if not _table_exists(con, "corporate_events"):
+        return "-"
+    cols = _columns(con, "corporate_events")
+    if not {"symbol", "event_type", "event_date"} <= cols:
+        return "-"
+    row = con.execute(
+        """
+        SELECT event_type, event_date
+        FROM corporate_events
+        WHERE symbol = ?
+          AND date(event_date) >= date(?)
+          AND date(event_date) <= date(?, '+90 day')
+        ORDER BY date(event_date) ASC
+        LIMIT 1
+        """,
+        (symbol, as_of, as_of),
+    ).fetchone()
+    if row is None:
+        return "-"
+    return f"{row['event_type']} {_date_only(row['event_date'])}"
+
+
+def _build_position_health(con: sqlite3.Connection, as_of: str, db_session=None) -> dict[str, Any]:
     if not _table_exists(con, "positions"):
         return {"items": [], "flags": ["missing:table:positions"]}
     required = {"symbol", "name", "quantity", "avg_cost", "stop_loss", "take_profit", "status"}
@@ -355,6 +448,9 @@ def _build_position_health(con: sqlite3.Connection, as_of: str) -> dict[str, Any
                 "take_profit": take_profit,
                 "distance_to_stop_loss_pct": stop_distance,
                 "distance_to_take_profit_pct": take_distance,
+                "piotroski": _piotroski_display(db_session, symbol),
+                "s_flow": _s_flow_display(con, symbol, as_of),
+                "next_event": _next_event_display(con, symbol, as_of),
                 "missing": missing,
                 "research_reference": _build_research_reference(con, symbol, as_of),
             }
@@ -542,6 +638,55 @@ def _build_stop_loss_buffer_ranking(position_items: list[dict[str, Any]]) -> dic
     }
 
 
+def _build_event_warnings(con: sqlite3.Connection, universe: list[dict[str, Any]], as_of: str) -> dict[str, Any]:
+    if not _table_exists(con, "corporate_events"):
+        return {"items": [], "flags": ["missing:table:corporate_events"]}
+    cols = _columns(con, "corporate_events")
+    required = {"symbol", "event_type", "event_date"}
+    missing = sorted(required - cols)
+    if missing:
+        return {"items": [], "flags": [f"missing:columns:{','.join(missing)}"]}
+    if not universe:
+        return {"items": [], "flags": ["missing:universe_symbols"]}
+
+    names = _stock_names(con)
+    universe_names = {str(item["symbol"]): item.get("name") for item in universe}
+    symbols = sorted(universe_names)
+    placeholders = ", ".join("?" for _ in symbols)
+    rows = con.execute(
+        f"""
+        SELECT symbol, event_type, event_date,
+               {('title' if 'title' in cols else "'' AS title")},
+               {('detail' if 'detail' in cols else "'' AS detail")}
+        FROM corporate_events
+        WHERE symbol IN ({placeholders})
+          AND event_type IN ('解禁', '定增', '监管')
+          AND date(event_date) >= date(?, '-7 day')
+          AND date(event_date) <= date(?, '+30 day')
+        ORDER BY date(event_date) ASC, symbol ASC
+        """,
+        [*symbols, as_of, as_of],
+    ).fetchall()
+    items = []
+    for row in rows:
+        symbol = str(row["symbol"])
+        name = universe_names.get(symbol) or names.get(symbol) or ""
+        event_date = _date_only(row["event_date"])
+        detail = row["detail"] or row["title"] or "-"
+        line = f"⚠️ {symbol} {name} {row['event_type']} {event_date} ({detail})"
+        items.append(
+            {
+                "symbol": symbol,
+                "name": name,
+                "event_type": row["event_type"],
+                "event_date": event_date,
+                "detail": detail,
+                "line": line,
+            }
+        )
+    return {"items": items, "flags": []}
+
+
 def _build_risk_warnings(
     con: sqlite3.Connection,
     as_of: str,
@@ -590,6 +735,7 @@ def _build_risk_warnings(
             "regime_reliable": regime_reliable,
             "note": MOMENTUM_TAIL_REGIME_NOTE,
         },
+        "event_warnings": _build_event_warnings(con, universe, as_of),
         "concentration": _build_concentration(position_items),
         "stop_loss_buffer_ranking": _build_stop_loss_buffer_ranking(position_items),
         "flags": flags + (["missing:table:prices"] if not _table_exists(con, "prices") else []),
@@ -784,6 +930,27 @@ def _build_summary(
     }
 
 
+def _build_data_health(db_session) -> dict[str, Any]:
+    events: list[dict[str, Any]] = []
+    if db_session is not None:
+        try:
+            events = recent_degradations(hours=48, db=db_session)
+        except Exception:
+            events = []
+    grouped = Counter(str(event.get("component")) for event in events if event.get("component"))
+    placeholders = {
+        name: meta
+        for name, meta in FAKE_FEATURE_FLAGS.items()
+        if isinstance(meta, dict) and meta.get("placeholder") is True
+    }
+    return {
+        "recent_degradations_by_component": dict(sorted(grouped.items())),
+        "recent_degradation_count": sum(grouped.values()),
+        "active_fake_feature_flags": placeholders,
+        "hours": 48,
+    }
+
+
 def build_panel(
     *,
     db_path: str | Path | None = None,
@@ -796,24 +963,30 @@ def build_panel(
     resolved_db = Path(db_path) if db_path is not None else default_sqlite_path()
     resolved_universe = Path(universe_path)
     resolved_confirm_dir = Path(confirm_output_dir) if confirm_output_dir is not None else Path(watchtower_output_dir)
-    with _connect_readonly(resolved_db) as con:
-        resolved_as_of = _latest_as_of(con, as_of)
-        buy_candidates = _build_buy_candidates(con, resolved_as_of)
-        position_health = _build_position_health(con, resolved_as_of)
-        risk_warnings = _build_risk_warnings(
-            con, resolved_as_of, resolved_universe, position_health["items"]
-        )
-        return {
-            "schema_version": "postmarket_panel.v1",
-            "summary": _build_summary(buy_candidates, position_health, risk_warnings),
-            "header": _build_header(con, resolved_as_of),
-            "buy_candidates": buy_candidates,
-            "position_health": position_health,
-            "risk_warnings": risk_warnings,
-            "review_attribution": _build_review_attribution(con, resolved_as_of),
-            "watchtower_followups": _build_watchtower_followups(Path(watchtower_output_dir)),
-            "watchtower_confirm": _build_watchtower_confirm(resolved_confirm_dir),
-        }
+    engine, db_session = _open_readonly_orm_session(resolved_db)
+    try:
+        with _connect_readonly(resolved_db) as con:
+            resolved_as_of = _latest_as_of(con, as_of)
+            buy_candidates = _build_buy_candidates(con, resolved_as_of)
+            position_health = _build_position_health(con, resolved_as_of, db_session)
+            risk_warnings = _build_risk_warnings(
+                con, resolved_as_of, resolved_universe, position_health["items"]
+            )
+            return {
+                "schema_version": "postmarket_panel.v1",
+                "summary": _build_summary(buy_candidates, position_health, risk_warnings),
+                "header": _build_header(con, resolved_as_of),
+                "buy_candidates": buy_candidates,
+                "position_health": position_health,
+                "risk_warnings": risk_warnings,
+                "review_attribution": _build_review_attribution(con, resolved_as_of),
+                "watchtower_followups": _build_watchtower_followups(Path(watchtower_output_dir)),
+                "watchtower_confirm": _build_watchtower_confirm(resolved_confirm_dir),
+                "data_health": _build_data_health(db_session),
+            }
+    finally:
+        db_session.close()
+        engine.dispose()
 
 
 def _format_research_reference(reference: dict[str, Any] | None) -> str:
@@ -865,14 +1038,15 @@ def render_markdown(panel: dict[str, Any]) -> str:
         [
             "",
             "## ② 持仓体检",
-            "| symbol | current | stop distance % | take distance % | missing | 研究参考 |",
-            "|---|---:|---:|---:|---|---|",
+            "| symbol | current | stop distance % | take distance % | piotroski | s_flow | next_event | missing | 研究参考 |",
+            "|---|---:|---:|---:|---|---:|---|---|---|",
         ]
     )
     for item in panel["position_health"]["items"]:
         lines.append(
             f"| {item['symbol']} | {item.get('current_price')} | {item.get('distance_to_stop_loss_pct')} | "
-            f"{item.get('distance_to_take_profit_pct')} | {', '.join(item.get('missing') or [])} | "
+            f"{item.get('distance_to_take_profit_pct')} | {item.get('piotroski')} | {item.get('s_flow')} | "
+            f"{item.get('next_event')} | {', '.join(item.get('missing') or [])} | "
             f"{_format_research_reference(item.get('research_reference'))} |"
         )
     risk = panel["risk_warnings"]
@@ -884,6 +1058,20 @@ def render_markdown(panel: dict[str, Any]) -> str:
             "",
             "## ③ 风险工程区",
             f"市场 regime: {risk['market_regime']['value']} ({risk['market_regime']['method']})",
+            "",
+            "避雷警示区:",
+        ]
+    )
+    event_warnings = risk.get("event_warnings", {})
+    if event_warnings.get("items"):
+        for item in event_warnings["items"]:
+            lines.append(item.get("line", ""))
+    else:
+        flags = event_warnings.get("flags") or []
+        lines.append("暂无" + (f" ({', '.join(flags)})" if flags else ""))
+    lines.extend(
+        [
+            "",
             f"动量末档:{momentum_tail['note']} (regime_reliable={momentum_tail['regime_reliable']})",
             "预警≠卖出指令",
             "| symbol | momentum | in_position |",
@@ -938,6 +1126,24 @@ def render_markdown(panel: dict[str, Any]) -> str:
                 f"| {item.get('symbol')} | {item.get('theme')} | {item.get('stance')} | "
                 f"{item.get('thesis_status')} | {item.get('reasoning')} |"
             )
+    data_health = panel.get("data_health", {})
+    grouped = data_health.get("recent_degradations_by_component") or {}
+    lines.extend(
+        [
+            "",
+            "## 数据健康区",
+            f"最近{data_health.get('hours', 48)}小时降级: {data_health.get('recent_degradation_count', 0)}",
+            "| component | count |",
+            "|---|---:|",
+        ]
+    )
+    if grouped:
+        for component, count in grouped.items():
+            lines.append(f"| {component} | {count} |")
+    else:
+        lines.append("| - | 0 |")
+    flags = data_health.get("active_fake_feature_flags") or {}
+    lines.append("FAKE_FEATURE_FLAGS: " + (", ".join(sorted(flags)) if flags else "-"))
     return "\n".join(lines)
 
 

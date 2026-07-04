@@ -40,6 +40,9 @@ STOCK_CONTEXT_KEYS = {
     # tracked/hint: 2026-07-03 UX 批次新增——未追踪股票不再返回全 null 假象
     "tracked",
     "hint",
+    # M61 P3-2: single-stock copilot/agent context receives unified evidence pack.
+    "context_pack",
+    "context_text",
 }
 WEB_DATA_COVERAGE_KEYS = {
     "generated_at",

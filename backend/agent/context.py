@@ -9,11 +9,23 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from backend.agent.security import agent_mode
+from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.database import LongTermLabel, Position, ResearchState, Signal, Stock
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _MINGCANG_MEMORY_DIR = Path.home() / ".mingcang" / "memory"
 DEFAULT_MEMORY_DIR = _MINGCANG_MEMORY_DIR
+STOCK_CONTEXT_PACK_SECTIONS = [
+    "price",
+    "financials",
+    "research_reports",
+    "announcements",
+    "corporate_events",
+    "holders",
+    "fund_flow",
+    "lhb",
+    "data_health",
+]
 _COUNT_TABLES = {
     "ai_memory",
     "stock_memory_items",
@@ -200,6 +212,18 @@ def _research_copilot(db: Session, symbol: str) -> dict | None:
         return None
 
 
+def _stock_context_pack(db: Session, symbol: str) -> tuple[dict, str]:
+    try:
+        pack = build_stock_context_pack(
+            symbol,
+            sections=STOCK_CONTEXT_PACK_SECTIONS,
+            db=db,
+        )
+        return pack, render_context_text(pack, 3000)
+    except Exception as exc:
+        return {"error": str(exc)}, ""
+
+
 def mingcang_stock_context(db: Session, symbol: str) -> dict:
     """Return the project context most useful before discussing one stock."""
     try:
@@ -252,6 +276,7 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
     else:
         tracked = True
         hint = None
+    context_pack, context_text = _stock_context_pack(db, symbol)
     return {
         "symbol": symbol,
         "tracked": tracked,
@@ -282,6 +307,8 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
             for row in layered
         ],
         "memory_context": memory_context,
+        "context_pack": context_pack,
+        "context_text": context_text,
     }
 
 
