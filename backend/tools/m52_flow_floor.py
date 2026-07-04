@@ -58,7 +58,7 @@ def compute_s_flow_data(raw: list[dict[str, Any]] | None) -> float | None:
     """
     if not raw:
         return None
-    values = [float(row.get("main_net") or 0.0) for row in raw]
+    values = [float(row.get("main_net")) for row in raw if row.get("main_net") is not None]
     if len(values) < 25:
         return None
 

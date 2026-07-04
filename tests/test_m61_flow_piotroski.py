@@ -2,9 +2,21 @@ from __future__ import annotations
 
 from datetime import datetime
 from math import tanh
+from types import SimpleNamespace
 from statistics import median
 
 from backend.data.database import FinancialMetric, FundFlow, HolderSnapshot
+
+
+def _flow_row(day: int, main_net: float | None) -> SimpleNamespace:
+    return SimpleNamespace(
+        trade_date=datetime(2026, 7, day),
+        main_net=main_net,
+        super_large_net=None,
+        large_net=None,
+        medium_net=None,
+        small_net=None,
+    )
 
 
 def _add_metric(db, symbol: str, report_date: str) -> None:
@@ -97,6 +109,105 @@ def test_compute_s_flow_data_known_series_and_empty_cases():
     assert compute_s_flow_data(None) is None
 
 
+def test_compute_s_flow_data_ignores_missing_main_net_but_keeps_zero():
+    from backend.tools.m52_flow_floor import compute_s_flow_data
+
+    valid_values = [0.0] + [float(idx * 100) for idx in range(1, 25)]
+    raw = [
+        {"trade_date": datetime(2026, 1, 1), "main_net": None},
+        *[
+            {"trade_date": datetime(2026, 1, idx + 2), "main_net": value}
+            for idx, value in enumerate(valid_values)
+        ],
+        {"trade_date": datetime(2026, 1, 27), "main_net": None},
+    ]
+
+    rolling = [sum(valid_values[idx : idx + 5]) for idx in range(0, len(valid_values) - 4)]
+    expected = tanh(sum(valid_values[-5:]) / (median(abs(value) for value in rolling) * 3))
+
+    assert compute_s_flow_data(raw) == expected
+    assert compute_s_flow_data(raw[:25]) is None
+
+
+def test_context_fund_flow_recent5_uses_last_five_valid_values(test_db, monkeypatch):
+    import backend.data.context_builder as context_builder
+
+    symbol = "601869"
+    for day, main_net in ((1, 100.0), (2, None), (3, 0.0), (4, -50.0), (5, 25.0), (6, 75.0)):
+        test_db.add(
+            FundFlow(
+                symbol=symbol,
+                trade_date=datetime(2026, 7, day),
+                main_net=main_net,
+                provider="unit",
+            )
+        )
+    test_db.commit()
+    monkeypatch.setattr(context_builder.flow_floor, "compute_s_flow_data", lambda raw: None)
+
+    pack = context_builder.build_stock_context_pack(
+        symbol,
+        as_of=datetime(2026, 7, 6),
+        sections=["fund_flow"],
+        db=test_db,
+    )
+
+    assert pack["fund_flow"]["recent5_main_net"] == 150.0
+
+
+def test_context_fund_flow_recent5_is_none_when_valid_values_are_insufficient(test_db):
+    import backend.data.context_builder as context_builder
+
+    symbol = "300308"
+    for day, main_net in ((1, None), (2, 0.0), (3, 10.0), (4, -5.0), (5, 20.0)):
+        test_db.add(
+            FundFlow(
+                symbol=symbol,
+                trade_date=datetime(2026, 7, day),
+                main_net=main_net,
+                provider="unit",
+            )
+        )
+    test_db.commit()
+
+    pack = context_builder.build_stock_context_pack(
+        symbol,
+        as_of=datetime(2026, 7, 5),
+        sections=["fund_flow"],
+        db=test_db,
+    )
+
+    assert pack["fund_flow"]["recent5_main_net"] is None
+
+
+def test_m61_fund_flow_features_use_last_five_valid_values_and_keep_zero():
+    from backend.tools.m61_quant_features import _fund_flow_features
+
+    rows = [
+        _flow_row(day, main_net)
+        for day, main_net in ((1, 100.0), (2, None), (3, 0.0), (4, -50.0), (5, 25.0), (6, 75.0))
+    ]
+
+    features = _fund_flow_features(rows, datetime(2026, 7, 6))
+
+    assert features["main_net_5d_sum"] == 150.0
+
+
+def test_m61_fund_flow_features_require_five_valid_values():
+    from math import isnan
+
+    from backend.tools.m61_quant_features import _fund_flow_features
+
+    rows = [
+        _flow_row(day, main_net)
+        for day, main_net in ((1, None), (2, 0.0), (3, 10.0), (4, -5.0), (5, 20.0))
+    ]
+
+    features = _fund_flow_features(rows, datetime(2026, 7, 5))
+
+    assert isnan(features["main_net_5d_sum"])
+
+
 def test_fetch_flow_data_pit_excludes_rows_after_as_of(test_db, monkeypatch):
     import backend.tools.m52_flow_floor as flow_floor
 
@@ -161,3 +272,64 @@ def test_piotroski_no_new_shares_missing_history_is_na_and_excluded(test_db):
 
     assert result["factors"]["no_new_shares"] is None
     assert result["score_denominator"] == 8
+
+
+def test_piotroski_analyst_denominator_9_behavior_is_unchanged(monkeypatch):
+    import backend.agents.long_term.piotroski_analyst as analyst
+
+    monkeypatch.setattr(analyst.settings, "long_term_piotroski_enabled", True)
+    monkeypatch.setattr(analyst.settings, "piotroski_strong_threshold", 7)
+    monkeypatch.setattr(analyst.settings, "piotroski_weak_threshold", 4)
+    monkeypatch.setattr(analyst, "build_stock_context_pack", lambda *args, **kwargs: {})
+    monkeypatch.setattr(analyst, "render_context_text", lambda *args, **kwargs: "")
+    monkeypatch.setattr(analyst, "lookup_caveat", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        analyst,
+        "compute_piotroski_factors",
+        lambda symbol, db: {
+            "available": True,
+            "score": 7,
+            "score_denominator": 9,
+            "factors": {"roa_positive": True},
+            "report_period": "2026-03-31",
+            "comparison_period": "2025-03-31",
+            "raw": {},
+        },
+    )
+
+    report = analyst.analyze("300548", db=None)
+
+    assert report.label_vote == "值得持有"
+    assert report.score == 55.6
+    assert "7/9" in report.key_findings[0]
+
+
+def test_piotroski_analyst_uses_normalized_denominator_for_vote_score_and_text(monkeypatch):
+    import backend.agents.long_term.piotroski_analyst as analyst
+
+    monkeypatch.setattr(analyst.settings, "long_term_piotroski_enabled", True)
+    monkeypatch.setattr(analyst.settings, "piotroski_strong_threshold", 7)
+    monkeypatch.setattr(analyst.settings, "piotroski_weak_threshold", 5)
+    monkeypatch.setattr(analyst, "build_stock_context_pack", lambda *args, **kwargs: {})
+    monkeypatch.setattr(analyst, "render_context_text", lambda *args, **kwargs: "")
+    monkeypatch.setattr(analyst, "lookup_caveat", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        analyst,
+        "compute_piotroski_factors",
+        lambda symbol, db: {
+            "available": True,
+            "score": 5,
+            "score_denominator": 8,
+            "factors": {"roa_positive": True, "no_new_shares": None},
+            "report_period": "2026-03-31",
+            "comparison_period": "2025-03-31",
+            "raw": {},
+        },
+    )
+
+    report = analyst.analyze("300548", db=None)
+
+    assert report.label_vote == "观望"
+    assert report.score == 25.0
+    assert "5/8" in report.key_findings[0]
+    assert "股本历史缺失" in report.key_findings[0]

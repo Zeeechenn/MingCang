@@ -397,7 +397,7 @@ def _build_fund_flow(symbol: str, as_of: datetime, db) -> dict:
     raw = _fetch_flow_data_for_db(symbol, as_of, db)
     if not raw:
         return {"empty": True}
-    values = [float(row.get("main_net") or 0.0) for row in raw]
+    values = [float(row.get("main_net")) for row in raw if row.get("main_net") is not None]
     recent5 = sum(values[-5:]) if len(values) >= 5 else None
     return {
         "s_flow": flow_floor.compute_s_flow_data(raw),

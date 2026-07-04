@@ -43,18 +43,25 @@ _FACTOR_LABELS = {
 }
 
 
-def _score_to_label_vote(score: int) -> VoteLabel:
-    """Map F-score integer to a label vote string."""
-    if score >= settings.piotroski_strong_threshold:
+def _score_to_label_vote(normalized_score: float) -> VoteLabel:
+    """Map normalized F-score ratio to a label vote string."""
+    if normalized_score >= settings.piotroski_strong_threshold / 9:
         return "值得持有"
-    if score <= settings.piotroski_weak_threshold:
+    if normalized_score <= settings.piotroski_weak_threshold / 9:
         return "规避"
     return "观望"
 
 
-def _score_to_signal_score(score: int) -> float:
-    """0-9 映射到 -100 ~ +100（中位 4.5 = 0）"""
-    return round((score - 4.5) / 4.5 * 100, 1)
+def _score_to_signal_score(normalized_score: float) -> float:
+    """0-1 映射到 -100 ~ +100（中位 0.5 = 0）"""
+    return round((normalized_score - 0.5) / 0.5 * 100, 1)
+
+
+def _score_summary(score: int, denominator: int) -> str:
+    summary = f"Piotroski F-Score {score}/{denominator}"
+    if denominator < 9:
+        summary += " (股本历史缺失,N/A 因子已从分母剔除)"
+    return summary
 
 
 def _template_findings(factors: dict[str, bool | None], raw: dict) -> list[str]:
@@ -95,23 +102,34 @@ def analyze(symbol: str, db) -> LongTermReport:
             raw=result,
         )
 
-    score = result["score"]               # 0-9
+    score = result["score"]
+    denominator_value = result.get("score_denominator", 9)
+    denominator = int(denominator_value) if denominator_value is not None else 0
+    if denominator <= 0:
+        result["context_text"] = context_text
+        return LongTermReport(
+            role="quality", score=0, confidence=0,
+            label_vote="观望",
+            key_findings=["财务数据不足: Piotroski 可用因子分母为 0"],
+            raw=result,
+        )
+    normalized_score = score / denominator
     factors = result["factors"]
     raw = result.get("raw", {})
 
-    label_vote = _score_to_label_vote(score)
-    signal_score = _score_to_signal_score(score)
+    label_vote = _score_to_label_vote(normalized_score)
+    signal_score = _score_to_signal_score(normalized_score)
     confidence = abs(signal_score) / 100
-    findings = _template_findings(factors, raw)
+    findings = ([_score_summary(score, denominator)] + _template_findings(factors, raw))[:3]
 
     # 边缘 5-6 分时可触发 LLM 生成更精炼解释（v1 先用模板）
     # TODO: 上线后若发现模板 findings 质量不够，再接入 LLM
 
-    logger.info("piotroski %s: F=%d/9 → %s", symbol, score, label_vote)
+    logger.info("piotroski %s: F=%d/%d → %s", symbol, score, denominator, label_vote)
 
     raw_payload = {
         "f_score": score,
-        "score_denominator": result.get("score_denominator", 9),
+        "score_denominator": denominator,
         "factors": factors,
         "report_period": result.get("report_period"),
         "comparison_period": result.get("comparison_period"),
@@ -124,7 +142,7 @@ def analyze(symbol: str, db) -> LongTermReport:
     # 不覆盖 label_vote — 让 LLM 自己看到原始投票 + 提示后判断。
     caveat = lookup_caveat(db, "piotroski", label_vote)
     if caveat:
-        findings = [f"⚠️ 偏差提示: {caveat}"] + findings
+        findings = ([f"⚠️ 偏差提示: {caveat}"] + findings)[:3]
         raw_payload["bias_caveat"] = caveat
 
     return LongTermReport(

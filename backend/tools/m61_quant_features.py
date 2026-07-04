@@ -259,10 +259,11 @@ def _fund_flow_features(rows: list[FundFlow], as_of: pd.Timestamp) -> dict[str, 
         for row in visible[-65:]
     ]
     s_flow = compute_s_flow_data(raw)
-    recent_main = [row.main_net for row in visible[-5:] if row.main_net is not None]
+    recent_main = [row.main_net for row in visible if row.main_net is not None]
+    recent5_main = recent_main[-5:] if len(recent_main) >= 5 else None
     return {
         "s_flow": float(s_flow) if s_flow is not None else np.nan,
-        "main_net_5d_sum": float(sum(recent_main)) if recent_main else np.nan,
+        "main_net_5d_sum": float(sum(recent5_main)) if recent5_main is not None else np.nan,
     }
 
 
