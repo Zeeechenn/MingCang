@@ -26,12 +26,18 @@ OUTPUT_DIR = REPO_ROOT / "paper_trading" / "m63_out"
 DEFAULT_QUEUE_PATH = Path.home() / ".mingcang" / "m63_research_queue.json"
 DEFAULT_TRIGGER_HISTORY_PATH = Path.home() / ".mingcang" / "m63_trigger_history.json"
 DEFAULT_UNIVERSE_PATH = REPO_ROOT / "paper_trading" / "test2_universe.json"
-# M63 关注面 = test2 实盘跟踪池 ∪ 标的1(A老师池) ∪ 持仓;不含全库 active(145支刷屏教训)
+# M63 关注面 = test2 实盘跟踪池 ∪ 标的1(赛道研究员池) ∪ 持仓;不含全库 active(145支刷屏教训)
 DEFAULT_UNIVERSE_PATHS: tuple[Path, ...] = (
     REPO_ROOT / "paper_trading" / "test2_universe.json",
     REPO_ROOT / "paper_trading" / "biaodi1_universe.json",
 )
 AUTO_REFRESH_LIMIT = 5
+# R6 thresholds come from 2026-07-05 weekly sweep evidence: 15 misses at ±10-19%/week;
+# keep subject to weekly-audit tuning.
+R6_CHG_5D_PCT = 10.0
+R6_CHG_1D_PCT = 7.0
+R6_DAMPER_DAYS = 5
+R6_RULE = "R6_price_move"
 
 
 def _connect(db_path: str | Path | None = None) -> sqlite3.Connection:
@@ -112,6 +118,34 @@ def _latest_price(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str,
         (symbol, as_of),
     ).fetchone()
     return dict(row) if row else None
+
+
+def _price_move(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str, Any] | None:
+    if not _table_exists(con, "prices") or not {"symbol", "date", "close"} <= _columns(con, "prices"):
+        return None
+    rows = con.execute(
+        """
+        SELECT date, close
+        FROM prices
+        WHERE symbol = ? AND date <= ? AND close IS NOT NULL
+        ORDER BY date DESC
+        LIMIT 6
+        """,
+        (symbol, as_of),
+    ).fetchall()
+    if len(rows) < 2 or not rows[0]["close"] or not rows[1]["close"]:
+        return None
+    latest = float(rows[0]["close"])
+    chg_1d = (latest / float(rows[1]["close"]) - 1) * 100
+    chg_5d = None
+    if len(rows) >= 6 and rows[5]["close"]:
+        chg_5d = (latest / float(rows[5]["close"]) - 1) * 100
+    return {
+        "symbol": symbol,
+        "date": str(rows[0]["date"])[:10],
+        "chg_1d": chg_1d,
+        "chg_5d": chg_5d,
+    }
 
 
 def _latest_signal_stop(con: sqlite3.Connection, symbol: str, as_of: str) -> float | None:
@@ -488,8 +522,9 @@ def _record_watchtower_history(
     *,
     as_of: str,
     history_path: Path = DEFAULT_TRIGGER_HISTORY_PATH,
+    history: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    history = _load_history(history_path)
+    history = _load_history(history_path) if history is None else history
     existing = {
         (item.get("date"), item.get("target"), item.get("trigger_type"))
         for item in history
@@ -505,6 +540,110 @@ def _record_watchtower_history(
     history = [item for item in history if date.fromisoformat(str(item["date"])) >= cutoff]
     _save_history(history, history_path)
     return history
+
+
+def _history_rule(item: dict[str, Any]) -> str:
+    return str(item.get("trigger_rule") or item.get("trigger_type") or "")
+
+
+def _trading_days_since(con: sqlite3.Connection, symbol: str, *, start: str, end: str) -> int:
+    if not _table_exists(con, "prices") or not {"symbol", "date"} <= _columns(con, "prices"):
+        return (date.fromisoformat(end) - date.fromisoformat(start)).days
+    row = con.execute(
+        """
+        SELECT COUNT(DISTINCT date) AS count
+        FROM prices
+        WHERE symbol = ? AND date(date) > date(?) AND date(date) <= date(?)
+        """,
+        (symbol, start, end),
+    ).fetchone()
+    return int(row["count"] or 0) if row else 0
+
+
+def _r6_recently_recorded(con: sqlite3.Connection, history: list[dict[str, Any]], symbol: str, *, as_of: str) -> bool:
+    dates: list[str] = []
+    for item in history:
+        if str(item.get("target")) != symbol or _history_rule(item) != R6_RULE or not item.get("date"):
+            continue
+        try:
+            item_date = date.fromisoformat(str(item["date"])[:10])
+        except ValueError:
+            continue
+        if item_date <= date.fromisoformat(as_of):
+            dates.append(item_date.isoformat())
+    if not dates:
+        return False
+    return _trading_days_since(con, symbol, start=max(dates), end=as_of) <= R6_DAMPER_DAYS
+
+
+def _record_r6_history(
+    history: list[dict[str, Any]],
+    *,
+    as_of: str,
+    symbol: str,
+    chg_1d: float,
+    chg_5d: float | None,
+    reason: str,
+) -> bool:
+    key = (as_of, symbol, R6_RULE)
+    existing = {
+        (str(item.get("date")), str(item.get("target")), _history_rule(item))
+        for item in history
+    }
+    if key in existing:
+        return False
+    history.append(
+        {
+            "date": as_of,
+            "target": symbol,
+            "trigger_type": R6_RULE,
+            "trigger_rule": R6_RULE,
+            "reason": reason,
+            "chg_1d_pct": round(chg_1d, 2),
+            "chg_5d_pct": None if chg_5d is None else round(chg_5d, 2),
+        }
+    )
+    return True
+
+
+def _run_r6_price_moves(
+    con: sqlite3.Connection,
+    queue: list[dict[str, Any]],
+    history: list[dict[str, Any]],
+    *,
+    as_of: str,
+    symbols: set[str],
+) -> list[dict[str, Any]]:
+    enqueued: list[dict[str, Any]] = []
+    history_changed = False
+    for symbol in sorted(symbols):
+        move = _price_move(con, symbol, as_of)
+        if move is None:
+            continue
+        chg_1d = float(move["chg_1d"])
+        chg_5d = move.get("chg_5d")
+        chg_5d_value = None if chg_5d is None else float(chg_5d)
+        if abs(chg_1d) < R6_CHG_1D_PCT and (chg_5d_value is None or abs(chg_5d_value) < R6_CHG_5D_PCT):
+            continue
+        if _r6_recently_recorded(con, history, symbol, as_of=as_of):
+            continue
+        direction_source = chg_1d if abs(chg_1d) >= R6_CHG_1D_PCT else float(chg_5d_value or 0)
+        direction = "急涨(考虑观察哨确认/第二时间评估)" if direction_source > 0 else "急跌(考虑持仓决断/避雷复核)"
+        reason = f"价格异动 1日{chg_1d:+.1f}%/5日{(chg_5d_value or 0):+.1f}% {direction}"
+        history_changed = _record_r6_history(
+            history,
+            as_of=as_of,
+            symbol=symbol,
+            chg_1d=chg_1d,
+            chg_5d=chg_5d_value,
+            reason=reason,
+        ) or history_changed
+        if _enqueue(queue, as_of=as_of, target=symbol, reason=reason, trigger_rule=R6_RULE):
+            enqueued.append(queue[-1])
+    if history_changed:
+        cutoff = date.fromisoformat(as_of) - timedelta(days=14)
+        history[:] = [item for item in history if date.fromisoformat(str(item["date"])[:10]) >= cutoff]
+    return enqueued
 
 
 def _opinion_change_stub(*, as_of: str) -> list[dict[str, Any]]:
@@ -527,6 +666,7 @@ def run_trigger_router(
     queue = load_queue(queue_path)
     auto_refreshed: list[str] = []
     enqueued: list[dict[str, Any]] = []
+    history = _load_history(history_path)
     with _connect(db_path) as con:
         universe = _universe_symbols(con) | _holding_symbols(con)
         expired = _expired_label_symbols(con, day, universe)
@@ -569,8 +709,9 @@ def run_trigger_router(
                     trigger_rule="R2_major_event",
                 ):
                     enqueued.append(queue[-1])
+        enqueued.extend(_run_r6_price_moves(con, queue, history, as_of=day, symbols=universe))
     if watchtower is not None:
-        history = _record_watchtower_history(watchtower, as_of=day, history_path=history_path)
+        history = _record_watchtower_history(watchtower, as_of=day, history_path=history_path, history=history)
         recent_start = date.fromisoformat(day) - timedelta(days=4)
         distinct_days: dict[str, set[str]] = {}
         for item in history:
@@ -590,6 +731,7 @@ def run_trigger_router(
     for item in _opinion_change_stub(as_of=day):
         if _enqueue(queue, as_of=day, **item):
             enqueued.append(queue[-1])
+    _save_history(history, history_path)
     save_queue(queue, queue_path)
     pending = [item for item in queue if item.get("status") == "pending"]
     return {

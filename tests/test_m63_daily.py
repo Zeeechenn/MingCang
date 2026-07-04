@@ -235,6 +235,172 @@ def test_trigger_r2_enqueues_with_dedup(tmp_path):
     assert len([item for item in second["pending"] if item["trigger_rule"] == "R2_major_event"]) == 1
 
 
+def _write_universe(path: Path, symbols: list[str]) -> None:
+    path.write_text(
+        json.dumps({"stocks": [{"symbol": symbol, "name": symbol} for symbol in symbols]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def _replace_prices(db_path: Path, symbol: str, closes: list[tuple[str, float]]) -> None:
+    con = sqlite3.connect(db_path)
+    try:
+        con.execute("DELETE FROM prices WHERE symbol = ?", (symbol,))
+        con.executemany(
+            """
+            INSERT INTO prices(symbol, date, open, high, low, close, volume, atr14)
+            VALUES (?, ?, ?, ?, ?, ?, 10000, 2.5)
+            """,
+            [(symbol, day, close, close, close, close) for day, close in closes],
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_trigger_r6_enqueues_5d_mover_and_records_history(tmp_path, monkeypatch):
+    db_path = _db(tmp_path)
+    universe_path = tmp_path / "universe.json"
+    _write_universe(universe_path, ["300308"])
+    monkeypatch.setattr(m63_daily, "DEFAULT_UNIVERSE_PATHS", (universe_path,))
+    _replace_prices(
+        db_path,
+        "300308",
+        [
+            ("2026-06-29", 100),
+            ("2026-06-30", 99),
+            ("2026-07-01", 97),
+            ("2026-07-02", 94),
+            ("2026-07-03", 91),
+            ("2026-07-06", 88),
+        ],
+    )
+    queue_path = tmp_path / "queue.json"
+    history_path = tmp_path / "history.json"
+
+    result = m63_daily.run_trigger_router(
+        db_path=db_path,
+        as_of="2026-07-06",
+        queue_path=queue_path,
+        history_path=history_path,
+        allow_auto_refresh=False,
+    )
+
+    r6_items = [item for item in result["pending"] if item["trigger_rule"] == "R6_price_move"]
+    assert len(r6_items) == 1
+    assert r6_items[0]["target"] == "300308"
+    assert "价格异动 1日-3.3%/5日-12.0%" in r6_items[0]["reason"]
+    assert "急跌(考虑持仓决断/避雷复核)" in r6_items[0]["reason"]
+    history = json.loads(history_path.read_text(encoding="utf-8"))
+    assert any(item["target"] == "300308" and item["trigger_type"] == "R6_price_move" for item in history)
+
+
+def test_trigger_r6_damper_blocks_duplicate_after_done_next_day(tmp_path, monkeypatch):
+    db_path = _db(tmp_path)
+    universe_path = tmp_path / "universe.json"
+    _write_universe(universe_path, ["300308"])
+    monkeypatch.setattr(m63_daily, "DEFAULT_UNIVERSE_PATHS", (universe_path,))
+    _replace_prices(
+        db_path,
+        "300308",
+        [
+            ("2026-06-29", 100),
+            ("2026-06-30", 99),
+            ("2026-07-01", 97),
+            ("2026-07-02", 94),
+            ("2026-07-03", 91),
+            ("2026-07-06", 88),
+            ("2026-07-07", 86),
+        ],
+    )
+    queue_path = tmp_path / "queue.json"
+    history_path = tmp_path / "history.json"
+
+    first = m63_daily.run_trigger_router(
+        db_path=db_path,
+        as_of="2026-07-06",
+        queue_path=queue_path,
+        history_path=history_path,
+        allow_auto_refresh=False,
+    )
+    queue = m63_daily.load_queue(queue_path)
+    queue[0]["status"] = "done"
+    queue[0]["done_at"] = "2026-07-06"
+    m63_daily.save_queue(queue, queue_path)
+    second = m63_daily.run_trigger_router(
+        db_path=db_path,
+        as_of="2026-07-07",
+        queue_path=queue_path,
+        history_path=history_path,
+        allow_auto_refresh=False,
+    )
+
+    assert sum(item["trigger_rule"] == "R6_price_move" for item in first["pending"]) == 1
+    assert sum(item["trigger_rule"] == "R6_price_move" for item in m63_daily.load_queue(queue_path)) == 1
+    assert not [item for item in second["enqueued"] if item["trigger_rule"] == "R6_price_move"]
+
+
+def test_trigger_r6_below_threshold_does_not_fire(tmp_path, monkeypatch):
+    db_path = _db(tmp_path)
+    universe_path = tmp_path / "universe.json"
+    _write_universe(universe_path, ["300308"])
+    monkeypatch.setattr(m63_daily, "DEFAULT_UNIVERSE_PATHS", (universe_path,))
+    _replace_prices(
+        db_path,
+        "300308",
+        [
+            ("2026-06-29", 100),
+            ("2026-06-30", 100),
+            ("2026-07-01", 99),
+            ("2026-07-02", 98),
+            ("2026-07-03", 97),
+            ("2026-07-06", 96),
+        ],
+    )
+
+    result = m63_daily.run_trigger_router(
+        db_path=db_path,
+        as_of="2026-07-06",
+        queue_path=tmp_path / "queue.json",
+        history_path=tmp_path / "history.json",
+        allow_auto_refresh=False,
+    )
+
+    assert not [item for item in result["pending"] if item["trigger_rule"] == "R6_price_move"]
+
+
+def test_trigger_r6_fires_on_1d_branch(tmp_path, monkeypatch):
+    db_path = _db(tmp_path)
+    universe_path = tmp_path / "universe.json"
+    _write_universe(universe_path, ["300308"])
+    monkeypatch.setattr(m63_daily, "DEFAULT_UNIVERSE_PATHS", (universe_path,))
+    _replace_prices(
+        db_path,
+        "300308",
+        [
+            ("2026-06-29", 100),
+            ("2026-06-30", 101),
+            ("2026-07-01", 99),
+            ("2026-07-02", 100),
+            ("2026-07-03", 99),
+            ("2026-07-06", 107),
+        ],
+    )
+
+    result = m63_daily.run_trigger_router(
+        db_path=db_path,
+        as_of="2026-07-06",
+        queue_path=tmp_path / "queue.json",
+        history_path=tmp_path / "history.json",
+        allow_auto_refresh=False,
+    )
+
+    r6_items = [item for item in result["pending"] if item["trigger_rule"] == "R6_price_move"]
+    assert len(r6_items) == 1
+    assert "1日+8.1%/5日+7.0%" in r6_items[0]["reason"]
+    assert "急涨(考虑观察哨确认/第二时间评估)" in r6_items[0]["reason"]
+
+
 def test_queue_file_round_trip(tmp_path):
     path = tmp_path / "queue.json"
     queue = [
