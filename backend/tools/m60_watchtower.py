@@ -49,6 +49,8 @@ TRIGGER_VOLUME_RATIO = "volume_ratio_anomaly"
 TRIGGER_NEW_HIGH = "new_high_breakout"
 TRIGGER_SECTOR_RESONANCE = "sector_resonance"
 TRIGGER_NEWS = "news_trigger"
+TRIGGER_LHB_APPEARANCE = "lhb_appearance"
+TRIGGER_FUND_FLOW_SURGE = "fund_flow_surge"
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +354,87 @@ def compute_news_trigger(
 
 
 # ---------------------------------------------------------------------------
+# d. M61 category trigger supplements (DB-only)
+# ---------------------------------------------------------------------------
+
+def _lhb_trigger_rows(con: sqlite3.Connection, symbol: str, as_of: str) -> list[dict[str, Any]]:
+    if not _table_exists(con, "lhb_records"):
+        return []
+    cols = _columns(con, "lhb_records")
+    required = {"symbol", "trade_date"}
+    if not required <= cols:
+        return []
+    rows = con.execute(
+        """
+        SELECT trade_date,
+               reason,
+               net_buy_amount
+        FROM lhb_records
+        WHERE symbol = ?
+          AND date(trade_date) = date(?)
+        ORDER BY id ASC
+        """,
+        (symbol, as_of),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def compute_fund_flow_surge(
+    con: sqlite3.Connection,
+    symbol: str,
+    as_of: str,
+    *,
+    min_rows: int = 25,
+    lookback_rows: int = 60,
+    recent_days: int = 5,
+    z_threshold: float = 2.0,
+) -> dict[str, Any] | None:
+    if not _table_exists(con, "fund_flows"):
+        return None
+    cols = _columns(con, "fund_flows")
+    if not {"symbol", "trade_date", "main_net"} <= cols:
+        return None
+    rows = con.execute(
+        """
+        SELECT trade_date, main_net
+        FROM fund_flows
+        WHERE symbol = ?
+          AND date(trade_date) <= date(?)
+          AND main_net IS NOT NULL
+        ORDER BY date(trade_date) DESC
+        LIMIT ?
+        """,
+        (symbol, as_of, lookback_rows),
+    ).fetchall()
+    values = [float(row["main_net"]) for row in reversed(rows)]
+    if len(values) < min_rows or len(values) < recent_days * 2:
+        return None
+
+    recent_sum = sum(values[-recent_days:])
+    historical = values[:-recent_days]
+    rolling_sums = [
+        sum(historical[idx : idx + recent_days])
+        for idx in range(0, len(historical) - recent_days + 1)
+    ]
+    if len(rolling_sums) < 2:
+        return None
+    mean = statistics.fmean(rolling_sums)
+    stdev = statistics.pstdev(rolling_sums)
+    if stdev <= 0:
+        return None
+    z_score = (recent_sum - mean) / stdev
+    if abs(z_score) < z_threshold:
+        return None
+    return {
+        "z_score": z_score,
+        "recent_5d_main_net_sum": recent_sum,
+        "distribution_mean": mean,
+        "distribution_stdev": stdev,
+        "rows_used": len(values),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -438,6 +521,38 @@ def build_watchtower_report(
                         "trigger_type": TRIGGER_NEW_HIGH,
                         "value": pv["close"],
                         "detail": {"window_days": pv["new_high_window_days"]},
+                        "price": price_snapshot,
+                    }
+                )
+            for row in _lhb_trigger_rows(con, symbol, resolved_as_of):
+                reason = row.get("reason") or "未列明"
+                card = f"龙虎榜上榜: {reason}, 净买 {row.get('net_buy_amount')}"
+                triggers.append(
+                    {
+                        "symbol": symbol,
+                        "themes": themes,
+                        "trigger_type": TRIGGER_LHB_APPEARANCE,
+                        "value": row.get("net_buy_amount"),
+                        "detail": {
+                            "trade_date": row.get("trade_date"),
+                            "reason": row.get("reason"),
+                            "net_buy_amount": row.get("net_buy_amount"),
+                        },
+                        "card": card,
+                        "price": price_snapshot,
+                    }
+                )
+            flow = compute_fund_flow_surge(con, symbol, resolved_as_of)
+            if flow is not None:
+                z_score = flow["z_score"]
+                triggers.append(
+                    {
+                        "symbol": symbol,
+                        "themes": themes,
+                        "trigger_type": TRIGGER_FUND_FLOW_SURGE,
+                        "value": z_score,
+                        "detail": flow,
+                        "card": f"主力资金异动 z={z_score:.2f}",
                         "price": price_snapshot,
                     }
                 )
@@ -555,8 +670,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append("| symbol | theme | 触发类型 | 数值 | 当日收盘 |")
         lines.append("|---|---|---|---:|---:|")
         for trigger in report["triggers"]:
+            trigger_label = trigger.get("card") or trigger["trigger_type"]
             lines.append(
-                f"| {trigger['symbol']} | {','.join(trigger['themes'])} | {trigger['trigger_type']} | "
+                f"| {trigger['symbol']} | {','.join(trigger['themes'])} | {trigger_label} | "
                 f"{trigger['value']} | {trigger['price'].get('close')} |"
             )
     lines.extend(["", "## 今日无触发标的"])

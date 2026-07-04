@@ -109,3 +109,23 @@ class FundFlow(Base):
     small_net: Mapped[float | None] = mapped_column(Float, nullable=True)
     provider: Mapped[str] = mapped_column(String)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class OverseasSnapshot(Base):
+    """Research-only overseas leading-indicator snapshot."""
+
+    __tablename__ = "overseas_snapshots"
+    __table_args__ = (
+        UniqueConstraint("symbol", "snap_date", "provider", name="uq_overseas_snapshot_symbol_date_provider"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String, index=True)
+    name: Mapped[str] = mapped_column(String)
+    snap_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    close: Mapped[float | None] = mapped_column(Float, nullable=True)
+    chg_pct_1d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    chg_pct_20d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider: Mapped[str] = mapped_column(String)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

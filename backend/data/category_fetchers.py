@@ -11,7 +11,13 @@ import requests
 
 from backend.config import settings
 from backend.data.category_registry import CategoryProvider, FetchRequest, register_category_provider
-from backend.data.ifind_mcp import NEWS_MCP_ID, STOCK_MCP_ID, IfindMcpClient, parse_ifind_mcp_text
+from backend.data.ifind_mcp import (
+    GLOBAL_STOCK_MCP_ID,
+    NEWS_MCP_ID,
+    STOCK_MCP_ID,
+    IfindMcpClient,
+    parse_ifind_mcp_text,
+)
 from backend.data.orm import _utcnow
 
 logger = logging.getLogger(__name__)
@@ -23,6 +29,12 @@ EASTMONEY_HEADERS = {
     "Referer": "https://data.eastmoney.com/",
 }
 _STOCK_IFIND_CLIENT: IfindMcpClient | None = None
+OVERSEAS_SYMBOLS = (
+    ("MRVL", "Marvell"),
+    ("MU", "美光"),
+    ("NVDA", "英伟达"),
+    ("AVGO", "博通"),
+)
 
 
 def _stock_ifind_client() -> IfindMcpClient:
@@ -760,6 +772,58 @@ def fetch_fund_flow_eastmoney_fflow(request: FetchRequest) -> list[dict]:
     return rows
 
 
+def _overseas_row(item: dict[str, Any], symbol: str, name: str, fetched_at: datetime) -> dict | None:
+    date_value = _first_present(item, ("日期", "交易日期", "date", "snap_date"))
+    close = _to_float(_first_present(item, ("收盘价", "收盘", "最新价", "close")))
+    if date_value is None or close is None:
+        return None
+    chg_pct_1d = _to_float(_first_present(item, ("涨跌幅", "日涨跌幅", "1日涨跌幅", "chg_pct_1d")))
+    chg_pct_20d = _to_float(_first_present(item, ("20日涨跌幅", "近20日涨跌幅", "20日收益率", "chg_pct_20d")))
+    note = json.dumps(item, ensure_ascii=False, default=str)
+    return {
+        "symbol": symbol,
+        "name": name,
+        "snap_date": _parse_datetime(date_value),
+        "close": close,
+        "chg_pct_1d": chg_pct_1d,
+        "chg_pct_20d": chg_pct_20d,
+        "note": note[:400] if note else None,
+        "provider": "ifind_global",
+        "fetched_at": fetched_at,
+    }
+
+
+def fetch_overseas_ifind_global(request: FetchRequest) -> list[dict]:
+    """Fetch fixed overseas reference snapshots; request.universe is intentionally ignored."""
+    rows: list[dict] = []
+    client = _stock_ifind_client()
+    fetched_at = _utcnow()
+    for symbol, name in OVERSEAS_SYMBOLS:
+        query = f"{name}({symbol})最近20个交易日的收盘价、涨跌幅、20日涨跌幅、换手率"
+        result = client.call_tool(
+            GLOBAL_STOCK_MCP_ID,
+            "global_stock_quotes",
+            {"query": query},
+        )
+        candidates = []
+        for item in _extract_ifind_rows(result.text):
+            row = _overseas_row(item, symbol, name, fetched_at)
+            if row is not None:
+                candidates.append(row)
+        if not candidates:
+            continue
+        candidates.sort(key=lambda row: row["snap_date"], reverse=True)
+        latest = candidates[0]
+        oldest = candidates[-1]
+        if latest.get("chg_pct_20d") is None and len(candidates) >= 2:
+            old_close = oldest.get("close")
+            new_close = latest.get("close")
+            if old_close not in (None, 0) and new_close is not None:
+                latest["chg_pct_20d"] = (float(new_close) / float(old_close) - 1.0) * 100.0
+        rows.append(latest)
+    return rows
+
+
 def save_announcements(rows: list[dict], db) -> int:
     from backend.data.database import Announcement
 
@@ -962,6 +1026,47 @@ def save_fund_flows(rows: list[dict], db) -> int:
     return inserted
 
 
+def save_overseas_snapshots(rows: list[dict], db) -> int:
+    from backend.data.database import OverseasSnapshot
+
+    inserted = 0
+    for row in rows:
+        existing = (
+            db.query(OverseasSnapshot)
+            .filter(
+                OverseasSnapshot.symbol == row["symbol"],
+                OverseasSnapshot.snap_date == row["snap_date"],
+                OverseasSnapshot.provider == row["provider"],
+            )
+            .first()
+        )
+        if existing:
+            changed = False
+            for field in ("close", "chg_pct_1d", "chg_pct_20d", "note", "name"):
+                if getattr(existing, field) is None and row.get(field) is not None:
+                    setattr(existing, field, row.get(field))
+                    changed = True
+            if changed:
+                existing.fetched_at = row.get("fetched_at") or _utcnow()
+            continue
+        db.add(
+            OverseasSnapshot(
+                symbol=row["symbol"],
+                name=row["name"],
+                snap_date=row["snap_date"],
+                close=row.get("close"),
+                chg_pct_1d=row.get("chg_pct_1d"),
+                chg_pct_20d=row.get("chg_pct_20d"),
+                note=row.get("note"),
+                provider=row.get("provider") or "unknown",
+                fetched_at=row.get("fetched_at") or _utcnow(),
+            )
+        )
+        inserted += 1
+    db.commit()
+    return inserted
+
+
 def _probe_ifind_notice() -> bool:
     if not settings.ifind_mcp_enabled or not settings.ifind_mcp_token:
         return False
@@ -1036,12 +1141,30 @@ def _probe_eastmoney_fflow() -> bool:
         return False
 
 
+def _probe_ifind_global() -> bool:
+    if not settings.ifind_mcp_enabled or not settings.ifind_mcp_token:
+        return False
+    return any(
+        tool.get("name") == "global_stock_quotes"
+        for tool in _stock_ifind_client().list_tools(GLOBAL_STOCK_MCP_ID)
+    )
+
+
 register_category_provider(
     CategoryProvider(
         name="ifind_notice",
         category="announcements",
         fetch=fetch_announcements_ifind_notice,
         probe=_probe_ifind_notice,
+        priority=10,
+    )
+)
+register_category_provider(
+    CategoryProvider(
+        name="ifind_global",
+        category="overseas",
+        fetch=fetch_overseas_ifind_global,
+        probe=_probe_ifind_global,
         priority=10,
     )
 )

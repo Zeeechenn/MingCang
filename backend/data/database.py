@@ -33,6 +33,7 @@ from backend.data.models import (  # noqa: F401  re-exported for backward compat
     MemoryPromotionCandidate,
     MemoryScenario,
     NewsItem,
+    OverseasSnapshot,
     PendingAIAction,
     Position,
     Price,

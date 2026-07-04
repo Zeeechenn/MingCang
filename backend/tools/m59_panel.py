@@ -253,6 +253,65 @@ def _latest_market_reference(con: sqlite3.Connection) -> dict[str, Any]:
     return {"title": None, "date": None, "source_table": None, "status": "missing:no_theme_level_record"}
 
 
+def _signed_pct(value: float | None) -> str:
+    if value is None:
+        return "-"
+    sign = "+" if value >= 0 else ""
+    return f"{sign}{round(value, 2)}%"
+
+
+def _build_overseas_reference(con: sqlite3.Connection) -> dict[str, Any]:
+    if not _table_exists(con, "overseas_snapshots"):
+        return {"items": [], "flags": ["missing:table:overseas_snapshots"]}
+    cols = _columns(con, "overseas_snapshots")
+    required = {"symbol", "name", "snap_date", "close"}
+    missing = sorted(required - cols)
+    if missing:
+        return {"items": [], "flags": [f"missing:columns:{','.join(missing)}"]}
+    value_cols = [
+        "symbol",
+        "name",
+        "snap_date",
+        "close",
+        "chg_pct_1d" if "chg_pct_1d" in cols else "NULL AS chg_pct_1d",
+        "chg_pct_20d" if "chg_pct_20d" in cols else "NULL AS chg_pct_20d",
+    ]
+    rows = con.execute(
+        f"""
+        SELECT {', '.join(value_cols)}
+        FROM overseas_snapshots
+        WHERE (symbol, snap_date) IN (
+            SELECT symbol, MAX(snap_date)
+            FROM overseas_snapshots
+            GROUP BY symbol
+        )
+        ORDER BY symbol ASC
+        """
+    ).fetchall()
+    items = []
+    for row in rows:
+        data = dict(row)
+        symbol = str(data["symbol"])
+        name = str(data["name"])
+        close = _safe_float(data.get("close"))
+        chg_1d = _safe_float(data.get("chg_pct_1d"))
+        chg_20d = _safe_float(data.get("chg_pct_20d"))
+        line = f"{symbol}({name}) 收 {close} (1日 {_signed_pct(chg_1d)} / 20日 {_signed_pct(chg_20d)})"
+        items.append(
+            {
+                "symbol": symbol,
+                "name": name,
+                "snap_date": _date_only(data.get("snap_date")),
+                "close": close,
+                "chg_pct_1d": chg_1d,
+                "chg_pct_20d": chg_20d,
+                "line": line,
+                "note": "reference_only_not_scored",
+            }
+        )
+    return {"items": items, "flags": []}
+
+
 def _build_header(con: sqlite3.Connection, as_of: str) -> dict[str, Any]:
     freshness = {
         "prices": _max_value(con, "prices", ["date", "fetched_at"]),
@@ -982,6 +1041,7 @@ def build_panel(
                 "review_attribution": _build_review_attribution(con, resolved_as_of),
                 "watchtower_followups": _build_watchtower_followups(Path(watchtower_output_dir)),
                 "watchtower_confirm": _build_watchtower_confirm(resolved_confirm_dir),
+                "overseas_reference": _build_overseas_reference(con),
                 "data_health": _build_data_health(db_session),
             }
     finally:
@@ -1126,6 +1186,14 @@ def render_markdown(panel: dict[str, Any]) -> str:
                 f"| {item.get('symbol')} | {item.get('theme')} | {item.get('stance')} | "
                 f"{item.get('thesis_status')} | {item.get('reasoning')} |"
             )
+    overseas = panel.get("overseas_reference", {})
+    lines.extend(["", "### 海外领先指标(reference-only)", "绝不进打分"])
+    if overseas.get("items"):
+        for item in overseas["items"]:
+            lines.append(f"- {item.get('line')}")
+    else:
+        flags = overseas.get("flags") or []
+        lines.append("暂无" + (f" ({', '.join(flags)})" if flags else ""))
     data_health = panel.get("data_health", {})
     grouped = data_health.get("recent_degradations_by_component") or {}
     lines.extend(

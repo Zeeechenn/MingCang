@@ -14,6 +14,7 @@ from backend.data.category_fetchers import (  # noqa: F401
     save_fund_flows,
     save_holder_snapshots,
     save_lhb,
+    save_overseas_snapshots,
     save_research_reports,
 )
 from backend.data.category_registry import FetchRequest, fetch_by_category
@@ -30,6 +31,7 @@ SAVE_HELPERS = {
     "corporate_events": save_corporate_events,
     "holders": save_holder_snapshots,
     "fund_flow": save_fund_flows,
+    "overseas": save_overseas_snapshots,
 }
 
 
@@ -38,11 +40,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--category",
         required=True,
-        choices=("announcements", "research_reports", "lhb", "corporate_events", "holders", "fund_flow"),
+        choices=("announcements", "research_reports", "lhb", "corporate_events", "holders", "fund_flow", "overseas"),
     )
-    parser.add_argument("--universe", required=True)
-    parser.add_argument("--start", required=True)
-    parser.add_argument("--end", required=True)
+    parser.add_argument("--universe", default=None, help="Universe JSON path; ignored for --category overseas.")
+    parser.add_argument("--start", default=None, help="Required unless --category overseas.")
+    parser.add_argument("--end", default=None, help="Required unless --category overseas.")
     parser.add_argument("--limit-stocks", type=int, default=None)
     return parser.parse_args(argv)
 
@@ -184,6 +186,14 @@ def _backfill_stock_category(
     return inserted, degradations
 
 
+def _backfill_overseas(db) -> tuple[int, list[dict]]:
+    result = fetch_by_category("overseas", FetchRequest(symbol=None, start=None, end=None), db=db)
+    degradations = list(result.degradations)
+    if not result.ok:
+        return 0, degradations
+    return save_overseas_snapshots(result.rows, db), degradations
+
+
 def _fetch_stock_category_once(
     category: str,
     stock: dict[str, str],
@@ -271,15 +281,19 @@ def _backfill_corporate_events(
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    stocks = _load_universe(args.universe, args.limit_stocks)
-    start = _parse_date(args.start)
-    end = _parse_date(args.end)
+    if args.category != "overseas" and (not args.universe or not args.start or not args.end):
+        raise SystemExit("--universe, --start, and --end are required unless --category overseas")
+    stocks = [] if args.category == "overseas" else _load_universe(args.universe, args.limit_stocks)
+    start = _parse_date(args.start) if args.start else date.today()
+    end = _parse_date(args.end) if args.end else start
 
     db = SessionLocal()
     try:
         Base.metadata.create_all(bind=db.get_bind())
         if args.category == "lhb":
             inserted, degradations = _backfill_lhb(stocks, start, end, db)
+        elif args.category == "overseas":
+            inserted, degradations = _backfill_overseas(db)
         elif args.category == "corporate_events":
             inserted, degradations = _backfill_corporate_events(stocks, start, end, db)
         else:
@@ -288,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(
                 {
                     "category": args.category,
-                    "stocks": len(stocks),
+                    "stocks": 4 if args.category == "overseas" else len(stocks),
                     "inserted": inserted,
                     "degradations": degradations,
                 },

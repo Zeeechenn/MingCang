@@ -31,6 +31,7 @@ from backend.data.models.m61 import (
     FundFlow,
     HolderSnapshot,
     LhbRecord,
+    OverseasSnapshot,
     ResearchReport,
 )
 from backend.data.models.memory import (
@@ -79,6 +80,7 @@ __all__ = [
     "CorporateEvent",
     "HolderSnapshot",
     "FundFlow",
+    "OverseasSnapshot",
     "Signal",
     "SentimentCache",
     "LongTermLabel",

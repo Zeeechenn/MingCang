@@ -244,6 +244,7 @@ def _news_titles_from_db(
     symbol: str,
     as_of: datetime,
     lookback_days: int,
+    include_announcements: bool = False,
 ) -> list[str]:
     start_dt = datetime.combine(
         (as_of - timedelta(days=lookback_days)).date(),
@@ -268,7 +269,30 @@ def _news_titles_from_db(
             "as_of": as_of,
         },
     ).fetchall()
-    return [str(row._mapping["title"]) for row in rows]
+    titles = [str(row._mapping["title"]) for row in rows]
+    if not include_announcements:
+        return titles
+    ann_rows = db.execute(
+        text(
+            """
+            SELECT title
+            FROM announcements
+            WHERE symbol = :symbol
+              AND published_at >= :start_dt
+              AND published_at <= :as_of
+              AND title IS NOT NULL
+              AND TRIM(title) != ''
+            ORDER BY published_at ASC, id ASC
+            """
+        ),
+        {
+            "symbol": symbol,
+            "start_dt": start_dt,
+            "as_of": as_of,
+        },
+    ).fetchall()
+    titles.extend(f"【公告】{row._mapping['title']}" for row in ann_rows)
+    return titles
 
 
 def _legacy_score_from_db(
@@ -278,12 +302,14 @@ def _legacy_score_from_db(
     as_of: datetime,
     lookback_days: int,
     variant: Variant,
+    include_announcements: bool = False,
 ) -> dict[str, Any] | None:
     titles = _news_titles_from_db(
         db,
         symbol=symbol,
         as_of=as_of,
         lookback_days=lookback_days,
+        include_announcements=include_announcements,
     )
     if not titles:
         return None
@@ -715,6 +741,7 @@ def run_oos(
     mock: bool = False,
     require_price_coverage: float = 0.0,
     pyramid: bool | None = None,
+    include_announcements: bool = False,
 ) -> dict[str, Any]:
     active_ns = ns or _default_ns_for_variant(variant)
     cache_tier = tier if variant == "v2" else _legacy_tier_for_variant(variant)
@@ -786,13 +813,23 @@ def run_oos(
                     cache_misses += 1
                     if variant == "v2":
                         with _pyramid_override(pyramid):
-                            signal = news_v2_score_from_db(
-                                symbol,
-                                as_of,
-                                lookback_days,
-                                active_db,
-                                tier=tier,
-                            )
+                            if include_announcements:
+                                signal = news_v2_score_from_db(
+                                    symbol,
+                                    as_of,
+                                    lookback_days,
+                                    active_db,
+                                    tier=tier,
+                                    include_announcements=True,
+                                )
+                            else:
+                                signal = news_v2_score_from_db(
+                                    symbol,
+                                    as_of,
+                                    lookback_days,
+                                    active_db,
+                                    tier=tier,
+                                )
                         score = _score_from_signal(signal)
                     else:
                         score = _legacy_score_from_db(
@@ -801,6 +838,7 @@ def run_oos(
                             as_of=as_of,
                             lookback_days=lookback_days,
                             variant=variant,
+                            include_announcements=include_announcements,
                         )
                     if score is None:
                         continue
@@ -880,6 +918,7 @@ def run_oos(
             "require_price_coverage": require_price_coverage,
             "pyramid_override": pyramid,
             "pyramid_effective_default": settings.news_v2_pyramid_enabled,
+            "include_announcements": include_announcements,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
     }
@@ -938,6 +977,11 @@ def _parse_args() -> argparse.Namespace:
             "legs, which never consult this flag."
         ),
     )
+    parser.add_argument(
+        "--include-announcements",
+        action="store_true",
+        help="Opt-in: append same-window Announcement rows to the scoring corpus with a 【公告】 prefix.",
+    )
     return parser.parse_args()
 
 
@@ -960,6 +1004,7 @@ def main() -> None:
         mock=args.mock,
         require_price_coverage=args.require_price_coverage,
         pyramid=pyramid,
+        include_announcements=args.include_announcements,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

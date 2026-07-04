@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.data.models.market import NewsItem
+from backend.data.models.m61 import Announcement
 from backend.data.news_clustering import EventCluster, cluster_evidence
 from backend.data.news_evidence import NewsEvidence
 from backend.data.news_extraction import ClusterScore, extract_clusters, score_cluster_title_only
@@ -153,6 +154,8 @@ def evidence_from_db(
     as_of: datetime,
     lookback_days: int,
     db: Session,
+    *,
+    include_announcements: bool = False,
 ) -> list[NewsEvidence]:
     """Load point-in-time historical news evidence without calling live adapters."""
     start = as_of - timedelta(days=lookback_days)
@@ -167,7 +170,22 @@ def evidence_from_db(
         .all()
     )
 
-    return [_evidence_from_news_item(row, symbol=symbol) for row in rows]
+    evidence = [_evidence_from_news_item(row, symbol=symbol) for row in rows]
+    if not include_announcements:
+        return evidence
+
+    announcement_rows = (
+        db.query(Announcement)
+        .filter(
+            Announcement.symbol == symbol,
+            Announcement.published_at >= start,
+            Announcement.published_at <= as_of,
+        )
+        .order_by(Announcement.published_at.asc(), Announcement.id.asc())
+        .all()
+    )
+    evidence.extend(_evidence_from_announcement(row, symbol=symbol) for row in announcement_rows)
+    return evidence
 
 
 def news_v2_score_from_db(
@@ -178,9 +196,16 @@ def news_v2_score_from_db(
     *,
     tier: str = "capable",
     flow_value: float | None = None,
+    include_announcements: bool = False,
 ) -> NewsSignalV2:
     """Load PIT DB evidence and score it through the M54 v2 stack."""
-    evidence = evidence_from_db(symbol, as_of, lookback_days, db)
+    evidence = evidence_from_db(
+        symbol,
+        as_of,
+        lookback_days,
+        db,
+        include_announcements=include_announcements,
+    )
     return score_news_v2(
         evidence,
         as_of,
@@ -199,5 +224,21 @@ def _evidence_from_news_item(row: NewsItem, *, symbol: str) -> NewsEvidence:
         source_name=row.source or provider,
         provider=provider,
         content=row.content,
+        fetched_at=row.fetched_at,
+    )
+
+
+def _evidence_from_announcement(row: Announcement, *, symbol: str) -> NewsEvidence:
+    provider = row.provider or "announcement"
+    title = f"【公告】{row.title}"
+    content = f"【公告】{row.content}" if row.content else None
+    return NewsEvidence(
+        symbol=row.symbol or symbol,
+        title=title,
+        url=row.source_url or f"announcement://{row.symbol or symbol}/{row.id}",
+        published_at=row.published_at,
+        source_name=provider,
+        provider=provider,
+        content=content,
         fetched_at=row.fetched_at,
     )
