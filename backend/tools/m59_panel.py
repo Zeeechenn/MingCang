@@ -280,11 +280,47 @@ def _latest_research_pointer(con: sqlite3.Connection, symbol: str) -> dict[str, 
     return {"summary": row["summary"], "created_at": row["created_at"], "status": "ok"}
 
 
+def _latest_copilot_card(con: sqlite3.Connection, symbol: str) -> dict[str, Any]:
+    """Return persisted research copilot card metadata, reference-only."""
+    if not _table_exists(con, "research_states"):
+        return {"summary": None, "trigger_quality": None, "status": "missing:table:research_states"}
+    cols = _columns(con, "research_states")
+    required = {"symbol", "copilot_json"}
+    missing = sorted(required - cols)
+    if missing:
+        return {"summary": None, "trigger_quality": None, "status": f"missing:columns:{','.join(missing)}"}
+    row = con.execute(
+        """
+        SELECT copilot_json
+        FROM research_states
+        WHERE symbol = ? AND copilot_json IS NOT NULL
+        LIMIT 1
+        """,
+        (symbol,),
+    ).fetchone()
+    if row is None:
+        return {"summary": None, "trigger_quality": None, "status": "missing:no_copilot"}
+    try:
+        card = json.loads(row["copilot_json"])
+    except (TypeError, json.JSONDecodeError) as exc:
+        return {"summary": None, "trigger_quality": None, "status": f"invalid:copilot_json:{exc.__class__.__name__}"}
+    if not isinstance(card, dict):
+        return {"summary": None, "trigger_quality": None, "status": "invalid:copilot_json:not_object"}
+    return {
+        "summary": card.get("summary_opinion"),
+        "stance": card.get("stance"),
+        "reentry_trigger": card.get("reentry_trigger"),
+        "trigger_quality": card.get("trigger_quality") or "ok",
+        "status": "ok",
+    }
+
+
 def _build_research_reference(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str, Any]:
     """Deep/long-term research pointers for LLM discretion only; never scored (owner 2026-07-03 软联动裁决)."""
     return {
         "long_term_label": _latest_long_term_label(con, symbol, as_of),
         "research_pointer": _latest_research_pointer(con, symbol),
+        "copilot": _latest_copilot_card(con, symbol),
     }
 
 
@@ -1243,13 +1279,17 @@ def _format_research_reference(reference: dict[str, Any] | None) -> str:
         return "missing"
     label = reference.get("long_term_label") or {}
     pointer = reference.get("research_pointer") or {}
+    copilot = reference.get("copilot") or {}
     label_text = (
         f"{label.get('label')}/{label.get('quality')}(至{label.get('expires_at')})"
         if label.get("status") == "ok"
         else label.get("status", "missing")
     )
     pointer_text = pointer.get("summary") if pointer.get("status") == "ok" else pointer.get("status", "missing")
-    return f"标签:{label_text}; 研究指针:{pointer_text}"
+    copilot_text = copilot.get("summary") if copilot.get("status") == "ok" else copilot.get("status", "missing")
+    if copilot.get("trigger_quality") == "degraded":
+        copilot_text = f"{copilot_text}; ⚠️ 触发条件质量降级(需人工补可观测触发)"
+    return f"标签:{label_text}; 研究指针:{pointer_text}; copilot:{copilot_text}"
 
 
 def render_markdown(panel: dict[str, Any]) -> str:

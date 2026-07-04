@@ -824,8 +824,18 @@ def _panel_lines(panel: dict[str, Any] | None) -> list[str]:
     protective_count = sum(1 for item in position_items if item.get("protective_action"))
     stop_flag_count = sum(1 for item in position_items if item.get("stop_flags"))
     quality_flag_count = sum(1 for item in candidate_items if item.get("quality_flags"))
-    if protective_count or stop_flag_count or quality_flag_count:
-        lines.append(f"保护动作 {protective_count} 条 / 止损贴身旗 {stop_flag_count} 条 / 质量旗 {quality_flag_count} 条")
+    degraded_symbols = {
+        str(item.get("symbol"))
+        for item in [*position_items, *candidate_items]
+        if ((item.get("research_reference") or {}).get("copilot") or {}).get("trigger_quality") == "degraded"
+        and item.get("symbol")
+    }
+    trigger_degraded_count = len(degraded_symbols)
+    if protective_count or stop_flag_count or quality_flag_count or trigger_degraded_count:
+        line = f"保护动作 {protective_count} 条 / 止损贴身旗 {stop_flag_count} 条 / 质量旗 {quality_flag_count} 条"
+        if trigger_degraded_count:
+            line += f" / 触发降级 {trigger_degraded_count} 条"
+        lines.append(line)
     for item in panel.get("position_health", {}).get("items", [])[:8]:
         label = (item.get("research_reference") or {}).get("long_term_label") or {}
         line = (

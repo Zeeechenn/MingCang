@@ -240,3 +240,55 @@ def test_r2_copilot_prompt_schema_and_degraded_observe_trigger(test_db, monkeypa
     assert "CFO<净利" in copilot._SYSTEM_PROMPT
     assert "reentry_trigger" in copilot._COPILOT_TOOL["input_schema"]["properties"]
     assert card["trigger_quality"] == "degraded"
+
+
+def test_r2_m59_panel_surfaces_degraded_copilot_trigger_quality(tmp_path):
+    from backend.data.database import ResearchState, Signal
+    from backend.tools.m59_panel import build_panel, render_markdown
+
+    db_path, engine, db = _file_db(tmp_path)
+    try:
+        _seed_stock(db, "600031")
+        _add_prices(db, "600031", start_close=100, days=21)
+        db.add(
+            Signal(
+                symbol="600031",
+                date="2026-07-05",
+                composite_score=80,
+                recommendation="买入",
+                confidence="中",
+                stop_loss=90,
+                take_profit=120,
+            )
+        )
+        db.add(
+            ResearchState(
+                symbol="600031",
+                risks_json="[]",
+                open_questions_json="[]",
+                copilot_json=json.dumps(
+                    {
+                        "stance": "观望",
+                        "summary_opinion": "继续观察。",
+                        "reentry_trigger": "等待更清晰信号",
+                        "trigger_quality": "degraded",
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        db.commit()
+
+        panel = build_panel(
+            db_path=db_path,
+            as_of="2026-07-05",
+            universe_path=_write_universe(tmp_path, ["600031"]),
+            watchtower_output_dir=tmp_path,
+        )
+    finally:
+        db.close()
+        engine.dispose()
+
+    item = panel["buy_candidates"]["items"][0]
+    assert item["research_reference"]["copilot"]["trigger_quality"] == "degraded"
+    assert "⚠️ 触发条件质量降级(需人工补可观测触发)" in render_markdown(panel)

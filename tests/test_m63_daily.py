@@ -529,7 +529,11 @@ def test_panel_lines_surface_hard_rule_fields():
             "summary": {"text": "面板"},
             "buy_candidates": {
                 "items": [
-                    {"symbol": "300308", "quality_flags": ["missing:piotroski"]},
+                    {
+                        "symbol": "300308",
+                        "quality_flags": ["missing:piotroski"],
+                        "research_reference": {"copilot": {"trigger_quality": "degraded"}},
+                    },
                 ]
             },
             "position_health": {
@@ -549,7 +553,7 @@ def test_panel_lines_surface_hard_rule_fields():
     )
 
     text = "\n".join(lines)
-    assert "保护动作 1 条 / 止损贴身旗 1 条 / 质量旗 1 条" in text
+    assert "保护动作 1 条 / 止损贴身旗 1 条 / 质量旗 1 条 / 触发降级 1 条" in text
     assert "保护动作: 集中度超限" in text
     assert "旗标: 止损贴身" in text
     assert "质量旗标: missing:piotroski(建议仓位上限减半)" in text
