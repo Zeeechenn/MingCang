@@ -161,6 +161,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m60_second_entry",
+        "category": "stable",
+        "purpose": "M60 Phase 2b observe-only second-entry shadow ledger: register V1 immediate, V2 MA5 pullback, and V3 volume-confirmed new-high variants from watchtower triggers.",
+        "read_write_boundary": "Read-only against prices via the configured SQLite database in mode=ro; writes only paper_trading/m60_out/second_entry_ledger.json and optional M29 preregistry JSON backup/update when explicitly requested.",
+        "recommended_entrypoint": "python3 -m backend.tools.m60_second_entry",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m31_cache_benchmark",
         "category": "stable",
         "purpose": "Measure M31 cache-layer latency for L1/L2 and describe L3 policy without calling it.",
