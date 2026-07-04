@@ -30,6 +30,7 @@ from backend.analysis.technical import (
     score_volume,
 )
 from backend.backtest.costs import net_return
+from backend.backtest.statistics import deflated_sharpe, pbo
 from backend.config import default_sqlite_path
 
 OUTPUT_DIR = Path("/private/tmp")
@@ -238,7 +239,15 @@ def _ic(values: pd.DataFrame) -> float:
 def _evaluate_slot(scored: pd.DataFrame, *, slot: str) -> dict[str, Any]:
     rows = scored.dropna(subset=["score", "forward_5d_net_return", "pool_return"]).copy()
     if rows.empty:
-        return {"observations": 0, "mean_excess": 0.0, "hit_rate": 0.0, "ic": 0.0, "icir": 0.0, "regime": {}}
+        return {
+            "observations": 0,
+            "mean_excess": 0.0,
+            "hit_rate": 0.0,
+            "ic": 0.0,
+            "icir": 0.0,
+            "regime": {},
+            "_daily_ic": {},
+        }
     rows["rank_pct"] = rows.groupby("date")["score"].rank(method="average", pct=True)
     if slot == "selection":
         picked = rows[rows["rank_pct"] >= 0.8].copy()
@@ -269,6 +278,7 @@ def _evaluate_slot(scored: pd.DataFrame, *, slot: str) -> dict[str, Any]:
         "ic": round(float(ic), 6),
         "icir": round(float(icir), 6),
         "regime": regime,
+        "_daily_ic": {str(idx): round(float(value), 6) for idx, value in daily_ic.items() if pd.notna(value)},
     }
 
 
@@ -285,6 +295,73 @@ def evaluate_trials(panel: pd.DataFrame, trials: list[dict[str, Any]]) -> dict[s
     for slot in results:
         results[slot].sort(key=lambda row: (row["mean_excess"], row["icir"], row["hit_rate"]), reverse=True)
     return results
+
+
+def build_statistical_gate(results: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    gate: dict[str, Any] = {"trial_count": sum(len(rows) for rows in results.values())}
+    for slot, rows in results.items():
+        if not rows:
+            gate[slot] = {"dsr": None, "dsr_reason": "no trials", "pbo": None, "pbo_reason": "no trials"}
+            continue
+
+        best = rows[0]
+        trial_icirs = [float(row.get("icir", 0.0) or 0.0) for row in rows]
+        daily_ic = best.get("_daily_ic") or {}
+        if daily_ic:
+            dsr = deflated_sharpe(
+                [float(value) for _, value in sorted(daily_ic.items())],
+                trial_icirs,
+                sharpe_observed=float(best.get("icir", 0.0) or 0.0),
+                n_trials=len(rows),
+                periods_per_year=1,
+            ).to_dict()
+            dsr_reason = None
+        else:
+            dsr = None
+            dsr_reason = "best trial has no daily IC observations"
+
+        pbo_value: float | None = None
+        pbo_reason: str | None = None
+        pbo_details: dict[str, Any] | None = None
+        common_dates = set(rows[0].get("_daily_ic") or {})
+        for row in rows[1:]:
+            common_dates &= set(row.get("_daily_ic") or {})
+        if len(rows) < 2:
+            pbo_reason = "at least 2 trials required"
+        elif not common_dates:
+            pbo_reason = "no aligned daily IC observations"
+        else:
+            matrix = [
+                [float(row["_daily_ic"][day]) for row in rows]
+                for day in sorted(common_dates)
+            ]
+            pbo_result = pbo(matrix)
+            pbo_details = pbo_result.to_dict()
+            if pbo_result.n_splits > 0 and not pbo_result.note:
+                pbo_value = pbo_details["pbo"]
+            else:
+                pbo_reason = pbo_result.note or "no effective CSCV split"
+
+        slot_gate = {
+            "best_trial": best["trial"]["name"],
+            "dsr": dsr,
+            "pbo": pbo_value,
+        }
+        if dsr_reason:
+            slot_gate["dsr_reason"] = dsr_reason
+        if pbo_reason:
+            slot_gate["pbo_reason"] = pbo_reason
+        if pbo_details:
+            slot_gate["pbo_details"] = pbo_details
+        gate[slot] = slot_gate
+    return gate
+
+
+def _strip_internal_metrics(results: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    return {
+        slot: [{key: value for key, value in row.items() if not key.startswith("_")} for row in rows]
+        for slot, rows in results.items()
+    }
 
 
 def _eligible_symbols(con: sqlite3.Connection, *, min_days: int, limit_symbols: int | None) -> list[str]:
@@ -334,8 +411,14 @@ def build_report(
     normalize: str,
     limit_symbols: int | None = None,
     include_holdout: bool = False,
+    today: date | None = None,
 ) -> dict[str, Any]:
-    effective_end = resolve_effective_end(end, include_holdout=include_holdout)
+    effective_end = resolve_effective_end(end, include_holdout=include_holdout, today=today)
+    if date.fromisoformat(effective_end) < date.fromisoformat(start):
+        raise SystemExit(
+            "requested window is fully inside the locked holdout period "
+            f"(holdout locked to the most recent 1 year); available window upper bound: {effective_end}"
+        )
     con = _connect_readonly(db_path)
     try:
         symbols = _eligible_symbols(con, min_days=1000, limit_symbols=limit_symbols)
@@ -359,6 +442,7 @@ def build_report(
     trials = weight_trials + rule_trials
     results = evaluate_trials(normalized, trials)
     trial_count = len(trials) * len(results)
+    statistical_gate = build_statistical_gate(results)
     return {
         "meta": {
             "spec": "M58 Phase 1",
@@ -371,9 +455,10 @@ def build_report(
             "eligible_symbol_count": len(symbols),
             "evaluated_symbol_count": int(normalized["symbol"].nunique()),
             "date_count": int(normalized["date"].nunique()),
+            "statistical_gate": statistical_gate,
         },
         "trial_count": trial_count,
-        "results": results,
+        "results": _strip_internal_metrics(results),
     }
 
 
@@ -391,7 +476,27 @@ def _write_outputs(report: dict[str, Any]) -> tuple[Path, Path]:
         f"- normalize: {report['meta']['normalize']}",
         f"- trial_count: {report['trial_count']}",
         "",
+        "## Statistical Gate",
+        "",
+        f"- trial_count: {report['meta']['statistical_gate']['trial_count']}",
     ]
+    for slot, gate in report["meta"]["statistical_gate"].items():
+        if slot == "trial_count":
+            continue
+        dsr = gate.get("dsr")
+        lines.append(f"- {slot} best_trial: {gate.get('best_trial')}")
+        if dsr:
+            lines.append(
+                f"  - DSR: {dsr['dsr']:.4f} "
+                f"(p={dsr['p_value']:.4f}, threshold={dsr['sharpe_threshold']:.4f}, n={dsr['n_samples']})"
+            )
+        else:
+            lines.append(f"  - DSR: null ({gate.get('dsr_reason')})")
+        if gate.get("pbo") is None:
+            lines.append(f"  - PBO: null ({gate.get('pbo_reason')})")
+        else:
+            lines.append(f"  - PBO: {gate['pbo']:.4f}")
+    lines.append("")
     for slot, rows in report["results"].items():
         lines.extend([f"## {slot}", "", "| rank | trial | kind | mean_excess | hit_rate | ic | icir | observations |", "|---:|---|---|---:|---:|---:|---:|---:|"])
         for idx, row in enumerate(rows, 1):
@@ -432,6 +537,7 @@ def main(argv: list[str] | None = None) -> int:
         "json": str(json_path),
         "md": str(md_path),
         "trial_count": report["trial_count"],
+        "statistical_gate": report["meta"]["statistical_gate"],
         "selection_top": report["results"]["selection"][0] if report["results"]["selection"] else None,
         "risk_avoidance_top": report["results"]["risk_avoidance"][0] if report["results"]["risk_avoidance"] else None,
     }

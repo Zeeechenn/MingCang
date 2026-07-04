@@ -65,6 +65,55 @@ def test_holdout_exclusion_clamps_default_end_and_refuses_unlock():
         m58.resolve_effective_end("2026-01-01", include_holdout=True, today=date(2026, 7, 3))
 
 
+def test_build_report_rejects_window_fully_inside_locked_holdout(tmp_path):
+    with pytest.raises(SystemExit, match="holdout locked.*available window upper bound: 2025-07-03"):
+        m58.build_report(
+            db_path=tmp_path / "missing.sqlite",
+            start="2026-03-01",
+            end="2026-04-01",
+            families=["T", "M"],
+            normalize="zscore",
+            today=date(2026, 7, 3),
+        )
+
+
+def test_statistical_gate_reports_dsr_and_penalizes_more_trials():
+    best_ic = [0.15 if idx % 2 == 0 else 0.05 for idx in range(40)]
+    one_trial_results = {
+        "selection": [
+            {
+                "trial": {"name": "best", "kind": "weighted", "weights": {"T": 1.0, "M": 0.0}},
+                "icir": 0.7,
+                "_daily_ic": {f"2024-01-{idx + 1:02d}": value for idx, value in enumerate(best_ic)},
+            }
+        ],
+        "risk_avoidance": [],
+    }
+    multi_trial_results = {
+        "selection": [
+            one_trial_results["selection"][0],
+            {
+                "trial": {"name": "trial_2", "kind": "weighted", "weights": {"T": 0.5, "M": 0.5}},
+                "icir": 0.45,
+                "_daily_ic": {f"2024-01-{idx + 1:02d}": value * 0.8 for idx, value in enumerate(best_ic)},
+            },
+            {
+                "trial": {"name": "trial_3", "kind": "weighted", "weights": {"T": 0.0, "M": 1.0}},
+                "icir": 0.2,
+                "_daily_ic": {f"2024-01-{idx + 1:02d}": value * 0.4 for idx, value in enumerate(best_ic)},
+            },
+        ],
+        "risk_avoidance": [],
+    }
+
+    one_trial_gate = m58.build_statistical_gate(one_trial_results)["selection"]["dsr"]
+    multi_trial_gate = m58.build_statistical_gate(multi_trial_results)["selection"]["dsr"]
+
+    assert multi_trial_gate["dsr"] < one_trial_gate["dsr"]
+    assert multi_trial_gate["n_trials"] == 3
+    assert "pbo" in m58.build_statistical_gate(multi_trial_results)["selection"]
+
+
 def test_forward_five_day_return_uses_t_plus_1_entry_t_plus_6_exit_and_cost():
     df = pd.DataFrame(
         {
