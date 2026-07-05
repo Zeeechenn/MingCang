@@ -59,8 +59,7 @@
 
 ## 30秒看懂明仓
 
-- **它帮你干什么**：每天替你扫一遍关注的股票，给出信号建议（试错/关注/观望/规避）、算好止损止盈价，读当日新闻打情感分；每次判断和结果都会存下来，供下次参考。
-- **它不帮你干什么**：不预测涨跌、不自动下单、不替你拍板——AI 只负责"扫描 + 挑毛病"，最终判断始终在你自己手上。
+- **它做什么 / 不做什么**：每天扫描关注股票、给出分档信号、风险线和新闻情感，并保存判断与结果供下次参考，但不预测涨跌、不自动下单、不替你拍板——AI 只负责"扫描 + 挑毛病"，最终判断始终在你自己手上。
 - **数据在哪**：全部跑在你自己电脑上，行情/新闻/持仓数据不上传云端；只有主动开启新闻搜索等功能时才会联网查资料。
 - **怎么开始**：先跑下面的 `make demo` 免安装体验；觉得有用再走[快速开始](#快速开始)装 `mingcang` 长期用。
 
@@ -104,7 +103,9 @@
 
 > **第一次只做这个**：想先体验，不配 Key，跑下面的 `make demo`；想长期使用，走 [快速开始](#快速开始) 安装 `mingcang`；想开发，先 `make install` 再 `make dev` / `cd frontend && npm run dev`。
 
-## 3 分钟上手（无需真实 Key / 网络）
+## 快速开始
+
+### 零配置试用（无需 Key / 网络）
 
 ```bash
 git clone https://github.com/Zeeechenn/MingCang.git
@@ -122,34 +123,17 @@ make demo        # 种子 mock 数据，并启动后端 + 前端
 
 <!-- TODO: 后续可补一段操作 GIF（添加标的→研究卡→证伪→复盘→记忆候选）。 -->
 
-已有 Python 环境、不想走 demo 直接看真实命令？
+下一步看日常报告：
 
 ```bash
-git clone https://github.com/Zeeechenn/MingCang.git
-cd MingCang
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"                            # 装依赖
-python3 -m backend.agent.cli health --pretty       # 健康检查：库、依赖、权限
-python3 -m backend.tools.m59_panel                 # 盘后面板：信号、持仓健康、protective_action、ATR 止损和质量旗标
-```
-
----
-
-## 新手快速开始
-
-5 分钟路径：
-
-```bash
-make demo
-# 浏览器打开 http://127.0.0.1:5173 看首页和"日常"页
 python3 -m backend.tools.m63_daily --mode premarket
+python3 -m backend.tools.m63_daily --mode postmarket
+python3 -m backend.tools.m63_daily --mode weekly
 ```
 
-只想先看系统长什么样，用 `make demo`；想知道今天开盘前该检查哪些风险和事件，跑 `premarket`；需要收盘后做正式复盘，跑 `postmarket`；一周结束要看标签、触发器和经验归因，跑 `weekly`。日常 Web 入口在前端导航的"日常"页，对应路由 `/daily`，日常页=盘前/盘中/盘后/周末四份报告+待研究队列+裁量参考区。
+想知道今天开盘前该检查哪些风险和事件，跑 `premarket`；需要收盘后做正式复盘，跑 `postmarket`；一周结束要看标签、触发器和经验归因，跑 `weekly`。日常 Web 入口在前端导航的"日常"页，对应路由 `/daily`，日常页=盘前/盘中/盘后/周末四份报告+待研究队列+裁量参考区。
 
----
-
-## 快速开始
+### 安装 mingcang 长期用
 
 明仓自带一个 **`mingcang` Pi 终端壳**——把整套 CLI、记忆、研究流程和安全边界打包成一个开箱即用的 agent 终端，不用记一堆命令就能用。只想离线看 demo 时不需要安装它，直接用上面的 `make demo`。
 
@@ -160,21 +144,30 @@ mingcang
 
 装好后直接对它说人话即可（"看一下 300308"、"扫一遍自选"、"帮我复盘上周的票"），它会自己读项目上下文、跑 CLI、给出研究和风险结论。
 
-手动安装 / 开发模式：
-
-```bash
-git clone https://github.com/Zeeechenn/MingCang.git
-cd MingCang
-make agent-setup   # 准备环境
-make agent         # 启动 Pi 终端
-```
-
 默认 `AI_PROVIDER=local_cli`，走本机已登录的本地 CLI，不需要云端 key；demo 模式不需要任何 LLM / 数据源 key。也可以直接用底层 CLI：
 
 ```bash
 python3 -m backend.agent.cli health --pretty
 python3 -m backend.agent.cli premarket --pretty
 python3 -m backend.agent.cli stock-context 000001 --pretty
+```
+
+### 开发模式
+
+已有 Python 环境、不想走 demo 直接看真实命令？
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"                            # 装依赖
+python3 -m backend.agent.cli health --pretty       # 健康检查：库、依赖、权限
+python3 -m backend.tools.m59_panel                 # 盘后面板：信号、持仓健康、protective_action、ATR 止损和质量旗标
+```
+
+手动安装 / 开发 Pi 终端：
+
+```bash
+make agent-setup   # 准备环境
+make agent         # 启动 Pi 终端
 ```
 
 ---

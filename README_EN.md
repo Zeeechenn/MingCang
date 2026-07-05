@@ -59,8 +59,7 @@ Same day, full batch:
 
 ## MingCang in 30 seconds
 
-- **What it does**: every day it scans the stocks you follow, gives a tiered call (small starter / watch / stand by / avoid), pre-computes stop-loss/target levels, and scores the day's news sentiment; every judgment and outcome gets saved for next time.
-- **What it doesn't do**: it doesn't predict price moves, doesn't place orders, and doesn't decide for you — AI only "scans wider and pokes holes," while the final judgment is always yours.
+- **What it does / does not do**: every day it scans the stocks you follow, gives tiered signals, risk lines, and news sentiment, and saves judgments and outcomes for next time, but it does not predict price moves, place orders, or decide for you — AI only "scans wider and pokes holes," while the final judgment is always yours.
 - **Where your data lives**: everything runs on your own machine; prices/news/positions never leave it. It only reaches the network when you turn on a feature like news search.
 - **How to start**: run `make demo` below for a no-install trial; once it clicks, install `mingcang` via [Quick start](#quick-start) for daily use.
 
@@ -104,7 +103,9 @@ MingCang never decides for you: **LLMs don't predict prices, don't place orders,
 
 > **First-time path:** use `make demo` below if you want a no-key trial; use [Quick start](#quick-start) when you want to install the `mingcang` terminal; use `make install` plus `make dev` / `cd frontend && npm run dev` if you are developing.
 
-## 3-minute demo (no real keys / no provider network)
+## Quick start
+
+### Zero-config trial (no keys / no provider network)
 
 ```bash
 git clone https://github.com/Zeeechenn/MingCang.git
@@ -120,34 +121,17 @@ Open <http://127.0.0.1:5173>. The first screen is the new MingCang terminal: you
 
 ![MingCang frontend preview: decision pulse dossier](docs/assets/screenshot-watchlist.png)
 
-Already have a Python environment and want the real commands instead of the demo?
+Next, check the daily reports:
 
 ```bash
-git clone https://github.com/Zeeechenn/MingCang.git
-cd MingCang
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"                            # install dependencies
-python3 -m backend.agent.cli health --pretty       # health check: DB, deps, permissions
-python3 -m backend.tools.m59_panel                 # post-market panel: signals, position health, protective_action, ATR stops, quality flags
-```
-
----
-
-## New User Quick Start
-
-5-minute path:
-
-```bash
-make demo
-# Open http://127.0.0.1:5173 in a browser and inspect the home and Daily pages
 python3 -m backend.tools.m63_daily --mode premarket
+python3 -m backend.tools.m63_daily --mode postmarket
+python3 -m backend.tools.m63_daily --mode weekly
 ```
 
-Use `make demo` when you only want to see the product; run `premarket` when you want the pre-open checklist of events and risks; run `postmarket` when you need the after-close review; run `weekly` when the week ends and you want labels, triggers, and attribution checked together. The web daily entry lives in the frontend navigation as "日常" at `/daily`: the Daily page shows the pre-market, intraday, post-market, and weekly reports, plus the research queue and discretionary reference area.
+Run `premarket` when you want the pre-open checklist of events and risks; run `postmarket` when you need the after-close review; run `weekly` when the week ends and you want labels, triggers, and attribution checked together. The web daily entry lives in the frontend navigation as "日常" at `/daily`: the Daily page shows the pre-market, intraday, post-market, and weekly reports, plus the research queue and discretionary reference area.
 
----
-
-## Quick start
+### Install mingcang for daily use
 
 MingCang ships with a **`mingcang` Pi terminal shell** — it packages the whole CLI, memory, research flow, and safety boundaries into a ready-to-use agent terminal, so you don't have to memorize commands. If you only want the offline demo, use `make demo` above instead.
 
@@ -158,21 +142,30 @@ mingcang
 
 Once installed, just talk to it in plain language ("look at 300308", "scan my watchlist", "review last week's positions") — it reads project context, runs the CLI, and returns research and risk conclusions itself.
 
-Manual / dev mode:
-
-```bash
-git clone https://github.com/Zeeechenn/MingCang.git
-cd MingCang
-make agent-setup   # prepare environment
-make agent         # launch the Pi terminal
-```
-
 Default `AI_PROVIDER=local_cli` routes internal LLM work through your logged-in local CLI — no cloud key needed. Demo mode does not require any LLM or market-data keys. You can also call the raw CLI:
 
 ```bash
 python3 -m backend.agent.cli health --pretty
 python3 -m backend.agent.cli premarket --pretty
 python3 -m backend.agent.cli stock-context 000001 --pretty
+```
+
+### Development mode
+
+Already have a Python environment and want the real commands instead of the demo?
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"                            # install dependencies
+python3 -m backend.agent.cli health --pretty       # health check: DB, deps, permissions
+python3 -m backend.tools.m59_panel                 # post-market panel: signals, position health, protective_action, ATR stops, quality flags
+```
+
+Manual / dev Pi terminal:
+
+```bash
+make agent-setup   # prepare environment
+make agent         # launch the Pi terminal
 ```
 
 ---
