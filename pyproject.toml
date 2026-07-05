@@ -117,6 +117,10 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+    "slow: 慢速测试（大数据/全量回测/长回放），CI 可用 -m 'not slow' 分级跳过",
+    "integration: 集成测试（跨模块/外部依赖），可单独分级运行",
+]
 
 [tool.coverage.run]
 branch = true
