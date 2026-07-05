@@ -344,7 +344,9 @@ def generate_single_case(
     slot = _case_slot(case)
     card = m59_discretion._validate_card(data, slot=slot, soft_length=True)
     objection_data = provider.complete_structured(
-        prompt=m59_discretion._objection_prompt([{**card, "symbol": case["symbol"], "slot": slot}]),
+        prompt=m59_discretion._objection_prompt(
+            [{**card, "symbol": case["symbol"], "slot": slot, "as_of": case["as_of"]}]
+        ),
         tool=m59_discretion.OBJECTION_TOOL,
         system=m59_discretion.OBJECTION_SYSTEM_PROMPT,
         max_tokens=900,

@@ -62,6 +62,7 @@ PROMPT_TEMPLATE = """\
 - 必须引用输入包中的具体证据字段;证据不足就说证据不足。
 - reevaluation_trigger 必须是可观测外部条件,禁止锚定内部标签、内部分数或模型打分。
 - 输出字数硬上限:timing_note≤60字,rationale≤120字,objection≤80字;超限即为无效输出,必须压缩到限内。
+- 以 panel_item_json.as_of 为当前日期作答;禁止使用 as_of 之后的时间视角、日期换算或事实(历史回放时环境日期不可信)。
 
 slot={slot}
 allowed_stance={allowed_stance}
@@ -85,6 +86,7 @@ OBJECTION_PROMPT_TEMPLATE = """\
 - 不预测价格,不承诺涨跌。
 - 只基于输入摘要指出被忽略的反面事实或 rationale 跳跃。
 - objection 80字内; low 可给轻微疑点,但渲染层不会展示 low。
+- 若卡内含 as_of,以其为当前日期作审视;禁止使用 as_of 之后的时间视角、"距今"换算或事实(历史回放时环境日期不可信)。
 
 cards_json={cards_json}
 """
