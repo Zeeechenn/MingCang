@@ -129,6 +129,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m63_trigger_backscan",
+        "category": "evidence",
+        "purpose": "M63 trigger backscan harness: zero-LLM PIT replay measuring which watchtower trigger sources observed later 5-trading-day move episodes.",
+        "read_write_boundary": "Read-only against SQLite; writes only trigger_backscan JSON/Markdown artifacts under paper_trading/m63_out and never calls LLM/API providers.",
+        "recommended_entrypoint": "python3 -m backend.tools.m63_trigger_backscan",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m63_weekly",
         "category": "stable",
         "purpose": "M63-3 固定式周末体检 CLI: one optional LLM attribution call plus zero-LLM trigger audit, staleness/drift scan, R5 weekly-sweep queue escalation, and weekly report rendering.",
@@ -190,6 +198,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "purpose": "M60 Phase 1 postmarket watchtower: scan the Phase 0 observation watchlist for price/volume anomaly, sector resonance, M54 news-L1 triggers, and precompiled ForwardThesis validation/invalidation condition specs (zero LLM, deterministic).",
         "read_write_boundary": "Read-only against prices/news/category tables/forward_theses/thesis_condition_specs via the configured SQLite database in mode=ro; writes only the requested JSON/Markdown artifacts under --output-dir (default /private/tmp), never the database.",
         "recommended_entrypoint": "python3 -m backend.tools.m60_watchtower",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.m60_market_temperature",
+        "category": "maintenance",
+        "purpose": "Capture observe-only Eastmoney limit-up, failed-limit-up, and yesterday-limit-up board pools into market_temperature_snapshots, then print market temperature summary metrics.",
+        "read_write_boundary": "Writes only market_temperature_snapshots idempotently; performs bounded Eastmoney board-pool fetches; never mutates signals, positions, watchlists, or official scoring.",
+        "recommended_entrypoint": "python3 -m backend.tools.m60_market_temperature --date <YYYY-MM-DD> --pretty",
         "still_runnable": True,
     },
     {

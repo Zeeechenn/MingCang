@@ -702,6 +702,26 @@ def build_watchtower_report(
     """Return an m60_watchtower.v1 payload without writing the database."""
     resolved_db = Path(db_path) if db_path is not None else default_sqlite_path()
     entries, watchlist_errors = load_watchlists(watchlist_dir) if watchlist_dir is not None else load_watchlists()
+    return build_watchtower_report_from_entries(
+        entries=entries,
+        watchlist_errors=watchlist_errors,
+        db_path=resolved_db,
+        as_of=as_of,
+        watchlist_dir=watchlist_dir if watchlist_dir is not None else WATCHLIST_DIR,
+    )
+
+
+def build_watchtower_report_from_entries(
+    *,
+    entries: list[dict[str, Any]],
+    watchlist_errors: list[str] | None = None,
+    db_path: str | Path | None = None,
+    as_of: str | None = None,
+    watchlist_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """Return an m60_watchtower.v1 payload for already-loaded watchlist entries."""
+    resolved_db = Path(db_path) if db_path is not None else default_sqlite_path()
+    watchlist_errors = list(watchlist_errors or [])
     symbol_to_themes = themes_by_symbol(entries)
     all_symbols = sorted(symbol_to_themes)
 
