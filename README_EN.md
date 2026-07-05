@@ -257,20 +257,22 @@ DATABASE_URL=sqlite:////absolute/path/to/mingcang.db
 MINGCANG_AGENT_MODE=local
 ```
 
-Default local mode uses `AI_PROVIDER=local_cli`, preferring your logged-in local AI runtime and requiring no cloud LLM key; market data and news default to key-free sources (Eastmoney etc.). **The base flow runs with zero keys.** Fill the keys below only when enabling the matching provider or feature:
+Default local mode uses `AI_PROVIDER=local_cli`, preferring your logged-in local AI runtime and requiring no cloud LLM key; market data and news default to key-free sources (Eastmoney etc.). **The base flow runs with zero keys**, with one prerequisite: a logged-in local AI CLI (`claude` or `codex`). Without one, you must set either `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
 
-| Variable | When to set | Where to get it | Cost |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` | [console.anthropic.com](https://console.anthropic.com/) | Paid, usage-based |
-| `OPENAI_API_KEY` | `AI_PROVIDER=openai` | [platform.openai.com](https://platform.openai.com/api-keys) | Paid, usage-based |
-| `OPENAI_BASE_URL` | OpenAI-compatible gateway | Leave empty for OpenAI's official endpoint | — |
-| `TUSHARE_TOKEN` | Tushare Pro A-share data supplement | [tushare.pro](https://tushare.pro/register) | Free signup; points system unlocks endpoints |
-| `TICKFLOW_API_KEY` | `TICKFLOW_ENABLED=true` | [tickflow.org](https://tickflow.org/) | Free tier available |
-| `IFIND_MCP_TOKEN` | `IFIND_MCP_ENABLED=true` | [mcp.51ifind.com](https://mcp.51ifind.com/) (iFinD MCP by Hithink/同花顺) | Free tier (daily/monthly caps); paid personal plan is roomier |
-| `TAVILY_API_KEY` | Real-time news/search supplement | [tavily.com](https://www.tavily.com/) | Free monthly quota |
-| `ANSPIRE_API_KEY` | Deep research or strict event-news retrieval | [anspire.cn](https://www.anspire.cn/) | Paid, prepaid credits |
-| `BARK_KEY` | iOS Bark notifications | [Bark iOS App](https://github.com/Finb/Bark) (device key auto-generated in app) | Free |
-| `MINGCANG_AGENT_API_KEY` | `MINGCANG_AGENT_MODE=remote` | Generate any strong random string yourself; not a third-party key | — |
+Necessity tiers: **Required** (the matching mode won't run without it), **⭐Recommended** (set these to get the full research/news experience), Optional (as needed).
+
+| Variable | Necessity | When to set | Where to get it | Cost |
+|---|---|---|---|---|
+| `ANTHROPIC_API_KEY` | Required (either/or, when no local AI CLI) | `AI_PROVIDER=anthropic` | [console.anthropic.com](https://console.anthropic.com/) | Paid, usage-based |
+| `OPENAI_API_KEY` | Required (either/or, when no local AI CLI) | `AI_PROVIDER=openai` | [platform.openai.com](https://platform.openai.com/api-keys) | Paid, usage-based |
+| `OPENAI_BASE_URL` | Optional | OpenAI-compatible gateway | Leave empty for OpenAI's official endpoint | — |
+| `IFIND_MCP_TOKEN` | ⭐Recommended | `IFIND_MCP_ENABLED=true`; **primary production source for news/announcements** — without it the news layer degrades to the Eastmoney fallback and announcement/history backfill is unavailable | [mcp.51ifind.com](https://mcp.51ifind.com/) (iFinD MCP by Hithink/同花顺) | Free tier (daily/monthly caps); paid personal plan is roomier |
+| `TAVILY_API_KEY` | ⭐Recommended | Real-time news/search fallback and deep-research retrieval | [tavily.com](https://www.tavily.com/) | Free monthly quota |
+| `TUSHARE_TOKEN` | Optional | Tushare Pro A-share data supplement | [tushare.pro](https://tushare.pro/register) | Free signup; points system unlocks endpoints |
+| `TICKFLOW_API_KEY` | Optional | `TICKFLOW_ENABLED=true` | [tickflow.org](https://tickflow.org/) | Free tier available |
+| `ANSPIRE_API_KEY` | Optional | Deep research or strict event-news retrieval | [anspire.cn](https://www.anspire.cn/) | Paid, prepaid credits |
+| `BARK_KEY` | Optional | iOS Bark notifications | [Bark iOS App](https://github.com/Finb/Bark) (device key auto-generated in app) | Free |
+| `MINGCANG_AGENT_API_KEY` | Required for remote mode | `MINGCANG_AGENT_MODE=remote`; not needed in local mode | Generate any strong random string yourself; not a third-party key | — |
 
 Remote exposure is opt-in and read-only by default:
 

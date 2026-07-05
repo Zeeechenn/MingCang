@@ -257,20 +257,22 @@ DATABASE_URL=sqlite:////absolute/path/to/mingcang.db
 MINGCANG_AGENT_MODE=local
 ```
 
-默认本地模式使用 `AI_PROVIDER=local_cli`，优先走本机已登录的本地 AI 运行时，不需要云端 LLM key；行情/新闻默认走东财等免 key 源。**零 key 也能跑通基础流程**，只有启用对应 provider 或能力时，才需要填写下面的 key：
+默认本地模式使用 `AI_PROVIDER=local_cli`，优先走本机已登录的本地 AI 运行时，不需要云端 LLM key；行情/新闻默认走东财等免 key 源。**零 key 也能跑通基础流程**，但有一个前置条件：本机已登录可用的 AI CLI（`claude` 或 `codex`）。没有的话，`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` 必须二选一。
 
-| 变量 | 何时填写 | 获取地址 | 费用 |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` | [console.anthropic.com](https://console.anthropic.com/) | 付费按量 |
-| `OPENAI_API_KEY` | `AI_PROVIDER=openai` | [platform.openai.com](https://platform.openai.com/api-keys) | 付费按量 |
-| `OPENAI_BASE_URL` | 使用 OpenAI 兼容网关时 | 留空表示 OpenAI 官方地址 | — |
-| `TUSHARE_TOKEN` | 需要 Tushare Pro A 股数据补充时 | [tushare.pro](https://tushare.pro/register) | 免费注册，积分制解锁接口 |
-| `TICKFLOW_API_KEY` | `TICKFLOW_ENABLED=true` | [tickflow.org](https://tickflow.org/) | 有免费额度 |
-| `IFIND_MCP_TOKEN` | `IFIND_MCP_ENABLED=true` | [mcp.51ifind.com](https://mcp.51ifind.com/)（同花顺 iFinD MCP） | 有免费档（日/月双层限额），个人付费档更宽 |
-| `TAVILY_API_KEY` | 需要实时新闻或搜索补充时 | [tavily.com](https://www.tavily.com/) | 有免费月度额度 |
-| `ANSPIRE_API_KEY` | deep research 或严格事件新闻抓取 | [anspire.cn](https://www.anspire.cn/) | 付费充值按量 |
-| `BARK_KEY` | 需要 iOS Bark 推送时 | [Bark iOS App](https://github.com/Finb/Bark)（App 内自动生成设备 key） | 免费 |
-| `MINGCANG_AGENT_API_KEY` | `MINGCANG_AGENT_MODE=remote` | 自行生成任意强随机串，非第三方申请 | — |
+必要性分三档：**必须**（不配跑不起来对应模式）、**⭐推荐**（想顺利用全明仓的研究/新闻能力就该配）、可选（按需）。
+
+| 变量 | 必要性 | 何时填写 | 获取地址 | 费用 |
+|---|---|---|---|---|
+| `ANTHROPIC_API_KEY` | 二选一必须（无本机 AI CLI 时） | `AI_PROVIDER=anthropic` | [console.anthropic.com](https://console.anthropic.com/) | 付费按量 |
+| `OPENAI_API_KEY` | 二选一必须（无本机 AI CLI 时） | `AI_PROVIDER=openai` | [platform.openai.com](https://platform.openai.com/api-keys) | 付费按量 |
+| `OPENAI_BASE_URL` | 可选 | 使用 OpenAI 兼容网关时 | 留空表示 OpenAI 官方地址 | — |
+| `IFIND_MCP_TOKEN` | ⭐推荐 | `IFIND_MCP_ENABLED=true`；**新闻/公告的生产主源**，不配则新闻层退化到东财兜底、公告与历史新闻回填不可用 | [mcp.51ifind.com](https://mcp.51ifind.com/)（同花顺 iFinD MCP） | 有免费档（日/月双层限额），个人付费档更宽 |
+| `TAVILY_API_KEY` | ⭐推荐 | 实时新闻/搜索兜底与 deep research 检索 | [tavily.com](https://www.tavily.com/) | 有免费月度额度 |
+| `TUSHARE_TOKEN` | 可选 | 需要 Tushare Pro A 股数据补充时 | [tushare.pro](https://tushare.pro/register) | 免费注册，积分制解锁接口 |
+| `TICKFLOW_API_KEY` | 可选 | `TICKFLOW_ENABLED=true` | [tickflow.org](https://tickflow.org/) | 有免费额度 |
+| `ANSPIRE_API_KEY` | 可选 | deep research 或严格事件新闻抓取 | [anspire.cn](https://www.anspire.cn/) | 付费充值按量 |
+| `BARK_KEY` | 可选 | 需要 iOS Bark 推送时 | [Bark iOS App](https://github.com/Finb/Bark)（App 内自动生成设备 key） | 免费 |
+| `MINGCANG_AGENT_API_KEY` | 远程模式必须 | `MINGCANG_AGENT_MODE=remote`；本地模式不需要 | 自行生成任意强随机串，非第三方申请 | — |
 
 远程暴露是 opt-in，默认只读：
 
