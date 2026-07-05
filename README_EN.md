@@ -1,9 +1,9 @@
-# MingCang · LLM-Powered A-Share AI Research Workbench
+# MingCang · Local A-Share Research Workbench
 
-> **Every day, AI gives you signals, news sentiment, stop-loss/take-profit, and reviews — runs locally, no data upload.**
-> And more than that — **every research call, signal, position, and review is distilled into a growing, layered research memory (L0–L4) that sharpens your next decision.**
+> **Research-driven concentrated holdings + disciplined execution + AI-augmented judgment** for local A-share research.
+> MingCang is not a quant system: the tunable parameters are risk controls, review cadence, and evidence gates, not prediction parameters. It does not promise returns or place orders for you.
 
-**MingCang is a local-first personal A-share research operating system**: you own alpha and the final call, AI handles breadth sweeps and falsification, and the system turns judgments and outcomes into memory that grows over time.
+**MingCang is a local-first personal A-share research operating system**: you own alpha and the final judgment, AI handles breadth sweeps and falsification, and the system turns judgments, discipline, and outcomes into memory that grows over time.
 
 [![Docs](https://img.shields.io/badge/%F0%9F%93%96_Docs-mingcang.docs-ffd400?labelColor=07070d)](https://zeeechenn.github.io/MingCang/)
 [![CI](https://github.com/Zeeechenn/MingCang/actions/workflows/test.yml/badge.svg)](https://github.com/Zeeechenn/MingCang/actions/workflows/test.yml)
@@ -55,12 +55,12 @@ Same day, full batch:
 | 603986 | GigaDevice | 4.3 | 🔵 Watch | 26.4 | 4.5 | −55.2 | 414.86 | 603.09 |
 | 300750 | CATL | −1.7 | ⚪ Stand by | −12.5 | 1.3 | +18.0 | 397.42 | 488.68 |
 
-> Tiered calls with ATR stop/target levels; no price predictions, no "buy / guaranteed gains." News sentiment is scored by an LLM reading the day's news.
+> Tiered calls with ATR risk lines; no price predictions and no guaranteed-gain language. News sentiment is scored by an LLM reading the day's news.
 
 ## MingCang in 30 seconds
 
 - **What it does**: every day it scans the stocks you follow, gives a tiered call (small starter / watch / stand by / avoid), pre-computes stop-loss/target levels, and scores the day's news sentiment; every judgment and outcome gets saved for next time.
-- **What it doesn't do**: it doesn't predict price moves, doesn't place orders, and doesn't decide for you — AI only "scans wider and pokes holes," the buy/sell call is always yours.
+- **What it doesn't do**: it doesn't predict price moves, doesn't place orders, and doesn't decide for you — AI only "scans wider and pokes holes," while the final judgment is always yours.
 - **Where your data lives**: everything runs on your own machine; prices/news/positions never leave it. It only reaches the network when you turn on a feature like news search.
 - **How to start**: run `make demo` below for a no-install trial; once it clicks, install `mingcang` via [Quick start](#quick-start) for daily use.
 
@@ -114,6 +114,8 @@ make demo        # seed mock data, then start backend + frontend
 
 Open <http://127.0.0.1:5173>. The first screen is the new MingCang terminal: you can ask for stock research, review candidates, watchlist actions, and governance drafts in natural language. The navigation opens the decision pulse, stock dossiers, review dossiers, research copilot, position discipline, source health, and governance console. The demo database also includes sample stocks, a long-term thesis, a review case, and one pending memory-promotion candidate for the full loop in the [User Guide](docs_public/USER_GUIDE.md). The backend health check is at <http://127.0.0.1:8000/health>, and the interactive API docs (Swagger UI) are at <http://127.0.0.1:8000/docs>. Press `Ctrl+C` to stop the demo.
 
+> Screenshots and UI need to be viewed in a browser at <http://127.0.0.1:5173>; the terminal command only starts the services and does not render the frontend itself.
+
 > The demo DB and the real DB are two separate datasets: the demo only has three sample stocks (Kweichow Moutai, Zhongji Innolight, Ping An). Once you switch to a real environment and look up those same tickers, you may get empty signals/labels if they aren't in your own tracked pool — that's expected, just use your own watchlist symbols instead.
 
 ![MingCang frontend preview: decision pulse dossier](docs/assets/screenshot-watchlist.png)
@@ -128,6 +130,20 @@ pip install -e ".[dev]"                            # install dependencies
 python3 -m backend.agent.cli health --pretty       # health check: DB, deps, permissions
 python3 -m backend.tools.m59_panel                 # post-market panel: signals, position health, protective_action, ATR stops, quality flags
 ```
+
+---
+
+## New User Quick Start
+
+5-minute path:
+
+```bash
+make demo
+# Open http://127.0.0.1:5173 in a browser and inspect the home and Daily pages
+python3 -m backend.tools.m63_daily --mode premarket
+```
+
+Use `make demo` when you only want to see the product; run `premarket` when you want the pre-open checklist of events and risks; run `postmarket` when you need the after-close review; run `weekly` when the week ends and you want labels, triggers, and attribution checked together. The web daily entry lives in the frontend navigation as "日常" at `/daily`, showing M63 reports and M59 discretionary reference cards.
 
 ---
 
@@ -175,7 +191,7 @@ mingcang stock 300308
 python3 -m backend.agent.cli stock-context 300308 --pretty
 ```
 
-You get the official signal (buy / watch / avoid), recent news and sentiment, long-term labels, the research copilot's shadow conclusion, and the risks and open questions it lists. For deeper digging, have it run a deep-research pass:
+You get the official signal (small starter / watch / stand by / avoid), recent news and sentiment, long-term labels, the research copilot's shadow conclusion, and the risks and open questions it lists. For deeper digging, have it run a deep-research pass:
 
 ```bash
 python3 -m backend.agent.cli action research.deep.run \
@@ -193,8 +209,17 @@ python3 -m backend.tools.m63_research --target 300308 --no-llm
 python3 -m backend.tools.m63_opinion --text '<opinion text>' --source manual --no-llm
 ```
 
-In the Pi terminal just say "run the pre-market scan" or "review after close." Signals include the day's suggestion, the ATR trailing-stop level, portfolio exposure, and data-quality alerts — MingCang never places the order, it just enforces discipline.
-The post-market panel also renders risk-specific `protective_action`, stop-distance pressure, and financial/data-quality flags so discretionary action stays tied to checkable rules.
+| Entry | Command | When to use it | What `--no-llm` changes |
+|---|---|---|---|
+| Pre-market read | `python3 -m backend.tools.m63_daily --mode premarket` | Before the open, check overnight news, announcements, events, and position risk lines | No LLM step is required; rule checks still run |
+| Intraday note | `python3 -m backend.tools.m63_daily --mode intraday` | During the session, only record watchtower triggers, nearby risk lines, and price moves | No LLM step is required; rule checks still run |
+| Post-market decision | `python3 -m backend.tools.m63_daily --mode postmarket --no-llm` | After the close, chain backfill, watchtower, panel, trigger routing, and the plain-language report | Skips LLM discretionary cards, news-sentiment accrual scoring, and automatic label refresh; rule-based steps still run |
+| Weekend health check | `python3 -m backend.tools.m63_weekly --no-llm` | At week end, review attribution, missed triggers, stale theses, and data health | Skips the weekly attribution LLM; trigger audit, data health, and queue upgrades still run |
+| Research `<target>` | `python3 -m backend.tools.m63_research --target 300308 --no-llm` | Research a stock or theme on demand, refreshing labels, deep research, copilot, and watchtower context | Skips label, deep-research, and copilot LLM steps; data backfill and watchtower updates still run |
+| Opinion intake | `python3 -m backend.tools.m63_opinion --text '<opinion text>' --source manual --no-llm` | Archive an external view or your own thesis into the watchtower system | Archives only; no LLM comparison or trigger queueing |
+
+In the Pi terminal just say "run the pre-market scan" or "review after close." Signals include the day's suggestion, the ATR trailing-stop level, portfolio exposure, and data-quality alerts — MingCang never places orders, it only enforces discipline.
+The post-market panel also renders risk-specific `protective_action`, stop-distance pressure, and financial/data-quality flags so discretionary judgment stays tied to checkable rules.
 
 ### Maintain a watchlist
 
@@ -215,15 +240,15 @@ Record a sector or theme judgment (yours, a seasoned researcher's, or from a pro
 python3 -m backend.agent.cli action long_term.run --payload-json '{"symbol":"300308"}' --pretty
 ```
 
-It won't raise a buy score just because a thesis "sounds reasonable" — only after the outcome lands and the review passes does the judgment promote into trusted memory and feed the next round of research.
+It won't raise the signal score just because a thesis "sounds reasonable" — only after the outcome lands and the review passes does the judgment promote into trusted memory and feed the next round of research.
 
-### Put memory to work
+### Memory System Quick Start
 
 ```bash
 python3 -m backend.agent.cli memory-snapshot --pretty
 ```
 
-This shows layered memory, the audit log, and promotion status: which rules/lessons are trusted and which are still pending. Trusted memory is injected automatically as context the next time you research the same stock or theme.
+This shows layered memory, the audit log, and promotion status: which rules/lessons are trusted and which are still pending. Memory only participates as prompt context; it does not score official signals. Trusted memory is injected the next time you research the same stock or theme, reminding you what was validated or falsified before. M57 self-evolution is still under development, so the current system does not let an LLM promote pending memory into trusted memory by itself.
 
 ---
 
@@ -274,6 +299,19 @@ The signals and judgments above sit on an **audited data foundation**, not raw k
 | 🗃️ **Cache & freshness policy** | a declarative contract for when remote data may be fetched |
 
 > No matter how good the signals are, **dirty data makes it all a castle in the air.** This foundation keeps every judgment above standing on reproducible, lookahead-free data.
+
+### Major Version Capability Overview
+
+| Capability | Current state |
+|---|---|
+| M59 post-market panel | Four hard rules have landed: risk warnings must include protective actions, stand-by conclusions must include observable recheck triggers, position checks show ATR distance and risk flags, and financial-quality flags enter both candidates and health checks. The LLM discretionary layer is reference-only, grey rollout is off by default, and it does not change official signals. |
+| M60 watchtower + triggers | Observation watchlists, post-market trigger detection, panel follow-up candidates, and post-trigger LLM confirmation are implemented. Dragon-Tiger list events, fund-flow anomalies, price moves, and theme resonance can enter the review queue. The second-entry shadow ledger is observe-only and does not change official signals. |
+| M63 three touchpoints | Pre-market, intraday, and post-market form the daily cadence, with weekend health checks, on-demand research, and opinion intake around it. The report layer translates terms into plain language and uses a wording guard to sanitize actionable phrasing. |
+| Data foundation | Source manuals, data contracts, degradation tiers, PIT type gates, and a unified context package are wired in. The point is traceability, graceful degradation, and reviewability rather than blind trust in one provider. |
+| Blind adjudication | Judgment features can be A/B-accepted with a cross-model blind-adjudication harness: arms are anonymized, real outcomes are compared, and majority votes are archived. |
+| Web Daily page | The frontend includes a Daily page at `/daily` for M63 reports, the research queue, and M59 discretionary reference cards; screenshots/UI should still be checked in the local browser. |
+
+Terminology: the **watchtower** only scans followed names for price, fund-flow, news, or theme-linkage changes and sends triggers to post-market review; it is not an instruction. A **trigger** records an abnormal change as something to review further; it is not a conclusion.
 
 ### Architecture: the research-to-decision loop
 
