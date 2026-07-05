@@ -71,6 +71,7 @@ WIRING_MAP: dict[str, WiringEntry] = {
     "backend.tools.m58_exit_sweep": {"bucket": "manual_only", "reason": "M58出场参数扫描,人工触发"},
     "backend.tools.m58_exit_shadow": {"bucket": "daily_postmarket", "reason": "盘后影子出场只读对照"},
     "backend.tools.m58_lgbm_walkforward": {"bucket": "manual_only", "reason": "LGBM walk-forward证据实验,人工触发"},
+    "backend.tools.m58_entry_arena": {"bucket": "manual_only", "reason": "D7入场演练场历史回放验收,人工触发"},
     "backend.tools.m27_alpha_diagnostic": {"bucket": "manual_only", "reason": "alpha诊断实验,人工触发"},
     "backend.tools.m27_kronos_preflight": {"bucket": "manual_only", "reason": "Kronos训练前检查,人工触发"},
     "backend.tools.m27_label_objective_eval": {"bucket": "manual_only", "reason": "标签目标评估实验,人工触发"},

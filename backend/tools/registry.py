@@ -409,6 +409,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m58_entry_arena",
+        "category": "evidence",
+        "purpose": "M58 D7 entry arena: point-in-time replay of historical entry triggers with same-pool equal-weight control arms and calibration bins.",
+        "read_write_boundary": "Read-only against SQLite prices/signals/labels/theses in mode=ro; post-as_of data is used only on outcome-side; writes JSON/Markdown artifacts and trial ledger under paper_trading/m58_out/arena only.",
+        "recommended_entrypoint": "python3 -m backend.tools.m58_entry_arena --from-history",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m27_alpha_diagnostic",
         "category": "evidence",
         "purpose": "Diagnose current alpha weakness before changing labels, factors, or production quant weight.",
