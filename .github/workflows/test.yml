@@ -55,6 +55,9 @@ jobs:
       - name: Install dependencies
         run: make python-sync
 
+      - name: Bootstrap database schema
+        run: PYTHONPATH=. .venv/bin/python backend/data/database.py
+
       - name: Run backend tests with coverage
         run: make coverage
 
