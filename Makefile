@@ -85,7 +85,7 @@ frontend-lint:
 
 frontend-lint-summary:
 	@echo "--- frontend ESLint summary (advisory, non-blocking) ---"
-	@cd frontend && npm run lint 2>&1 | tail -5 || true
+	@cd frontend && npm run eslint 2>&1 | tail -8 || true
 	@echo "--- end ESLint summary ---"
 
 frontend-format-check:
