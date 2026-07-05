@@ -1,4 +1,4 @@
-"""
+"""[M63 现役] [active] 消费者: backend/agents/pipeline.py, backend/agents/trader.py, backend/decision/aggregator.py.
 研究员团 — 看多/看空辩论。
 
 三层路径：

@@ -1,4 +1,4 @@
-"""
+"""[M39-M55 论点与门] [gate-guarded] 消费者: backend/api/routes/research.py, backend/research/watchlist.py, backend/tools/m45_import_track_theses.py, backend/tools/m60_thesis_sync.py, backend/tools/m60_watchtower.py.
 M39 Forward Thesis Beta — pure storage layer.
 
 Exposes six injectable-Session functions:

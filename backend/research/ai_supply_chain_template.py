@@ -1,4 +1,5 @@
-"""AI supply-chain theme template helpers.
+"""[ATLAS-dormant] [dormant] 消费者: backend/api/routes/research.py, backend/research/theme_hypothesis_engine.py; 归 M57 记忆基础设施保留,勿在新功能中引用.
+AI supply-chain theme template helpers.
 
 Pure structure layer for Atlas theme hypotheses.  No LLM calls, no network
 calls, no scoring writes, and no production-signal side effects.

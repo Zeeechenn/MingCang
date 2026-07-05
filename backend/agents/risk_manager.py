@@ -1,4 +1,4 @@
-"""
+"""[M63 现役] [active] 消费者: backend/agents/pipeline.py.
 风险经理 — 对交易员输出有否决权。
 
 否决（一票否决，veto_reason 置位）：

@@ -1,4 +1,5 @@
-"""Shared evidence definitions for M50 research layer.
+"""[M39-M55 论点与门] [gate-guarded] 消费者: backend/research/ai_supply_chain_template.py, backend/research/research_report_gate.py, backend/tools/m45_*.py, backend/tools/m63_render.py.
+Shared evidence definitions for M50 research layer.
 
 Pure constants and pure functions — no side effects, no imports from
 signal/decision/scheduler paths.

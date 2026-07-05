@@ -1,4 +1,5 @@
-"""M60 Watchtower Phase 2 — LLM confirmation layer.
+"""[M63 现役] [active] 消费者: backend/tools/m60_watchtower.py.
+M60 Watchtower Phase 2 — LLM confirmation layer.
 
 Takes today's Phase 1 (zero-LLM) watchtower triggers
 (``backend.tools.m60_watchtower``) and asks an LLM for one discretionary

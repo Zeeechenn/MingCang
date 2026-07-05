@@ -1,4 +1,4 @@
-"""
+"""[M63 现役] [active] 消费者: backend/agents/pipeline.py, backend/decision/aggregator.py.
 M4.2 Research Director Agent —— 协调层。
 
 职责：

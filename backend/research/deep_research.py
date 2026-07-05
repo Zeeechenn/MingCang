@@ -1,4 +1,5 @@
-"""Manual weekend/sector deep research workflow.
+"""[M63 现役] [active] 消费者: backend/api/routes/research.py, backend/research/research_report_gate.py, backend/tools/m63_research.py.
+Manual weekend/sector deep research workflow.
 
 This module is deliberately separate from scheduler.py and the daily signal
 path. It only runs when called explicitly from CLI or API.

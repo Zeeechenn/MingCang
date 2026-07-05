@@ -1,4 +1,5 @@
-"""Per-symbol research dossier aggregation.
+"""[M63 现役] [active] 消费者: backend/api/routes/research.py.
+Per-symbol research dossier aggregation.
 
 This module returns structured JSON, not rendered prose, so it does not
 enforce report *wording* itself. Rendered report text (Markdown surfaced to

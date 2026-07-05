@@ -1,4 +1,5 @@
-"""M60 Watchtower Phase 0 — observation watchlist theme grouping view.
+"""[M63 现役] [active] 消费者: backend/research/watchtower_confirm.py, backend/tools/m60_thesis_sync.py, backend/tools/m60_watchtower.py, backend/tools/m63_opinion.py, backend/tools/m63_research.py, backend/tools/m63_weekly.py.
+M60 Watchtower Phase 0 — observation watchlist theme grouping view.
 
 Schema decision (owner asked to evaluate reuse-vs-new-file before building):
 

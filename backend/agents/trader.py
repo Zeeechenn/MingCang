@@ -1,4 +1,4 @@
-"""
+"""[M63 现役] [active] 消费者: backend/agents/pipeline.py, backend/agents/risk_manager.py.
 交易员 — 综合所有分析师 + 研究员输出，给出操作建议 + 仓位 + 止盈止损。
 
 权重由 active_signal_weights() 决定：

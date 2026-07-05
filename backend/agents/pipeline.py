@@ -1,4 +1,4 @@
-"""
+"""[M63 现役] [active] 消费者: backend/agents/__init__.py, backend/decision/aggregator.py.
 多 Agent 决策流水线编排器
 
 调用顺序（M4.2 起）：

@@ -1,4 +1,4 @@
-"""
+"""[ATLAS-dormant] [gate-guarded] 消费者: backend/api/routes/research.py.
 M38 Dynamic Universe / Survivorship Guard — pure storage layer.
 
 BACKTEST / FORWARD-VALIDATION ONLY.

@@ -1,4 +1,4 @@
-"""
+"""[M63 现役] [active] 消费者: backend/agents/director.py, backend/agents/pipeline.py, backend/agents/researcher.py, backend/agents/trader.py, backend/decision/aggregator.py.
 分析师团 — 把原本散在 aggregator 里的"打分逻辑"包装成可解释的结构化报告。
 每个分析师输出 (score, confidence, key_findings, raw)，让 Trader 能引用。
 """

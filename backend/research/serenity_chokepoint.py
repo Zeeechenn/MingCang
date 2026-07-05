@@ -1,4 +1,5 @@
-"""Serenity Chokepoint methodology lens — RETIRED as an independent analyzer (M55).
+"""[ATLAS-dormant] [dormant] 消费者: backend/research/research_report_gate.py(type-only); 归 M57 记忆基础设施保留,勿在新功能中引用.
+Serenity Chokepoint methodology lens — RETIRED as an independent analyzer (M55).
 
 M55 Phase 0 spec (`docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`, section 4) found
 this module's own LLM-driven pipeline to be a full duplicate of structures

@@ -1,4 +1,5 @@
-"""Deterministic role templates for manual deep research."""
+"""[M63 现役] [active] 消费者: backend/research/deep_research.py.
+Deterministic role templates for manual deep research."""
 from __future__ import annotations
 
 from dataclasses import dataclass

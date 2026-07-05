@@ -1,4 +1,5 @@
-"""LLM research copilot shadow decision card."""
+"""[M63 现役] [active] 消费者: backend/api/routes/research.py, backend/tools/m63_research.py.
+LLM research copilot shadow decision card."""
 from __future__ import annotations
 
 import json

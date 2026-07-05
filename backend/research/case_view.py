@@ -1,4 +1,4 @@
-"""
+"""[M39-M55 论点与门] [gate-guarded] 消费者: backend/api/routes/research.py.
 M40 Case View helper — pure read-only aggregation of per-symbol M35-M39 records.
 
 Called only by GET /research/{symbol}/case-view.

@@ -1,4 +1,4 @@
-"""
+"""[M39-M55 论点与门] [gate-guarded] 消费者: backend/api/routes/research.py, backend/research/case_view.py, backend/tools/m45_falsification_scoreboard.py.
 M37 Review / Calibration / Memory Loop — pure storage layer.
 
 Exposes ten injectable-Session functions:

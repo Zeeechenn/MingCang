@@ -1,4 +1,4 @@
-"""
+"""[ATLAS-dormant] [gate-guarded] 消费者: backend/tools/atlas_stage2b_strict_gate.py, backend/tools/atlas_test4_stage2b_shadow.py, backend/tools/gate_b_tracker.py.
 M40 Gate-B prospective tracker — injectable-Session storage layer.
 
 Exposes:

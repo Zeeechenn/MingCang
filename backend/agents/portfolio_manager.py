@@ -1,4 +1,4 @@
-"""
+"""[M63 现役] [active] 消费者: backend/agents/__init__.py, backend/jobs/postmarket.py.
 M4.3 Portfolio Manager Agent —— 组合层仓位统筹。
 
 输入：当日所有候选信号（已通过 trader+risk_manager）+ 现有持仓

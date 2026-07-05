@@ -1,4 +1,4 @@
-"""
+"""[M39-M55 论点与门] [gate-guarded] 消费者: backend/api/routes/research.py, backend/research/case_view.py.
 M36 Theme Hypothesis Engine — pure storage layer.
 
 Exposes nine injectable-Session functions:

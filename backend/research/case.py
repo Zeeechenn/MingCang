@@ -1,3 +1,5 @@
+"""[M39-M55 论点与门] [gate-guarded] 消费者: backend/api/routes/research.py, backend/research/dossier.py, backend/research/gate_b_recorder.py."""
+
 from __future__ import annotations
 
 from datetime import datetime

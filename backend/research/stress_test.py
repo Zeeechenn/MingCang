@@ -1,4 +1,5 @@
-"""M34 Evidence-Bounded Stress Test — single-pass red-team review of a ResearchCase."""
+"""[M39-M55 论点与门] [gate-guarded] 消费者: backend/api/routes/research.py.
+M34 Evidence-Bounded Stress Test — single-pass red-team review of a ResearchCase."""
 from __future__ import annotations
 
 import json

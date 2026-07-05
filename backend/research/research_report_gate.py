@@ -1,4 +1,5 @@
-"""ResearchReportGate — M50 Phase 1.
+"""[M39-M55 论点与门] [gate-guarded] 消费者: backend/research/deep_research.py.
+ResearchReportGate — M50 Phase 1.
 
 Checks every DeepResearchReport before write_text / _persist_report.
 Returns GateVerdict(status, reasons, warnings).
