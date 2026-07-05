@@ -8,6 +8,8 @@
 // ============================================================
 import * as api from './api';
 
+const HEALTH_POLL_MS = Number(import.meta.env.VITE_HEALTH_POLL_MS) || 30000;
+
 let live = false;
 let atlasOn = false; // 后端 atlas_enabled 开启时为 true(论题/记忆候选/case-view 账本可用)
 let healthTimer: ReturnType<typeof setInterval> | null = null;
@@ -38,7 +40,7 @@ function startHealthMonitor() {
       stopHealthMonitor();
       store().set({ live: 'offline' });
     }
-  }, 30000);
+  }, HEALTH_POLL_MS);
 }
 
 // ---------- 归一化 ----------

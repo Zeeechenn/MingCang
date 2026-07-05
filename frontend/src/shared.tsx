@@ -365,7 +365,7 @@ export function Modal({ title, eyebrow, onClose, children, maxWidth = 560, right
   }, [onClose]);
   const node = (
     <div className="scrim" onClick={onClose}>
-      <div className="modal glass" style={{ background: 'var(--glass-strong)', maxWidth }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal glass" role="dialog" aria-modal="true" style={{ background: 'var(--glass-strong)', maxWidth }} onClick={(e) => e.stopPropagation()}>
         <div className="spread" style={{ position: 'sticky', top: 0, zIndex: 2, padding: '16px 20px', background: 'var(--glass-strong)', borderBottom: '1px solid var(--hairline-soft)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
           <div style={{ minWidth: 0 }}>
             {eyebrow && <div className="t-eyebrow">{eyebrow}</div>}

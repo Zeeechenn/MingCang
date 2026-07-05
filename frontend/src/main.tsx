@@ -189,13 +189,26 @@ function App() {
     <div>
       <div className="mc-backdrop"></div>
       <nav className="mc-nav glass" data-tour="nav" data-screen-label="导航">
-        <a className="nav-brand" onClick={() => navigate('/')}>
+        <a
+          className="nav-brand"
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate('/')}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/'); } }}
+        >
           <div className="nav-logo">仓</div>
           <span className="nav-wordmark">明仓</span>
         </a>
         <div className="navlinks">
           {NAV.map(([to, label, icon]) => (
-            <a key={to} className={`navlink ${activeNav === to ? 'on' : ''}`} onClick={() => navigate(to)}>
+            <a
+              key={to}
+              className={`navlink ${activeNav === to ? 'on' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(to)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to); } }}
+            >
               <McIcon name={icon} size={16} /><span>{label}</span>
             </a>
           ))}

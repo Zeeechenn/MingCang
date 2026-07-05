@@ -1,4 +1,5 @@
-const BASE = '/api'
+const BASE = import.meta.env.VITE_API_BASE ?? '/api'
+const DEFAULT_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS) || 15000
 
 export type ApiErrorKind = 'transient' | 'server' | 'client' | 'timeout' | 'network' | 'unknown'
 
@@ -47,7 +48,7 @@ interface RequestClientOptions {
 export function createRequestClient({
   base = BASE,
   fetchImpl = fetch,
-  timeoutMs = 15000,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
   retries = 1,
   sleep = defaultSleep,
 }: RequestClientOptions = {}) {
