@@ -177,6 +177,7 @@ def _calm_db(tmp_path: Path) -> Path:
 
 
 def test_shadow_exits_earlier_via_floating_take_profit_while_current_stays_open(tmp_path, monkeypatch):
+    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
     db_path, universe_path = _divergence_db(tmp_path)
     monkeypatch.setattr("paper_trading.test2_ab_models.START_DATE", "2026-01-04")
 
@@ -207,6 +208,7 @@ def test_shadow_exits_earlier_via_floating_take_profit_while_current_stays_open(
 
 
 def test_no_divergence_yet_reports_open_position_stop_lines(tmp_path, monkeypatch):
+    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
     db_path, universe_path = _calm_db(tmp_path)
     monkeypatch.setattr("paper_trading.test2_ab_models.START_DATE", "2026-01-04")
 
@@ -230,6 +232,7 @@ def test_no_divergence_yet_reports_open_position_stop_lines(tmp_path, monkeypatc
 
 
 def test_no_divergence_and_no_open_positions_message(tmp_path, monkeypatch):
+    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
     db_path = tmp_path / "empty.sqlite"
     _seed_db(db_path, signals=[], prices=[("ZZZ000", "2026-01-05", 10.0, 10.5, 9.5, 10.0)])
     universe_path = tmp_path / "universe.json"
@@ -251,6 +254,7 @@ def test_no_divergence_and_no_open_positions_message(tmp_path, monkeypatch):
 
 
 def test_run_never_mutates_the_source_database(tmp_path, monkeypatch):
+    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
     db_path, universe_path = _divergence_db(tmp_path)
     monkeypatch.setattr("paper_trading.test2_ab_models.START_DATE", "2026-01-04")
     before_hash = _sha256(db_path)
@@ -263,6 +267,7 @@ def test_run_never_mutates_the_source_database(tmp_path, monkeypatch):
 
 
 def test_run_never_touches_real_test2_ab_state_json(tmp_path, monkeypatch):
+    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
     real_state = REPO_ROOT / "paper_trading" / "test2_ab_state.json"
     assert real_state.exists(), "expected the real test2 v1/v2 state file to exist in this repo"
     before_hash = _sha256(real_state)

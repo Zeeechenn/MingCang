@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from backend.data.database import get_db
 from backend.main import app
+from backend.version import APP_VERSION
 
 
 def _client_for_db(test_db):
@@ -98,7 +99,7 @@ def test_system_status_happy_path_counts_core_tables(test_db, monkeypatch):
 
     payload = system_status(db=test_db, settings=get_settings())
 
-    assert payload["version"] == "0.5.2"
+    assert payload["version"] == APP_VERSION
     assert payload["atlas_enabled"] is False
     assert "database_url" not in payload
     assert "database_path" not in payload
