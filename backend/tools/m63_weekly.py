@@ -22,6 +22,21 @@ OUTPUT_DIR = m63_daily.OUTPUT_DIR
 DEFAULT_QUEUE_PATH = m63_daily.DEFAULT_QUEUE_PATH
 DEFAULT_TRIGGER_HISTORY_PATH = m63_daily.DEFAULT_TRIGGER_HISTORY_PATH
 R5_RULE = "R5_weekly_sweep"
+DEGRADATION_EXPLAINER = (
+    "降级=某数据源当次没取到,系统自动跳过或用兜底,"
+    "不影响已落库数据;持续大量降级才需要关注网络/接口配置"
+)
+DEGRADATION_DETAIL_LIMIT = 20
+COVERAGE_GAP_IMPACTS = {
+    "announcements": "公告避雷与研报参考降级",
+    "research_reports": "公告避雷与研报参考降级",
+    "fund_flow": "资金流触发与量化特征降级",
+    "news": "新闻情感降级",
+    "corporate_events": "事件日历、解禁复牌提醒降级",
+    "overseas": "海外映射与隔夜参考降级",
+    "holders": "股东结构参考降级",
+    "lhb": "龙虎榜上榜参考降级",
+}
 
 _ATTRIBUTION_TOOL = {
     "name": "m63_weekly_attribution",
@@ -264,6 +279,19 @@ def _is_coverage_gap_reason(error: str | None) -> bool:
     return reason.startswith("coverage_gap:") or reason in {"empty", "no_pit_data"}
 
 
+def _degradation_reason_category(error: str | None) -> str:
+    reason = str(error or "").lower()
+    if re.search(r"timeout|timed out|超时", reason):
+        return "timeout"
+    if re.search(r"http\s*5\d\d|\b5\d\d\b|bad gateway|service unavailable", reason):
+        return "http_5xx"
+    if re.search(r"http\s*4\d\d|\b4\d\d\b|unauthorized|forbidden|not found|权限", reason):
+        return "http_4xx"
+    if re.search(r"connection|connect|conn|连接|network|网络|dns|reset|refused", reason):
+        return "connection"
+    return "other"
+
+
 def _data_health(con: sqlite3.Connection, *, start: str, end: str) -> dict[str, Any]:
     if not m63_daily._table_exists(con, "degradation_events"):
         return {"failures": [], "coverage_gaps": [], "total_failures": 0, "total_coverage_gaps": 0}
@@ -272,15 +300,15 @@ def _data_health(con: sqlite3.Connection, *, start: str, end: str) -> dict[str, 
         return {"failures": [], "coverage_gaps": [], "total_failures": 0, "total_coverage_gaps": 0}
     rows = con.execute(
         """
-        SELECT component, category, provider, error, COUNT(*) AS count
+        SELECT component, category, error, date(ts) AS event_date, COUNT(*) AS count
         FROM degradation_events
         WHERE date(ts) >= date(?) AND date(ts) <= date(?)
-        GROUP BY component, category, provider, error
-        ORDER BY count DESC, component, category, provider, error
+        GROUP BY component, category, error, date(ts)
+        ORDER BY count DESC, component, category, error, event_date
         """,
         (start, end),
     ).fetchall()
-    failures: list[dict[str, Any]] = []
+    failures_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     coverage_by_category: Counter[str] = Counter()
     for row in rows:
         item = dict(row)
@@ -288,7 +316,26 @@ def _data_health(con: sqlite3.Connection, *, start: str, end: str) -> dict[str, 
         if _is_coverage_gap_reason(item.get("error")):
             coverage_by_category[str(item.get("category") or "unknown")] += count
         else:
-            failures.append(item)
+            component = str(item.get("component") or "unknown")
+            reason_category = _degradation_reason_category(item.get("error"))
+            key = (component, reason_category)
+            existing = failures_by_key.setdefault(
+                key,
+                {
+                    "component": component,
+                    "reason_category": reason_category,
+                    "count": 0,
+                    "latest_date": str(item.get("event_date") or "-"),
+                },
+            )
+            existing["count"] += count
+            event_date = str(item.get("event_date") or "-")
+            if event_date > str(existing.get("latest_date") or ""):
+                existing["latest_date"] = event_date
+    failures = sorted(
+        failures_by_key.values(),
+        key=lambda row: (-int(row.get("count") or 0), str(row.get("component") or ""), str(row.get("reason_category") or "")),
+    )
     coverage_gaps = [
         {"category": category, "count": count}
         for category, count in sorted(coverage_by_category.items(), key=lambda item: (-item[1], item[0]))
@@ -309,14 +356,22 @@ def _lines_data_health(data_health: dict[str, Any]) -> list[str]:
     if not failures and not gaps:
         return ["近7天未见 degradation_events 记录"]
 
-    lines: list[str] = [f"真降级 {total_failures} 条"]
-    lines.extend(
-        f"{row['component']}/{row['category']}/{row['provider']}: {row['error']} x{row['count']}"
-        for row in failures
-    )
+    lines: list[str] = [DEGRADATION_EXPLAINER, f"真降级 {total_failures} 条"]
+    for row in failures[:DEGRADATION_DETAIL_LIMIT]:
+        lines.append(
+            f"{row['component']} × {row['reason_category']} × {row['count']} 条(最近: {row['latest_date']})"
+        )
+    hidden_failure_count = sum(int(row.get("count") or 0) for row in failures[DEGRADATION_DETAIL_LIMIT:])
+    if hidden_failure_count:
+        lines.append(f"其余 {hidden_failure_count} 条见降级表")
     lines.append(f"覆盖缺口 {total_gaps} 条")
     if gaps:
         lines.append("覆盖缺口汇总:" + ", ".join(f"{row['category']}={row['count']}" for row in gaps))
+        impacts = [
+            f"{row['category']}→{COVERAGE_GAP_IMPACTS.get(str(row['category']), '相关数据参考降级')}"
+            for row in gaps
+        ]
+        lines.append("缺口影响说明: " + "; ".join(impacts))
     return lines
 
 

@@ -76,6 +76,12 @@ def _db(path: Path) -> Path:
         con.execute(
             """
             INSERT INTO degradation_events(ts, component, category, provider, error, context_json)
+            VALUES ('2026-07-04T10:05:00', 'category_registry', 'announcements', 'unit', 'coverage_gap:empty', '{}')
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO degradation_events(ts, component, category, provider, error, context_json)
             VALUES ('2026-07-04T11:00:00', 'category_registry', 'quotes', 'unit', 'failure:source offline', '{}')
             """
         )
@@ -159,9 +165,13 @@ def test_weekly_no_llm_detects_miss_stale_expiring_and_writes_report(tmp_path, m
     assert "长期标签临期" in result["text"]
     assert "陈旧主题" in result["text"]
     assert "真降级 1 条" in result["text"]
-    assert "category_registry/quotes/unit: failure:source offline" in result["text"]
-    assert "覆盖缺口 1 条" in result["text"]
+    assert "降级=某数据源当次没取到,系统自动跳过或用兜底,不影响已落库数据" in result["text"]
+    assert "category_registry × other × 1 条(最近: 2026-07-04)" in result["text"]
+    assert "category_registry/quotes/unit: failure:source offline" not in result["text"]
+    assert "覆盖缺口 2 条" in result["text"]
     assert "fund_flow=1" in result["text"]
+    assert "announcements=1" in result["text"]
+    assert "缺口影响说明: announcements→公告避雷与研报参考降级; fund_flow→资金流触发与量化特征降级" in result["text"]
     assert Path(result["output_path"]).exists()
 
     second = m63_weekly.run_weekly(
@@ -233,3 +243,24 @@ def test_weekly_final_text_uses_sanitize_language_guard(tmp_path, monkeypatch):
     assert "强烈推荐" not in result["text"]
     assert "[操作词已屏蔽]" in result["text"]
     assert "语言守卫" in result["text"]
+
+
+def test_weekly_data_health_caps_degradation_groups():
+    from backend.tools import m63_weekly
+
+    failures = [
+        {"component": f"c{i:02d}", "reason_category": "other", "count": 1, "latest_date": "2026-07-04"}
+        for i in range(21)
+    ]
+
+    lines = m63_weekly._lines_data_health(
+        {
+            "failures": failures,
+            "coverage_gaps": [],
+            "total_failures": 21,
+            "total_coverage_gaps": 0,
+        }
+    )
+
+    assert sum(" × other × " in line for line in lines) == 20
+    assert "其余 1 条见降级表" in lines

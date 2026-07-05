@@ -28,6 +28,11 @@ GLOSSARY: dict[str, str] = {
     "回撤": "从阶段高点往下跌的幅度。",
     "EPS": "每股收益,常用于看公司盈利和估值。",
     "研报评级": "券商研究报告给出的观点标签,只能作为外部参考。",
+    "观察哨": "只扫描已关注标的是否出现价格、资金、新闻或主题联动变化,触发后进入盘后复核,不是操作指令。",
+    "触发器": "把异常变化记录成待复核事项的规则,用于提醒继续研究,不等于结论。",
+    "sector_resonance": "联动共振,同一观察主题里多数已有价格数据的成员同日上涨且平均涨幅超过阈值。",
+    "lhb_spotlight": "龙虎榜上榜,交易所异常交易席位榜单出现该标的,用于观察短线资金行为。",
+    "flow_anomaly": "资金流异动,当日主力资金相对近期分布偏离较大,用于提示资金热度异常。",
 }
 
 SEMANTIC_NOTES: dict[str, str] = {
@@ -36,8 +41,12 @@ SEMANTIC_NOTES: dict[str, str] = {
         "出场规则管'持有中怎么退'--三者各管一段,不互相否决。"
     ),
     "position_avoid": (
-        "说明:持仓还在不等于标签支持继续研究;规避标签提示基本面/估值或证据不足,"
-        "持仓处理仍按止损位、仓位和盘后决断来管。"
+        "长期标签(规避)与当前持仓并存:标签是长期研究观点,"
+        "持仓处置以止损纪律与保护动作为准,不构成自动平仓指令"
+    ),
+    "position_overvalued": (
+        "长期标签(估值偏高)与当前持仓并存:标签是长期研究观点,"
+        "持仓处置以止损纪律与保护动作为准,不构成自动平仓指令"
     ),
 }
 
@@ -97,8 +106,14 @@ def enforce_language_guard(text: str, mode: str = "strict") -> str:
         raise ValueError(f"M63 language guard blocked trade words: {', '.join(hits)}")
 
     sanitized, count = sanitize_trade_words(text)
-    logger.warning("M63 language guard sanitized %s trade wording hit(s)", count)
-    return sanitized.rstrip() + f"\n⚠️ 语言守卫：屏蔽 {count} 处交易动词\n"
+    logger.warning(
+        "M63 language guard sanitized %s actionable wording hit(s); compliance design, not an error",
+        count,
+    )
+    return (
+        sanitized.rstrip()
+        + f"\n⚠️ 语言守卫：已屏蔽 {count} 处操作性表述(合规设计,系统不输出买卖指令,非错误)\n"
+    )
 
 
 def assert_no_trade_words(text: str) -> None:
@@ -178,6 +193,8 @@ def inject_semantic_notes(lines: list[str]) -> list[str]:
         notes.append(SEMANTIC_NOTES["long_term_signal"])
     if "持仓" in text and "规避" in text:
         notes.append(SEMANTIC_NOTES["position_avoid"])
+    if "持仓" in text and "估值偏高" in text:
+        notes.append(SEMANTIC_NOTES["position_overvalued"])
     return [*lines, *notes] if notes else lines
 
 

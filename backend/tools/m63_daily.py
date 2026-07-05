@@ -815,6 +815,13 @@ def _watchtower_lines(report: dict[str, Any] | None) -> list[str]:
     return lines
 
 
+def _format_stop_distance(value: Any) -> str:
+    if value is None:
+        return "- (止损数据缺失)"
+    text = format_cn_number(value)
+    return text if text.endswith("%") else f"{text}%"
+
+
 def _panel_lines(panel: dict[str, Any] | None) -> list[str]:
     if not panel:
         return ["面板:无结果"]
@@ -850,9 +857,11 @@ def _panel_lines(panel: dict[str, Any] | None) -> list[str]:
         lines.append(line)
     for item in panel.get("position_health", {}).get("items", [])[:8]:
         label = (item.get("research_reference") or {}).get("long_term_label") or {}
+        symbol = format_cn_number(item.get("symbol"))
+        label_text = format_cn_number(label.get("label"))
         line = (
-            f"持仓 {item.get('symbol')} 现价{format_cn_number(item.get('current_price'))} "
-            f"距止损{item.get('distance_to_stop_loss_pct')}% 长期标签{label.get('label') or '-'}"
+            f"持仓 {symbol} 现价{format_cn_number(item.get('current_price'))} "
+            f"距止损{_format_stop_distance(item.get('distance_to_stop_loss_pct'))} 长期标签{label_text}"
         )
         if item.get("protective_action"):
             line += f" → 保护动作: {item.get('protective_action')}"
@@ -861,14 +870,14 @@ def _panel_lines(panel: dict[str, Any] | None) -> list[str]:
         lines.append(line)
     for item in candidate_items[:8]:
         if item.get("quality_flags"):
-            lines.append(f"候选 {item.get('symbol')} 质量旗标: {', '.join(item.get('quality_flags') or [])}(建议仓位上限减半)")
+            lines.append(f"候选 {format_cn_number(item.get('symbol'))} 质量旗标: {', '.join(item.get('quality_flags') or [])}(建议仓位上限减半)")
     for symbol, action in risk_actions[:5]:
-        lines.append(f"风险警示 {symbol} → 保护动作: {action}")
+        lines.append(f"风险警示 {format_cn_number(symbol)} → 保护动作: {action}")
     for item in panel.get("risk_warnings", {}).get("event_warnings", {}).get("items", [])[:8]:
         if isinstance(item, dict):
             lines.append(
-                f"⚠️ {item.get('symbol')} {item.get('name') or ''} "
-                f"{item.get('event_type')} {item.get('event_date')}".strip()
+                f"⚠️ {format_cn_number(item.get('symbol'))} {item.get('name') or ''} "
+                f"{format_cn_number(item.get('event_type'))} {format_cn_number(item.get('event_date'))}".strip()
             )
         else:
             lines.append(re.sub(r"\s*\(\{.*\}\)", "", str(item)))

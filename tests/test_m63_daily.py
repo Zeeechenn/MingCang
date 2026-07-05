@@ -140,7 +140,7 @@ def test_language_guard_sanitize_replaces_and_counts_hits():
     assert "buy now" not in text
     assert "目标价" not in text
     assert text.count("[操作词已屏蔽]") == 3
-    assert "⚠️ 语言守卫：屏蔽 3 处交易动词" in text
+    assert "⚠️ 语言守卫：已屏蔽 3 处操作性表述(合规设计,系统不输出买卖指令,非错误)" in text
 
 
 def test_intraday_proximity_alert_math(tmp_path):
@@ -585,9 +585,40 @@ def test_panel_lines_surface_hard_rule_fields():
     assert "质量旗标: missing:piotroski(建议仓位上限减半)" in text
 
 
+def test_panel_lines_explain_missing_stop_distance_and_avoid_holding():
+    lines = m63_daily._panel_lines(
+        {
+            "summary": {"text": "面板"},
+            "buy_candidates": {"items": []},
+            "position_health": {
+                "items": [
+                    {
+                        "symbol": "688111",
+                        "current_price": 211.35,
+                        "distance_to_stop_loss_pct": None,
+                        "research_reference": {"long_term_label": {"label": "规避"}},
+                    }
+                ]
+            },
+            "risk_warnings": {"event_warnings": {"items": []}},
+        }
+    )
+
+    text = "\n".join(lines)
+    assert "持仓 688111 现价211.35 距止损- (止损数据缺失) 长期标签规避" in text
+    assert "None%" not in text
+    assert "长期标签(规避)与当前持仓并存" in text
+    assert "持仓处置以止损纪律与保护动作为准" in text
+
+
 def test_glossary_footnote_only_lists_terms_present():
-    text = render_report([("术语", ["ATR 用于止损位计算"])], glossary_terms={"ATR", "EPS"})
+    text = render_report(
+        [("术语", ["ATR 用于止损位计算,观察哨触发 sector_resonance"])],
+        glossary_terms={"ATR", "EPS", "观察哨", "sector_resonance"},
+    )
 
     assert "- ATR:" in text
     assert "- 止损位:" in text
+    assert "- 观察哨:" in text
+    assert "- sector_resonance:" in text
     assert "- EPS:" not in text
