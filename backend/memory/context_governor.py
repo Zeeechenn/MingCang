@@ -98,18 +98,36 @@ def _resident_candidates(db, *, symbol: str | None, query: str | None) -> list[d
 
 def _retrieval_candidates(db, *, symbol: str | None, query: str | None, limit: int) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    for capsule in list_task_capsules(db, limit=3):
-        items.append({
-            "id": f"capsule:{capsule['capsule_id']}",
-            "namespace": NAMESPACE_SYSTEM_OPERATIONS,
-            "subject": capsule["capsule_id"],
-            "summary": (
-                f"{capsule['goal']}；下一步:{' / '.join(capsule.get('next_actions') or [])}; "
-                f"未完成:{' / '.join(capsule.get('open_loops') or [])}"
-            ),
-            "symbols": capsule.get("symbols_json") or [],
-            "themes": capsule.get("themes_json") or [],
-        })
+    if query:
+        try:
+            from backend.memory.recall import recall
+
+            for row in recall(db, query, symbol=symbol, limit=max(limit, 8)):
+                items.append({
+                    "id": f"recall:{row['source']}:{row['source_id']}",
+                    "namespace": row.get("namespace"),
+                    "subject": row.get("subject") or row.get("symbol"),
+                    "summary": row.get("body"),
+                    "symbols": [row["symbol"]] if row.get("symbol") else [],
+                    "themes": [row.get("namespace") or ""],
+                    "source": row.get("source"),
+                    "recency_note": row.get("recency_note"),
+                })
+        except Exception:
+            pass
+    if not items:
+        for capsule in list_task_capsules(db, limit=3):
+            items.append({
+                "id": f"capsule:{capsule['capsule_id']}",
+                "namespace": NAMESPACE_SYSTEM_OPERATIONS,
+                "subject": capsule["capsule_id"],
+                "summary": (
+                    f"{capsule['goal']}；下一步:{' / '.join(capsule.get('next_actions') or [])}; "
+                    f"未完成:{' / '.join(capsule.get('open_loops') or [])}"
+                ),
+                "symbols": capsule.get("symbols_json") or [],
+                "themes": capsule.get("themes_json") or [],
+            })
     try:
         from backend.memory.stock_memory import list_stock_memories
 

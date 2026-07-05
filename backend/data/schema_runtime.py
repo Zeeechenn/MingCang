@@ -6,12 +6,89 @@ from typing import Any
 from sqlalchemy import text
 
 
+def _ensure_memory_recall_schema(runtime_engine: Any) -> None:
+    """Create the unified memory recall index and FTS5 table."""
+    with runtime_engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS memory_recall_index (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                namespace TEXT NOT NULL,
+                symbol TEXT,
+                subject TEXT,
+                title TEXT,
+                body TEXT NOT NULL,
+                tags TEXT,
+                as_of TEXT,
+                event_time TEXT,
+                ingestion_time TEXT,
+                invalidated_at TEXT,
+                supports_as_of INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT,
+                UNIQUE(source, source_id)
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_memory_recall_index_filters
+            ON memory_recall_index(namespace, symbol, supports_as_of)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_memory_recall_index_time
+            ON memory_recall_index(ingestion_time, invalidated_at, updated_at)
+        """))
+        conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS memory_recall_fts USING fts5(
+                title,
+                body,
+                namespace,
+                symbol,
+                tags,
+                content='memory_recall_index',
+                content_rowid='id'
+            )
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS memory_recall_index_ai
+            AFTER INSERT ON memory_recall_index BEGIN
+                INSERT INTO memory_recall_fts(rowid, title, body, namespace, symbol, tags)
+                VALUES (new.id, new.title, new.body, new.namespace, new.symbol, new.tags);
+            END
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS memory_recall_index_ad
+            AFTER DELETE ON memory_recall_index BEGIN
+                INSERT INTO memory_recall_fts(
+                    memory_recall_fts, rowid, title, body, namespace, symbol, tags
+                )
+                VALUES (
+                    'delete', old.id, old.title, old.body, old.namespace, old.symbol, old.tags
+                );
+            END
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS memory_recall_index_au
+            AFTER UPDATE ON memory_recall_index BEGIN
+                INSERT INTO memory_recall_fts(
+                    memory_recall_fts, rowid, title, body, namespace, symbol, tags
+                )
+                VALUES (
+                    'delete', old.id, old.title, old.body, old.namespace, old.symbol, old.tags
+                );
+                INSERT INTO memory_recall_fts(rowid, title, body, namespace, symbol, tags)
+                VALUES (new.id, new.title, new.body, new.namespace, new.symbol, new.tags);
+            END
+        """))
+
+
 def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
     """SQLite create_all 不会补既有表字段，这里做轻量幂等迁移。"""
     if runtime_engine is None:
         from backend.data.database import engine
 
         runtime_engine = engine
+
+    _ensure_memory_recall_schema(runtime_engine)
 
     with runtime_engine.begin() as conn:
         price_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(prices)")).fetchall()]
@@ -452,4 +529,4 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
         """))
 
 
-__all__ = ["_ensure_runtime_schema"]
+__all__ = ["_ensure_runtime_schema", "_ensure_memory_recall_schema"]
