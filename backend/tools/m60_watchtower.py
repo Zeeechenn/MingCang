@@ -38,7 +38,9 @@ from backend.config import default_sqlite_path, settings
 from backend.data.news_clustering import cluster_evidence
 from backend.data.news_evidence import NewsEvidence
 from backend.data.news_trigger import decide_trigger
+from backend.research.forward_thesis import list_theme_forward_theses_from_connection
 from backend.research.watchlist import WATCHLIST_DIR, load_watchlists, themes_by_symbol
+from backend.tools.m60_thesis_conditions import evaluate_condition_spec
 
 DEFAULT_OUTPUT_DIR = Path("/private/tmp")
 OUTPUT_FILENAME_PREFIX = "m60_watchtower_"
@@ -55,6 +57,8 @@ TRIGGER_FLOW_ANOMALY = "flow_anomaly"
 # values use the Phase 2.5 names above.
 TRIGGER_LHB_APPEARANCE = TRIGGER_LHB_SPOTLIGHT
 TRIGGER_FUND_FLOW_SURGE = TRIGGER_FLOW_ANOMALY
+TRIGGER_THESIS_VALIDATION = "thesis_validation"
+TRIGGER_THESIS_INVALIDATION = "thesis_invalidation"
 CATEGORY_TRIGGER_DAMPER_TRADING_DAYS = 5
 
 
@@ -532,6 +536,159 @@ def _has_recent_flow_anomaly(con: sqlite3.Connection, symbol: str, as_of: str) -
     return row is not None
 
 
+def _open_position_symbols(con: sqlite3.Connection, as_of: str) -> set[str]:
+    if not _table_exists(con, "positions") or not {"symbol"} <= _columns(con, "positions"):
+        return set()
+    cols = _columns(con, "positions")
+    if "closed_at" in cols:
+        rows = con.execute(
+            """
+            SELECT DISTINCT symbol
+            FROM positions
+            WHERE symbol IS NOT NULL
+              AND (closed_at IS NULL OR date(closed_at) > date(?))
+            """,
+            (as_of,),
+        ).fetchall()
+    else:
+        rows = con.execute("SELECT DISTINCT symbol FROM positions WHERE symbol IS NOT NULL").fetchall()
+    return {str(row["symbol"]) for row in rows}
+
+
+def _load_condition_specs(con: sqlite3.Connection) -> tuple[dict[int, dict[str, list[dict[str, Any]]]], dict[str, int]]:
+    if not _table_exists(con, "thesis_condition_specs"):
+        return {}, {"total": 0, "compiled": 0, "manual_review": 0}
+    cols = _columns(con, "thesis_condition_specs")
+    if not {"forward_thesis_id", "condition_type", "spec_json", "compiled_by"} <= cols:
+        return {}, {"total": 0, "compiled": 0, "manual_review": 0}
+    rows = con.execute(
+        """
+        SELECT forward_thesis_id, condition_type, spec_json, compiled_by
+        FROM thesis_condition_specs
+        ORDER BY id
+        """
+    ).fetchall()
+    grouped: dict[int, dict[str, list[dict[str, Any]]]] = {}
+    stats = {"total": 0, "compiled": 0, "manual_review": 0}
+    for row in rows:
+        try:
+            spec = json.loads(str(row["spec_json"]))
+        except json.JSONDecodeError:
+            continue
+        stats["total"] += 1
+        if row["compiled_by"] == "manual" or spec.get("kind") == "manual_review":
+            stats["manual_review"] += 1
+        else:
+            stats["compiled"] += 1
+        grouped.setdefault(int(row["forward_thesis_id"]), {}).setdefault(str(row["condition_type"]), []).append(spec)
+    return grouped, stats
+
+
+def _has_recent_thesis_trigger(
+    con: sqlite3.Connection,
+    symbol: str,
+    theme_key: str,
+    trigger_type: str,
+    as_of: str,
+) -> bool:
+    history_table = "m60_watchtower_trigger_history"
+    if not _table_exists(con, history_table):
+        return False
+    cols = _columns(con, history_table)
+    if not {"date", "target", "trigger_type"} <= cols:
+        return False
+    recent_dates = _recent_trading_dates(con, symbol, as_of, CATEGORY_TRIGGER_DAMPER_TRADING_DAYS)
+    if not recent_dates:
+        return False
+    placeholders = ",".join("?" for _ in recent_dates)
+    row = con.execute(
+        f"""
+        SELECT 1
+        FROM {history_table}
+        WHERE target = ?
+          AND trigger_type = ?
+          AND date(date) IN ({placeholders})
+        LIMIT 1
+        """,
+        (theme_key, trigger_type, *recent_dates),
+    ).fetchone()
+    return row is not None
+
+
+def _thesis_condition_triggers(
+    con: sqlite3.Connection,
+    *,
+    entries: list[dict[str, Any]],
+    resolved_as_of: str,
+    per_symbol_pv: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    specs_by_thesis_id, stats = _load_condition_specs(con)
+    if not specs_by_thesis_id or not _table_exists(con, "forward_theses"):
+        return [], {
+            **stats,
+            "themes_with_specs": 0,
+            "text": (
+                "论点条件 0 条暂需人工判断(未数据化)"
+                if stats["manual_review"] == 0
+                else f"论点条件 {stats['manual_review']} 条暂需人工判断(未数据化)"
+            ),
+        }
+    symbols_by_theme = {str(entry["theme_key"]): list(entry.get("symbols") or []) for entry in entries}
+    open_positions = _open_position_symbols(con, resolved_as_of)
+    thesis_rows = list_theme_forward_theses_from_connection(con)
+    triggers: list[dict[str, Any]] = []
+    themes_with_specs = 0
+    for thesis in thesis_rows:
+        thesis_id = int(thesis["id"])
+        theme_key = str(thesis["theme_key"])
+        condition_map = specs_by_thesis_id.get(thesis_id) or {}
+        symbols = symbols_by_theme.get(theme_key) or []
+        if not condition_map or not symbols:
+            continue
+        themes_with_specs += 1
+        for condition_type, trigger_type in (
+            ("validation", TRIGGER_THESIS_VALIDATION),
+            ("invalidation", TRIGGER_THESIS_INVALIDATION),
+        ):
+            for spec in condition_map.get(condition_type, []):
+                if spec.get("kind") == "manual_review":
+                    continue
+                for symbol in symbols:
+                    evaluation = evaluate_condition_spec(con, symbol=symbol, as_of=resolved_as_of, spec=spec)
+                    if not evaluation.get("triggered"):
+                        continue
+                    if _has_recent_thesis_trigger(con, symbol, theme_key, trigger_type, resolved_as_of):
+                        continue
+                    pv = per_symbol_pv.get(symbol, {})
+                    holding_risk = trigger_type == TRIGGER_THESIS_INVALIDATION and symbol in open_positions
+                    card = "论点证伪警报" if trigger_type == TRIGGER_THESIS_INVALIDATION else "论点验证进展"
+                    if holding_risk:
+                        card += "｜持仓论点风险"
+                    triggers.append(
+                        {
+                            "symbol": symbol,
+                            "themes": [theme_key],
+                            "trigger_type": trigger_type,
+                            "trigger_rule": "R7_thesis_validated" if trigger_type == TRIGGER_THESIS_VALIDATION else "R7_thesis_invalidated",
+                            "value": evaluation.get("value"),
+                            "detail": {
+                                "forward_thesis_id": thesis_id,
+                                "condition_type": condition_type,
+                                "spec": spec,
+                                "evaluation": evaluation,
+                                "observe_only": True,
+                                "state_machine_unchanged": True,
+                                "holding_thesis_risk": holding_risk,
+                            },
+                            "card": card,
+                            "price": {"date": pv.get("as_of_date"), "close": pv.get("close")},
+                        }
+                    )
+    manual = stats["manual_review"]
+    text = f"论点条件 {manual} 条暂需人工判断(未数据化)" if manual else ""
+    return triggers, {**stats, "themes_with_specs": themes_with_specs, "text": text}
+
+
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
@@ -715,12 +872,21 @@ def build_watchtower_report(
                     }
                 )
 
+        thesis_triggers, thesis_condition_coverage = _thesis_condition_triggers(
+            con,
+            entries=entries,
+            resolved_as_of=resolved_as_of,
+            per_symbol_pv=per_symbol_pv,
+        )
+        triggers.extend(thesis_triggers)
+
     triggers.sort(key=lambda t: (t["symbol"], t["trigger_type"]))
     triggered_symbols = sorted({t["symbol"] for t in triggers})
     no_trigger_symbols = [s for s in all_symbols if s not in triggered_symbols]
     coverage = {
         "fund_flow_insufficient_history_count": len(fund_flow_insufficient_history_symbols),
         "fund_flow_insufficient_history_symbols": fund_flow_insufficient_history_symbols,
+        "thesis_conditions": thesis_condition_coverage,
         "text": (
             f"资金流历史不足 {len(fund_flow_insufficient_history_symbols)} 支跳过"
             if fund_flow_insufficient_history_symbols
@@ -773,6 +939,14 @@ def render_markdown(report: dict[str, Any]) -> str:
     coverage_text = (report.get("coverage") or {}).get("text")
     if coverage_text:
         lines.append(f"coverage: {coverage_text}")
+    thesis_coverage = (report.get("coverage") or {}).get("thesis_conditions") or {}
+    if thesis_coverage:
+        lines.append(
+            "thesis_conditions: "
+            f"{thesis_coverage.get('compiled', 0)}/{thesis_coverage.get('total', 0)} 数据化"
+        )
+        if thesis_coverage.get("manual_review"):
+            lines.append(f"周末体检: 论点条件 {thesis_coverage.get('manual_review')} 条暂需人工判断(未数据化)")
     for theme in report["themes"]:
         resonance = report["sector_resonance"].get(theme["theme_key"], {})
         lines.append(

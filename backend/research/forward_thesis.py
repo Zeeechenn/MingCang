@@ -18,6 +18,7 @@ The actual artifacts remain in their source storage.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -47,6 +48,7 @@ FORWARD_THESIS_TRANSITIONS: set[tuple[str, str]] = {
     ("watch", "superseded"),
     ("watch", "invalidated"),
 }
+THEME_STATEMENT_RE = re.compile(r"^\[theme:(?P<theme_key>[^\]]+)\]")
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +104,41 @@ def _row_to_dict(row) -> dict:
         "created_at": _iso(row.created_at),
         "updated_at": _iso(row.updated_at),
     }
+
+
+def theme_key_from_statement(statement: str) -> str | None:
+    """Return the ``[theme:<key>]`` prefix value, if present."""
+    match = THEME_STATEMENT_RE.match(statement or "")
+    return match.group("theme_key") if match else None
+
+
+def list_theme_forward_theses_from_connection(con, *, statuses: tuple[str, ...] = ("active", "watch", "draft")) -> list[dict]:
+    """Read theme-level ForwardThesis rows through an existing sqlite connection.
+
+    This helper is intentionally read-only for M60 watchtower consumers and does
+    not touch the ForwardThesis status state machine.
+    """
+    placeholders = ",".join("?" for _ in statuses)
+    rows = con.execute(
+        f"""
+        SELECT id, statement, status, invalidation_conditions_json, follow_up_metrics_json, updated_at
+        FROM forward_theses
+        WHERE symbol IS NULL
+          AND statement LIKE '[theme:%'
+          AND status IN ({placeholders})
+        ORDER BY updated_at DESC, id DESC
+        """,
+        statuses,
+    ).fetchall()
+    items: list[dict] = []
+    for row in rows:
+        data = dict(row)
+        theme_key = theme_key_from_statement(str(data.get("statement") or ""))
+        if not theme_key:
+            continue
+        data["theme_key"] = theme_key
+        items.append(data)
+    return items
 
 
 # ---------------------------------------------------------------------------

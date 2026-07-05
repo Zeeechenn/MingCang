@@ -163,9 +163,17 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
     {
         "module": "backend.tools.m60_watchtower",
         "category": "stable",
-        "purpose": "M60 Phase 1 postmarket watchtower: scan the Phase 0 observation watchlist for price/volume anomaly, sector resonance, and M54 news-L1 triggers (zero LLM, deterministic).",
-        "read_write_boundary": "Read-only against prices/news via the configured SQLite database in mode=ro; writes only the requested JSON/Markdown artifacts under --output-dir (default /private/tmp), never the database.",
+        "purpose": "M60 Phase 1 postmarket watchtower: scan the Phase 0 observation watchlist for price/volume anomaly, sector resonance, M54 news-L1 triggers, and precompiled ForwardThesis validation/invalidation condition specs (zero LLM, deterministic).",
+        "read_write_boundary": "Read-only against prices/news/category tables/forward_theses/thesis_condition_specs via the configured SQLite database in mode=ro; writes only the requested JSON/Markdown artifacts under --output-dir (default /private/tmp), never the database.",
         "recommended_entrypoint": "python3 -m backend.tools.m60_watchtower",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.m60_thesis_conditions",
+        "category": "maintenance",
+        "purpose": "Compile ForwardThesis validation/invalidation prose into thesis_condition_specs using rule-only data templates; unmatched prose is marked manual_review.",
+        "read_write_boundary": "Writes only thesis_condition_specs in the configured SQLite database; zero LLM; does not mutate ForwardThesis status, signals, positions, or watchlists.",
+        "recommended_entrypoint": "python3 -m backend.tools.m60_thesis_conditions --json",
         "still_runnable": True,
     },
     {

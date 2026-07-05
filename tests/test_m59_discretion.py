@@ -11,12 +11,17 @@ from backend.tools.m63_render import assert_no_trade_words
 class FakeProvider:
     name = "fake-provider"
 
-    def __init__(self, payload: dict | None = None) -> None:
+    def __init__(self, payload: dict | None = None, objection_payload: dict | None = None) -> None:
         self.payload = payload
+        self.objection_payload = objection_payload
         self.calls: list[dict] = []
 
     def complete_structured(self, **kwargs):
         self.calls.append(kwargs)
+        if kwargs["tool"]["name"] == "m59_discretion_objection_batch":
+            if self.objection_payload is not None:
+                return self.objection_payload
+            return {"objections": []}
         if self.payload is not None:
             return self.payload
         prompt = kwargs["prompt"]
@@ -92,7 +97,7 @@ def test_schema_validation_failure_degrades_without_raising(tmp_path, monkeypatc
     assert provider.calls
 
 
-def test_budget_caps_at_five_candidates_plus_three_flagged_holdings(tmp_path, monkeypatch):
+def test_budget_caps_at_four_candidates_plus_three_flagged_holdings_plus_objection_batch(tmp_path, monkeypatch):
     _patch_context(monkeypatch)
     db_path = _db(tmp_path / "m59.sqlite")
     panel = {
@@ -104,10 +109,94 @@ def test_budget_caps_at_five_candidates_plus_three_flagged_holdings(tmp_path, mo
     result = m59_discretion.build_discretion_cards(panel, db_path=db_path, as_of="2026-07-05", provider=provider)
 
     assert len(provider.calls) == 8
-    assert len(result["cards"]) == 8
-    assert [card["slot"] for card in result["cards"]].count("candidate_selection") == 5
+    assert provider.calls[-1]["tool"]["name"] == "m59_discretion_objection_batch"
+    assert len(result["cards"]) == 7
+    assert [card["slot"] for card in result["cards"]].count("candidate_selection") == 4
     assert [card["slot"] for card in result["cards"]].count("holding_decision") == 3
     assert {card["symbol"] for card in result["cards"] if card["slot"] == "holding_decision"} == {"H2", "H3", "H4"}
+
+
+def test_objection_schema_validation_failure_degrades_without_blocking(tmp_path, monkeypatch):
+    _patch_context(monkeypatch)
+    db_path = _db(tmp_path / "m59.sqlite")
+    panel = {"buy_candidates": {"items": [_candidate("C0")]}, "position_health": {"items": []}}
+    provider = FakeProvider(objection_payload={"objections": [{"symbol": "C0", "severity": "critical"}]})
+
+    result = m59_discretion.build_discretion_cards(panel, db_path=db_path, as_of="2026-07-05", provider=provider)
+
+    assert len(result["cards"]) == 1
+    assert result["skipped"] == 0
+    assert result["cards"][0].get("objection") is None
+    assert "反方审视失败" in result["text"]
+
+
+def test_high_objection_downgrades_confidence_renders_and_persists(tmp_path, monkeypatch):
+    _patch_context(monkeypatch)
+    db_path = _db(tmp_path / "m59.sqlite")
+    panel = {"buy_candidates": {"items": [_candidate("C0")]}, "position_health": {"items": []}}
+    provider = FakeProvider(
+        payload={
+            "stance": "观望",
+            "timing_note": "等待公告确认",
+            "rationale": "price.last_close 与 fund_flow.recent5_main_net 支撑不足",
+            "confidence": "high",
+            "reevaluation_trigger": "公告风险解除且成交额放大",
+        },
+        objection_payload={
+            "objections": [
+                {
+                    "symbol": "C0",
+                    "objection": "fund_flow.recent5_main_net 转弱被忽略,公告风险仍未解除",
+                    "severity": "high",
+                    "confidence_adjustment": "downgrade",
+                }
+            ]
+        },
+    )
+
+    result = m59_discretion.build_discretion_cards(panel, db_path=db_path, as_of="2026-07-05", provider=provider)
+    text = "\n".join(m59_discretion.render_card_lines(result))
+
+    assert result["cards"][0]["stance"] == "观望"
+    assert result["cards"][0]["confidence"] == "med"
+    assert result["cards"][0]["objection"]["severity"] == "high"
+    assert "⚖️ 反方: fund_flow.recent5_main_net 转弱被忽略,公告风险仍未解除" in text
+    assert_no_trade_words(text)
+    with sqlite3.connect(db_path) as con:
+        card = json.loads(con.execute("SELECT card_json FROM m59_discretion_cards").fetchone()[0])
+    assert card["confidence"] == "med"
+    assert card["objection"]["confidence_adjustment"] == "downgrade"
+
+
+def test_medium_objection_renders_without_downgrade(tmp_path, monkeypatch):
+    _patch_context(monkeypatch)
+    db_path = _db(tmp_path / "m59.sqlite")
+    panel = {"buy_candidates": {"items": [_candidate("C0")]}, "position_health": {"items": []}}
+    provider = FakeProvider(
+        payload={
+            "stance": "观望",
+            "timing_note": "等待公告确认",
+            "rationale": "price.last_close 与 long_term_label.label 显示证据仍需确认",
+            "confidence": "med",
+            "reevaluation_trigger": "公告风险解除且成交额放大",
+        },
+        objection_payload={
+            "objections": [
+                {
+                    "symbol": "C0",
+                    "objection": "long_term_label.label 偏谨慎,需要补充财务验证",
+                    "severity": "med",
+                    "confidence_adjustment": "none",
+                }
+            ]
+        },
+    )
+
+    result = m59_discretion.build_discretion_cards(panel, db_path=db_path, as_of="2026-07-05", provider=provider)
+    text = "\n".join(m59_discretion.render_card_lines(result))
+
+    assert result["cards"][0]["confidence"] == "med"
+    assert "⚖️ 反方: long_term_label.label 偏谨慎,需要补充财务验证" in text
 
 
 def test_stance_render_escape_passes_strict_language_guard():

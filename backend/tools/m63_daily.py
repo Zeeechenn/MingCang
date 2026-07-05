@@ -829,6 +829,22 @@ def run_trigger_router(
         enqueued.extend(_run_r6_price_moves(con, queue, history, as_of=day, symbols=universe))
     if watchtower is not None:
         history = _record_watchtower_history(watchtower, as_of=day, history_path=history_path, history=history)
+        for trigger in watchtower.get("triggers", []) if isinstance(watchtower, dict) else []:
+            if trigger.get("trigger_type") != "thesis_validation":
+                continue
+            target = str(trigger.get("symbol") or "")
+            if not target:
+                continue
+            themes = ",".join(trigger.get("themes") or [])
+            reason = f"论点验证进展:{themes} {trigger.get('card') or ''}".strip()
+            if _enqueue(
+                queue,
+                as_of=day,
+                target=target,
+                reason=reason,
+                trigger_rule=str(trigger.get("trigger_rule") or "R7_thesis_validated"),
+            ):
+                enqueued.append(queue[-1])
         recent_start = date.fromisoformat(day) - timedelta(days=4)
         distinct_days: dict[str, set[str]] = {}
         for item in history:

@@ -10,6 +10,10 @@ from backend.tools.m60_watchtower import (
     compute_sector_resonance,
     render_markdown,
 )
+from backend.tools.m60_thesis_conditions import (
+    compile_condition,
+    compile_forward_thesis_conditions,
+)
 
 
 def _init_watchtower_db(path):
@@ -59,6 +63,48 @@ def _init_watchtower_db(path):
             target TEXT,
             trigger_type TEXT
         );
+        CREATE TABLE forward_theses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            statement TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            invalidation_conditions_json TEXT,
+            follow_up_metrics_json TEXT,
+            updated_at TEXT
+        );
+        CREATE TABLE positions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            closed_at TEXT
+        );
+        CREATE TABLE announcements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            title TEXT,
+            published_at TEXT
+        );
+        CREATE TABLE research_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            title TEXT,
+            publish_date TEXT
+        );
+        CREATE TABLE corporate_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            event_type TEXT,
+            title TEXT,
+            event_date TEXT
+        );
+        CREATE TABLE overseas_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT,
+            name TEXT,
+            snap_date TEXT,
+            close REAL,
+            chg_pct_1d REAL,
+            chg_pct_20d REAL
+        );
         """
     )
     return con
@@ -67,6 +113,8 @@ def _init_watchtower_db(path):
 def _write_watchlist(tmp_path, entry, filename="theme.json"):
     watchlist_dir = tmp_path / "watchlists"
     watchlist_dir.mkdir(exist_ok=True)
+    entry.setdefault("created_at", "2026-07-03")
+    entry.setdefault("source_ref", "unit")
     (watchlist_dir / filename).write_text(json.dumps(entry), encoding="utf-8")
     return watchlist_dir
 
@@ -318,6 +366,197 @@ def test_build_watchtower_report_news_trigger_fires_on_announcement(tmp_path):
     assert "new_announcement_event" in news_triggers[0]["detail"]["reasons"] or (
         "policy_keyword_hit" in news_triggers[0]["detail"]["reasons"]
     )
+
+
+def test_thesis_condition_compiler_covers_four_templates_and_manual():
+    price = compile_condition("若回调 8% 则证伪", condition_type="invalidation")
+    flow = compile_condition("主力净流入持续 3 日", condition_type="validation")
+    event = compile_condition("公告/研报出现关键词: 合同", condition_type="validation")
+    overseas = compile_condition("海外映射标的上涨 5%", condition_type="validation")
+    manual = compile_condition("管理层战略执行力明显变差", condition_type="invalidation")
+
+    assert price["kind"] == "price_pct_move"
+    assert price["params"]["direction"] == "down"
+    assert flow["kind"] == "fund_flow_streak"
+    assert flow["params"]["days"] == 3
+    assert event["kind"] == "event_keyword"
+    assert "合同" in event["params"]["keywords"]
+    assert overseas["kind"] == "overseas_pct_move"
+    assert manual["kind"] == "manual_review"
+
+
+def _insert_theme_thesis(con, *, theme_key="thesis_theme", validation=None, invalidation=None):
+    con.execute(
+        """
+        INSERT INTO forward_theses(
+            statement, status, follow_up_metrics_json, invalidation_conditions_json, updated_at
+        )
+        VALUES (?, 'active', ?, ?, '2026-07-01 00:00:00')
+        """,
+        (
+            f"[theme:{theme_key}]测试论点",
+            json.dumps(validation or [], ensure_ascii=False),
+            json.dumps(invalidation or [], ensure_ascii=False),
+        ),
+    )
+
+
+def test_compile_forward_thesis_conditions_persists_specs(tmp_path):
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        _insert_theme_thesis(
+            con,
+            validation=["主力净流入持续 2 日", "公告出现关键词: 合同"],
+            invalidation=["需要专家访谈确认"],
+        )
+
+    summary = compile_forward_thesis_conditions(db_path=db_path)
+
+    assert summary["forward_theses"] == 1
+    assert summary["total_conditions"] == 3
+    assert summary["compiled_conditions"] == 2
+    assert summary["manual_review_conditions"] == 1
+    with sqlite3.connect(db_path) as con:
+        rows = con.execute("SELECT compiled_by, spec_json FROM thesis_condition_specs ORDER BY id").fetchall()
+    assert [row[0] for row in rows] == ["rule", "rule", "manual"]
+
+
+def test_build_watchtower_report_thesis_validation_triggers_and_queues_rule(tmp_path):
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        for d, value in (("2026-07-04", 100.0), ("2026-07-05", 101.0)):
+            con.execute(
+                "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('A', ?, ?, ?, ?, ?, 1000)",
+                (d, value, value, value, value),
+            )
+        con.execute(
+            "INSERT INTO fund_flows(symbol, trade_date, main_net, provider) VALUES ('A', '2026-07-04', 10, 'unit')"
+        )
+        con.execute(
+            "INSERT INTO fund_flows(symbol, trade_date, main_net, provider) VALUES ('A', '2026-07-05', 20, 'unit')"
+        )
+        _insert_theme_thesis(con, validation=["主力净流入持续 2 日"])
+    compile_forward_thesis_conditions(db_path=db_path)
+    watchlist_dir = _write_watchlist(
+        tmp_path,
+        {
+            "theme_key": "thesis_theme",
+            "title": "论点主题",
+            "thesis": "test",
+            "symbols": ["A"],
+            "validation_conditions": [],
+            "invalidation_conditions": [],
+        },
+    )
+
+    report = build_watchtower_report(db_path=db_path, as_of="2026-07-05", watchlist_dir=watchlist_dir)
+
+    triggers = [t for t in report["triggers"] if t["trigger_type"] == "thesis_validation"]
+    assert len(triggers) == 1
+    assert triggers[0]["trigger_rule"] == "R7_thesis_validated"
+    assert triggers[0]["detail"]["state_machine_unchanged"] is True
+    assert "论点验证进展" in triggers[0]["card"]
+
+
+def test_build_watchtower_report_thesis_invalidation_flags_holding_risk(tmp_path):
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        con.execute(
+            "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('A', '2026-07-04', 100, 100, 100, 100, 1000)"
+        )
+        con.execute(
+            "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('A', '2026-07-05', 91, 91, 91, 91, 1000)"
+        )
+        con.execute("INSERT INTO positions(symbol, closed_at) VALUES ('A', NULL)")
+        _insert_theme_thesis(con, invalidation=["回调 8%"])
+    compile_forward_thesis_conditions(db_path=db_path)
+    watchlist_dir = _write_watchlist(
+        tmp_path,
+        {
+            "theme_key": "thesis_theme",
+            "title": "论点主题",
+            "thesis": "test",
+            "symbols": ["A"],
+            "validation_conditions": [],
+            "invalidation_conditions": [],
+        },
+    )
+
+    report = build_watchtower_report(db_path=db_path, as_of="2026-07-05", watchlist_dir=watchlist_dir)
+
+    triggers = [t for t in report["triggers"] if t["trigger_type"] == "thesis_invalidation"]
+    assert len(triggers) == 1
+    assert triggers[0]["detail"]["holding_thesis_risk"] is True
+    assert "持仓论点风险" in triggers[0]["card"]
+
+
+def test_build_watchtower_report_thesis_conditions_respect_pit_and_damper(tmp_path):
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        for d, value in (("2026-07-04", 100.0), ("2026-07-05", 101.0), ("2026-07-06", 110.0)):
+            con.execute(
+                "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('A', ?, ?, ?, ?, ?, 1000)",
+                (d, value, value, value, value),
+            )
+        con.execute(
+            "INSERT INTO announcements(symbol, title, published_at) VALUES ('A', 'A公司获得重大合同', '2026-07-06 09:00:00')"
+        )
+        _insert_theme_thesis(con, validation=["公告出现关键词: 合同"])
+    compile_forward_thesis_conditions(db_path=db_path)
+    watchlist_dir = _write_watchlist(
+        tmp_path,
+        {
+            "theme_key": "thesis_theme",
+            "title": "论点主题",
+            "thesis": "test",
+            "symbols": ["A"],
+            "validation_conditions": [],
+            "invalidation_conditions": [],
+        },
+    )
+
+    pit_report = build_watchtower_report(db_path=db_path, as_of="2026-07-05", watchlist_dir=watchlist_dir)
+    assert [t for t in pit_report["triggers"] if t["trigger_type"] == "thesis_validation"] == []
+
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            """
+            INSERT INTO m60_watchtower_trigger_history(date, target, trigger_type)
+            VALUES ('2026-07-05', 'thesis_theme', 'thesis_validation')
+            """
+        )
+    damped_report = build_watchtower_report(db_path=db_path, as_of="2026-07-06", watchlist_dir=watchlist_dir)
+    assert [t for t in damped_report["triggers"] if t["trigger_type"] == "thesis_validation"] == []
+
+
+def test_m63_router_enqueues_thesis_validation_only(tmp_path):
+    from backend.tools.m63_daily import run_trigger_router
+
+    db_path = tmp_path / "watchtower.sqlite"
+    with _init_watchtower_db(db_path) as con:
+        con.execute(
+            "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('A', '2026-07-05', 10, 10, 10, 10, 1000)"
+        )
+    watchtower = {
+        "triggers": [
+            {"symbol": "A", "themes": ["thesis_theme"], "trigger_type": "thesis_validation", "trigger_rule": "R7_thesis_validated", "card": "论点验证进展"},
+            {"symbol": "A", "themes": ["thesis_theme"], "trigger_type": "thesis_invalidation", "trigger_rule": "R7_thesis_invalidated", "card": "论点证伪警报"},
+        ]
+    }
+
+    result = run_trigger_router(
+        db_path=db_path,
+        as_of="2026-07-05",
+        watchtower=watchtower,
+        queue_path=tmp_path / "queue.json",
+        history_path=tmp_path / "history.json",
+        allow_auto_refresh=False,
+    )
+
+    r7_items = [item for item in result["pending"] if item["trigger_rule"] == "R7_thesis_validated"]
+    assert len(r7_items) == 1
+    assert r7_items[0]["target"] == "A"
+    assert not [item for item in result["pending"] if item["trigger_rule"] == "R7_thesis_invalidated"]
 
 
 def test_build_watchtower_report_lhb_spotlight_fires_for_watchlist_symbol(tmp_path):
