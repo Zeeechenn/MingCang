@@ -12,6 +12,26 @@ _（下一版工作累积区）_
 
 ---
 
+## [v0.6.1] CI green & README quickstart consolidation / CI 转绿与 README 快速开始收敛（2026-07-06）
+
+紧随 v0.6.0——首次把 `main` 推上 GitHub 后，CI 首跑暴露并修复一批既存的本地/CI 环境差异（此前 `main` 从未 push，CI 从未真正跑绿），并顺手收紧了首页。均不改任何官方信号、仓位、scheduler、production weights 或研究裁量逻辑。
+
+### Fixed / 修复
+- **CI 首次公开跑绿**（4 类既存红全清）：
+  - 前端 `package-lock.json` 缺跨平台可选依赖（`@emnapi/*` 等）→ CI 严格 `npm ci` 校验失败；删 `node_modules`+lock 全新重生成，本地 `npm ci` 通过。
+  - `test_core_paths_worker_d` 硬编码 `assert version == "0.5.2"` → 改断言 `APP_VERSION` 常量（随版本走，不再每次发版都断）。
+  - 依赖 `paper_trading/` 本地基线（个人纸上交易数据，`.gitignore` 不入库）的 8 个测试 → 加 `pytest.importorskip` 守卫，CI 无此目录时优雅 skip（沿用仓库既有模式）。
+  - `backend-tests` 未先建库直接跑 `make coverage` → 依赖 runtime-schema 表（`forward_theses` 等）的测试报 `no such table`；CI 增 `python backend/data/database.py` bootstrap 步（与 `AGENTS.md` 一致）。
+- **依赖安全**：6 个已知漏洞升级到修复版——`cryptography` 48.0.0→49.0.0、`msgpack` 1.1.2→1.2.1、`pydantic-settings` 2.14.1→2.14.2、`python-multipart` 0.0.30→0.0.32、`starlette` 1.2.1→1.3.1（pip-audit 转 "No known vulnerabilities found"）。
+
+### Changed / 变更
+- **README（中英双版）收紧**：三个并列的上手段（`3 分钟上手` / `新手快速开始` / `快速开始`）合并为单个 `快速开始`，重组为「零配置试用 / 安装 mingcang 长期用 / 开发模式」三个子段，去掉重复的 `clone`/`make demo` 样板；`30 秒看懂` 段与开头 tagline 重复的两条压成一条。信息不丢、截图与诚实红线保留，`README.md` 与 `README_EN.md` 同步。
+
+### Verification / 验证
+- GitHub CI 四 job 全绿（Backend lint/typecheck、Backend tests、Security & dependency audit、Frontend test/build）；本地 `make verify` 通过；`mypy` 0 error；`pip-audit` 无已知漏洞。
+
+---
+
 ## [v0.6.0] Trading operation loop, review orchestration, memory self-evolution & release hardening / 买卖操作闭环、复盘编排、记忆自进化与发布加固（2026-07-05）
 
 ### Upgrade notes / 升级说明
