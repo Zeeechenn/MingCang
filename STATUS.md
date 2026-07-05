@@ -22,7 +22,7 @@ consolidation, on top of the `v0.6.0` feature release (see `CHANGELOG.md`).
 | technical / sentiment weights | `0.6 / 0.4` |
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
-| quant_score provenance | LGBM served through 2026-06-05; since the 2026-06-06 rename the model file was never migrated to `~/.mingcang/models/`, so `quant_score` has silently been the `placeholder_v0` momentum fallback (0.6×mom5 + 0.4×mom20). Fixed 2026-07-03: missing model now emits an explicit one-time warning and `quant_model` provenance is persisted per signal into `decision_runs.input_snapshot_json` (regression: `tests/test_quant_model_degradation.py`). Momentum fallback deliberately kept serving (M26 gates failed → `keep_quant_disabled`; LGBM in-service ICIR ≈ 0.07); production composite unaffected (`WEIGHT_QUANT=0.0`). Caveat: the Saturday 09:00 `job_train_model` cron would write a fresh model and flip serving back to LGBM if the scheduler daemon runs |
+| quant_score provenance | `placeholder_v0` momentum fallback serving deliberately (silent-degradation incident fixed 2026-07-03: explicit warning + per-signal `quant_model` provenance in `decision_runs`; regression `tests/test_quant_model_degradation.py`). Production composite unaffected (`WEIGHT_QUANT=0.0`). Caveat: Saturday `job_train_model` cron would flip serving back to LGBM if the scheduler daemon runs |
 | completed history | v0.3.3–v0.6.1 / M45–M55: see `CHANGELOG.md` (not restated here) |
 | paper trading test2 | v1 ended 2026-07-02 (10 trades, 60% win, +19.53% weighted); **v2 started 2026-07-03**: exit params unchanged per M21.4 decision C (single-variable), direction-only evidence as before |
 | M51 external borrowing | suspended 2026-07-03 (star-growth strategy deferred); landed pieces kept in service: D1 DSR/PBO/trial-count contract in `m29_hypothesis_registry`, report-pack v1 adapter |
@@ -58,12 +58,16 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 Per-workstream first action and stop condition live in `docs/ROADMAP.md` — the
 single source of truth for sequencing; this file only carries the state snapshot
-above. Live lines as of 2026-07-03 (direction reset: composite-score fusion abandoned,
-function-slot decomposition adopted): **M58** decision-formula rebuild (core),
-**M54** news v2 forward accrual (pyramid default, verdict gated on IC-days>20),
-**M57** memory self-evolution (MVP), **M59** post-market action panel
-(LLM-discretion productization). Everything else is archived — see the
-ROADMAP archive index.
+above. Live lines as of 2026-07-06: **M58** exit-channel shadow arm (stock-pick
+formula terminally falsified; 4-6 week forward run), **M54** news v2 forward
+IC-day accrual (pure-news / announcement-boost / flow-fusion variants all
+non-GO so far; re-adjudicate at IC-days>=20 across regimes), **M57** memory
+self-evolution Phases 1-3 landed (miner + governance console; shadow evaluator
+pending), **M59** post-market panel with LLM-discretion gray release ON,
+**M60** watchtower trigger family + second-entry shadow ledger, **M63** daily
+orchestration in routine service. Quant v2 first run missed its gates
+(IC 0.0215 / ICIR 0.098 vs 0.04 / 0.40); rerun when fund-flow history grows.
+Everything else is archived — see the ROADMAP archive index.
 
 For Atlas/M44 detail read `docs/ATLAS_MERGE.md`. For older milestone history read
 `CHANGELOG.md` only when the task actually asks for releases, audit trail, or
@@ -80,14 +84,11 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate for v0.6.1 on 2026-07-06:
-`make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
-RUFF_CACHE_DIR=/private/tmp/mingcang_ruff_cache
-MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache` passed locally: ruff passed,
-mypy passed (0 errors), backend pytest reported 1657 passed / 5 skipped,
-frontend typecheck/Vite test/build passed, and frontend lint-summary passed.
-GitHub CI is green remotely as of v0.6.1 (Backend lint/typecheck, Backend tests,
-Security & dependency audit, Frontend test/build all pass on `main`).
+Last recorded full-suite run (2026-07-06, post-M57-Phase-3): backend pytest
+1665 passed / 5 skipped; ruff, mypy (0 errors), frontend
+typecheck/test/build all green. GitHub CI is green remotely as of v0.6.1
+(Backend lint/typecheck, Backend tests, Security & dependency audit,
+Frontend test/build all pass on `main`).
 
 For release-quality work, treat `make verify` as the canonical gate.
 

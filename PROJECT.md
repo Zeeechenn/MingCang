@@ -33,23 +33,8 @@ tracking.
 
 ## 里程碑总览
 
-- M0-M28: closed historical buildout; details live in `CHANGELOG.md`.
-- M29: active read-only alpha-reset / forward-evidence work; no promotion yet.
-- M30: completed engineering-quality convergence.
-- M31: completed cache / provider fallback / rhythm CLI / postmarket exports.
-- M32: planned forward-hypothesis bridge.
-- M41: completed read-only A/HK/US global data/research facade.
-- M42: completed qfq/hfq contamination guard and dry-run remediation.
-- M43: completed architecture boundary hardening.
-- M44: completed dormant Atlas L0-L4 merge; Atlas/test4 Stage 2b signal-overlay shadow starter exists; `ATLAS_ENABLED=false`.
-- M45: completed amplifier-primary, source-gated research-positioning tools.
-- M46: completed user discoverability and first-run documentation cleanup.
-- M47-M48: completed evidence-trust CLI/API visibility and frontend reliability.
-- M49: completed tools registry / CLI observability and request correlation tracing.
-
-Current production conclusion: quant remains disabled
-(`WEIGHT_QUANT=0.0`), Kronos remains off, and M29 evidence is still
-non-promoting.
+不在本文件维护里程碑状态：活跃线与排序见 `docs/ROADMAP.md`，已完成历史见
+`CHANGELOG.md`，生产权重/当前结论见 `STATUS.md`。
 
 ---
 
@@ -72,7 +57,7 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 | Analysis and backtests | `backend/analysis/`, `backend/backtest/`, `backend/tools/m29_*`, `backend/tools/atlas_test4_stage2b_shadow.py` | quant engine, statistics, forward-evidence tooling, Atlas/test4 non-promoting shadow starter |
 | Tools registry | `backend/tools/registry.py`, `python3 -m backend.agent.cli tools` | M49 classification for retained tools: stable / maintenance / evidence / attic, with purpose and read/write boundaries |
 | M31/M41/M42/M45 tools | `backend/tools/m31_*`, `backend/tools/m41_*`, `backend/tools/m42_*`, `backend/tools/m45_*` | cache benchmark, probe health, qfq/hfq remediation, source-gated import/scoreboard |
-| Frontend | `frontend/src/pages/`, `frontend/src/components/` | dashboard pages and evidence/review components |
+| Frontend | `frontend/src/page-*.tsx`, `frontend/src/main.tsx` | 平铺单文件页面（page-home/page-daily/page-memory-evolution 等），main.tsx 做 hash 路由 |
 | Public docs | `README.md`, `docs/WHY_NOT_AI_STOCK_PICKER.md`, `docs/assets/` | GitHub-facing product explanation and visuals |
 
 ## 研究模块地图
