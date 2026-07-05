@@ -204,7 +204,23 @@ def _allowed_stances(slot: str) -> tuple[str, ...]:
     return HOLDING_STANCES if slot == "holding_decision" else CANDIDATE_STANCES
 
 
-def _validate_card(data: Any, *, slot: str) -> dict[str, str]:
+_SENTENCE_BREAKS = "。;；!！?？,，"
+
+
+def _soft_trim(value: str, limit: int) -> str:
+    """句界优先截断到 limit 内(末尾省略号),供 soft_length 降级路径使用。"""
+    if len(value) <= limit:
+        return value
+    head = value[: limit - 1]
+    cut = max(head.rfind(ch) for ch in _SENTENCE_BREAKS)
+    if cut >= limit // 2:
+        head = head[: cut + 1]
+    return head + "…"
+
+
+def _validate_card(data: Any, *, slot: str, soft_length: bool = False) -> dict[str, str]:
+    # "必须引用具体证据"与字数硬上限存在张力,LLM 高频超限;soft_length=True 时
+    # 超长走句界截断+length_truncated 如实标注(降级不阻断),语义类失败仍硬拒。
     if not isinstance(data, dict):
         raise ValueError("schema invalid: not an object")
     allowed = _allowed_stances(slot)
@@ -217,21 +233,33 @@ def _validate_card(data: Any, *, slot: str) -> dict[str, str]:
     timing_note = str(data.get("timing_note") or "").strip()
     rationale = str(data.get("rationale") or "").strip()
     trigger = str(data.get("reevaluation_trigger") or "").strip()
+    truncated = False
     if len(timing_note) > 60:
-        raise ValueError("schema invalid: timing_note too long")
-    if not rationale or len(rationale) > 120:
+        if not soft_length:
+            raise ValueError("schema invalid: timing_note too long")
+        timing_note = _soft_trim(timing_note, 60)
+        truncated = True
+    if not rationale:
         raise ValueError("schema invalid: rationale")
+    if len(rationale) > 120:
+        if not soft_length:
+            raise ValueError("schema invalid: rationale")
+        rationale = _soft_trim(rationale, 120)
+        truncated = True
     if not trigger:
         raise ValueError("schema invalid: reevaluation_trigger")
     if any(word in trigger for word in INTERNAL_TRIGGER_WORDS):
         raise ValueError("schema invalid: reevaluation_trigger internal anchor")
-    return {
+    card = {
         "stance": stance,
         "timing_note": timing_note,
         "rationale": rationale,
         "confidence": confidence,
         "reevaluation_trigger": trigger,
     }
+    if truncated:
+        card["length_truncated"] = "true"
+    return card
 
 
 def _sanitize_render_text(value: str) -> str:
@@ -244,7 +272,9 @@ def _sanitize_render_text(value: str) -> str:
         return value.strip()
 
 
-def _validate_objections(data: Any, symbols: set[str]) -> dict[str, dict[str, str]]:
+def _validate_objections(
+    data: Any, symbols: set[str], *, soft_length: bool = False
+) -> dict[str, dict[str, str]]:
     if not isinstance(data, dict):
         raise ValueError("objection schema invalid: not an object")
     items = data.get("objections")
@@ -261,18 +291,27 @@ def _validate_objections(data: Any, symbols: set[str]) -> dict[str, dict[str, st
         objection = _sanitize_render_text(str(item.get("objection") or ""))
         severity = str(item.get("severity") or "")
         confidence_adjustment = str(item.get("confidence_adjustment") or "")
-        if not objection or len(objection) > 80:
+        if not objection:
             raise ValueError("objection schema invalid: objection")
+        length_truncated = False
+        if len(objection) > 80:
+            if not soft_length:
+                raise ValueError("objection schema invalid: objection")
+            objection = _soft_trim(objection, 80)
+            length_truncated = True
         if severity not in {"low", "med", "high"}:
             raise ValueError("objection schema invalid: severity")
         if confidence_adjustment not in {"none", "downgrade"}:
             raise ValueError("objection schema invalid: confidence_adjustment")
-        objections[symbol] = {
+        entry = {
             "symbol": symbol,
             "objection": objection,
             "severity": severity,
             "confidence_adjustment": confidence_adjustment,
         }
+        if length_truncated:
+            entry["length_truncated"] = "true"
+        objections[symbol] = entry
     return objections
 
 
@@ -483,9 +522,9 @@ def build_discretion_cards(
                     tool=DISCRETION_TOOL,
                     system=SYSTEM_PROMPT,
                     max_tokens=450,
-                    model_tier="fast",
+                    model_tier="capable",
                 )
-                llm_card = _validate_card(data, slot=slot)
+                llm_card = _validate_card(data, slot=slot, soft_length=True)
                 digest = _digest(inputs)
                 card = {
                     **llm_card,
@@ -511,11 +550,12 @@ def build_discretion_cards(
                     tool=OBJECTION_TOOL,
                     system=OBJECTION_SYSTEM_PROMPT,
                     max_tokens=900,
-                    model_tier="fast",
+                    model_tier="capable",
                 )
                 objections = _validate_objections(
                     objection_data,
                     {str(card["symbol"]) for card in cards},
+                    soft_length=True,
                 )
                 _apply_objections(cards, objections)
             except Exception as exc:  # noqa: BLE001 - adversarial review degrades without blocking cards.

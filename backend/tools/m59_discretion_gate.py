@@ -339,18 +339,20 @@ def generate_single_case(
         tool=m59_discretion.DISCRETION_TOOL,
         system=m59_discretion.SYSTEM_PROMPT,
         max_tokens=450,
-        model_tier="fast",
+        model_tier="capable",
     )
     slot = _case_slot(case)
-    card = m59_discretion._validate_card(data, slot=slot)
+    card = m59_discretion._validate_card(data, slot=slot, soft_length=True)
     objection_data = provider.complete_structured(
         prompt=m59_discretion._objection_prompt([{**card, "symbol": case["symbol"], "slot": slot}]),
         tool=m59_discretion.OBJECTION_TOOL,
         system=m59_discretion.OBJECTION_SYSTEM_PROMPT,
         max_tokens=900,
-        model_tier="fast",
+        model_tier="capable",
     )
-    objections = m59_discretion._validate_objections(objection_data, {str(case["symbol"])})
+    objections = m59_discretion._validate_objections(
+        objection_data, {str(case["symbol"])}, soft_length=True
+    )
     cards = [{**card, "symbol": case["symbol"], "slot": slot}]
     m59_discretion._apply_objections(cards, objections)
     rendered = m59_discretion.render_card_lines({"cards": cards, "degradations": []})
