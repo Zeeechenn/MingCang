@@ -180,6 +180,7 @@ def system_status(
         from backend.scheduler import get_scheduler_state
         scheduler_state = get_scheduler_state()
     except Exception:
+        logger.warning("system.system_status: reading scheduler state failed, using fallback", exc_info=True)
         scheduler_state = None
 
     database_path = sqlite_path_from_url(settings.database_url)
@@ -267,6 +268,7 @@ def system_health(db: Session = Depends(get_db)):
             last = datetime.strptime(latest_price_date, "%Y-%m-%d")
             data_age_days = (datetime.now(UTC).replace(tzinfo=None) - last).days
     except Exception:
+        logger.warning("system.system_health: reading latest price date failed, using fallback", exc_info=True)
         db_ok = False
 
     recent_losses = 0
@@ -292,6 +294,7 @@ def system_health(db: Session = Depends(get_db)):
                 returns.append((next_p[0] - sig_p[0]) / sig_p[0])
         recent_losses = kill_switch.detect_consecutive_losses(returns)
     except Exception:
+        logger.warning("system.system_health: calculating recent losses failed, using fallback", exc_info=True)
         pass
 
     ks_state = kill_switch.current_state()
@@ -299,6 +302,7 @@ def system_health(db: Session = Depends(get_db)):
         from backend.scheduler import get_scheduler_state
         scheduler_state = get_scheduler_state()
     except Exception as e:
+        logger.warning("system.system_health: reading scheduler state failed: %s", e)
         scheduler_state = {"error": str(e), "jobs": {}}
 
     healthy = (
@@ -325,6 +329,7 @@ def system_health(db: Session = Depends(get_db)):
                     ),
                 )
             except Exception:
+                logger.warning("system.system_health: sending LLM budget alert failed, using fallback", exc_info=True)
                 pass
             try:
                 from backend.memory.audit import audit_write
@@ -335,8 +340,10 @@ def system_health(db: Session = Depends(get_db)):
                     related_scope="global",
                 )
             except Exception:
+                logger.warning("system.system_health: writing LLM budget audit failed, using fallback", exc_info=True)
                 pass
     except Exception:
+        logger.warning("system.system_health: checking LLM budget alert failed, using fallback", exc_info=True)
         pass
 
     return {

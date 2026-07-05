@@ -1,6 +1,7 @@
 """M57 deterministic context packing governor."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +13,8 @@ from backend.memory.evolution_trace import (
     record_trace,
 )
 from backend.memory.task_capsule import list_task_capsules
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,7 @@ def _resident_candidates(db, *, symbol: str | None, query: str | None) -> list[d
                 "themes": ["用户偏好"],
             })
     except Exception:
+        logger.warning("context_governor._resident_candidates: reading active memories failed, using fallback", exc_info=True)
         pass
     if query:
         items.append({
@@ -114,6 +118,7 @@ def _retrieval_candidates(db, *, symbol: str | None, query: str | None, limit: i
                     "recency_note": row.get("recency_note"),
                 })
         except Exception:
+            logger.warning("context_governor._retrieval_candidates: recalling memories failed, using fallback", exc_info=True)
             pass
     if not items:
         for capsule in list_task_capsules(db, limit=3):
@@ -141,6 +146,7 @@ def _retrieval_candidates(db, *, symbol: str | None, query: str | None, limit: i
                 "themes": [row.get("memory_type") or ""],
             })
     except Exception:
+        logger.warning("context_governor._retrieval_candidates: listing stock memories failed, using fallback", exc_info=True)
         pass
     return items
 

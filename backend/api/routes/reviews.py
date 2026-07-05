@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, time
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from backend.agent.http_guard import agent_write_guard
 from backend.data.database import ReviewRun, get_db
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -26,7 +28,7 @@ def _review_to_dict(row: ReviewRun) -> dict:
     if row.payload_json:
         try:
             payload = json.loads(row.payload_json)
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError):
             payload = {}
     return {
         "id": row.id,
@@ -47,12 +49,13 @@ def _review_content(row: ReviewRun) -> str:
             if path.exists() and path.is_file():
                 return path.read_text(encoding="utf-8")
         except Exception:
+            logger.warning("reviews._review_content: reading review file failed, using fallback", exc_info=True)
             pass
     payload = {}
     if row.payload_json:
         try:
             payload = json.loads(row.payload_json)
-        except Exception:
+        except (json.JSONDecodeError, TypeError, ValueError):
             payload = {}
     if payload.get("content"):
         return str(payload["content"])
@@ -100,6 +103,7 @@ def _time_from_setting(value: str, fallback: time) -> time:
         hour, minute = value.split(":", 1)
         return time(int(hour), int(minute))
     except Exception:
+        logger.debug("reviews._time_from_setting: parsing schedule time failed, using fallback", exc_info=True)
         return fallback
 
 
@@ -189,10 +193,12 @@ def _run_long_term_review(day: str, db: Session) -> dict:
             try:
                 findings = json.loads(row.key_findings_json) if row.key_findings_json else []
             except Exception:
+                logger.warning("reviews._run_long_term_review: parsing key findings failed, using fallback", exc_info=True)
                 findings = []
             try:
                 votes = json.loads(row.votes_json) if row.votes_json else {}
             except Exception:
+                logger.warning("reviews._run_long_term_review: parsing votes failed, using fallback", exc_info=True)
                 votes = {}
             lines.append(
                 f"| {row.symbol} {names.get(row.symbol, '')} | {row.label} | "

@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import logging
 import statistics
 from dataclasses import dataclass, field
 
@@ -18,6 +19,8 @@ from jsonschema import ValidationError, validate
 from backend.agents.analyst import AnalystReport
 from backend.config import settings
 from backend.llm import get_provider, has_runtime_llm_provider
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -329,6 +332,7 @@ def multi_round_debate(
         from backend.ops.llm_usage import log_llm_usage
         log_llm_usage("deep_research", bull_prompt, _json.dumps(bull_data))
     except Exception:
+        logger.debug("researcher.multi_round_debate: logging bull LLM usage failed, using fallback", exc_info=True)
         pass
     bull_valid, bull_err = _validate_tool_output(bull_data, _BULL_OPENING_TOOL)
     if not bull_valid:
@@ -358,6 +362,7 @@ def multi_round_debate(
         from backend.ops.llm_usage import log_llm_usage
         log_llm_usage("deep_research", bear_prompt, _json.dumps(bear_data))
     except Exception:
+        logger.debug("researcher.multi_round_debate: logging bear LLM usage failed, using fallback", exc_info=True)
         pass
     bear_valid, bear_err = _validate_tool_output(bear_data, _BEAR_REBUTTAL_TOOL)
     bear_empty = bear_valid and not bear_data.get("rebuttals")
@@ -413,6 +418,7 @@ def multi_round_debate(
         from backend.ops.llm_usage import log_llm_usage
         log_llm_usage("deep_research", final_prompt, _json.dumps(final_data))
     except Exception:
+        logger.debug("researcher.multi_round_debate: logging final LLM usage failed, using fallback", exc_info=True)
         pass
     final_valid, final_err = _validate_tool_output(final_data, _FINAL_ADJUDICATION_TOOL)
     final_empty = final_valid and not final_data.get("action_bias")

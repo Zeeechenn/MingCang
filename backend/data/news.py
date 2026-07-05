@@ -244,6 +244,7 @@ def fetch_stock_news_cn(symbol: str, limit: int = 20) -> list[RawNews]:
                 provider="eastmoney",
             ))
         except Exception:
+            logger.debug("news.fetch_stock_news_cn: parsing EastMoney news row failed, using fallback", exc_info=True)
             continue
 
     return results
@@ -282,6 +283,7 @@ def fetch_stock_news_us(symbol: str | None = None, limit: int = 20) -> list[RawN
                     symbol=symbol,
                 ))
             except Exception:
+                logger.debug("news.fetch_stock_news_us: parsing RSS news entry failed, using fallback", exc_info=True)
                 continue
     return results
 

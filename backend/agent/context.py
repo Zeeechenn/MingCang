@@ -1,6 +1,7 @@
 """Project context and memory snapshots for local coding agents."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from backend.agent.security import agent_mode
 from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.database import LongTermLabel, Position, ResearchState, Signal, Stock
 
+logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _MINGCANG_MEMORY_DIR = Path.home() / ".mingcang" / "memory"
 DEFAULT_MEMORY_DIR = _MINGCANG_MEMORY_DIR
@@ -209,6 +211,7 @@ def _research_copilot(db: Session, symbol: str) -> dict | None:
     try:
         return json.loads(row.copilot_json) if row.copilot_json else None
     except Exception:
+        logger.warning("context._research_copilot: parsing copilot JSON failed, using fallback", exc_info=True)
         return None
 
 
@@ -221,6 +224,7 @@ def _stock_context_pack(db: Session, symbol: str) -> tuple[dict, str]:
         )
         return pack, render_context_text(pack, 3000)
     except Exception as exc:
+        logger.warning("context._stock_context_pack: building stock context pack failed: %s", exc)
         return {"error": str(exc)}, ""
 
 
@@ -236,6 +240,7 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
             include_l0=settings.research_l0_recall_enabled,
         )
     except Exception:
+        logger.warning("context.mingcang_stock_context: building memory context failed, using fallback", exc_info=True)
         memory_context = {"symbol": symbol, "task_type": "stock_context", "text": "",
                           "used_stock_memory_ids": [], "ai_memory_keys": []}
     try:
@@ -353,6 +358,7 @@ def mingcang_context(
             include_l0=settings.research_l0_recall_enabled,
         )
     except Exception:
+        logger.warning("context.mingcang_context: building memory context failed, using fallback", exc_info=True)
         memory_context = {
             "symbol": symbol,
             "task_type": "project_context",
@@ -403,6 +409,7 @@ def mingcang_memory_context(
             include_l0=settings.research_l0_recall_enabled,
         )
     except Exception:
+        logger.warning("context.mingcang_memory_context: building memory context failed, using fallback", exc_info=True)
         return {
             "symbol": symbol,
             "task_type": task_type,

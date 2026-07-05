@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
@@ -11,6 +12,8 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.exc import OperationalError
 
 from backend.memory.audit_log import audit_write
+
+logger = logging.getLogger(__name__)
 
 MEMORY_TYPES = {
     "thesis",
@@ -449,6 +452,7 @@ def build_memory_context(
                 record_usage=record_usage,
             )
         except Exception:
+            logger.warning("stock_memory.build_memory_context: building L0 context failed, using fallback", exc_info=True)
             l0_context = _empty_l0_context()
     try:
         stock_rows = list_stock_memories(db, symbol=symbol, limit=max(limit * 3, 20))
@@ -476,6 +480,7 @@ def build_memory_context(
             from backend.decision.memory_layered import get_layered_context
             layered_text = get_layered_context(symbol, db)
         except Exception:
+            logger.warning("stock_memory.build_memory_context: reading layered memory failed, using fallback", exc_info=True)
             layered_text = ""
     if layered_text:
         parts.append(layered_text.strip())
