@@ -10,11 +10,12 @@ import argparse
 import json
 import re
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from backend.config import default_sqlite_path
+from backend.research.forward_thesis import theme_key_from_statement
 
 CONDITION_TYPES = {"validation", "invalidation"}
 
@@ -434,6 +435,459 @@ def evaluate_condition_spec(
     if kind == "fund_flow_ma_break":
         return _eval_fund_flow_ma_break(con, symbol=symbol, as_of=as_of, params=params)
     return {"triggered": False, "coverage": "manual_review"}
+
+
+def _day(value: Any) -> str:
+    return str(value or "")[:10]
+
+
+def _parse_day(value: str) -> datetime:
+    return datetime.fromisoformat(value[:10])
+
+
+def _window_start(as_of: str, lookback_days: int) -> str:
+    return (_parse_day(as_of) - timedelta(days=lookback_days)).date().isoformat()
+
+
+def _load_historical_specs(
+    con: sqlite3.Connection,
+    *,
+    condition_type: str,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    if condition_type not in CONDITION_TYPES:
+        raise ValueError(f"invalid condition_type: {condition_type}")
+    if not _table_exists(con, "thesis_condition_specs") or not _table_exists(con, "forward_theses"):
+        return [], {"total": 0, "compiled": 0, "manual_review": 0}
+    rows = con.execute(
+        """
+        SELECT
+            s.forward_thesis_id,
+            s.condition_type,
+            s.spec_json,
+            s.compiled_by,
+            t.statement,
+            t.status
+        FROM thesis_condition_specs s
+        JOIN forward_theses t ON t.id = s.forward_thesis_id
+        WHERE s.condition_type = ?
+          AND t.symbol IS NULL
+          AND t.statement LIKE '[theme:%'
+          AND t.status IN ('active', 'watch', 'draft')
+        ORDER BY s.id
+        """,
+        (condition_type,),
+    ).fetchall()
+    specs: list[dict[str, Any]] = []
+    stats = {"total": 0, "compiled": 0, "manual_review": 0}
+    for row in rows:
+        try:
+            spec = json.loads(str(row["spec_json"]))
+        except json.JSONDecodeError:
+            continue
+        stats["total"] += 1
+        if row["compiled_by"] == "manual" or spec.get("kind") == "manual_review":
+            stats["manual_review"] += 1
+            continue
+        stats["compiled"] += 1
+        theme_key = theme_key_from_statement(str(row["statement"] or ""))
+        if not theme_key:
+            continue
+        specs.append(
+            {
+                "forward_thesis_id": int(row["forward_thesis_id"]),
+                "theme_key": theme_key,
+                "condition_type": str(row["condition_type"]),
+                "spec": spec,
+            }
+        )
+    return specs, stats
+
+
+def _fetch_rows(
+    con: sqlite3.Connection,
+    table: str,
+    cols: Sequence[str],
+    *,
+    date_col: str,
+    start: str,
+    end: str,
+    symbols: Sequence[str] | None = None,
+) -> list[dict[str, Any]]:
+    if not cols:
+        return []
+    if not _table_exists(con, table):
+        return []
+    available = _columns(con, table)
+    if not set(cols) <= available or date_col not in available:
+        return []
+    params: list[Any] = [start, end]
+    symbol_clause = ""
+    if symbols is not None and "symbol" in available:
+        selected = [str(symbol) for symbol in symbols if symbol]
+        if not selected:
+            return []
+        placeholders = ",".join("?" for _ in selected)
+        symbol_clause = f" AND symbol IN ({placeholders})"
+        params.extend(selected)
+    rows = con.execute(
+        f"""
+        SELECT {", ".join(cols)}
+        FROM {table}
+        WHERE date({date_col}) >= date(?)
+          AND date({date_col}) <= date(?)
+          {symbol_clause}
+        ORDER BY date({date_col}) ASC
+        """,
+        params,
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _rows_by_symbol(rows: Sequence[dict[str, Any]], date_col: str) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        symbol = str(row.get("symbol") or "")
+        if not symbol:
+            continue
+        row = dict(row)
+        row["_day"] = _day(row.get(date_col))
+        grouped.setdefault(symbol, []).append(row)
+    return grouped
+
+
+def _latest_rows_by_date(rows: Sequence[dict[str, Any]], as_of: str, *, exact_latest: bool = False) -> list[dict[str, Any]]:
+    eligible = [row for row in rows if str(row.get("_day") or "") <= as_of]
+    if exact_latest and (not eligible or str(eligible[-1].get("_day")) != as_of):
+        return []
+    return eligible
+
+
+def _eval_cached_condition(
+    cache: dict[str, Any],
+    *,
+    symbol: str,
+    as_of: str,
+    spec: dict[str, Any],
+) -> dict[str, Any]:
+    kind = spec.get("kind")
+    params = spec.get("params") or {}
+    if kind == "price_pct_move":
+        rows = _latest_rows_by_date(cache["prices"].get(symbol, []), as_of, exact_latest=True)
+        if len(rows) < 2:
+            return {"triggered": False, "coverage": "missing:as_of_price"}
+        cur = float(rows[-1]["close"])
+        prev = float(rows[-2]["close"])
+        if prev == 0:
+            return {"triggered": False, "coverage": "invalid:prev_close_zero"}
+        pct = (cur / prev - 1.0) * 100.0
+        threshold = float(params.get("threshold_pct") or 0)
+        direction = str(params.get("direction") or "up")
+        return {"triggered": _threshold_hit(pct, threshold, direction), "coverage": "ok", "value": pct, "threshold_pct": threshold}
+    if kind == "relative_benchmark_move":
+        window_days = int(params.get("window_days") or 1)
+        benchmark = str(params.get("benchmark_symbol") or "000300")
+        stock_rows = _latest_rows_by_date(cache["prices"].get(symbol, []), as_of, exact_latest=True)[-(max(window_days + 1, 2)) :]
+        index_rows = _latest_rows_by_date(cache["index_prices"].get(benchmark, []), as_of, exact_latest=True)[-(max(window_days + 1, 2)) :]
+        if len(stock_rows) < 2 or len(index_rows) < 2:
+            return {"triggered": False, "coverage": "missing:relative_prices"}
+        stock_now, stock_prev = float(stock_rows[-1]["close"]), float(stock_rows[0]["close"])
+        index_now, index_prev = float(index_rows[-1]["close"]), float(index_rows[0]["close"])
+        if stock_prev == 0 or index_prev == 0:
+            return {"triggered": False, "coverage": "invalid:prev_close_zero"}
+        excess_pp = ((stock_now / stock_prev - 1.0) - (index_now / index_prev - 1.0)) * 100.0
+        threshold = float(params.get("threshold_pp") or 0)
+        direction = str(params.get("direction") or "up")
+        triggered = excess_pp <= -abs(threshold) if direction == "down" else excess_pp >= abs(threshold)
+        return {"triggered": triggered, "coverage": "ok", "excess_pp": excess_pp, "threshold_pp": threshold}
+    if kind == "fund_flow_streak":
+        days = int(params.get("days") or 3)
+        rows = _latest_rows_by_date(cache["fund_flows"].get(symbol, []), as_of, exact_latest=True)[-days:]
+        if len(rows) < days:
+            return {"triggered": False, "coverage": "missing:flow_streak"}
+        values = [float(row["main_net"]) for row in reversed(rows)]
+        direction = str(params.get("direction") or "up")
+        triggered = all(value < 0 for value in values) if direction == "down" else all(value > 0 for value in values)
+        return {"triggered": triggered, "coverage": "ok", "values": values, "days": days}
+    if kind == "fund_flow_ma_break":
+        days = int(params.get("days") or 3)
+        flow_rows = _latest_rows_by_date(cache["fund_flows"].get(symbol, []), as_of, exact_latest=True)[-days:]
+        if len(flow_rows) < days:
+            return {"triggered": False, "coverage": "missing:flow_streak"}
+        flow_values = [float(row["main_net"]) for row in reversed(flow_rows)]
+        flow_hit = all(value < 0 for value in flow_values)
+        ma_window = int(params.get("ma_window") or 20)
+        price_rows = _latest_rows_by_date(cache["prices"].get(symbol, []), as_of, exact_latest=True)[-ma_window:]
+        if len(price_rows) < ma_window:
+            return {"triggered": False, "coverage": "missing:ma_window"}
+        latest_close = float(price_rows[-1]["close"])
+        ma_value = sum(float(row["close"]) for row in price_rows) / ma_window
+        return {
+            "triggered": flow_hit and latest_close < ma_value,
+            "coverage": "ok",
+            "flow_values": flow_values,
+            "latest_close": latest_close,
+            "ma_window": ma_window,
+            "ma_value": ma_value,
+        }
+    if kind == "event_keyword":
+        tables = [str(table) for table in params.get("tables") or []]
+        keywords = [str(keyword) for keyword in params.get("keywords") or [] if str(keyword)]
+        if not keywords:
+            return {"triggered": False, "coverage": "missing:keywords"}
+        lookback_days = int(params.get("lookback_days") or 5)
+        start = _window_start(as_of, lookback_days)
+        matches: list[dict[str, Any]] = []
+        missing: list[str] = []
+        for table in tables:
+            table_rows = cache["events"].get(table)
+            if table_rows is None:
+                missing.append(table)
+                continue
+            for row in table_rows.get(symbol, []):
+                item_day = str(row.get("_day") or "")
+                if not (start <= item_day <= as_of):
+                    continue
+                title = str(row.get("title") or "")
+                hit = [keyword for keyword in keywords if keyword in title]
+                if hit:
+                    matches.append({"table": table, "date": item_day, "title": title, "keywords": hit})
+        return {"triggered": bool(matches), "coverage": "ok" if matches or len(missing) < len(tables) else "missing:event_tables", "matches": matches, "missing_tables": missing}
+    if kind == "overseas_indicator_keyword":
+        keywords = [str(keyword) for keyword in params.get("keywords") or [] if str(keyword)]
+        if not keywords:
+            return {"triggered": False, "coverage": "missing:keywords"}
+        lookback_days = int(params.get("lookback_days") or 10)
+        start = _window_start(as_of, lookback_days)
+        matches = []
+        for row in cache["overseas_snapshots"]:
+            item_day = str(row.get("_day") or "")
+            if not (start <= item_day <= as_of):
+                continue
+            haystack = f"{row.get('symbol') or ''} {row.get('name') or ''} {row.get('note') or ''}"
+            hit = [keyword for keyword in keywords if keyword in haystack]
+            if hit:
+                matches.append({"symbol": row.get("symbol"), "name": row.get("name"), "date": item_day, "keywords": hit})
+        return {"triggered": bool(matches), "coverage": "ok", "matches": matches}
+    if kind == "overseas_pct_move":
+        field = str(params.get("field") or "chg_pct_1d")
+        rows = _latest_rows_by_date(cache["overseas_by_symbol"].get(symbol, []), as_of, exact_latest=True)
+        if not rows or field not in rows[-1] or rows[-1].get(field) is None:
+            return {"triggered": False, "coverage": "missing:as_of_overseas"}
+        value = float(rows[-1][field])
+        threshold = float(params.get("threshold_pct") or 0)
+        direction = str(params.get("direction") or "up")
+        return {"triggered": _threshold_hit(value, threshold, direction), "coverage": "ok", "value": value, "threshold_pct": threshold}
+    if kind == "financial_metric_threshold":
+        thresholds = [item for item in params.get("thresholds") or [] if isinstance(item, dict)]
+        rows = [row for row in cache["financial_metrics"].get(symbol, []) if str(row.get("_day") or "") <= as_of]
+        if not rows:
+            return {"triggered": False, "coverage": "missing:financial_row"}
+        row = rows[-1]
+        checks = []
+        for item in thresholds:
+            field = str(item.get("field"))
+            if row.get(field) is None:
+                continue
+            value = float(row[field])
+            threshold = float(item.get("threshold_pct") or 0)
+            operator = str(item.get("operator") or "gte")
+            checks.append({"field": field, "value": value, "operator": operator, "threshold_pct": threshold, "hit": _compare(value, operator, threshold)})
+        if not checks:
+            return {"triggered": False, "coverage": "missing:financial_values"}
+        join = str(params.get("join") or "all")
+        triggered = any(check["hit"] for check in checks) if join == "any" else all(check["hit"] for check in checks)
+        return {"triggered": triggered, "coverage": "ok", "checks": checks, "join": join}
+    if kind == "long_term_label_state":
+        labels = [str(label) for label in params.get("labels") or [] if str(label)]
+        if not labels:
+            return {"triggered": False, "coverage": "missing:labels"}
+        rows = [row for row in cache["long_term_labels"].get(symbol, []) if str(row.get("_day") or "") <= as_of]
+        if not rows:
+            return {"triggered": False, "coverage": "missing:long_term_label_row"}
+        row = rows[-1]
+        haystack = f"{row.get('label') or ''} {row.get('key_findings_json') or ''}"
+        hits = [label for label in labels if label in haystack]
+        return {"triggered": bool(hits), "coverage": "ok", "date": str(row.get("_day")), "hits": hits}
+    return {"triggered": False, "coverage": "manual_review"}
+
+
+def _max_spec_lookback(specs: Sequence[dict[str, Any]]) -> int:
+    lookback = 1
+    for item in specs:
+        params = (item.get("spec") or {}).get("params") or {}
+        for key in ("lookback_days", "window_days", "ma_window", "days"):
+            try:
+                lookback = max(lookback, int(params.get(key) or 0))
+            except (TypeError, ValueError):
+                continue
+    return lookback + 5
+
+
+def _build_history_cache(
+    con: sqlite3.Connection,
+    *,
+    symbols: Sequence[str],
+    start: str,
+    end: str,
+    specs: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    buffered_start = _window_start(start, _max_spec_lookback(specs))
+    symbol_list = sorted({str(symbol) for symbol in symbols if symbol})
+    price_rows = _fetch_rows(
+        con,
+        "prices",
+        ("symbol", "date", "close"),
+        date_col="date",
+        start=buffered_start,
+        end=end,
+        symbols=symbol_list,
+    )
+    index_rows = _fetch_rows(
+        con,
+        "index_prices",
+        ("symbol", "date", "close"),
+        date_col="date",
+        start=buffered_start,
+        end=end,
+    )
+    fund_rows = _fetch_rows(
+        con,
+        "fund_flows",
+        ("symbol", "trade_date", "main_net"),
+        date_col="trade_date",
+        start=buffered_start,
+        end=end,
+        symbols=symbol_list,
+    )
+    financial_rows = _fetch_rows(
+        con,
+        "financial_metrics",
+        tuple(
+            col
+            for col in _columns(con, "financial_metrics")
+            if col in {"symbol", "report_date", "disclosure_date", "revenue_yoy", "net_profit_yoy", "gross_margin"}
+        ),
+        date_col="report_date",
+        start="1900-01-01",
+        end=end,
+        symbols=symbol_list,
+    )
+    for row in financial_rows:
+        row["_day"] = _day(row.get("disclosure_date") or row.get("report_date"))
+    label_date_col = "date" if "date" in _columns(con, "long_term_labels") else "as_of"
+    label_rows = _fetch_rows(
+        con,
+        "long_term_labels",
+        tuple(col for col in ("symbol", label_date_col, "label", "key_findings_json") if col in _columns(con, "long_term_labels")),
+        date_col=label_date_col,
+        start="1900-01-01",
+        end=end,
+        symbols=symbol_list,
+    )
+    for row in label_rows:
+        row["_day"] = _day(row.get(label_date_col))
+    events: dict[str, dict[str, list[dict[str, Any]]] | None] = {}
+    event_meta = {
+        "announcements": ("published_at", "title"),
+        "research_reports": ("publish_date", "title"),
+        "corporate_events": ("event_date", "title"),
+        "news": ("published_at", "title"),
+    }
+    for table, (date_col, title_col) in event_meta.items():
+        rows = _fetch_rows(
+            con,
+            table,
+            ("symbol", date_col, title_col),
+            date_col=date_col,
+            start=buffered_start,
+            end=end,
+            symbols=symbol_list,
+        )
+        normalized = []
+        for row in rows:
+            normalized.append({"symbol": row.get("symbol"), "title": row.get(title_col), "_day": _day(row.get(date_col))})
+        events[table] = _rows_by_symbol(normalized, "_day") if rows or _table_exists(con, table) else None
+    overseas_cols = [col for col in ("symbol", "name", "snap_date", "note", "chg_pct_1d") if col in _columns(con, "overseas_snapshots")]
+    overseas_rows = _fetch_rows(
+        con,
+        "overseas_snapshots",
+        tuple(overseas_cols),
+        date_col="snap_date",
+        start=buffered_start,
+        end=end,
+    )
+    for row in overseas_rows:
+        row["_day"] = _day(row.get("snap_date"))
+    return {
+        "prices": _rows_by_symbol(price_rows, "date"),
+        "index_prices": _rows_by_symbol(index_rows, "date"),
+        "fund_flows": _rows_by_symbol(fund_rows, "trade_date"),
+        "financial_metrics": _rows_by_symbol(financial_rows, "_day"),
+        "long_term_labels": _rows_by_symbol(label_rows, "_day"),
+        "events": events,
+        "overseas_snapshots": overseas_rows,
+        "overseas_by_symbol": _rows_by_symbol(overseas_rows, "_day"),
+    }
+
+
+def historical_condition_backscan(
+    con: sqlite3.Connection,
+    *,
+    symbols_by_theme: dict[str, Sequence[str]],
+    start: str,
+    end: str,
+    condition_type: str = "validation",
+) -> dict[str, Any]:
+    """Replay compiled thesis specs over historical trading days with PIT inputs only.
+
+    The thesis text and theme membership are assumed to be known for the replay.
+    Each condition evaluation only sees rows dated on or before ``as_of``.
+    """
+    specs, stats = _load_historical_specs(con, condition_type=condition_type)
+    symbols = sorted({str(symbol) for values in symbols_by_theme.values() for symbol in values if symbol})
+    cache = _build_history_cache(con, symbols=symbols, start=start, end=end, specs=specs)
+    hits: list[dict[str, Any]] = []
+    evaluated = 0
+    for item in specs:
+        theme_key = str(item["theme_key"])
+        theme_symbols = [str(symbol) for symbol in symbols_by_theme.get(theme_key, []) if symbol]
+        if not theme_symbols:
+            continue
+        spec = item["spec"]
+        for symbol in theme_symbols:
+            trading_days = [
+                str(row.get("_day") or "")
+                for row in cache["prices"].get(symbol, [])
+                if start <= str(row.get("_day") or "") <= end
+            ]
+            for as_of in trading_days:
+                evaluated += 1
+                evaluation = _eval_cached_condition(cache, symbol=symbol, as_of=as_of, spec=spec)
+                if not evaluation.get("triggered"):
+                    continue
+                hits.append(
+                    {
+                        "symbol": symbol,
+                        "as_of": as_of,
+                        "trigger_type": f"thesis_{condition_type}_backscan",
+                        "theme_key": theme_key,
+                        "forward_thesis_id": item["forward_thesis_id"],
+                        "condition_type": condition_type,
+                        "spec": spec,
+                        "evaluation": evaluation,
+                    }
+                )
+    dedup: dict[tuple[str, str, str, int, str], dict[str, Any]] = {}
+    for hit in hits:
+        dedup[(hit["symbol"], hit["as_of"], hit["theme_key"], int(hit["forward_thesis_id"]), json.dumps(hit["spec"], sort_keys=True, ensure_ascii=False))] = hit
+    return {
+        "schema_version": "m60_thesis_conditions.history_backscan.v1",
+        "condition_type": condition_type,
+        "start": start,
+        "end": end,
+        "stats": {**stats, "evaluated_points": evaluated, "hit_count": len(dedup)},
+        "hits": sorted(dedup.values(), key=lambda row: (row["as_of"], row["theme_key"], row["symbol"], row["forward_thesis_id"])),
+    }
 
 
 def _threshold_hit(value: float, threshold: float, direction: str) -> bool:

@@ -1,6 +1,7 @@
+import json
 import sqlite3
 
-from backend.tools.m60_thesis_conditions import compile_condition, evaluate_condition_spec
+from backend.tools.m60_thesis_conditions import compile_condition, evaluate_condition_spec, historical_condition_backscan
 
 
 def test_event_condition_extracts_conservative_keywords_and_reads_news():
@@ -147,3 +148,57 @@ def test_fund_flow_ma_break_requires_outflow_and_broken_average():
 
     assert result["triggered"] is True
     assert result["latest_close"] < result["ma_value"]
+
+
+def test_historical_backscan_matches_single_day_evaluator_for_price_spec():
+    spec = {"kind": "price_pct_move", "params": {"threshold_pct": 5, "direction": "up"}, "raw_text": "涨幅5%"}
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.execute("CREATE TABLE prices(symbol TEXT, date TEXT, close REAL)")
+    con.execute(
+        """
+        CREATE TABLE forward_theses(
+            id INTEGER PRIMARY KEY,
+            symbol TEXT,
+            statement TEXT,
+            status TEXT
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE thesis_condition_specs(
+            id INTEGER PRIMARY KEY,
+            forward_thesis_id INTEGER,
+            condition_type TEXT,
+            spec_json TEXT,
+            compiled_by TEXT,
+            created_at TEXT
+        )
+        """
+    )
+    con.executemany(
+        "INSERT INTO prices VALUES ('A', ?, ?)",
+        [("2026-01-01", 100.0), ("2026-01-02", 106.0), ("2026-01-03", 105.0)],
+    )
+    con.execute("INSERT INTO forward_theses VALUES (1, NULL, '[theme:unit] test', 'active')")
+    con.execute(
+        "INSERT INTO thesis_condition_specs VALUES (1, 1, 'validation', ?, 'rule', '2026-07-05')",
+        (json.dumps(spec),),
+    )
+
+    batch = historical_condition_backscan(
+        con,
+        symbols_by_theme={"unit": ["A"]},
+        start="2026-01-01",
+        end="2026-01-03",
+        condition_type="validation",
+    )
+    daily_hits = []
+    for as_of in ("2026-01-01", "2026-01-02", "2026-01-03"):
+        result = evaluate_condition_spec(con, symbol="A", as_of=as_of, spec=spec)
+        if result["triggered"]:
+            daily_hits.append(as_of)
+
+    assert [hit["as_of"] for hit in batch["hits"]] == daily_hits == ["2026-01-02"]
+    assert batch["stats"]["evaluated_points"] == 3

@@ -469,6 +469,86 @@ def build_arena_batch(
     }
 
 
+def _readiness_calibration_for_cases(
+    cases: Sequence[ArenaCase],
+    *,
+    start: str,
+    end: str,
+) -> dict[str, Any]:
+    from backend.tools.m59_readiness import DEFAULT_BINS, evaluate_calibration_gates, readiness_score_for_arena_case
+
+    windows = []
+    for name, left, right in (("2024H2", "2024-07-01", "2024-12-31"), ("2025H1", "2025-01-01", "2025-06-30")):
+        if right < start or left > end:
+            continue
+        window_cases = [case for case in cases if max(start, left) <= case.as_of <= min(end, right)]
+        calibration = calibrate(window_cases, readiness_score_for_arena_case, bins=DEFAULT_BINS, horizon="d5")
+        calibration["name"] = name
+        calibration["start"] = max(start, left)
+        calibration["end"] = min(end, right)
+        calibration["case_count"] = len(window_cases)
+        windows.append(calibration)
+    gates = evaluate_calibration_gates(windows)
+    return {
+        "schema_version": "m58_entry_arena.thesis_backscan_readiness.v1",
+        "score_fn": "backend.tools.m59_readiness.readiness_score_for_arena_case",
+        "gate_status": "pass" if all(gate.get("pass") for gate in gates.values()) else "fail",
+        "gates": gates,
+        "bin_edges": list(DEFAULT_BINS),
+        "windows": windows,
+        "assumption": (
+            "Historical replay asks when these 2026-authored thesis conditions would have lit up if the thesis "
+            "had existed then. Condition evaluation is PIT-clean, but theme membership is selected after the fact; "
+            "use this for method validation, not return claims."
+        ),
+    }
+
+
+def thesis_backscan_triggers(
+    con: sqlite3.Connection,
+    *,
+    symbols_by_theme: dict[str, Sequence[str]],
+    start: str,
+    end: str,
+) -> tuple[list[TriggerPoint], dict[str, Any]]:
+    from backend.tools.m60_thesis_conditions import historical_condition_backscan
+
+    backscan = historical_condition_backscan(
+        con,
+        symbols_by_theme=symbols_by_theme,
+        start=start,
+        end=end,
+        condition_type="validation",
+    )
+    points = [
+        TriggerPoint(
+            symbol=str(hit["symbol"]),
+            as_of=str(hit["as_of"])[:10],
+            trigger_source="thesis_validation_backscan",
+            payload={
+                **hit,
+                "trigger_type": "thesis_validation",
+                "pit_note": "condition evaluation uses data dated on or before as_of only",
+            },
+        )
+        for hit in backscan.get("hits") or []
+    ]
+    return points, backscan
+
+
+def _load_watchlist_symbols_by_theme(path: Path | None) -> tuple[dict[str, list[str]], dict[str, Any]]:
+    from backend.research.watchlist import WATCHLIST_DIR, load_watchlists, symbols_by_theme
+
+    entries, errors = load_watchlists(path or WATCHLIST_DIR, authoritative_thesis=False)
+    mapping = symbols_by_theme(entries)
+    return mapping, {
+        "watchlist_dir": str(path or WATCHLIST_DIR),
+        "theme_count": len(mapping),
+        "symbol_count": len({symbol for symbols in mapping.values() for symbol in symbols}),
+        "errors": errors,
+    }
+
+
 def _default_score_fn(case: ArenaCase) -> float | None:
     signal = case.inputs.get("signal") or {}
     score = _to_float(signal.get("composite_score") or signal.get("score"))
@@ -684,12 +764,36 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"- zero_llm: {report.get('meta', {}).get('zero_llm')}",
         f"- trial_count: {report.get('meta', {}).get('trial_count')}",
         f"- entry/control: {report.get('meta', {}).get('entry_case_count')} / {report.get('meta', {}).get('control_case_count')}",
+    ]
+    if report.get("meta", {}).get("case_source") == "thesis_validation_backscan":
+        stats = ((report.get("meta", {}).get("thesis_backscan") or {}).get("stats") or {})
+        lines.extend(
+            [
+                f"- case_source: {report.get('meta', {}).get('case_source')}",
+                f"- backscan_window: {report.get('meta', {}).get('backscan_start')} to {report.get('meta', {}).get('backscan_end')}",
+                f"- thesis_backscan_hits: {stats.get('hit_count')} / evaluated_points: {stats.get('evaluated_points')}",
+                "- assumption: 2026-authored thesis conditions are replayed as if they had existed then; condition inputs are PIT-clean, while theme membership is ex-post and survivor-biased. Results validate method coverage only, not returns.",
+            ]
+        )
+        readiness = report.get("readiness_calibration") or {}
+        if readiness:
+            lines.extend(["", "## Readiness Calibration Gates", ""])
+            lines.append(f"- gate_status: {readiness.get('gate_status')}")
+            for name, gate in (readiness.get("gates") or {}).items():
+                lines.append(f"- {name}: {gate.get('pass')}")
+            for window in readiness.get("windows") or []:
+                lines.extend(["", f"### {window.get('name')}", "| bin | n | win_rate | status |", "|---|---:|---:|---|"])
+                for row in window.get("bins") or []:
+                    lines.append(f"| {row.get('bin')} | {row.get('sample_count')} | {row.get('win_rate')} | {row.get('sample_status')} |")
+    lines.extend(
+        [
         "",
         "## Arm Summary",
         "",
         "| horizon | arm | n | win_rate | avg_excess |",
         "|---|---|---:|---:|---:|",
-    ]
+        ]
+    )
     for horizon in horizons:
         key = f"d{horizon}"
         for arm_name, case_key in (("entry", "cases"), ("random_control", "control_cases")):
@@ -720,6 +824,7 @@ def main(argv: list[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--from-history", action="store_true")
     mode.add_argument("--synthetic-sweep", action="store_true")
+    mode.add_argument("--thesis-backscan", action="store_true")
     parser.add_argument("--start")
     parser.add_argument("--end")
     parser.add_argument("--sample-rate", type=float, default=0.05)
@@ -734,13 +839,27 @@ def main(argv: list[str] | None = None) -> int:
 
     horizons = _parse_horizons(args.horizons)
     with connect_readonly(args.db_path) as con:
-        universe = _load_universe(args.universe, con)
+        thesis_backscan_meta: dict[str, Any] | None = None
+        if args.thesis_backscan:
+            if not args.start or not args.end:
+                parser.error("--thesis-backscan requires --start and --end")
+            symbols_by_theme_map, watchlist_meta = _load_watchlist_symbols_by_theme(args.universe)
+            universe = sorted({symbol for symbols in symbols_by_theme_map.values() for symbol in symbols})
+            triggers, thesis_backscan_meta = thesis_backscan_triggers(
+                con,
+                symbols_by_theme=symbols_by_theme_map,
+                start=args.start,
+                end=args.end,
+            )
+            thesis_backscan_meta["watchlists"] = watchlist_meta
+        else:
+            universe = _load_universe(args.universe, con)
         if args.from_history:
             triggers = load_history_triggers(
                 trigger_history_path=args.trigger_history_path,
                 m60_ledger_path=args.m60_ledger_path,
             )
-        else:
+        elif args.synthetic_sweep:
             if not args.start or not args.end:
                 parser.error("--synthetic-sweep requires --start and --end")
             triggers = synthetic_sweep_triggers(
@@ -759,6 +878,17 @@ def main(argv: list[str] | None = None) -> int:
         horizons=horizons,
         random_seed=args.random_seed,
     )
+    if args.thesis_backscan:
+        cases = [ArenaCase(**case) for case in report.get("cases") or []]
+        report["meta"].update(
+            {
+                "case_source": "thesis_validation_backscan",
+                "backscan_start": args.start,
+                "backscan_end": args.end,
+                "thesis_backscan": thesis_backscan_meta,
+            }
+        )
+        report["readiness_calibration"] = _readiness_calibration_for_cases(cases, start=args.start, end=args.end)
     json_path, md_path = _write_outputs(report, args.out_dir)
     print(json.dumps({"json": str(json_path), "markdown": str(md_path), "meta": report["meta"]}, ensure_ascii=False, indent=2))
     return 0

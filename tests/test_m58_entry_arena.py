@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 
 import pytest
@@ -188,3 +189,74 @@ def test_calibrate_reports_bins_baseline_and_spearman_shape():
     assert report["bins"][0]["sample_count"] == 2
     assert report["bins"][0]["win_rate"] == 0.5
     assert report["bins"][1]["baseline_win_rate"] == 1.0
+
+
+def test_thesis_backscan_cases_keep_pit_inputs_and_source(tmp_path):
+    db_path = tmp_path / "arena.sqlite"
+    spec = {"kind": "price_pct_move", "params": {"threshold_pct": 5, "direction": "up"}, "raw_text": "涨幅5%"}
+    with _init_db(db_path) as con:
+        _insert_prices(con, "AAA", [100, 106, 104, 108])
+        con.execute(
+            "INSERT INTO signals(symbol, created_at, signal_type, composite_score, stop_loss) VALUES (?, ?, ?, ?, ?)",
+            ("AAA", "2026-01-02T15:00:00", "watch", 30.0, 90.0),
+        )
+        con.execute(
+            "INSERT INTO signals(symbol, created_at, signal_type, composite_score, stop_loss) VALUES (?, ?, ?, ?, ?)",
+            ("AAA", "2026-01-03T15:00:00", "buy", 99.0, 95.0),
+        )
+        con.execute(
+            "INSERT INTO long_term_labels(symbol, as_of, label, confidence) VALUES (?, ?, ?, ?)",
+            ("AAA", "2026-01-03", "future_label", 0.9),
+        )
+        con.execute(
+            """
+            CREATE TABLE forward_theses(
+                id INTEGER PRIMARY KEY,
+                symbol TEXT,
+                statement TEXT,
+                status TEXT
+            )
+            """
+        )
+        con.execute(
+            """
+            CREATE TABLE thesis_condition_specs(
+                id INTEGER PRIMARY KEY,
+                forward_thesis_id INTEGER,
+                condition_type TEXT,
+                spec_json TEXT,
+                compiled_by TEXT,
+                created_at TEXT
+            )
+            """
+        )
+        con.execute("INSERT INTO forward_theses VALUES (1, NULL, '[theme:unit] test', 'active')")
+        con.execute(
+            "INSERT INTO thesis_condition_specs VALUES (1, 1, 'validation', ?, 'rule', '2026-07-05')",
+            (json.dumps(spec),),
+        )
+
+    with arena.connect_readonly(db_path) as con:
+        triggers, meta = arena.thesis_backscan_triggers(
+            con,
+            symbols_by_theme={"unit": ["AAA"]},
+            start="2026-01-01",
+            end="2026-01-03",
+        )
+        case = arena.build_arena_case(
+            con,
+            symbol=triggers[0].symbol,
+            as_of=triggers[0].as_of,
+            trigger_source=triggers[0].trigger_source,
+            trigger_payload=triggers[0].payload,
+            universe=["AAA"],
+            horizons=(1,),
+        )
+
+    assert meta["stats"]["hit_count"] == 1
+    assert triggers[0].as_of == "2026-01-02"
+    assert triggers[0].trigger_source == "thesis_validation_backscan"
+    assert triggers[0].payload["trigger_type"] == "thesis_validation"
+    assert case.inputs["signal"]["composite_score"] == 30.0
+    assert case.inputs["long_term_label"] is None
+    assert case.inputs["trigger"]["payload"]["evaluation"]["coverage"] == "ok"
