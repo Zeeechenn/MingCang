@@ -8,9 +8,12 @@ COPY pyproject.toml README.md ./
 COPY backend/ ./backend/
 RUN pip install --no-cache-dir .
 
-COPY .env.example .env
-
 ENV PYTHONPATH=/app
+
+# 非 root 运行：创建有家目录的用户，家目录承载 ~/.mingcang 运行时数据
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8000
 

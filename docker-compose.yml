@@ -5,7 +5,7 @@ services:
       target: backend
     volumes:
       - ./mingcang.db:/app/mingcang.db
-      - ~/.mingcang:/root/.mingcang
+      - ~/.mingcang:/home/appuser/.mingcang
     env_file: .env
     ports:
       - "8000:8000"

@@ -1,0 +1,37 @@
+# Virtualenvs
+.venv/
+.venv_kronos/
+vendor/kronos/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Databases & data
+*.db
+*.sqlite
+*.sqlite3
+mingcang.db
+
+# Personal / local data
+paper_trading/
+docs/adr/
+.env
+
+# Caches & build artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+.codegraph/
+mingcang.egg-info/
+
+# VCS & tooling
+.git/
+.github/
+.pi/
+.pilotdeck/
+.superpowers/
+.claude/
