@@ -18,6 +18,7 @@ def test_default_registry_is_read_only_and_preregistered():
         "m58_stop_loss_momentum_tail_v1",
         "m58_stock_selection_technical_head_v1",
         "m58_exit_trailing_atr_sweep_v1",
+        "m59_discretion_judgment_gate",
     }
     assert all(item["candidate_type"] == "shadow_research_candidate" for item in report["hypotheses"])
 

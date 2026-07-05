@@ -73,6 +73,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m59_discretion_gate",
+        "category": "evidence",
+        "purpose": "Build and fill the M59 discretion judgment-gate blind-adjudication case JSON: A=zero-LLM hard-rule baseline, B=M59 discretion card.",
+        "read_write_boundary": "build is read-only and zero-LLM, writing only gate JSON under paper_trading/m61_out; generate may call the runtime LLM provider and only fills arms.full in that JSON.",
+        "recommended_entrypoint": "python3 -m backend.tools.m59_discretion_gate build",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m52_flow_floor",
         "category": "stable",
         "purpose": "M61 B7 资金流地基:news_fusion flow 腿的 PIT 数据读取(fetch_flow_data_pit)与 s_flow 计算(compute_s_flow_data,tanh 自归一 v1)。打分路径只读 DB,绝不打外部 API。",

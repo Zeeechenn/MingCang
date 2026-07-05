@@ -61,6 +61,7 @@ PROMPT_TEMPLATE = """\
 - 不预测价格,不承诺涨跌。
 - 必须引用输入包中的具体证据字段;证据不足就说证据不足。
 - reevaluation_trigger 必须是可观测外部条件,禁止锚定内部标签、内部分数或模型打分。
+- 输出字数硬上限:timing_note≤60字,rationale≤120字,objection≤80字;超限即为无效输出,必须压缩到限内。
 
 slot={slot}
 allowed_stance={allowed_stance}

@@ -435,6 +435,85 @@ def default_hypotheses() -> list[dict[str, Any]]:
                 },
             },
         ),
+        _base_hypothesis(
+            hypothesis_id="m59_discretion_judgment_gate",
+            motivation=(
+                "Pre-register the M59 discretion-layer judgment gate before any generation run: "
+                "the discretion card with adversarial review should beat the pure hard-rule "
+                "baseline on blind ex-ante plus ex-post adjudicated case wins, with zero leakage."
+            ),
+            source_m27_clues=[
+                "judgment_gate_adjudication_20260704:tianfu_drawdown_300394",
+                "judgment_gate_adjudication_20260704:gigadevice_divergence_603986",
+                "judgment_gate_adjudication_20260704:corning_glassbridge_601869",
+                "judgment_gate_adjudication_20260704:innovative_drug_603259",
+                "adjudication_h1_expansion_20260705:tianfu_drawdown",
+                "adjudication_h1_expansion_20260705:gigadevice_divergence",
+                "adjudication_h1_expansion_20260705:corning_glassbridge",
+                "adjudication_h1_expansion_20260705:innovative_drug",
+                "adjudication_h1_expansion_20260705:changfei_feb_entry",
+                "adjudication_h1_expansion_20260705:shengyi_drawdown_hold",
+                "adjudication_h1_expansion_20260705:changchuan_pullback_entry",
+                "adjudication_h1_expansion_20260705:woer_laggard_switch",
+                "adjudication_h1_expansion_20260705:fii_june_chase",
+                "adjudication_h1_expansion_20260705:shenghong_breakout_chase",
+            ],
+            candidate_family="m59_discretion_observe_only_judgment_gate",
+            features=[
+                "arms.starved_zero_llm_hard_rules",
+                "arms.full_m59_discretion_card",
+                "d6_adversarial_objection",
+                "blind_adjudication_case_win_count",
+                "leakage_flags",
+            ],
+            sample_scope={
+                "universe": "final_adjudicated_zero_leakage_case_pool_20260704_20260705",
+                "case_pool": [
+                    "tianfu_drawdown",
+                    "gigadevice_divergence",
+                    "corning_glassbridge",
+                    "innovative_drug",
+                    "changfei_feb_entry",
+                    "shengyi_drawdown_hold",
+                    "changchuan_pullback_entry",
+                    "woer_laggard_switch",
+                    "fii_june_chase",
+                    "shenghong_breakout_chase",
+                ],
+                "dedupe_key": ["symbol", "as_of"],
+                "expected_cases": 10,
+                "judges_per_case": 3,
+                "vote_budget": "case_count * 3 claude judges",
+            },
+            horizons=[],
+            split_override={
+                "train_end_before_oos": True,
+                "requires_fresh_oos_forward": False,
+                "label_realized_before_target_start": True,
+                "requires_non_overlapping_stride_metrics": False,
+                "validation_basis": "fixed historical blind adjudication gate",
+            },
+            stop_conditions=[
+                "stop if any arm context contains post-as_of facts not present under PIT truncation",
+                "stop if arms.full is generated before this preregistration is committed in the registry output",
+                "stop if fewer than 3 claude judge votes are collected per case without owner approval",
+                "stop if B(full) win case count is not greater than A(starved) win case count",
+            ],
+            forbidden_interpretation_suffix=(
+                "flat or negative B-vs-A case wins keep M59_DISCRETION_ENABLED default off; "
+                "positive B-vs-A case wins only submit the grey-release decision to owner"
+            ),
+            extra_fields={
+                "namespace": "m59_discretion_judgment_gate",
+                "case_scope": "reuse 2026-07-04/2026-07-05 finalized zero-leakage judgment-gate case pools",
+                "decision_rule": (
+                    "B胜案例数>A胜 -> submit owner decision on grey release; "
+                    "平或负 -> discretion layer remains default off"
+                ),
+                "vote_budget": "case_count * 3 claude judges",
+                "leakage_requirement": "zero leakage required",
+            },
+        ),
     ]
 
 
