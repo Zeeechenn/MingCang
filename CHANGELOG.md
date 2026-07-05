@@ -15,6 +15,7 @@
 
 ### Added / 新增
 - **买卖操作闭环一期（R1/D0/D1/D2/D6/D7,2026-07-05）**:论点合流(forward_thesis 为唯一权威存储,watchlist 降级主题视图,7主题落库)→论点触发器(条件编译器7模板,40条件36条数据化,thesis_validation 进研究队列/thesis_invalidation 出持仓论点风险警示)→入场条件卡(V1/V2/V3 实算价位量能风险线+单笔风险预算参考股数,单票模式)→入场准备度分(四维透明记点+否决项,三道校准门未过即如实渲染"仅证据清单",校准转前向攒样本)→入场演练场(历史触发 PIT 回放+随机对照臂+分箱校准,零 LLM)→裁量层反方审视步(批量最强反驳,severity=high 强制降档)。分数定位=证据清单可视化,非预测。
+- **交易级复盘台账+分散持仓模式(D8/D9)**:开仓自动记 snapshot(准备度/触发器/条件卡),平仓补结局,周报按入场准备度 band 归因;portfolio_mode=diversified 提供等权参考+否决区+集中度(第二套逻辑,focus 单票模式默认不变)。
 - **M57 记忆自进化 Phase 1**:EvolutionTrace(三时间戳双时间轴+七仓 namespace)/TaskCapsule(盘后自动落胶囊)/ContextGovernor(常驻+检索两层,预算裁剪,注入去重)/memory.correct+archive 确认制 action;方案附录 A/B 收 MemOS/Mem0/Zep-Graphiti/Letta 机制归口(不引框架)。
 - **Web 日常页**:M63 报告四 tab+待研究队列+M59 裁量参考区(仅供参考角标),只读 API 六端点(路径白名单防穿越)。
 - **评审修复轮(13项闭环)**:语言守卫全出口统一(strict/sanitize 双档)/m60_second_entry 接线断裂修复/main_net 缺失禁填0/Piotroski 分母归一传导/公司事件 PIT 类型门统一/数据合同全品类+降级 coverage_gap:/failure: 分级止噪/trigger_quality 消费接线;复检 13 项 9PASS 4PARTIAL 全收口。
