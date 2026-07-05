@@ -561,6 +561,11 @@ class MemoryRejectRequest(BaseModel):
     note: str | None = None
 
 
+class MemoryArchiveRequest(BaseModel):
+    confirmed_by: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
 # ── M40 Universe Guard schemas ────────────────────────────────────────────────
 
 class UniverseSnapshotOut(BaseModel):

@@ -17,4 +17,5 @@ interface Window {
   PositionsPage: any;
   PulsePage: any;
   HealthPage: any;
+  MemoryEvolutionPage: any;
 }

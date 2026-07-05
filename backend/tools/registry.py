@@ -89,6 +89,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m57_miner",
+        "category": "maintenance",
+        "purpose": "M57 profile miner: deterministically generate pending memory-evolution candidates from evolution_traces.",
+        "read_write_boundary": "Reads evolution_traces and writes only pending memory_atoms/memory_profiles/memory_scenarios plus pending memory_promotion_candidates; zero LLM; never writes trusted memory, signals, positions, or scheduler state.",
+        "recommended_entrypoint": "python3 -m backend.tools.m57_miner --pretty",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m61_backfill",
         "category": "stable",
         "purpose": "M61 品类数据回填/滴灌 CLI:announcements/research_reports/lhb/corporate_events/holders/fund_flow/overseas 按 universe+日期窗口拉取入库,逐股降级续跑,幂等。",

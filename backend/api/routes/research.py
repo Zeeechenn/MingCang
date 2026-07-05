@@ -1,7 +1,11 @@
 """Research state and deep-research routes."""
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
@@ -23,6 +27,7 @@ from backend.api.schemas import (
     HypothesisListOut,
     HypothesisOut,
     HypothesisStatusRequest,
+    MemoryArchiveRequest,
     MemoryCandidateCreateRequest,
     MemoryCandidateListOut,
     MemoryCandidateOut,
@@ -798,6 +803,256 @@ def reject_memory_candidate_endpoint(
         if "not found" in detail:
             raise HTTPException(404, detail) from e
         raise HTTPException(400, detail) from e
+
+
+def _json_list(value: str | None) -> list:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _json_dict(value: str | None) -> dict:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _candidate_target(db: Session, source_ref: str | None) -> dict | None:
+    if not source_ref:
+        return None
+    atom = db.execute(text("""
+        SELECT id, scope_type, scope_key, memory_type, summary, evidence_json,
+               source_type, source_ref, trust_state, created_at, updated_at
+        FROM memory_atoms
+        WHERE source_ref = :source_ref
+        ORDER BY id ASC
+        LIMIT 1
+    """), {"source_ref": source_ref}).mappings().first()
+    if atom is not None:
+        row = dict(atom)
+        row["target_type"] = "memory_atoms"
+        row["evidence"] = _json_dict(row.pop("evidence_json"))
+        return row
+    profile = db.execute(text("""
+        SELECT id, profile_type, profile_key, summary, atom_ids_json,
+               trust_state, source_type, source_ref, created_at, updated_at
+        FROM memory_profiles
+        WHERE source_ref = :source_ref
+        ORDER BY id ASC
+        LIMIT 1
+    """), {"source_ref": source_ref}).mappings().first()
+    if profile is not None:
+        row = dict(profile)
+        row["target_type"] = "memory_profiles"
+        row["evidence"] = _json_dict(row.pop("atom_ids_json"))
+        return row
+    scenario = db.execute(text("""
+        SELECT id, scope_type, scope_key, title, summary, atom_ids_json,
+               trust_state, source_type, source_ref, created_at, updated_at
+        FROM memory_scenarios
+        WHERE source_ref = :source_ref
+        ORDER BY id ASC
+        LIMIT 1
+    """), {"source_ref": source_ref}).mappings().first()
+    if scenario is not None:
+        row = dict(scenario)
+        row["target_type"] = "memory_scenarios"
+        row["evidence"] = _json_dict(row.pop("atom_ids_json"))
+        return row
+    return None
+
+
+def _source_events(db: Session, event_ids: list[int]) -> list[dict]:
+    if not event_ids:
+        return []
+    rows = db.execute(text("""
+        SELECT id, trace_type, namespace, subject, symbols_json, themes_json,
+               content, source_type, source_ref, as_of, event_time, ingestion_time
+        FROM evolution_traces
+        WHERE id IN :ids
+        ORDER BY id ASC
+    """).bindparams(bindparam("ids", expanding=True)), {"ids": event_ids}).mappings().all()
+    events = []
+    for row in rows:
+        item = dict(row)
+        item["symbols"] = _json_list(item.pop("symbols_json"))
+        item["themes"] = _json_list(item.pop("themes_json"))
+        events.append(item)
+    return events
+
+
+def _memory_diff(db: Session, candidate: dict, target: dict | None) -> dict:
+    existing: list[dict] = []
+    symbol = candidate.get("symbol")
+    memory_type = candidate.get("memory_type")
+    if symbol and symbol != "__GLOBAL__":
+        rows = db.execute(text("""
+            SELECT 'memory_atoms' AS source, id, summary, trust_state AS status
+            FROM memory_atoms
+            WHERE scope_key = :symbol AND memory_type = :memory_type
+              AND trust_state = 'trusted'
+            UNION ALL
+            SELECT 'stock_memory_items' AS source, id, summary, status
+            FROM stock_memory_items
+            WHERE symbol = :symbol AND memory_type = :memory_type
+              AND status != 'archived'
+            ORDER BY id DESC
+            LIMIT 5
+        """), {"symbol": symbol, "memory_type": memory_type}).mappings().all()
+        existing = [dict(row) for row in rows]
+    elif target and target.get("target_type") == "memory_profiles":
+        rows = db.execute(text("""
+            SELECT 'memory_profiles' AS source, id, summary, trust_state AS status
+            FROM memory_profiles
+            WHERE profile_type = :profile_type AND profile_key = :profile_key
+              AND trust_state = 'trusted'
+            ORDER BY id DESC
+            LIMIT 5
+        """), {
+            "profile_type": target.get("profile_type"),
+            "profile_key": target.get("profile_key"),
+        }).mappings().all()
+        existing = [dict(row) for row in rows]
+    return {"candidate": candidate.get("summary"), "existing": existing}
+
+
+@router.get("/memory/evolution/candidates")
+def list_memory_evolution_candidates(
+    status: str | None = Query(default="pending"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """List memory-evolution candidates with pagination and status filter."""
+    from backend.data.database import MemoryPromotionCandidate
+    from backend.research.review_loop import _cand_to_dict
+
+    q = db.query(MemoryPromotionCandidate)
+    if status:
+        q = q.filter(MemoryPromotionCandidate.source_trust == status)
+    total = q.count()
+    rows = (
+        q.order_by(MemoryPromotionCandidate.created_at.desc(), MemoryPromotionCandidate.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return {"items": [_cand_to_dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/memory/evolution/candidates/{candidate_id}")
+def get_memory_evolution_candidate_detail(candidate_id: int, db: Session = Depends(get_db)):
+    """Return one candidate with sanitized source-event evidence and existing-memory diff."""
+    from backend.research.review_loop import get_memory_candidate
+
+    candidate = get_memory_candidate(db, candidate_id)
+    if candidate is None:
+        raise HTTPException(404, f"memory candidate {candidate_id} not found")
+    target = _candidate_target(db, candidate.get("source_ref"))
+    evidence = (target or {}).get("evidence") or {}
+    source_event_ids = [int(item) for item in evidence.get("source_event_ids", []) if str(item).isdigit()]
+    return {
+        "candidate": candidate,
+        "target": target,
+        "source_events": _source_events(db, source_event_ids),
+        "diff": _memory_diff(db, candidate, target),
+        "shadow_eval": {"enabled": False, "reason": "shadow evaluator is a later M57 phase"},
+    }
+
+
+@router.post(
+    "/memory/evolution/candidates/{candidate_id}/promote",
+    response_model=MemoryCandidateOut,
+    dependencies=[Depends(local_human_memory_gate), Depends(agent_write_guard("research.memory.promote"))],
+)
+def promote_memory_evolution_candidate(
+    candidate_id: int,
+    request: MemoryPromoteRequest,
+    db: Session = Depends(get_db),
+):
+    """HUMAN-GATED: promote through the existing M37 memory gate."""
+    return promote_memory_candidate(candidate_id=candidate_id, request=request, db=db)
+
+
+@router.post(
+    "/memory/evolution/candidates/{candidate_id}/reject",
+    response_model=MemoryCandidateOut,
+    dependencies=[Depends(local_human_memory_gate), Depends(agent_write_guard("research.memory.reject"))],
+)
+def reject_memory_evolution_candidate(
+    candidate_id: int,
+    request: MemoryRejectRequest,
+    db: Session = Depends(get_db),
+):
+    """HUMAN-GATED: reject with a required reason and trace the reason."""
+    if not request.note or not request.note.strip():
+        raise HTTPException(400, "reject reason is required")
+    result = reject_memory_candidate_endpoint(candidate_id=candidate_id, request=request, db=db)
+    from backend.memory.evolution_trace import NAMESPACE_OPERATION_REVIEW, record_trace
+
+    record_trace(
+        db,
+        trace_type="memory_evolution.reject",
+        namespace=NAMESPACE_OPERATION_REVIEW,
+        subject=str(candidate_id),
+        content=f"Memory evolution candidate {candidate_id} rejected: {request.note.strip()}",
+        payload={"candidate_id": candidate_id, "reason": request.note.strip(), "confirmed_by": request.confirmed_by},
+        source_type="memory_evolution_api",
+        source_ref=f"memory_evolution:{candidate_id}:reject",
+    )
+    return result
+
+
+@router.post(
+    "/memory/evolution/candidates/{candidate_id}/archive",
+    response_model=MemoryCandidateOut,
+    dependencies=[Depends(local_human_memory_gate), Depends(agent_write_guard("research.memory.archive"))],
+)
+def archive_memory_evolution_candidate(
+    candidate_id: int,
+    request: MemoryArchiveRequest,
+    db: Session = Depends(get_db),
+):
+    """HUMAN-GATED: archive a pending candidate without promoting it."""
+    from backend.data.database import MemoryPromotionCandidate
+    from backend.memory.audit_log import audit_write
+    from backend.memory.evolution_trace import NAMESPACE_OPERATION_REVIEW, record_trace
+    from backend.research.review_loop import _cand_to_dict
+
+    row = db.query(MemoryPromotionCandidate).filter(MemoryPromotionCandidate.id == candidate_id).first()
+    if row is None:
+        raise HTTPException(404, f"memory candidate {candidate_id} not found")
+    if row.source_trust != "pending":
+        raise HTTPException(400, f"candidate {candidate_id} is already in state {row.source_trust!r}")
+    row.source_trust = "archived"
+    row.note = request.reason.strip()
+    row.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    db.flush()
+    audit_write(
+        db,
+        "memory_evolution.archive",
+        f"candidate {candidate_id} archived by {request.confirmed_by!r}; reason={request.reason!r}",
+        related_symbol=None if row.symbol == "__GLOBAL__" else row.symbol,
+    )
+    record_trace(
+        db,
+        trace_type="memory_evolution.archive",
+        namespace=NAMESPACE_OPERATION_REVIEW,
+        subject=str(candidate_id),
+        content=f"Memory evolution candidate {candidate_id} archived: {request.reason.strip()}",
+        payload={"candidate_id": candidate_id, "reason": request.reason.strip(), "confirmed_by": request.confirmed_by},
+        source_type="memory_evolution_api",
+        source_ref=f"memory_evolution:{candidate_id}:archive",
+    )
+    return _cand_to_dict(row)
 
 
 # ── M40 Universe Guard routes ─────────────────────────────────────────────────

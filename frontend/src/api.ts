@@ -258,6 +258,33 @@ export const getSystemHealth = () => request('/system/health')
 
 export const getLLMUsage = (days = 7) => request(`/system/llm-usage?days=${days}`)
 
+export const getMemoryEvolutionCandidates = (status = 'pending', limit = 50, offset = 0) =>
+  request(`/memory/evolution/candidates?status=${encodeURIComponent(status)}&limit=${limit}&offset=${offset}`)
+
+export const getMemoryEvolutionCandidate = (id) =>
+  request(`/memory/evolution/candidates/${id}`)
+
+export const promoteMemoryEvolutionCandidate = (id, confirmedBy = 'local_human') =>
+  request(`/memory/evolution/candidates/${id}/promote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed_by: confirmedBy }),
+  })
+
+export const rejectMemoryEvolutionCandidate = (id, reason, confirmedBy = 'local_human') =>
+  request(`/memory/evolution/candidates/${id}/reject`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed_by: confirmedBy, note: reason }),
+  })
+
+export const archiveMemoryEvolutionCandidate = (id, reason, confirmedBy = 'local_human') =>
+  request(`/memory/evolution/candidates/${id}/archive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed_by: confirmedBy, reason }),
+  })
+
 export const triggerKillSwitch = (reason = 'manual') =>
   request(`/system/kill-switch/trigger?reason=${encodeURIComponent(reason)}`, { method: 'POST' })
 

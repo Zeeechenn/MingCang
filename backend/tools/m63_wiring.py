@@ -31,6 +31,7 @@ WIRING_MAP: dict[str, WiringEntry] = {
     "backend.tools.m59_discretion": {"bucket": "daily_postmarket", "reason": "盘后LLM裁量参考层,灰度开关控制"},
     "backend.tools.m59_discretion_gate": {"bucket": "manual_only", "reason": "M59裁量层盲裁验收包,人工触发"},
     "backend.tools.m52_flow_floor": {"bucket": "daily_postmarket", "reason": "资金流融合库函数,由日常评分/面板间接使用"},
+    "backend.tools.m57_miner": {"bucket": "manual_only", "reason": "M57记忆候选生成器,默认不接日常自动线,人工触发后只写pending"},
     "backend.tools.m61_backfill": {"bucket": "daily_postmarket", "reason": "盘后滴灌补数为主,深研也会调用"},
     "backend.tools.m63_render": {"bucket": "manual_only", "reason": "M63渲染库本体,由其他M63工具调用"},
     "backend.tools.m63_daily": {"bucket": "daily_postmarket", "reason": "M63盘前/盘中/盘后主入口;主接线按盘后"},

@@ -11,6 +11,7 @@ import { ChatPage } from './page-chat';
 import { DailyPage } from './page-daily';
 import { HealthPage } from './page-health';
 import { HomePage } from './page-home';
+import { MemoryEvolutionPage } from './page-memory-evolution';
 import { PositionsPage } from './page-positions';
 import { PulsePage } from './page-pulse';
 import { ReportsPage } from './page-reports';
@@ -32,6 +33,7 @@ import './page-chat';
 import './page-daily';
 import './page-health';
 import './page-admin';
+import './page-memory-evolution';
 import { startLive } from './live';
 
 const { useState: useMState, useEffect: useMEffect } = React;
@@ -46,6 +48,7 @@ const NAV = [
   ['/reports', '复盘案卷', 'reports'],
   ['/chat', '研究副驾驶', 'chat'],
   ['/positions', '持仓纪律', 'positions'],
+  ['/memory-evolution', '记忆进化', 'memory'],
   ['/health', '来源健康', 'health'],
   ['/admin', '治理台', 'admin'],
 ];
@@ -177,6 +180,7 @@ function App() {
   else if (route.page === 'daily') page = <DailyPage />;
   else if (route.page === 'memory' || route.page === 'reviews') page = <ReportsPage />;
   else if (route.page === 'positions') page = <PositionsPage />;
+  else if (route.page === 'memory-evolution') page = <MemoryEvolutionPage />;
   else if (route.page === 'chat') page = <ChatPage />;
   else if (route.page === 'health') page = <HealthPage />;
   else if (route.page === 'admin') page = <AdminPage />;
