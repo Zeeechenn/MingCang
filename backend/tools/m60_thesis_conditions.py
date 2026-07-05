@@ -18,6 +18,24 @@ from backend.config import default_sqlite_path
 
 CONDITION_TYPES = {"validation", "invalidation"}
 
+EVENT_TABLES = ["announcements", "research_reports", "corporate_events", "news"]
+OVERSEAS_KEYWORDS = (
+    "ASML",
+    "backlog",
+    "AI capex",
+    "NV",
+    "NVIDIA",
+    "Corning",
+    "Lumentum",
+    "Meta",
+    "美光",
+    "SCA",
+    "HBM",
+    "DRAM",
+    "NAND",
+)
+NEGATIVE_LONG_TERM_LABELS = ("规避", "观望", "估值偏高")
+
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
@@ -94,16 +112,192 @@ def _keyword_tail(raw: str) -> list[str]:
     return candidates
 
 
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        clean = item.strip()
+        if clean and clean not in seen:
+            seen.add(clean)
+            result.append(clean)
+    return result
+
+
+def _event_keywords(raw: str) -> list[str]:
+    pairs = (
+        ("订单下修", "订单下修"),
+        ("订单", "订单"),
+        ("合同", "合同"),
+        ("中标", "中标"),
+        ("交付", "交付"),
+        ("收入", "收入"),
+        ("营收", "营收"),
+        ("利润", "利润"),
+        ("净利", "净利"),
+        ("毛利率", "毛利率"),
+        ("产能利用率", "产能利用率"),
+        ("产能扩张", "产能扩张"),
+        ("扩产", "扩产"),
+        ("客户验证", "客户验证"),
+        ("份额", "份额"),
+        ("产品结构", "产品结构"),
+        ("交期缩短", "交期缩短"),
+        ("交期", "交期"),
+        ("价格松动", "价格松动"),
+        ("涨价", "涨价"),
+        ("供给约束", "供给约束"),
+        ("库存", "库存"),
+        ("回购", "回购"),
+        ("诉讼", "诉讼"),
+        ("移出清单", "移出清单"),
+        ("出口管制", "出口管制"),
+        ("投资禁令", "投资禁令"),
+        ("强制剥离", "强制剥离"),
+        ("商誉减值", "商誉减值"),
+        ("减持", "减持"),
+        ("回落", "回落"),
+        ("转弱", "转弱"),
+        ("松动", "松动"),
+    )
+    return _dedupe([*_keyword_tail(raw), *[keyword for needle, keyword in pairs if needle in raw]])
+
+
+def _looks_event_observable(raw: str) -> bool:
+    markers = (
+        "订单",
+        "交付",
+        "收入",
+        "营收",
+        "利润",
+        "净利",
+        "毛利率",
+        "产能",
+        "客户验证",
+        "份额",
+        "产品结构",
+        "交期",
+        "价格",
+        "供给",
+        "库存",
+        "回购",
+        "诉讼",
+        "清单",
+        "出口管制",
+        "投资禁令",
+        "强制剥离",
+        "商誉减值",
+        "减持",
+    )
+    return any(marker in raw for marker in markers) and bool(_event_keywords(raw))
+
+
+def _financial_metric_threshold(raw: str) -> dict[str, Any] | None:
+    if not any(word in raw for word in ("财报", "营收", "净利", "毛利率", "收入增速")):
+        return None
+    thresholds: list[dict[str, Any]] = []
+    direction = "lte" if any(word in raw for word in ("以下", "跌破", "滑落", "回落")) else "gte"
+    if any(word in raw for word in ("营收", "收入", "增速")):
+        pct = _pct(raw)
+        if pct is not None:
+            thresholds.append({"field": "revenue_yoy", "operator": direction, "threshold_pct": pct})
+    if "净利" in raw or "利润" in raw or "增速" in raw:
+        pct = _pct(raw)
+        if pct is not None:
+            thresholds.append({"field": "net_profit_yoy", "operator": direction, "threshold_pct": pct})
+    gross_margin = re.search(r"毛利率[^0-9%]*([0-9]+(?:\.[0-9]+)?)\s*%", raw)
+    if gross_margin:
+        thresholds.append(
+            {"field": "gross_margin", "operator": "lte" if "跌破" in raw else direction, "threshold_pct": float(gross_margin.group(1))}
+        )
+    if not thresholds:
+        return None
+    return {
+        "kind": "financial_metric_threshold",
+        "params": {"thresholds": thresholds, "join": "any" if "或" in raw else "all"},
+        "raw_text": raw,
+    }
+
+
+def _long_term_label_state(raw: str) -> dict[str, Any] | None:
+    if "长期标签" not in raw:
+        return None
+    labels = [label for label in NEGATIVE_LONG_TERM_LABELS if label in raw]
+    if not labels:
+        if "估值约束缓和" in raw:
+            labels = ["估值约束缓和"]
+        else:
+            return None
+    return {"kind": "long_term_label_state", "params": {"labels": labels, "match": "any"}, "raw_text": raw}
+
+
+def _relative_move(raw: str) -> dict[str, Any] | None:
+    if "沪深300" not in raw or not any(word in raw for word in ("跑赢", "超额")):
+        return None
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*pp", raw)
+    threshold = float(match.group(1)) if match else 5.0
+    window_match = re.search(r"([0-9]+)\s*交易日", raw)
+    window_days = int(window_match.group(1)) if window_match else 1
+    return {
+        "kind": "relative_benchmark_move",
+        "params": {"benchmark_symbol": "000300", "threshold_pp": threshold, "window_days": window_days, "direction": "up"},
+        "raw_text": raw,
+    }
+
+
+def _research_report_density(raw: str) -> dict[str, Any] | None:
+    if not any(word in raw for word in ("研报密度", "研报数量", "覆盖提升", "评级上调")):
+        return None
+    keywords = _keyword_tail(raw) if "关键词" in raw else []
+    return {
+        "kind": "research_report_density",
+        "params": {"lookback_days": 30, "min_count": 2, "keywords": keywords},
+        "raw_text": raw,
+    }
+
+
+def _fund_flow_ma_break(raw: str) -> dict[str, Any] | None:
+    if "资金流" not in raw or "净流出" not in raw or "跌破" not in raw or "日均线" not in raw:
+        return None
+    window_match = re.search(r"([0-9]+)\s*日均线", raw)
+    return {
+        "kind": "fund_flow_ma_break",
+        "params": {"days": _days(raw), "flow_direction": "down", "ma_window": int(window_match.group(1)) if window_match else 20},
+        "raw_text": raw,
+    }
+
+
+def _overseas_indicator_keywords(raw: str) -> list[str]:
+    return _dedupe([keyword for keyword in OVERSEAS_KEYWORDS if keyword in raw])
+
+
 def compile_condition(raw_text: str, *, condition_type: str) -> dict[str, Any]:
     if condition_type not in CONDITION_TYPES:
         raise ValueError(f"invalid condition_type: {condition_type}")
     raw = str(raw_text or "").strip()
     pct = _pct(raw)
 
+    for compiled in (
+        _financial_metric_threshold(raw),
+        _long_term_label_state(raw),
+        _relative_move(raw),
+        _research_report_density(raw),
+        _fund_flow_ma_break(raw),
+    ):
+        if compiled is not None:
+            return compiled
+
     if "海外" in raw and pct is not None:
         return {
             "kind": "overseas_pct_move",
             "params": {"threshold_pct": pct, "direction": _direction(raw), "field": "chg_pct_1d"},
+            "raw_text": raw,
+        }
+
+    overseas_keywords = _overseas_indicator_keywords(raw)
+    if overseas_keywords or ("海外领先指标" in raw and _event_keywords(raw)):
+        return {
+            "kind": "overseas_indicator_keyword",
+            "params": {"keywords": overseas_keywords or _event_keywords(raw), "lookback_days": 10},
             "raw_text": raw,
         }
 
@@ -121,7 +315,7 @@ def compile_condition(raw_text: str, *, condition_type: str) -> dict[str, Any]:
             "raw_text": raw,
         }
 
-    if any(word in raw for word in ("公告", "研报", "解禁")) and ("关键词" in raw or _keyword_tail(raw)):
+    if (any(word in raw for word in ("公告", "研报", "解禁")) and ("关键词" in raw or _keyword_tail(raw))) or _looks_event_observable(raw):
         tables = []
         if "公告" in raw:
             tables.append("announcements")
@@ -129,9 +323,11 @@ def compile_condition(raw_text: str, *, condition_type: str) -> dict[str, Any]:
             tables.append("research_reports")
         if "解禁" in raw:
             tables.append("corporate_events")
+        if not tables:
+            tables = EVENT_TABLES
         return {
             "kind": "event_keyword",
-            "params": {"tables": tables or ["announcements", "research_reports", "corporate_events"], "keywords": _keyword_tail(raw), "lookback_days": 5},
+            "params": {"tables": tables, "keywords": _event_keywords(raw), "lookback_days": 5},
             "raw_text": raw,
         }
 
@@ -225,6 +421,18 @@ def evaluate_condition_spec(
         return _eval_event_keyword(con, symbol=symbol, as_of=as_of, params=params)
     if kind == "overseas_pct_move":
         return _eval_overseas_pct_move(con, symbol=symbol, as_of=as_of, params=params)
+    if kind == "overseas_indicator_keyword":
+        return _eval_overseas_indicator_keyword(con, as_of=as_of, params=params)
+    if kind == "financial_metric_threshold":
+        return _eval_financial_metric_threshold(con, symbol=symbol, as_of=as_of, params=params)
+    if kind == "long_term_label_state":
+        return _eval_long_term_label_state(con, symbol=symbol, as_of=as_of, params=params)
+    if kind == "relative_benchmark_move":
+        return _eval_relative_benchmark_move(con, symbol=symbol, as_of=as_of, params=params)
+    if kind == "research_report_density":
+        return _eval_research_report_density(con, symbol=symbol, as_of=as_of, params=params)
+    if kind == "fund_flow_ma_break":
+        return _eval_fund_flow_ma_break(con, symbol=symbol, as_of=as_of, params=params)
     return {"triggered": False, "coverage": "manual_review"}
 
 
@@ -288,7 +496,9 @@ def _eval_event_keyword(con: sqlite3.Connection, *, symbol: str, as_of: str, par
         "announcements": ("published_at", "title"),
         "research_reports": ("publish_date", "title"),
         "corporate_events": ("event_date", "title"),
+        "news": ("published_at", "title"),
     }
+    lookback_days = int(params.get("lookback_days") or 5)
     matches: list[dict[str, Any]] = []
     missing: list[str] = []
     for table in tables:
@@ -300,11 +510,13 @@ def _eval_event_keyword(con: sqlite3.Connection, *, symbol: str, as_of: str, par
             f"""
             SELECT symbol, {date_col} AS item_date, {title_col} AS title
             FROM {table}
-            WHERE symbol = ? AND date({date_col}) <= date(?)
+            WHERE symbol = ?
+              AND date({date_col}) <= date(?)
+              AND date({date_col}) >= date(?, ?)
             ORDER BY date({date_col}) DESC
             LIMIT 50
             """,
-            (symbol, as_of),
+            (symbol, as_of, as_of, f"-{lookback_days} day"),
         ).fetchall()
         for row in rows:
             title = str(row["title"] or "")
@@ -312,6 +524,211 @@ def _eval_event_keyword(con: sqlite3.Connection, *, symbol: str, as_of: str, par
             if hit:
                 matches.append({"table": table, "date": str(row["item_date"])[:10], "title": title, "keywords": hit})
     return {"triggered": bool(matches), "coverage": "ok" if matches or len(missing) < len(tables) else "missing:event_tables", "matches": matches, "missing_tables": missing}
+
+
+def _eval_overseas_indicator_keyword(con: sqlite3.Connection, *, as_of: str, params: dict[str, Any]) -> dict[str, Any]:
+    if not _table_exists(con, "overseas_snapshots") or not {"snap_date", "name", "note"} <= _columns(con, "overseas_snapshots"):
+        return {"triggered": False, "coverage": "missing:overseas_snapshots"}
+    keywords = [str(keyword) for keyword in params.get("keywords") or [] if str(keyword)]
+    if not keywords:
+        return {"triggered": False, "coverage": "missing:keywords"}
+    lookback_days = int(params.get("lookback_days") or 10)
+    rows = con.execute(
+        """
+        SELECT symbol, name, snap_date, note
+        FROM overseas_snapshots
+        WHERE date(snap_date) <= date(?)
+          AND date(snap_date) >= date(?, ?)
+        ORDER BY date(snap_date) DESC
+        LIMIT 100
+        """,
+        (as_of, as_of, f"-{lookback_days} day"),
+    ).fetchall()
+    matches = []
+    for row in rows:
+        haystack = f"{row['symbol'] or ''} {row['name'] or ''} {row['note'] or ''}"
+        hit = [keyword for keyword in keywords if keyword in haystack]
+        if hit:
+            matches.append({"symbol": row["symbol"], "name": row["name"], "date": str(row["snap_date"])[:10], "keywords": hit})
+    return {"triggered": bool(matches), "coverage": "ok", "matches": matches}
+
+
+def _compare(value: float, operator: str, threshold: float) -> bool:
+    return value <= threshold if operator == "lte" else value >= threshold
+
+
+def _eval_financial_metric_threshold(con: sqlite3.Connection, *, symbol: str, as_of: str, params: dict[str, Any]) -> dict[str, Any]:
+    required = {"symbol", "disclosure_date", "report_date"}
+    if not _table_exists(con, "financial_metrics") or not required <= _columns(con, "financial_metrics"):
+        return {"triggered": False, "coverage": "missing:financial_metrics"}
+    thresholds = [item for item in params.get("thresholds") or [] if isinstance(item, dict)]
+    fields = [str(item.get("field")) for item in thresholds if item.get("field")]
+    if not fields or not set(fields) <= _columns(con, "financial_metrics"):
+        return {"triggered": False, "coverage": "missing:financial_fields"}
+    rows = con.execute(
+        f"""
+        SELECT report_date, disclosure_date, {", ".join(fields)}
+        FROM financial_metrics
+        WHERE symbol = ? AND date(COALESCE(disclosure_date, report_date)) <= date(?)
+        ORDER BY date(COALESCE(disclosure_date, report_date)) DESC
+        LIMIT 1
+        """,
+        (symbol, as_of),
+    ).fetchall()
+    if not rows:
+        return {"triggered": False, "coverage": "missing:financial_row"}
+    row = rows[0]
+    checks = []
+    for item in thresholds:
+        field = str(item.get("field"))
+        if row[field] is None:
+            continue
+        value = float(row[field])
+        threshold = float(item.get("threshold_pct") or 0)
+        operator = str(item.get("operator") or "gte")
+        checks.append({"field": field, "value": value, "operator": operator, "threshold_pct": threshold, "hit": _compare(value, operator, threshold)})
+    if not checks:
+        return {"triggered": False, "coverage": "missing:financial_values"}
+    join = str(params.get("join") or "all")
+    triggered = any(check["hit"] for check in checks) if join == "any" else all(check["hit"] for check in checks)
+    return {"triggered": triggered, "coverage": "ok", "checks": checks, "join": join}
+
+
+def _eval_long_term_label_state(con: sqlite3.Connection, *, symbol: str, as_of: str, params: dict[str, Any]) -> dict[str, Any]:
+    required = {"symbol", "date", "label", "key_findings_json"}
+    if not _table_exists(con, "long_term_labels") or not required <= _columns(con, "long_term_labels"):
+        return {"triggered": False, "coverage": "missing:long_term_labels"}
+    labels = [str(label) for label in params.get("labels") or [] if str(label)]
+    if not labels:
+        return {"triggered": False, "coverage": "missing:labels"}
+    row = con.execute(
+        """
+        SELECT date, label, key_findings_json
+        FROM long_term_labels
+        WHERE symbol = ? AND date(date) <= date(?)
+        ORDER BY date(date) DESC
+        LIMIT 1
+        """,
+        (symbol, as_of),
+    ).fetchone()
+    if row is None:
+        return {"triggered": False, "coverage": "missing:long_term_label_row"}
+    haystack = f"{row['label'] or ''} {row['key_findings_json'] or ''}"
+    hits = [label for label in labels if label in haystack]
+    return {"triggered": bool(hits), "coverage": "ok", "date": str(row["date"])[:10], "hits": hits}
+
+
+def _latest_close(con: sqlite3.Connection, table: str, symbol: str, as_of: str, window_days: int) -> tuple[float, float] | None:
+    date_col = "date"
+    rows = con.execute(
+        f"""
+        SELECT {date_col}, close
+        FROM {table}
+        WHERE symbol = ? AND date({date_col}) <= date(?) AND close IS NOT NULL
+        ORDER BY date({date_col}) DESC
+        LIMIT ?
+        """,
+        (symbol, as_of, max(window_days + 1, 2)),
+    ).fetchall()
+    if len(rows) < 2 or str(rows[0][date_col])[:10] != as_of:
+        return None
+    return float(rows[0]["close"]), float(rows[-1]["close"])
+
+
+def _eval_relative_benchmark_move(con: sqlite3.Connection, *, symbol: str, as_of: str, params: dict[str, Any]) -> dict[str, Any]:
+    if not _table_exists(con, "prices") or not {"symbol", "date", "close"} <= _columns(con, "prices"):
+        return {"triggered": False, "coverage": "missing:prices"}
+    if not _table_exists(con, "index_prices") or not {"symbol", "date", "close"} <= _columns(con, "index_prices"):
+        return {"triggered": False, "coverage": "missing:index_prices"}
+    window_days = int(params.get("window_days") or 1)
+    benchmark = str(params.get("benchmark_symbol") or "000300")
+    stock_pair = _latest_close(con, "prices", symbol, as_of, window_days)
+    index_pair = _latest_close(con, "index_prices", benchmark, as_of, window_days)
+    if stock_pair is None or index_pair is None:
+        return {"triggered": False, "coverage": "missing:relative_prices"}
+    stock_now, stock_prev = stock_pair
+    index_now, index_prev = index_pair
+    if stock_prev == 0 or index_prev == 0:
+        return {"triggered": False, "coverage": "invalid:prev_close_zero"}
+    stock_pct = (stock_now / stock_prev - 1.0) * 100.0
+    index_pct = (index_now / index_prev - 1.0) * 100.0
+    excess_pp = stock_pct - index_pct
+    threshold = float(params.get("threshold_pp") or 0)
+    direction = str(params.get("direction") or "up")
+    triggered = excess_pp <= -abs(threshold) if direction == "down" else excess_pp >= abs(threshold)
+    return {"triggered": triggered, "coverage": "ok", "excess_pp": excess_pp, "threshold_pp": threshold}
+
+
+def _eval_research_report_density(con: sqlite3.Connection, *, symbol: str, as_of: str, params: dict[str, Any]) -> dict[str, Any]:
+    if not _table_exists(con, "research_reports") or not {"symbol", "publish_date", "title"} <= _columns(con, "research_reports"):
+        return {"triggered": False, "coverage": "missing:research_reports"}
+    keywords = [str(keyword) for keyword in params.get("keywords") or [] if str(keyword)]
+    lookback_days = int(params.get("lookback_days") or 30)
+    min_count = int(params.get("min_count") or 2)
+    rows = con.execute(
+        """
+        SELECT publish_date, title
+        FROM research_reports
+        WHERE symbol = ?
+          AND date(publish_date) <= date(?)
+          AND date(publish_date) >= date(?, ?)
+        ORDER BY date(publish_date) DESC
+        LIMIT 100
+        """,
+        (symbol, as_of, as_of, f"-{lookback_days} day"),
+    ).fetchall()
+    matches = []
+    for row in rows:
+        title = str(row["title"] or "")
+        if not keywords or any(keyword in title for keyword in keywords):
+            matches.append({"date": str(row["publish_date"])[:10], "title": title})
+    return {"triggered": len(matches) >= min_count, "coverage": "ok", "count": len(matches), "min_count": min_count, "matches": matches}
+
+
+def _eval_fund_flow_ma_break(con: sqlite3.Connection, *, symbol: str, as_of: str, params: dict[str, Any]) -> dict[str, Any]:
+    if not _table_exists(con, "fund_flows") or not {"symbol", "trade_date", "main_net"} <= _columns(con, "fund_flows"):
+        return {"triggered": False, "coverage": "missing:fund_flows"}
+    if not _table_exists(con, "prices") or not {"symbol", "date", "close"} <= _columns(con, "prices"):
+        return {"triggered": False, "coverage": "missing:prices"}
+    days = int(params.get("days") or 3)
+    flow_rows = con.execute(
+        """
+        SELECT trade_date, main_net
+        FROM fund_flows
+        WHERE symbol = ? AND date(trade_date) <= date(?) AND main_net IS NOT NULL
+        ORDER BY date(trade_date) DESC
+        LIMIT ?
+        """,
+        (symbol, as_of, days),
+    ).fetchall()
+    if len(flow_rows) < days or str(flow_rows[0]["trade_date"])[:10] != as_of:
+        return {"triggered": False, "coverage": "missing:flow_streak"}
+    flow_values = [float(row["main_net"]) for row in flow_rows]
+    flow_hit = all(value < 0 for value in flow_values)
+    ma_window = int(params.get("ma_window") or 20)
+    price_rows = con.execute(
+        """
+        SELECT date, close
+        FROM prices
+        WHERE symbol = ? AND date(date) <= date(?) AND close IS NOT NULL
+        ORDER BY date(date) DESC
+        LIMIT ?
+        """,
+        (symbol, as_of, ma_window),
+    ).fetchall()
+    if len(price_rows) < ma_window or str(price_rows[0]["date"])[:10] != as_of:
+        return {"triggered": False, "coverage": "missing:ma_window"}
+    latest_close = float(price_rows[0]["close"])
+    ma_value = sum(float(row["close"]) for row in price_rows) / ma_window
+    ma_hit = latest_close < ma_value
+    return {
+        "triggered": flow_hit and ma_hit,
+        "coverage": "ok",
+        "flow_values": flow_values,
+        "latest_close": latest_close,
+        "ma_window": ma_window,
+        "ma_value": ma_value,
+    }
 
 
 def _eval_overseas_pct_move(con: sqlite3.Connection, *, symbol: str, as_of: str, params: dict[str, Any]) -> dict[str, Any]:
