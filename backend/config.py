@@ -153,6 +153,8 @@ class Settings(BaseSettings):
     max_position_per_sector: float = 0.30     # 单板块最大仓位
     max_total_equity_pct: float = 0.80        # 股票总仓位上限
     new_signal_trial_pct: float = 0.05        # 新信号试错仓
+    entry_risk_budget_pct: float = 1.5        # D2 条件卡:单笔风险预算占资金百分比
+    entry_account_size: float | None = None   # D2 条件卡:None 时只展示公式,不实算金额
 
     # 阶段C 多 Agent 决策。
     # 日常/批量产信号默认关闭以控制 token；单股研究、长期团、深度研究等手动研究入口可显式开启。
@@ -345,6 +347,10 @@ class Settings(BaseSettings):
             value = getattr(self, key)
             if value < 0 or value > 1:
                 raise ValueError(f"{key} must be in [0, 1]")
+        if self.entry_risk_budget_pct < 0:
+            raise ValueError("entry_risk_budget_pct must be >= 0")
+        if self.entry_account_size is not None and self.entry_account_size < 0:
+            raise ValueError("entry_account_size must be >= 0")
         return self
 
 

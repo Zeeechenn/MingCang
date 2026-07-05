@@ -49,6 +49,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m59_entry_card",
+        "category": "stable",
+        "purpose": "Build deterministic M59 entry-condition cards with V1/V2/V3 prices and risk-budget sizing.",
+        "read_write_boundary": "Read-only; opens prices in SQLite mode=ro and reads the M60 second-entry ledger if present; zero LLM and no database writes.",
+        "recommended_entrypoint": "python3 -m backend.tools.m59_entry_card <symbol> --as-of <YYYY-MM-DD>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m59_discretion",
         "category": "stable",
         "purpose": "Build observe-only M59 LLM discretion reference cards for candidate selection and holding decisions.",

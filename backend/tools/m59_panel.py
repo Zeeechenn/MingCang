@@ -21,6 +21,7 @@ from backend.data.degradation import recent_degradations
 from backend.data.fundamentals import compute_piotroski_factors
 from backend.data.market_features import FAKE_FEATURE_FLAGS
 from backend.tools import m52_flow_floor as flow_floor
+from backend.tools.m59_entry_card import build_entry_card, render_entry_card_compact
 from backend.tools.m58_grid_backtest import regime_from_pool_equal_weight
 
 DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
@@ -484,6 +485,7 @@ def _build_buy_candidates(con: sqlite3.Connection, as_of: str) -> dict[str, Any]
                 "missing": item_missing,
                 "quality_flags": _quality_flags(con, symbol),
                 "research_reference": _build_research_reference(con, symbol, as_of),
+                "entry_card": build_entry_card(symbol, as_of, con),
             }
         )
     return {"items": items, "flags": flags}
@@ -970,7 +972,7 @@ def _build_risk_warnings(
                 "momentum_score": score,
                 "mom5": mom5,
                 "mom20": mom20,
-                "warning_note": "预警≠卖出指令",
+                "warning_note": "预警≠处置指令",
                 "in_position": symbol in positions,
             }
         )
@@ -1066,7 +1068,7 @@ def _build_watchtower_followups(watchtower_output_dir: Path) -> dict[str, Any]:
             "items": [],
             "source_file": None,
             "as_of": None,
-            "note": "触发≠买入,待 LLM 确认层(Phase 2)",
+            "note": "触发≠结论,待 LLM 确认层(Phase 2)",
             "flags": [f"missing:no_watchtower_output_in:{watchtower_output_dir}"],
         }
     try:
@@ -1076,7 +1078,7 @@ def _build_watchtower_followups(watchtower_output_dir: Path) -> dict[str, Any]:
             "items": [],
             "source_file": str(latest_file),
             "as_of": None,
-            "note": "触发≠买入,待 LLM 确认层(Phase 2)",
+            "note": "触发≠结论,待 LLM 确认层(Phase 2)",
             "flags": [f"invalid:watchtower_json:{exc.msg}"],
         }
     triggers = payload.get("triggers") if isinstance(payload, dict) else None
@@ -1090,14 +1092,14 @@ def _build_watchtower_followups(watchtower_output_dir: Path) -> dict[str, Any]:
                 "value": trigger.get("value"),
                 "price": trigger.get("price"),
                 "reentry_hint": trigger.get("reentry_hint") or trigger.get("reentry_trigger"),
-                "followup_note": "触发≠买入,待 LLM 确认层(Phase 2)",
+                "followup_note": "触发≠结论,待 LLM 确认层(Phase 2)",
             }
         )
     return {
         "items": items,
         "source_file": str(latest_file),
         "as_of": payload.get("as_of") if isinstance(payload, dict) else None,
-        "note": "触发≠买入,待 LLM 确认层(Phase 2)",
+        "note": "触发≠结论,待 LLM 确认层(Phase 2)",
         "flags": [] if items else (["watchtower_no_trigger_today"] if isinstance(payload, dict) else ["invalid:watchtower_payload"]),
     }
 
@@ -1124,7 +1126,7 @@ def _build_watchtower_confirm(confirm_output_dir: Path) -> dict[str, Any]:
             "items": [],
             "source_file": None,
             "as_of": None,
-            "note": "跟进关注≠买入建议",
+            "note": "跟进关注≠条件结论",
             "flags": [f"missing:no_confirm_output_in:{confirm_output_dir}"],
         }
     try:
@@ -1134,7 +1136,7 @@ def _build_watchtower_confirm(confirm_output_dir: Path) -> dict[str, Any]:
             "items": [],
             "source_file": str(latest_file),
             "as_of": None,
-            "note": "跟进关注≠买入建议",
+            "note": "跟进关注≠条件结论",
             "flags": [f"invalid:confirm_json:{exc.msg}"],
         }
     cards = payload.get("cards") if isinstance(payload, dict) else None
@@ -1158,7 +1160,7 @@ def _build_watchtower_confirm(confirm_output_dir: Path) -> dict[str, Any]:
         "items": items,
         "source_file": str(latest_file),
         "as_of": payload.get("as_of") if isinstance(payload, dict) else None,
-        "note": "跟进关注≠买入建议",
+        "note": "跟进关注≠条件结论",
         "flags": [] if items else (["confirm_no_cards"] if isinstance(payload, dict) else ["invalid:confirm_payload"]),
     }
 
@@ -1313,7 +1315,7 @@ def render_markdown(panel: dict[str, Any]) -> str:
         f"- 市场 regime: {header['market_regime']['value']} ({header['market_regime']['flag']})",
         f"- 行情参考: {market_reference_line}",
         "",
-        "## ① 买入候选",
+        "## ① 候选区",
         "| symbol | name | score | stop_loss | take_profit | llm_layer | 质量 | 研究参考 |",
         "|---|---|---:|---:|---:|---|---|---|",
     ]
@@ -1330,6 +1332,9 @@ def render_markdown(panel: dict[str, Any]) -> str:
             f"{quality_text} | "
             f"{_format_research_reference(item.get('research_reference'))} |"
         )
+        entry_card = item.get("entry_card") or {}
+        for entry_line in render_entry_card_compact(entry_card):
+            lines.append(f"  - {entry_line}")
     lines.extend(
         [
             "",
@@ -1371,7 +1376,7 @@ def render_markdown(panel: dict[str, Any]) -> str:
         [
             "",
             f"动量末档:{momentum_tail['note']} (regime_reliable={momentum_tail['regime_reliable']})",
-            "预警≠卖出指令",
+            "预警≠处置指令",
             "| symbol | momentum | in_position | 动作 |",
             "|---|---:|---|---|",
         ]
