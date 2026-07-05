@@ -12,7 +12,11 @@ from typing import Any
 import requests
 
 from backend.config import settings
-from backend.data.category_registry import CategoryProvider, FetchRequest, register_category_provider
+from backend.data.category_registry import (
+    CategoryProvider,
+    FetchRequest,
+    register_category_provider,
+)
 from backend.data.ifind_mcp import (
     GLOBAL_STOCK_MCP_ID,
     NEWS_MCP_ID,
@@ -170,19 +174,19 @@ def _extract_ifind_rows(text: str) -> list[dict[str, Any]]:
             except json.JSONDecodeError:
                 decoded = None
             if decoded is not None:
-                rows = walk(decoded)
-                if rows:
-                    return rows
+                decoded_rows = walk(decoded)
+                if decoded_rows:
+                    return decoded_rows
             nested = parse_ifind_mcp_text(text_value)
             table_rows: list[dict[str, Any]] = []
             for table in nested.get("tables", []):
                 table_rows.extend(table.get("rows", []))
             return table_rows
         if isinstance(value, list):
-            rows: list[dict[str, Any]] = []
+            list_rows: list[dict[str, Any]] = []
             for item in value:
-                rows.extend(walk(item))
-            return rows
+                list_rows.extend(walk(item))
+            return list_rows
         if isinstance(value, dict):
             for key in ("answer", "text", "data", "result", "rows", "list", "items"):
                 child = value.get(key)
@@ -523,6 +527,7 @@ def _holder_snapshot_row(rows: list[dict[str, Any]], request: FetchRequest, fetc
         _first_present(merged, ("股东户数", "股东总户数", "holder_count"))
     )
     top10_value = _first_present(merged, ("前十大股东", "前10大股东", "前十大股东列表", "top10"))
+    top10_json: str | None
     if top10_rows:
         top10_json = json.dumps(top10_rows, ensure_ascii=False, default=str)
     elif _ranked_holder_json(merged) is not None:
@@ -555,7 +560,7 @@ def _announcement_row(item: dict[str, Any], request: FetchRequest) -> dict | Non
     )
     if not title:
         return None
-    source_url = _compact(item.get("URL") or item.get("url") or item.get("公告链接"))
+    source_url: str | None = _compact(item.get("URL") or item.get("url") or item.get("公告链接"))
     source_url = source_url or None
     published_at = _parse_datetime(
         item.get("日期")
@@ -654,16 +659,17 @@ def fetch_research_reports_eastmoney(request: FetchRequest) -> list[dict]:
     if not request.symbol:
         raise ValueError("symbol is required for eastmoney_reportapi")
     limit = min(int(request.limit or 50), 100)
+    params: dict[str | bytes | int | float, str | bytes | int | float | None] = {
+        "code": request.symbol,
+        "beginTime": _date_str(request.start),
+        "endTime": _date_str(request.end),
+        "pageSize": limit,
+        "pageNo": 1,
+        "qType": 0,
+    }
     response = requests.get(
         REPORT_API_URL,
-        params={
-            "code": request.symbol,
-            "beginTime": _date_str(request.start),
-            "endTime": _date_str(request.end),
-            "pageSize": limit,
-            "pageNo": 1,
-            "qType": 0,
-        },
+        params=params,
         headers=EASTMONEY_HEADERS,
         timeout=10,
     )
@@ -792,15 +798,16 @@ def _parse_fflow_history_kline(kline: str, symbol: str, fetched_at: datetime) ->
 def fetch_fund_flow_eastmoney_fflow(request: FetchRequest) -> list[dict]:
     if not request.symbol:
         raise ValueError("symbol is required for eastmoney_fflow")
+    params: dict[str | bytes | int | float, str | bytes | int | float | None] = {
+        "secid": _eastmoney_secid(request.symbol),
+        "klt": 101,
+        "lmt": 250,
+        "fields1": "f1,f2,f3",
+        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+    }
     response = requests.get(
         EASTMONEY_FFLOW_URL,
-        params={
-            "secid": _eastmoney_secid(request.symbol),
-            "klt": 101,
-            "lmt": 250,
-            "fields1": "f1,f2,f3",
-            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-        },
+        params=params,
         headers=EASTMONEY_HEADERS,
         timeout=10,
     )
@@ -911,7 +918,7 @@ def fetch_overseas_ifind_global(request: FetchRequest) -> list[dict]:
         if latest.get("chg_pct_20d") is None and len(candidates) >= 2:
             old_close = oldest.get("close")
             new_close = latest.get("close")
-            if old_close not in (None, 0) and new_close is not None:
+            if old_close is not None and old_close != 0 and new_close is not None:
                 latest["chg_pct_20d"] = (float(new_close) / float(old_close) - 1.0) * 100.0
         rows.append(latest)
     return rows
@@ -1179,16 +1186,17 @@ def _probe_ifind_shareholders() -> bool:
 
 def _probe_eastmoney_reportapi() -> bool:
     try:
+        params: dict[str | bytes | int | float, str | bytes | int | float | None] = {
+            "code": "000001",
+            "beginTime": "2026-01-01",
+            "endTime": "2026-01-02",
+            "pageSize": 1,
+            "pageNo": 1,
+            "qType": 0,
+        }
         response = requests.get(
             REPORT_API_URL,
-            params={
-                "code": "000001",
-                "beginTime": "2026-01-01",
-                "endTime": "2026-01-02",
-                "pageSize": 1,
-                "pageNo": 1,
-                "qType": 0,
-            },
+            params=params,
             headers=EASTMONEY_HEADERS,
             timeout=10,
         )
@@ -1212,15 +1220,16 @@ def _probe_akshare_lhb() -> bool:
 
 def _probe_eastmoney_fflow() -> bool:
     try:
+        params: dict[str | bytes | int | float, str | bytes | int | float | None] = {
+            "secid": "1.601869",
+            "klt": 101,
+            "lmt": 1,
+            "fields1": "f1,f2,f3",
+            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
+        }
         response = requests.get(
             EASTMONEY_FFLOW_URL,
-            params={
-                "secid": "1.601869",
-                "klt": 101,
-                "lmt": 1,
-                "fields1": "f1,f2,f3",
-                "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61",
-            },
+            params=params,
             headers=EASTMONEY_HEADERS,
             timeout=10,
         )

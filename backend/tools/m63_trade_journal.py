@@ -210,7 +210,7 @@ def _outcome(con: sqlite3.Connection, pos: sqlite3.Row, entry_price: float | Non
     opened_at = str(pos["opened_at"])[:10]
     closed_at = str(pos["closed_at"])[:10]
     return_pct = None
-    if entry_price not in (None, 0) and exit_price is not None:
+    if entry_price is not None and entry_price != 0 and exit_price is not None:
         return_pct = round((float(exit_price) / float(entry_price) - 1) * 100, 2)
     return {
         "return_pct": return_pct,

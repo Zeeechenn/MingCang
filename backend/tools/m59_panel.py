@@ -21,8 +21,8 @@ from backend.data.degradation import recent_degradations
 from backend.data.fundamentals import compute_piotroski_factors
 from backend.data.market_features import FAKE_FEATURE_FLAGS
 from backend.tools import m52_flow_floor as flow_floor
-from backend.tools.m59_entry_card import build_entry_card, render_entry_card_compact
 from backend.tools.m58_grid_backtest import regime_from_pool_equal_weight
+from backend.tools.m59_entry_card import build_entry_card, render_entry_card_compact
 from backend.tools.m59_readiness import build_readiness, render_readiness_line
 
 DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
@@ -216,6 +216,7 @@ def _event_protective_action(con: sqlite3.Connection, symbol: str, as_of: str) -
         missing.append("atr14")
     if missing:
         return f"数据不足,无法给出动作(缺:{','.join(missing)})"
+    assert current is not None and atr is not None
     current_stop = _latest_open_position_stop(con, symbol)
     atr_stop = current - 1.5 * atr
     raised_stop = max(current_stop, atr_stop) if current_stop is not None else atr_stop
@@ -658,10 +659,10 @@ def _build_position_health(con: sqlite3.Connection, as_of: str, db_session=None)
         stop_distance = None
         take_distance = None
         stop_gap_atr = None
-        if current not in (None, 0):
+        if current is not None and current != 0:
             if stop_loss is not None:
                 stop_distance = _pct((current - stop_loss) / current)
-                if atr14 not in (None, 0):
+                if atr14 is not None and atr14 != 0:
                     stop_gap_atr = round((current - stop_loss) / atr14, 2)
             if take_profit is not None:
                 take_distance = _pct((take_profit - current) / current)
@@ -1204,7 +1205,7 @@ def _build_summary(
         for item in position_items
         if any("止损贴身" in flag for flag in (item.get("stop_flags") or []))
     ]
-    action_items = []
+    action_items: list[dict[str, Any]] = []
     action_items.extend(risk_warnings.get("event_warnings", {}).get("items") or [])
     action_items.extend(risk_warnings.get("momentum_tail", {}).get("items") or [])
     action_items.extend(risk_warnings.get("concentration", {}).get("items") or [])

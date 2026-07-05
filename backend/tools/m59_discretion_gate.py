@@ -13,9 +13,10 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from backend.config import default_sqlite_path
 from backend.data.context_builder import build_stock_context_pack, render_context_text
@@ -68,7 +69,7 @@ def _load_case_metadata(paths: tuple[Path, ...] = CASE_METADATA_FILES) -> dict[s
         for case in payload.get("cases") or []:
             if isinstance(case, dict) and case.get("id"):
                 cases[str(case["id"])] = {
-                    key: case.get(key)
+                    key: str(case.get(key))
                     for key in ("id", "symbol", "name", "as_of", "question", "outcome_note")
                     if case.get(key) is not None
                 }

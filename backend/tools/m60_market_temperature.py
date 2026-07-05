@@ -38,16 +38,17 @@ def _to_float(value: Any) -> float | None:
 
 def _fetch_pool(url: str, snap_date: date, sort: str) -> list[dict[str, Any]]:
     _EASTMONEY_THROTTLE.wait()
+    params: dict[str | bytes | int | float, str | bytes | int | float | None] = {
+        "ut": EASTMONEY_POOL_UT,
+        "dpt": "wz.ztzt",
+        "date": snap_date.strftime("%Y%m%d"),
+        "Pageindex": 0,
+        "pagesize": 10000,
+        "sort": sort,
+    }
     response = requests.get(
         url,
-        params={
-            "ut": EASTMONEY_POOL_UT,
-            "dpt": "wz.ztzt",
-            "date": snap_date.strftime("%Y%m%d"),
-            "Pageindex": 0,
-            "pagesize": 10000,
-            "sort": sort,
-        },
+        params=params,
         headers=EASTMONEY_QUOTE_HEADERS,
         timeout=10,
     )
@@ -110,10 +111,11 @@ def _save_snapshot_rows(rows: list[dict[str, Any]], db) -> int:
 def _summary(rows: list[dict[str, Any]], snap_date: date) -> dict[str, Any]:
     zt_count = sum(1 for row in rows if row["pool_type"] == "zt")
     zb_count = sum(1 for row in rows if row["pool_type"] == "zb")
-    yzt_changes = [
-        _to_float(row["raw"].get("zdp"))
+    yzt_changes: list[float] = [
+        change
         for row in rows
         if row["pool_type"] == "yzt" and _to_float(row["raw"].get("zdp")) is not None
+        if (change := _to_float(row["raw"].get("zdp"))) is not None
     ]
     denominator = zt_count + zb_count
     avg_chg = sum(yzt_changes) / len(yzt_changes) if yzt_changes else None

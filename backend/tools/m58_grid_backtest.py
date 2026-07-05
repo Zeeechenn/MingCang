@@ -283,7 +283,7 @@ def _evaluate_slot(scored: pd.DataFrame, *, slot: str) -> dict[str, Any]:
 
 
 def evaluate_trials(panel: pd.DataFrame, trials: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-    results = {"selection": [], "risk_avoidance": []}
+    results: dict[str, list[dict[str, Any]]] = {"selection": [], "risk_avoidance": []}
     for trial in trials:
         if trial["kind"] == "weighted":
             scored = apply_weight_score(panel, trial["weights"])

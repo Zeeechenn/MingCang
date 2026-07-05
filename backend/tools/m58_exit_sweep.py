@@ -19,7 +19,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pandas as pd
 
@@ -436,7 +436,7 @@ def _build_entry_events(prices: pd.DataFrame, *, start: str, end: str, names: di
     regime_by_date = dict(zip(regimes["date"], regimes["regime"], strict=False))
     events: list[EntryEvent] = []
     rows_by_symbol: dict[str, list[PriceRow]] = {}
-    skipped = Counter()
+    skipped: Counter[str] = Counter()
 
     for symbol, group in prices.sort_values(["symbol", "date"]).groupby("symbol", sort=False):
         local = group.reset_index(drop=True).copy()
@@ -937,8 +937,8 @@ def run_test2_comparison(
     variants: list[ExitVariant] | None = None,
 ) -> dict[str, Any]:
     from paper_trading.test2_ab_data import load_prices, load_sectors, load_signals, load_universe
-    from paper_trading.test2_ab_models import DEFAULT_MAX_POSITIONS, FRAMEWORKS
-    from paper_trading.test2_ab_runner import _by_date, _next_fillable_date
+    from paper_trading.test2_ab_models import DEFAULT_MAX_POSITIONS
+    from paper_trading.test2_ab_runner import _by_date
     from paper_trading.test2_ab_stats import result_summary
 
     universe = load_universe(universe_path)
@@ -1014,7 +1014,14 @@ def _replay_test2_with_variant(
     sectors: dict[str, str],
     max_positions: int,
 ) -> dict[str, Any]:
-    from paper_trading.test2_ab_models import FRAMEWORKS, MAX_PER_SECTOR, FrameworkResult, Holding, Trade, composite_for
+    from paper_trading.test2_ab_models import (
+        FRAMEWORKS,
+        MAX_PER_SECTOR,
+        FrameworkResult,
+        Holding,
+        Trade,
+        composite_for,
+    )
     from paper_trading.test2_ab_runner import _next_fillable_date
     from paper_trading.test2_ab_stats import pct
 
@@ -1312,7 +1319,11 @@ def main(argv: list[str] | None = None) -> int:
 
     test2_variants = None
     if args.full_test2_grid:
-        test2_variants = [ExitVariant(mult, mode) for mult in TRAILING_MULTS for mode in ("none", "drawdown_10")]
+        test2_variants = [
+            ExitVariant(mult, cast(ProfitMode, mode))
+            for mult in TRAILING_MULTS
+            for mode in ("none", "drawdown_10")
+        ]
 
     report = build_report(
         db_path=args.db_path,

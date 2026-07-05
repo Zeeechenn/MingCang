@@ -14,10 +14,11 @@ import json
 import math
 import random
 import sqlite3
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, cast
 
 from backend.config import default_sqlite_path
 
@@ -216,10 +217,13 @@ def _max_drawdown(rows: Sequence[dict[str, Any]], start_idx: int, horizon: int) 
     if target_idx <= start_idx:
         return None
     base = _to_float(rows[start_idx].get("close"))
-    if base is None or not base:
+    if base is None or base == 0:
         return None
-    closes = [_to_float(row.get("close")) for row in rows[start_idx + 1 : target_idx + 1]]
-    closes = [value for value in closes if value is not None]
+    closes: list[float] = [
+        value
+        for row in rows[start_idx + 1 : target_idx + 1]
+        if (value := _to_float(row.get("close"))) is not None
+    ]
     if not closes:
         return None
     return min(closes) / base - 1.0
@@ -475,7 +479,11 @@ def _readiness_calibration_for_cases(
     start: str,
     end: str,
 ) -> dict[str, Any]:
-    from backend.tools.m59_readiness import DEFAULT_BINS, evaluate_calibration_gates, readiness_score_for_arena_case
+    from backend.tools.m59_readiness import (
+        DEFAULT_BINS,
+        evaluate_calibration_gates,
+        readiness_score_for_arena_case,
+    )
 
     windows = []
     for name, left, right in (("2024H2", "2024-07-01", "2024-12-31"), ("2025H1", "2025-01-01", "2025-06-30")):
@@ -582,7 +590,7 @@ def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float | None:
     denom = math.sqrt(sum(x * x for x in dx) * sum(y * y for y in dy))
     if not denom:
         return None
-    return sum(x * y for x, y in zip(dx, dy)) / denom
+    return sum(x * y for x, y in zip(dx, dy, strict=False)) / denom
 
 
 def _spearman(xs: Sequence[float], ys: Sequence[float]) -> dict[str, Any]:
@@ -847,7 +855,7 @@ def main(argv: list[str] | None = None) -> int:
             universe = sorted({symbol for symbols in symbols_by_theme_map.values() for symbol in symbols})
             triggers, thesis_backscan_meta = thesis_backscan_triggers(
                 con,
-                symbols_by_theme=symbols_by_theme_map,
+                symbols_by_theme=cast(dict[str, Sequence[str]], symbols_by_theme_map),
                 start=args.start,
                 end=args.end,
             )

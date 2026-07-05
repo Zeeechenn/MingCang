@@ -9,13 +9,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.database import NewsItem, SessionLocal
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUT_DIR = REPO_ROOT / "paper_trading" / "m61_out"
@@ -242,7 +242,7 @@ def run_gate(
     try:
         provider = None if dry_run else provider_factory()
         for case in _selected_cases(case_ids, _load_extra_cases(cases_file)):
-            case_result = {
+            case_result: dict[str, Any] = {
                 **case,
                 "status": "dry_run" if dry_run else "ok",
                 "arms": {

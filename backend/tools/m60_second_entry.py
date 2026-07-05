@@ -220,6 +220,7 @@ def _update_outcomes(entry: dict[str, Any], rows: list[dict[str, Any]]) -> None:
         target_idx = entry_idx + horizon
         if target_idx >= len(rows):
             continue
+        exit_price: float | None
         if stop_hit_idx is not None and stop_hit_idx <= target_idx and stop_price is not None:
             exit_price = stop_price
         else:
@@ -292,7 +293,8 @@ def _parse_demo_trigger(raw: str) -> dict[str, Any]:
 
 def _trigger_identity(trigger: dict[str, Any], fallback_date: str | None) -> tuple[str, str]:
     symbol = str(trigger["symbol"])
-    price = trigger.get("price") if isinstance(trigger.get("price"), dict) else {}
+    raw_price = trigger.get("price")
+    price: dict[str, Any] = raw_price if isinstance(raw_price, dict) else {}
     trigger_date = price.get("date") or trigger.get("trigger_date") or fallback_date
     if not trigger_date:
         raise ValueError(f"trigger for {symbol} has no trigger date")
@@ -415,12 +417,12 @@ def _equal_weight_v1_pool(entries: list[dict[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {"description": "equal-weight pool of all V1 immediate shadow entries"}
     for horizon in HORIZONS:
         key = f"d{horizon}"
-        values = [
-            _to_float((entry.get("returns") or {}).get(key))
+        values: list[float] = [
+            value
             for entry in v1_entries
             if (entry.get("returns") or {}).get(key) is not None
+            if (value := _to_float((entry.get("returns") or {}).get(key))) is not None
         ]
-        values = [value for value in values if value is not None]
         result[key] = _round(sum(values) / len(values)) if values else None
         result[f"{key}_n"] = len(values)
     return result

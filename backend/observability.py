@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import contextvars
 import logging
+from types import ModuleType
 from uuid import uuid4
 
+_structlog_contextvars: ModuleType | None
 try:  # pragma: no cover - exercised via tests that simulate absence
     import structlog.contextvars as _structlog_contextvars
 except ImportError:  # 非致命:退化到 stdlib contextvars

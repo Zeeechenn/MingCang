@@ -13,9 +13,10 @@ import argparse
 import json
 import math
 import sqlite3
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -128,7 +129,7 @@ def _piotroski_norm(piotroski: dict[str, Any] | None) -> float | None:
         return None
     score = _to_float(piotroski.get("score"))
     denom = _to_float(piotroski.get("score_denominator"))
-    if score is None or denom in (None, 0):
+    if score is None or denom is None or denom == 0:
         return None
     return score / denom
 
@@ -194,7 +195,8 @@ def _recent_trigger_counts(con: sqlite3.Connection, symbol: str, as_of: str, the
         if target not in targets:
             continue
         trigger_type = str(data["trigger_type"] or "")
-        if _days_between(str(data["date"])[:10], as_of) is not None and _days_between(str(data["date"])[:10], as_of) <= 5:
+        days_between = _days_between(str(data["date"])[:10], as_of)
+        if days_between is not None and days_between <= 5:
             counts["any"] += 1
         if trigger_type == "thesis_validation":
             counts["thesis_validation"] += 1
@@ -393,8 +395,12 @@ def readiness_score_for_arena_case(case: Any) -> float | None:
         research = 0
     else:
         research = 10 if label_text in POSITIVE_LONG_TERM_LABELS else 0
-        if research and _days_between(_date_text(label.get("date") or label.get("as_of") or label.get("created_at")), str(inputs.get("pit_as_of") or "")) is not None:
-            if _days_between(_date_text(label.get("date") or label.get("as_of") or label.get("created_at")), str(inputs.get("pit_as_of") or "")) <= 14:
+        label_age_days = _days_between(
+            _date_text(label.get("date") or label.get("as_of") or label.get("created_at")),
+            str(inputs.get("pit_as_of") or ""),
+        )
+        if research and label_age_days is not None:
+            if label_age_days <= 14:
                 research += 5
     score += research
     thesis = inputs.get("forward_thesis") or {}
@@ -437,8 +443,8 @@ def evaluate_calibration_gates(window_reports: Sequence[dict[str, Any]]) -> dict
     if len(window_reports) >= 2:
         left = window_reports[0].get("bins") or []
         right = window_reports[1].get("bins") or []
-        diffs = []
-        for lrow, rrow in zip(left, right):
+        diffs: list[float | None] = []
+        for lrow, rrow in zip(left, right, strict=False):
             if lrow.get("win_rate") is None or rrow.get("win_rate") is None:
                 diffs.append(None)
             else:

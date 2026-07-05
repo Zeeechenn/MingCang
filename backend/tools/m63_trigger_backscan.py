@@ -14,16 +14,15 @@ from collections import Counter, defaultdict, deque
 from datetime import datetime
 from math import ceil
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from backend.config import default_sqlite_path
-from backend.tools.m63_daily import R6_CHG_1D_PCT, R6_CHG_5D_PCT, R6_DAMPER_DAYS
 from backend.tools.m60_watchtower import (
     CATEGORY_TRIGGER_DAMPER_TRADING_DAYS,
     TRIGGER_FLOW_ANOMALY,
     TRIGGER_LHB_SPOTLIGHT,
-    TRIGGER_NEWS,
     TRIGGER_NEW_HIGH,
+    TRIGGER_NEWS,
     TRIGGER_PRICE_PERCENTILE,
     TRIGGER_PRICE_Z,
     TRIGGER_SECTOR_RESONANCE,
@@ -35,6 +34,7 @@ from backend.tools.m60_watchtower import (
     _table_exists,
     build_watchtower_report_from_entries,
 )
+from backend.tools.m63_daily import R6_CHG_1D_PCT, R6_CHG_5D_PCT, R6_DAMPER_DAYS
 
 DEFAULT_UNIVERSE_PATHS = (
     Path("paper_trading/test2_universe.json"),
@@ -46,6 +46,13 @@ TRIGGER_STEM = "trigger_backscan"
 R6_PRODUCTION_LAUNCH_DATE = "2026-07-05"
 
 SOURCE_PRICE_Z = "price_z"
+
+
+class SourceStats(TypedDict):
+    covered_episodes: int
+    captured_episodes: int
+    captured_trigger_count: int
+    capture_rate: float | None
 SOURCE_PRICE_PERCENTILE = "price_percentile"
 SOURCE_VOLUME_RATIO = "volume_ratio"
 SOURCE_NEW_HIGH = "new_high"
@@ -424,7 +431,7 @@ def summarize_backscan(
     coverage: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     date_index = {date_value: idx for idx, date_value in enumerate(trading_dates)}
-    source_stats = {
+    source_stats: dict[str, SourceStats] = {
         source: {"covered_episodes": 0, "captured_episodes": 0, "captured_trigger_count": 0, "capture_rate": None}
         for source in SOURCES
     }
@@ -462,6 +469,7 @@ def summarize_backscan(
             if captured:
                 any_captured = True
                 source_stats[source]["captured_trigger_count"] += len(hits)
+                assert first_lag is not None
                 lag_values[source].append(int(first_lag))
             if source in PRE_R6_SOURCES:
                 pre_r6_any_covered = pre_r6_any_covered or is_covered
@@ -527,6 +535,7 @@ def _lag_summary(values: list[int]) -> dict[str, Any]:
         return {"count": 0, "median": None, "p90": None}
     ordered = sorted(values)
     mid = len(ordered) // 2
+    median: int | float
     if len(ordered) % 2:
         median = ordered[mid]
     else:

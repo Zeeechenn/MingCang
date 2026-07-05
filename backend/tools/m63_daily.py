@@ -7,8 +7,7 @@ import json
 import os
 import re
 import sqlite3
-from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -85,7 +84,7 @@ def _now_date(as_of: str | None = None) -> str:
     return as_of or date.today().isoformat()
 
 
-def _dt_prev_1800(as_of: str) -> str:
+def _dt_prev_1800(as_of: str) -> datetime:
     return datetime.combine(date.fromisoformat(as_of), time(18, 0)) - timedelta(days=1)
 
 
@@ -197,7 +196,7 @@ def _open_positions(con: sqlite3.Connection) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-def _position_risk_lines(con: sqlite3.Connection, as_of: str) -> list[dict[str, Any]]:
+def _position_risk_lines(con: sqlite3.Connection, as_of: str) -> list[Any]:
     rows: list[dict[str, Any]] = []
     for pos in _open_positions(con):
         symbol = str(pos["symbol"])
@@ -304,7 +303,7 @@ def build_premarket_report(*, db_path: str | Path | None = None, as_of: str | No
             f"{row['symbol']} 今日{row['event_type']}: {row.get('title') or ''}".strip()
             for row in _event_rows(con, day, symbols)
         ]
-        sections = [
+        sections: list[tuple[str, Sequence[Any]] | dict[str, Any]] = [
             ("盘前看", [f"日期:{day}", "定位:只看风险和待观察事项,已列入今晚盘后决断。"]),
             ("海外隔夜", _overseas_lines(con)),
             ("今日事件日历", event_lines or ["今日未见解禁/复牌/定增事件"]),
@@ -1008,7 +1007,7 @@ def build_postmarket_report(
             ),
         )
     )
-    router = next((step["result"] for step in steps if step["name"] == "trigger_router" and step["ok"]), {})
+    router: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "trigger_router" and step["ok"]), {})
     steps.append(
         _step_result(
             "task_capsule",
@@ -1022,8 +1021,8 @@ def build_postmarket_report(
     from backend.tools.m59_discretion import render_card_lines
 
     failures = [f"⚠️ {step['name']} 失败:{step['error']}" for step in steps if not step["ok"]]
-    accrual = next((step["result"] for step in steps if step["name"] == "m54_daily_accrual" and step["ok"]), {})
-    exit_shadow = next((step["result"] for step in steps if step["name"] == "m58_exit_shadow" and step["ok"]), {})
+    accrual: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m54_daily_accrual" and step["ok"]), {})
+    exit_shadow: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m58_exit_shadow" and step["ok"]), {})
     pending = router.get("pending", []) if isinstance(router, dict) else []
     sections = [
         ("盘后决", [f"日期:{day}", "定位:汇总盘后证据、触发队列和数据健康。"]),
