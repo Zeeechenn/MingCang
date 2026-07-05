@@ -177,6 +177,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m60_thesis_sync",
+        "category": "maintenance",
+        "purpose": "Sync M60 watchlist thesis text and validation conditions into ForwardThesis authority rows.",
+        "read_write_boundary": "Writes forward_theses rows only when settings.forward_thesis_enabled is true; never writes signals, scores, positions, or watchlist JSON.",
+        "recommended_entrypoint": "python3 -m backend.tools.m60_thesis_sync --json",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m31_cache_benchmark",
         "category": "stable",
         "purpose": "Measure M31 cache-layer latency for L1/L2 and describe L3 policy without calling it.",

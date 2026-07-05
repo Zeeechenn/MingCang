@@ -231,6 +231,70 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
             ON memory_profiles(profile_type, profile_key, trust_state)
         """))
         conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS evolution_traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trace_type TEXT NOT NULL,
+                namespace TEXT NOT NULL,
+                subject TEXT,
+                symbols_json TEXT,
+                themes_json TEXT,
+                content TEXT NOT NULL,
+                payload_json TEXT,
+                source_type TEXT,
+                source_ref TEXT,
+                as_of TEXT,
+                stale_after TEXT,
+                event_time TEXT NOT NULL,
+                ingestion_time TEXT NOT NULL,
+                invalidated_at TEXT,
+                created_at TEXT NOT NULL
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_evolution_traces_namespace_as_of
+            ON evolution_traces(namespace, as_of)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_evolution_traces_type_ingestion
+            ON evolution_traces(trace_type, ingestion_time)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_evolution_traces_invalidated
+            ON evolution_traces(invalidated_at)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS task_capsules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                capsule_id TEXT NOT NULL UNIQUE,
+                task_type TEXT NOT NULL,
+                user_id TEXT DEFAULT 'owner',
+                symbols_json TEXT NOT NULL,
+                themes_json TEXT NOT NULL,
+                goal TEXT NOT NULL,
+                confirmed_facts TEXT,
+                decisions TEXT,
+                open_loops TEXT,
+                next_actions TEXT,
+                used_memory_refs TEXT,
+                artifact_refs TEXT,
+                trust_state TEXT DEFAULT 'draft',
+                token_estimate INTEGER NOT NULL,
+                as_of TEXT,
+                event_time TEXT NOT NULL,
+                ingestion_time TEXT NOT NULL,
+                invalidated_at TEXT,
+                created_at TEXT NOT NULL
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_task_capsules_user_created
+            ON task_capsules(user_id, created_at)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_task_capsules_as_of
+            ON task_capsules(as_of)
+        """))
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS decision_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 run_id TEXT,

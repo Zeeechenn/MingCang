@@ -277,7 +277,28 @@ def _build_context(symbol: str, db_path: str | Path | None, as_of: str) -> tuple
             sections=CONTEXT_SECTIONS,
             db=db,
         )
-        return pack, render_context_text(pack, max_chars=2400)
+        context_text = render_context_text(pack, max_chars=2400)
+        try:
+            from backend.memory.context_governor import ContextBudget, build_agent_context
+
+            governed = build_agent_context(
+                db,
+                task_type="m59_discretion",
+                query="盘后裁量参考上下文",
+                symbol=symbol,
+                budget=ContextBudget(total=900, resident=360, retrieval=540),
+            )
+            pack["context_governor"] = {
+                "provenance": governed["provenance"],
+                "omitted": governed["omitted"],
+                "token_estimate": governed["token_estimate"],
+                "trace_id": governed["trace_id"],
+            }
+            if governed["text"]:
+                context_text = f"{context_text}\n\n{governed['text']}"
+        except Exception as exc:  # noqa: BLE001 - context governor must not bypass observe-only degradation.
+            pack["context_governor"] = {"error": f"{type(exc).__name__}: {exc}"}
+        return pack, context_text
     finally:
         db.close()
         engine.dispose()

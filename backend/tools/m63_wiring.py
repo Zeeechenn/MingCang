@@ -42,6 +42,7 @@ WIRING_MAP: dict[str, WiringEntry] = {
     "backend.tools.m61_judgment_gate": {"bucket": "manual_only", "reason": "判断门验收实验,人工触发"},
     "backend.tools.m60_watchtower": {"bucket": "daily_intraday", "reason": "盘中/盘后观察哨触发源"},
     "backend.tools.m60_second_entry": {"bucket": "daily_postmarket", "reason": "M60第二时间入场影子台账,盘后只读累计"},
+    "backend.tools.m60_thesis_sync": {"bucket": "manual_only", "reason": "M60 watchlist thesis 到 ForwardThesis 的维护同步,人工触发"},
     "backend.tools.m31_cache_benchmark": {"bucket": "manual_only", "reason": "缓存基准测试,人工诊断触发"},
     "backend.tools.m41_probe_health_ledger": {"bucket": "manual_only", "reason": "探针健康台账,维护/验收人工触发"},
     "backend.tools.m54_content_probe": {"bucket": "manual_only", "reason": "新闻内容可行性探针,证据类人工触发"},

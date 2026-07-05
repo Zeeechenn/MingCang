@@ -460,6 +460,60 @@ def _run_second_entry_ledger(db_path: str | Path | None, as_of: str) -> dict[str
     return build_second_entry_ledger(db_path=db_path, as_of=as_of)
 
 
+def _run_task_capsule(
+    *,
+    db_path: str | Path | None,
+    as_of: str,
+    steps: list[dict[str, Any]],
+    router: dict[str, Any] | None,
+) -> dict[str, Any]:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.memory.task_capsule import write_task_capsule
+
+    resolved = Path(db_path) if db_path is not None else default_sqlite_path()
+    engine = create_engine(f"sqlite:///{resolved}", connect_args={"check_same_thread": False})
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    try:
+        ok_steps = [step["name"] for step in steps if step.get("ok")]
+        failed_steps = [step["name"] for step in steps if not step.get("ok")]
+        pending = (router or {}).get("pending") if isinstance(router, dict) else []
+        symbols = sorted({
+            str(item.get("target"))
+            for item in pending or []
+            if isinstance(item, dict) and item.get("target") and str(item.get("target")).isdigit()
+        })[:5]
+        capsule = write_task_capsule(
+            db,
+            task_type="data_refresh",
+            goal=f"M63 postmarket finished for {as_of}",
+            symbols=symbols,
+            themes=["M63", "盘后决"],
+            confirmed_facts=[
+                f"completed_steps={','.join(ok_steps)}",
+                f"failed_steps={','.join(failed_steps) if failed_steps else 'none'}",
+                f"pending_queue={len(pending or [])}",
+            ],
+            decisions=["仅生成盘后研究上下文,不执行真实交易"],
+            open_loops=[f"{item.get('target')}:{item.get('reason')}" for item in (pending or [])[:5] if isinstance(item, dict)],
+            next_actions=["新会话先读取 latest_task_capsule,再按需 drilldown 到 M63 报告和队列"],
+            used_memory_refs=[],
+            artifact_refs=[
+                f"paper_trading/m63_out/postmarket_{as_of}.md",
+                str((router or {}).get("queue_path") or ""),
+            ],
+            trust_state="draft",
+            as_of=as_of,
+            capsule_id=f"m63_postmarket:{as_of}",
+        )
+        return {"capsule_id": capsule["capsule_id"], "token_estimate": capsule["token_estimate"]}
+    finally:
+        db.close()
+        engine.dispose()
+
+
 def load_queue(path: Path = DEFAULT_QUEUE_PATH) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -930,10 +984,19 @@ def build_postmarket_report(
             ),
         )
     )
+    router = next((step["result"] for step in steps if step["name"] == "trigger_router" and step["ok"]), {})
+    steps.append(
+        _step_result(
+            "task_capsule",
+            overrides.get(
+                "task_capsule",
+                lambda: _run_task_capsule(db_path=db_path, as_of=day, steps=steps, router=router),
+            ),
+        )
+    )
     discretion = next((step["result"] for step in steps if step["name"] == "m59_discretion" and step["ok"]), None)
     from backend.tools.m59_discretion import render_card_lines
 
-    router = next((step["result"] for step in steps if step["name"] == "trigger_router" and step["ok"]), {})
     failures = [f"⚠️ {step['name']} 失败:{step['error']}" for step in steps if not step["ok"]]
     accrual = next((step["result"] for step in steps if step["name"] == "m54_daily_accrual" and step["ok"]), {})
     exit_shadow = next((step["result"] for step in steps if step["name"] == "m58_exit_shadow" and step["ok"]), {})

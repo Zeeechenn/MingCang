@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from hashlib import sha1
 
 from fastapi import HTTPException
@@ -222,6 +223,60 @@ def _stock_memory_write(payload: dict, db) -> dict:
     }
 
 
+def _memory_correct(payload: dict, db) -> dict:
+    from sqlalchemy import text
+
+    from backend.memory.evolution_trace import NAMESPACE_OPERATION_REVIEW, record_trace
+    from backend.memory.stock_memory import _ensure_schema as ensure_stock_memory_schema
+
+    ensure_stock_memory_schema(db)
+    row_id = int(payload["id"])
+    corrected_text = str(payload["text"]).strip()
+    row = db.execute(text("SELECT * FROM stock_memory_items WHERE id = :id"), {"id": row_id}).first()
+    if row is None:
+        raise HTTPException(404, f"memory not found: {row_id}")
+    now = datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds")
+    db.execute(
+        text("UPDATE stock_memory_items SET summary = :summary, updated_at = :now WHERE id = :id"),
+        {"summary": corrected_text, "now": now, "id": row_id},
+    )
+    db.commit()
+    trace = record_trace(
+        db,
+        trace_type="memory.correct",
+        namespace=payload.get("namespace") or NAMESPACE_OPERATION_REVIEW,
+        subject=str(row_id),
+        symbols=[row.symbol] if row.symbol else [],
+        themes=[row.memory_type] if row.memory_type else [],
+        content=f"Corrected memory {row_id}",
+        payload={"before": row.summary, "after": corrected_text, "reason": payload.get("reason")},
+        source_type="agent_action",
+        source_ref=f"stock_memory_items:{row_id}",
+    )
+    return {"persisted": True, "id": row_id, "trace_id": trace["id"], "summary": corrected_text}
+
+
+def _memory_archive(payload: dict, db) -> dict:
+    from backend.memory.evolution_trace import NAMESPACE_OPERATION_REVIEW, record_trace
+    from backend.memory.stock_memory import archive_stock_memory
+
+    row_id = int(payload["id"])
+    archived = archive_stock_memory(db, row_id)
+    trace = record_trace(
+        db,
+        trace_type="memory.archive",
+        namespace=payload.get("namespace") or NAMESPACE_OPERATION_REVIEW,
+        subject=str(row_id),
+        symbols=[archived["symbol"]] if archived.get("symbol") else [],
+        themes=[archived["memory_type"]] if archived.get("memory_type") else [],
+        content=f"Archived memory {row_id}",
+        payload={"reason": payload.get("reason")},
+        source_type="agent_action",
+        source_ref=f"stock_memory_items:{row_id}",
+    )
+    return {"persisted": True, "id": row_id, "status": archived["status"], "trace_id": trace["id"]}
+
+
 def _research_prepare(payload: dict, db) -> dict:
     from backend.api.routes.research import prepare_symbol_research
 
@@ -350,6 +405,31 @@ _ACTIONS: dict[str, ActionDefinition] = {
         requires_confirmation=True,
         allowed_modes=("local", "remote"),
         handler=_stock_memory_write,
+    ),
+    "memory.correct": ActionDefinition(
+        name="memory.correct",
+        input_schema=_object_schema(["id", "text"], {
+            "id": {"type": "integer", "minimum": 1},
+            "text": {"type": "string", "minLength": 1},
+            "reason": {"type": "string"},
+            "namespace": {"type": "string"},
+        }),
+        risk_level="high",
+        requires_confirmation=True,
+        allowed_modes=("local", "remote"),
+        handler=_memory_correct,
+    ),
+    "memory.archive": ActionDefinition(
+        name="memory.archive",
+        input_schema=_object_schema(["id"], {
+            "id": {"type": "integer", "minimum": 1},
+            "reason": {"type": "string"},
+            "namespace": {"type": "string"},
+        }),
+        risk_level="high",
+        requires_confirmation=True,
+        allowed_modes=("local", "remote"),
+        handler=_memory_archive,
     ),
     "research.prepare": ActionDefinition(
         name="research.prepare",
