@@ -252,7 +252,9 @@ def test_card_upsert_is_idempotent(tmp_path, monkeypatch):
 
 
 def test_m59_discretion_disabled_postmarket_has_no_step(tmp_path, monkeypatch):
-    monkeypatch.delenv("M59_DISCRETION_ENABLED", raising=False)
+    # 显式设 env 为 falsy 强制关闭：m59_discretion_enabled() env 优先于 Settings，
+    # delenv 只会回落到 .env 加载的 settings 单例(owner 灰度期为 True)导致本测试假失败。
+    monkeypatch.setenv("M59_DISCRETION_ENABLED", "false")
     db_path = _db(tmp_path / "m63.sqlite")
 
     report = m63_daily.build_postmarket_report(
