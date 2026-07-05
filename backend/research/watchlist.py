@@ -1,4 +1,4 @@
-"""M60 Watchtower Phase 0 — observation watchlist schema (file-based, zero LLM).
+"""M60 Watchtower Phase 0 — observation watchlist theme grouping view.
 
 Schema decision (owner asked to evaluate reuse-vs-new-file before building):
 
@@ -28,12 +28,11 @@ Schema decision (owner asked to evaluate reuse-vs-new-file before building):
        other paper-trading universes already live as files
        (``paper_trading/test2_universe.json`` and friends).
 
-    Net: this module defines a minimal, explicit JSON schema
-    (``paper_trading/watchlists/*.json``) instead of adding columns to
-    ``forward_theses``. No ORM/DB migration, no risk to M36/M39 invariants,
-    and the schema matches the spec's field list exactly:
-    ``theme_key / title / thesis / symbols[] / validation_conditions[] /
-    invalidation_conditions[] / created_at / source_ref``.
+    R1 update: ``backend.research.forward_thesis`` is now the authoritative
+    thesis store. The JSON files remain as the theme grouping view and for
+    backward compatibility. The JSON fields ``thesis``,
+    ``validation_conditions``, and ``invalidation_conditions`` are deprecated
+    as authority; loaders overlay them from ForwardThesis when available.
 
 This module is pure storage/schema plumbing: no LLM calls, no scoring, no
 writes to Signal/DecisionRun/ForwardThesis/theme_hypotheses. Detection
@@ -47,7 +46,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from backend.config import settings
+
 WATCHLIST_DIR = Path("paper_trading/watchlists")
+THEME_STATEMENT_PREFIX = "[theme:{theme_key}] "
 
 REQUIRED_FIELDS: tuple[str, ...] = (
     "theme_key",
@@ -114,7 +116,89 @@ def validate_watchlist_entry(entry: Any) -> list[str]:
     return errors
 
 
-def load_watchlists(directory: Path | str = WATCHLIST_DIR) -> tuple[list[dict[str, Any]], list[str]]:
+def _prefixed_statement(theme_key: str, thesis: str) -> str:
+    return f"{THEME_STATEMENT_PREFIX.format(theme_key=theme_key)}{thesis}"
+
+
+def _strip_theme_prefix(statement: str, theme_key: str) -> str:
+    prefix = THEME_STATEMENT_PREFIX.format(theme_key=theme_key)
+    if statement.startswith(prefix):
+        return statement[len(prefix):]
+    return statement
+
+
+def _forward_thesis_for_theme(db: Any, theme_key: str) -> dict[str, Any] | None:
+    from backend.data.database import ForwardThesis
+    from backend.research.forward_thesis import _row_to_dict
+
+    prefix = THEME_STATEMENT_PREFIX.format(theme_key=theme_key)
+    rows = (
+        db.query(ForwardThesis)
+        .filter(
+            ForwardThesis.symbol.is_(None),
+            ForwardThesis.statement.like(f"{prefix}%"),
+            ForwardThesis.status.in_(("active", "watch", "draft")),
+        )
+        .order_by(ForwardThesis.updated_at.desc(), ForwardThesis.id.desc())
+        .limit(20)
+        .all()
+    )
+    if not rows:
+        return None
+    rank = {"active": 0, "watch": 1, "draft": 2}
+    row = sorted(rows, key=lambda item: (rank.get(item.status, 99), -int(item.id or 0)))[0]
+    return _row_to_dict(row)
+
+
+def thesis_view(
+    theme_key: str,
+    *,
+    db: Any | None = None,
+    fallback_entry: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return the legacy watchlist thesis shape with ForwardThesis as authority.
+
+    The returned keys match the JSON watchlist entry shape so existing
+    consumers can continue to read ``thesis``, ``validation_conditions``, and
+    ``invalidation_conditions`` without knowing where the thesis is stored.
+    """
+    base = dict(fallback_entry or {"theme_key": theme_key})
+    if not settings.forward_thesis_enabled:
+        return base
+
+    opened_db = None
+    close_db = False
+    if db is None:
+        try:
+            from backend.data.database import SessionLocal
+
+            opened_db = SessionLocal()
+            db = opened_db
+            close_db = True
+        except Exception:
+            db = None
+
+    try:
+        row = _forward_thesis_for_theme(db, theme_key) if db is not None else None
+    finally:
+        if close_db and opened_db is not None:
+            opened_db.close()
+
+    if not row:
+        return base
+
+    base["thesis"] = _strip_theme_prefix(str(row.get("statement") or ""), theme_key)
+    base["validation_conditions"] = list(row.get("follow_up_metrics") or [])
+    base["invalidation_conditions"] = list(row.get("invalidation_conditions") or [])
+    return base
+
+
+def load_watchlists(
+    directory: Path | str = WATCHLIST_DIR,
+    *,
+    db: Any | None = None,
+    authoritative_thesis: bool = True,
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Load and validate every ``*.json`` watchlist file under ``directory``.
 
     Returns ``(valid_entries, errors)``. A file may contain either a single
@@ -153,6 +237,28 @@ def load_watchlists(directory: Path | str = WATCHLIST_DIR) -> tuple[list[dict[st
                 continue
             seen_theme_keys[theme_key] = file_path.name
             entries.append(entry)
+
+    if authoritative_thesis and entries:
+        opened_db = None
+        close_db = False
+        overlay_db = db
+        if overlay_db is None and settings.forward_thesis_enabled:
+            try:
+                from backend.data.database import SessionLocal
+
+                opened_db = SessionLocal()
+                overlay_db = opened_db
+                close_db = True
+            except Exception:
+                overlay_db = None
+        try:
+            entries = [
+                thesis_view(entry["theme_key"], db=overlay_db, fallback_entry=entry)
+                for entry in entries
+            ]
+        finally:
+            if close_db and opened_db is not None:
+                opened_db.close()
 
     return entries, errors
 

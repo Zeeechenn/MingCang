@@ -7,6 +7,7 @@ from backend.research.watchlist import (
     all_watchlist_symbols,
     load_watchlists,
     symbols_by_theme,
+    thesis_view,
     themes_by_symbol,
     validate_watchlist_entry,
 )
@@ -111,6 +112,60 @@ def test_symbols_by_theme_and_themes_by_symbol_and_all_symbols():
 
     all_symbols = all_watchlist_symbols(entries)
     assert all_symbols == ["603259", "300759", "002821", "000725"]
+
+
+def test_thesis_view_reads_authoritative_forward_thesis(test_db, tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.forward_thesis_enabled", True, raising=False)
+    from backend.research.forward_thesis import create_forward_thesis
+
+    (tmp_path / "a.json").write_text(json.dumps(_VALID_ENTRY, ensure_ascii=False), encoding="utf-8")
+    create_forward_thesis(
+        test_db,
+        statement="[theme:innovative_drug] 权威论点",
+        status="active",
+        invalidation_conditions=["失效条件A", "失效条件B"],
+        follow_up_metrics=["验证条件A"],
+    )
+
+    view = thesis_view("innovative_drug", db=test_db, fallback_entry=_VALID_ENTRY)
+    assert view["theme_key"] == "innovative_drug"
+    assert view["title"] == "创新药"
+    assert view["symbols"] == ["603259", "300759", "002821"]
+    assert view["thesis"] == "权威论点"
+    assert view["validation_conditions"] == ["验证条件A"]
+    assert view["invalidation_conditions"] == ["失效条件A", "失效条件B"]
+    assert view["source_ref"] == "pending"
+
+    entries, errors = load_watchlists(tmp_path, db=test_db)
+    assert errors == []
+    assert entries[0]["thesis"] == "权威论点"
+    assert entries[0]["validation_conditions"] == ["验证条件A"]
+    assert entries[0]["invalidation_conditions"] == ["失效条件A", "失效条件B"]
+
+
+def test_m60_thesis_sync_is_idempotent_and_preserves_conditions(test_db, tmp_path, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.forward_thesis_enabled", True, raising=False)
+    from backend.data.database import ForwardThesis
+    from backend.tools.m60_thesis_sync import sync_watchlists_to_forward_thesis
+
+    (tmp_path / "a.json").write_text(json.dumps(_VALID_ENTRY, ensure_ascii=False), encoding="utf-8")
+
+    first = sync_watchlists_to_forward_thesis(db=test_db, watchlist_dir=tmp_path)
+    assert first["summary"]["created"] == 1
+    assert first["summary"]["updated"] == 0
+    assert test_db.query(ForwardThesis).count() == 1
+
+    second = sync_watchlists_to_forward_thesis(db=test_db, watchlist_dir=tmp_path)
+    assert second["summary"]["created"] == 0
+    assert second["summary"]["unchanged"] == 1
+    assert test_db.query(ForwardThesis).count() == 1
+
+    row = test_db.query(ForwardThesis).one()
+    assert row.symbol is None
+    assert row.status == "active"
+    assert row.statement == "[theme:innovative_drug] owner 前期板块研究,细节待 owner 补充"
+    assert json.loads(row.follow_up_metrics_json) == _VALID_ENTRY["validation_conditions"]
+    assert json.loads(row.invalidation_conditions_json) == _VALID_ENTRY["invalidation_conditions"]
 
 
 def test_seed_innovative_drug_file_is_valid():
