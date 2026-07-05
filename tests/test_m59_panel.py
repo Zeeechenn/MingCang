@@ -104,8 +104,8 @@ def _init_minimal_db(path):
 
 
 def test_m59_panel_schema_has_required_sections(tmp_path):
-    from backend.tools.m63_render import assert_no_trade_words
     from backend.tools.m59_panel import build_panel, render_markdown
+    from backend.tools.m63_render import assert_no_trade_words
 
     db_path = tmp_path / "m59.sqlite"
     with _init_minimal_db(db_path) as con:

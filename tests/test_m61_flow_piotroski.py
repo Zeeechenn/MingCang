@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from math import tanh
-from types import SimpleNamespace
 from statistics import median
+from types import SimpleNamespace
 
 from backend.data.database import FinancialMetric, FundFlow, HolderSnapshot
 

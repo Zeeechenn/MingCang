@@ -322,7 +322,10 @@ def test_build_confirmation_report_no_triggers_produces_no_cards(tmp_path, monke
 
 
 def test_build_confirmation_report_rejects_non_dict_input(tmp_path):
-    from backend.research.watchtower_confirm import WatchtowerConfirmInputError, build_confirmation_report
+    from backend.research.watchtower_confirm import (
+        WatchtowerConfirmInputError,
+        build_confirmation_report,
+    )
 
     with pytest.raises(WatchtowerConfirmInputError):
         build_confirmation_report(watchtower_report=["not", "a", "dict"])

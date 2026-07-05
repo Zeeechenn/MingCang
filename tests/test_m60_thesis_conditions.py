@@ -1,7 +1,11 @@
 import json
 import sqlite3
 
-from backend.tools.m60_thesis_conditions import compile_condition, evaluate_condition_spec, historical_condition_backscan
+from backend.tools.m60_thesis_conditions import (
+    compile_condition,
+    evaluate_condition_spec,
+    historical_condition_backscan,
+)
 
 
 def test_event_condition_extracts_conservative_keywords_and_reads_news():

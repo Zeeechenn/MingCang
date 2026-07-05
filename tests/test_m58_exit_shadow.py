@@ -192,7 +192,7 @@ def test_shadow_exits_earlier_via_floating_take_profit_while_current_stays_open(
     assert diff["candidate_exit"]["exit_reason"] == "profit_drawdown_10"
     assert diff["candidate_exit"]["exit_price"] == pytest.approx(131.0)
 
-    for arm_key, payload in report["arm_summary"].items():
+    for _arm_key, payload in report["arm_summary"].items():
         assert payload["current"]["closed"] == 0
         assert payload["current"]["open"] == 1
         assert payload["shadow"]["closed"] == 1

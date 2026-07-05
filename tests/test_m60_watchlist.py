@@ -7,8 +7,8 @@ from backend.research.watchlist import (
     all_watchlist_symbols,
     load_watchlists,
     symbols_by_theme,
-    thesis_view,
     themes_by_symbol,
+    thesis_view,
     validate_watchlist_entry,
 )
 

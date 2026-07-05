@@ -4,15 +4,15 @@ import json
 import sqlite3
 from datetime import date, timedelta
 
+from backend.tools.m60_thesis_conditions import (
+    compile_condition,
+    compile_forward_thesis_conditions,
+)
 from backend.tools.m60_watchtower import (
     build_watchtower_report,
     compute_price_volume_signals,
     compute_sector_resonance,
     render_markdown,
-)
-from backend.tools.m60_thesis_conditions import (
-    compile_condition,
-    compile_forward_thesis_conditions,
 )
 
 
@@ -257,7 +257,7 @@ def test_build_watchtower_report_detects_price_volume_anomaly(tmp_path):
     dates[-1] = "2026-07-05"  # as_of day, kept last chronologically for the WHERE date <= as_of filter
 
     with _init_watchtower_db(db_path) as con:
-        for i, (d, close) in enumerate(zip(dates, closes)):
+        for i, (d, close) in enumerate(zip(dates, closes, strict=False)):
             volume = 5000.0 if i == len(closes) - 1 else 1000.0
             con.execute(
                 "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)",

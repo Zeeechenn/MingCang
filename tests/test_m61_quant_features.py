@@ -5,7 +5,12 @@ from datetime import datetime
 
 import pandas as pd
 
-from backend.data.database import CorporateEvent, FinancialMetric, FundFlow, Price, ResearchReport, Stock
+from backend.data.database import (
+    CorporateEvent,
+    Price,
+    ResearchReport,
+    Stock,
+)
 
 
 def _add_prices(db, symbol: str, start: str = "2026-01-01", days: int = 130) -> None:

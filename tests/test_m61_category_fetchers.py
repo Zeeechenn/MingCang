@@ -9,8 +9,8 @@ import pandas as pd
 
 
 def test_ifind_notice_maps_payload(monkeypatch):
-    from backend.data.category_registry import FetchRequest
     import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
 
     calls = []
 
@@ -67,8 +67,8 @@ def test_ifind_notice_maps_payload(monkeypatch):
 
 
 def test_eastmoney_reportapi_maps_payload(monkeypatch):
-    from backend.data.category_registry import FetchRequest
     import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
 
     captured = {}
 
@@ -123,8 +123,8 @@ def test_eastmoney_reportapi_maps_payload(monkeypatch):
 
 
 def test_akshare_lhb_maps_and_filters_payload(monkeypatch):
-    from backend.data.category_registry import FetchRequest
     import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
 
     fake_ak = SimpleNamespace(
         stock_lhb_detail_em=lambda start_date, end_date: pd.DataFrame(
@@ -163,8 +163,8 @@ def test_akshare_lhb_maps_and_filters_payload(monkeypatch):
 
 
 def test_ifind_events_maps_payload_and_classifies(monkeypatch):
-    from backend.data.category_registry import FetchRequest
     import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
 
     calls = []
 
@@ -271,8 +271,8 @@ def _ifind_shareholder_markdown(rows):
 
 
 def test_ifind_shareholders_maps_real_table_periods_and_converts_units(monkeypatch):
-    from backend.data.category_registry import FetchRequest
     import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
 
     calls = []
     answer = _ifind_shareholder_markdown(
@@ -476,8 +476,8 @@ def test_ifind_shareholders_maps_real_table_periods_and_converts_units(monkeypat
 
 
 def test_ifind_shareholders_undated_uses_fetch_date_provider_suffix(monkeypatch):
-    from backend.data.category_registry import FetchRequest
     import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
 
     class FakeClient:
         def call_tool(self, mcp_id, name, arguments):
@@ -500,8 +500,8 @@ def test_ifind_shareholders_undated_uses_fetch_date_provider_suffix(monkeypatch)
 
 
 def test_eastmoney_fflow_history_maps_fixture_and_filters(monkeypatch):
-    from backend.data.category_registry import FetchRequest
     import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
 
     captured = {}
 

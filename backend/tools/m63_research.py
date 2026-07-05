@@ -20,7 +20,11 @@ from pathlib import Path
 from typing import Any
 
 from backend.config import default_sqlite_path
-from backend.research.watchlist import REQUIRED_FIELDS, WATCHLIST_DIR, load_watchlists, validate_watchlist_entry
+from backend.research.watchlist import (
+    WATCHLIST_DIR,
+    load_watchlists,
+    validate_watchlist_entry,
+)
 from backend.tools import m61_backfill
 from backend.tools.m63_daily import DEFAULT_QUEUE_PATH, load_queue, save_queue
 from backend.tools.m63_render import enforce_language_guard, render_report, strip_raw_json

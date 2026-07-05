@@ -22,8 +22,8 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from backend.config import settings
-from backend.data.models.market import NewsItem
 from backend.data.models.m61 import Announcement
+from backend.data.models.market import NewsItem
 from backend.data.news_clustering import EventCluster, cluster_evidence
 from backend.data.news_evidence import NewsEvidence
 from backend.data.news_extraction import ClusterScore, extract_clusters, score_cluster_title_only

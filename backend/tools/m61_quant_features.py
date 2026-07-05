@@ -7,14 +7,22 @@ space; this file defines a new preregistered enriched-feature hypothesis.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime, timedelta
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
 
 from backend.analysis.alpha_factors import add_cross_sectional_alpha_factors
-from backend.data.database import CorporateEvent, FinancialMetric, FundFlow, LhbRecord, Price, ResearchReport, Stock
+from backend.data.database import (
+    CorporateEvent,
+    FinancialMetric,
+    FundFlow,
+    LhbRecord,
+    Price,
+    ResearchReport,
+    Stock,
+)
 from backend.data.qlib_data import FEATURE_COLS, _build_features
 from backend.tools.m52_flow_floor import compute_s_flow_data
 

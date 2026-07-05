@@ -381,7 +381,8 @@ def _exit_shadow_divergences(builder, *, db_path: str | Path | None, as_of: str)
             from backend.tools.m58_exit_shadow import build_shadow_report
             from paper_trading.test2_ab_data import DEFAULT_UNIVERSE
 
-            builder = lambda **_: build_shadow_report(db_path=Path(db_path) if db_path else default_sqlite_path(), universe_path=DEFAULT_UNIVERSE, run_date=as_of)
+            def builder(**_):
+                return build_shadow_report(db_path=Path(db_path) if db_path else default_sqlite_path(), universe_path=DEFAULT_UNIVERSE, run_date=as_of)
         except Exception:  # noqa: BLE001 - weekly scan must remain readable.
             return []
     try:

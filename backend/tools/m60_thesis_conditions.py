@@ -10,9 +10,10 @@ import argparse
 import json
 import re
 import sqlite3
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from backend.config import default_sqlite_path
 from backend.research.forward_thesis import theme_key_from_statement

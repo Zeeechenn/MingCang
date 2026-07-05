@@ -71,7 +71,7 @@ def test_schedule_blocks_have_no_lookahead_and_no_serve_overlap():
     # cutoffs strictly increasing by retrain_every
     cutoffs = [b.cutoff_idx for b in blocks]
     assert cutoffs == sorted(cutoffs)
-    assert all(b - a == 60 for a, b in zip(cutoffs, cutoffs[1:]))
+    assert all(b - a == 60 for a, b in zip(cutoffs, cutoffs[1:], strict=False))
 
 
 def test_schedule_train_and_serve_windows_are_disjoint_within_block():

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path

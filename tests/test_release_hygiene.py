@@ -6,7 +6,6 @@ from pathlib import Path
 
 from scripts.check_release_hygiene import scan_paths, scan_tracked_repo
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

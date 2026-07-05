@@ -590,8 +590,9 @@ def test_run_independent_review_degraded_path_tags_findings():
 
 def test_run_independent_review_no_score_or_vote_fields():
     """Non-promoting invariant: verdict must never carry a score/vote field."""
-    from backend.research.review_loop import run_independent_review
     from dataclasses import fields
+
+    from backend.research.review_loop import run_independent_review
     verdict = run_independent_review(falsification_questions=["x"])
     field_names = {f.name for f in fields(verdict)}
     assert "score" not in field_names

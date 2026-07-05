@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from backend.config import settings  # noqa: F401  re-exported for backward compatibility
 from backend.data.models import (  # noqa: F401  re-exported for backward compatibility
+    Announcement,
     ChatMessage,
     ChatSession,
     CorporateEvent,
@@ -38,7 +39,6 @@ from backend.data.models import (  # noqa: F401  re-exported for backward compat
     PendingAIAction,
     Position,
     Price,
-    Announcement,
     ResearchReport,
     ResearchState,
     ReviewCase,

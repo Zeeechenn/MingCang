@@ -187,8 +187,8 @@ def test_corporate_event_visible_as_of_matches_pit_type_gate():
 
 
 def test_section_exception_isolated_and_degradation_emitted(test_db, monkeypatch):
-    from backend.data.degradation import DegradationEvent
     import backend.data.context_builder as context_builder
+    from backend.data.degradation import DegradationEvent
 
     as_of = _seed_context_rows(test_db)
 

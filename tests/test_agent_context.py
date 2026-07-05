@@ -216,8 +216,8 @@ def test_mingcang_stock_context_tracked_flag_and_hint_for_unknown_symbol(test_db
 
 
 def test_mingcang_stock_context_tracked_flag_and_hint_for_inactive_symbol(test_db):
-    from backend.data.database import Stock
     from backend.agent.context import mingcang_stock_context
+    from backend.data.database import Stock
 
     test_db.add(Stock(symbol="300308", name="中际旭创", market="CN", industry="电子", active=False))
     test_db.commit()

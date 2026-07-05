@@ -7,9 +7,9 @@ from datetime import date, timedelta
 import pytest
 
 from backend.tools.m63_trigger_backscan import (
-    SOURCES,
-    SOURCE_R6_PRICE_MOVE,
     SOURCE_LHB,
+    SOURCE_R6_PRICE_MOVE,
+    SOURCES,
     build_backscan_report,
     detect_episodes,
     render_markdown,
@@ -137,7 +137,7 @@ def _dates(start: str, count: int) -> list[str]:
 
 
 def _insert_prices(con, symbol: str, dates: list[str], closes: list[float]) -> None:
-    for day, close in zip(dates, closes):
+    for day, close in zip(dates, closes, strict=False):
         con.execute(
             """
             INSERT INTO prices(symbol, date, open, high, low, close, volume)

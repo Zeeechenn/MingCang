@@ -16,15 +16,6 @@ from backend.data.models.decision import (
 from backend.data.models.degradation import (
     DegradationEvent,
 )
-from backend.data.models.market import (
-    FinancialMetric,
-    IndexPrice,
-    MarketSnapshot,
-    NewsItem,
-    Position,
-    Price,
-    Stock,
-)
 from backend.data.models.m61 import (
     Announcement,
     CorporateEvent,
@@ -34,6 +25,15 @@ from backend.data.models.m61 import (
     MarketTemperatureSnapshot,
     OverseasSnapshot,
     ResearchReport,
+)
+from backend.data.models.market import (
+    FinancialMetric,
+    IndexPrice,
+    MarketSnapshot,
+    NewsItem,
+    Position,
+    Price,
+    Stock,
 )
 from backend.data.models.memory import (
     DecisionMemoryLayered,

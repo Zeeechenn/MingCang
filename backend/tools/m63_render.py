@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 from collections.abc import Iterable, Sequence
 from typing import Any
 

@@ -1030,9 +1030,13 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.confirm:
         from backend.research.watchtower_confirm import (
-            build_confirmation_report,
-            render_markdown as render_confirm_markdown,
             _default_output_paths as _confirm_output_paths,
+        )
+        from backend.research.watchtower_confirm import (
+            build_confirmation_report,
+        )
+        from backend.research.watchtower_confirm import (
+            render_markdown as render_confirm_markdown,
         )
 
         db = None

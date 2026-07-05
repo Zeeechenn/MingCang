@@ -178,8 +178,8 @@ def test_track_prompt_uses_context_pack_and_fixed_semantic_search(test_db, monke
 
 
 def test_quality_boom_and_flow_context_markers(test_db, monkeypatch):
-    from backend.agents.long_term import jingqi_analyst, piotroski_analyst, qfii_flow_analyst
     import backend.data.context_builder as context_builder
+    from backend.agents.long_term import jingqi_analyst, piotroski_analyst, qfii_flow_analyst
 
     _seed_m61_context(test_db)
     monkeypatch.setattr(context_builder.flow_floor, "compute_s_flow_data", lambda raw: 0.31)

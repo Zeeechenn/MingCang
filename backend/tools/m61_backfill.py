@@ -18,9 +18,9 @@ from backend.data.category_fetchers import (  # noqa: F401
     save_research_reports,
 )
 from backend.data.category_registry import FetchRequest, fetch_by_category
+from backend.data.database import SessionLocal
 from backend.data.degradation import emit_degradation
 from backend.data.orm import Base
-from backend.data.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 

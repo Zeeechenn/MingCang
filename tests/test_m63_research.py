@@ -4,8 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-import pytest
-
+from backend.research.watchlist import REQUIRED_FIELDS
 from backend.tools import m63_opinion, m63_research
 
 
@@ -213,7 +212,7 @@ def test_watchlist_file_created_with_schema_keys(tmp_path):
     )
 
     entry = json.loads(Path(result["path"]).read_text(encoding="utf-8"))
-    assert set(entry) == set(m63_research.REQUIRED_FIELDS)
+    assert set(entry) == set(REQUIRED_FIELDS)
     assert entry["source_ref"] == "m63_research_20260705"
 
 
