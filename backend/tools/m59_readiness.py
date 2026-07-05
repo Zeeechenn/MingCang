@@ -84,15 +84,20 @@ def _latest_long_term_label(con: sqlite3.Connection, symbol: str, as_of: str) ->
     if date_col is None:
         return None
     select_cols = list(cols)
+    # 过期标签不参与打分/否决——与 m59_panel/m63_daily 的 expires_at 口径对齐(跨模块审计 P1)
+    expiry_clause = (
+        " AND (expires_at IS NULL OR substr(expires_at, 1, 10) >= ?)" if "expires_at" in cols else ""
+    )
+    params: tuple[Any, ...] = (symbol, as_of, as_of) if expiry_clause else (symbol, as_of)
     row = con.execute(
         f"""
         SELECT {', '.join(select_cols)}
         FROM long_term_labels
-        WHERE symbol = ? AND substr({date_col}, 1, 10) <= ?
+        WHERE symbol = ? AND substr({date_col}, 1, 10) <= ?{expiry_clause}
         ORDER BY {date_col} DESC
         LIMIT 1
         """,
-        (symbol, as_of),
+        params,
     ).fetchone()
     if row is None:
         return None
@@ -105,7 +110,7 @@ def _latest_copilot(con: sqlite3.Connection, symbol: str) -> dict[str, Any] | No
     if not _table_exists(con, "research_states") or not {"symbol", "copilot_json"} <= _columns(con, "research_states"):
         return None
     row = con.execute(
-        "SELECT copilot_json FROM research_states WHERE symbol = ? AND copilot_json IS NOT NULL LIMIT 1",
+        "SELECT copilot_json FROM research_states WHERE symbol = ? AND copilot_json IS NOT NULL ORDER BY rowid DESC LIMIT 1",
         (symbol,),
     ).fetchone()
     if row is None:

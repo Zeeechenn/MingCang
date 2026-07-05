@@ -154,6 +154,7 @@ class Settings(BaseSettings):
     max_total_equity_pct: float = 0.80        # 股票总仓位上限
     new_signal_trial_pct: float = 0.05        # 新信号试错仓
     entry_risk_budget_pct: float = 1.5        # D2 条件卡:单笔风险预算占资金百分比
+    m59_discretion_enabled: bool = False      # M59 LLM 裁量层灰度旗(env M59_DISCRETION_ENABLED)
     entry_account_size: float | None = None   # D2 条件卡:None 时只展示公式,不实算金额
 
     # 阶段C 多 Agent 决策。

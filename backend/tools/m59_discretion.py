@@ -137,7 +137,14 @@ def _truthy_env(name: str) -> bool:
 
 
 def m59_discretion_enabled() -> bool:
-    return _truthy_env("M59_DISCRETION_ENABLED")
+    # env 实时覆盖优先(运行时旗),否则读 Settings(配置三处同步:config/.env.example/runtime config)
+    import os
+
+    if os.environ.get("M59_DISCRETION_ENABLED") is not None:
+        return _truthy_env("M59_DISCRETION_ENABLED")
+    from backend.config import settings
+
+    return bool(settings.m59_discretion_enabled)
 
 
 def _now_iso() -> str:
