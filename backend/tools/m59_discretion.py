@@ -17,9 +17,10 @@ from backend.config import default_sqlite_path, settings
 from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.llm import get_provider, has_runtime_llm_provider, runtime_readiness
 
-MAX_CANDIDATES = 5
+MAX_CANDIDATES = 4
 MAX_HOLDINGS = 3
 MAX_LLM_CALLS = 8
+MAX_INITIAL_CARDS = MAX_LLM_CALLS - 1
 CONTEXT_SECTIONS = [
     "price",
     "financials",
@@ -68,6 +69,25 @@ context_pack_json={context_pack_json}
 context_text={context_text}
 """
 
+OBJECTION_SYSTEM_PROMPT = (
+    "你是 MingCang 的 M59 反方研究员。输出仅供研究参考。"
+    "你的任务是对每张裁量卡找最强反驳:证据里有什么被忽略的反面事实,"
+    "rationale 有什么跳跃。不得预测价格,不得下买卖指令。输出中文。"
+)
+
+OBJECTION_PROMPT_TEMPLATE = """\
+请批量审视以下 M59 初判卡,逐卡输出最强反方意见。
+
+纪律约束:
+- 反方只审视,不改判,不得改 stance。
+- 输出仅供研究参考,不得给出买卖指令。
+- 不预测价格,不承诺涨跌。
+- 只基于输入摘要指出被忽略的反面事实或 rationale 跳跃。
+- objection 80字内; low 可给轻微疑点,但渲染层不会展示 low。
+
+cards_json={cards_json}
+"""
+
 DISCRETION_TOOL = {
     "name": "m59_discretion_card",
     "description": "M59 observe-only LLM discretion reference card",
@@ -84,6 +104,30 @@ DISCRETION_TOOL = {
             },
         },
         "required": ["stance", "timing_note", "rationale", "confidence", "reevaluation_trigger"],
+    },
+}
+
+OBJECTION_TOOL = {
+    "name": "m59_discretion_objection_batch",
+    "description": "Batch adversarial review for M59 observe-only discretion cards",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "objections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "symbol": {"type": "string"},
+                        "objection": {"type": "string", "description": "80字内最强反方意见"},
+                        "severity": {"type": "string", "enum": ["low", "med", "high"]},
+                        "confidence_adjustment": {"type": "string", "enum": ["none", "downgrade"]},
+                    },
+                    "required": ["symbol", "objection", "severity", "confidence_adjustment"],
+                },
+            }
+        },
+        "required": ["objections"],
     },
 }
 
@@ -136,7 +180,7 @@ def select_panel_items(panel: dict[str, Any]) -> list[dict[str, Any]]:
     ]
     holdings = sorted(holdings, key=lambda item: (-_flag_count(item), str(item.get("symbol"))))[:MAX_HOLDINGS]
     selected = [*candidates, *({"slot": "holding_decision", "item": item} for item in holdings)]
-    return selected[:MAX_LLM_CALLS]
+    return selected[:MAX_INITIAL_CARDS]
 
 
 def _provider_name(provider: Any | None = None) -> str:
@@ -180,6 +224,82 @@ def _validate_card(data: Any, *, slot: str) -> dict[str, str]:
         "confidence": confidence,
         "reevaluation_trigger": trigger,
     }
+
+
+def _sanitize_render_text(value: str) -> str:
+    try:
+        from backend.tools.m63_render import sanitize_trade_words
+
+        sanitized, _ = sanitize_trade_words(value)
+        return sanitized.strip()
+    except Exception:  # noqa: BLE001 - rendering guard fallback must not block observe-only cards.
+        return value.strip()
+
+
+def _validate_objections(data: Any, symbols: set[str]) -> dict[str, dict[str, str]]:
+    if not isinstance(data, dict):
+        raise ValueError("objection schema invalid: not an object")
+    items = data.get("objections")
+    if not isinstance(items, list):
+        raise ValueError("objection schema invalid: objections")
+
+    objections: dict[str, dict[str, str]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("objection schema invalid: item")
+        symbol = str(item.get("symbol") or "").strip()
+        if symbol not in symbols:
+            raise ValueError("objection schema invalid: symbol")
+        objection = _sanitize_render_text(str(item.get("objection") or ""))
+        severity = str(item.get("severity") or "")
+        confidence_adjustment = str(item.get("confidence_adjustment") or "")
+        if not objection or len(objection) > 80:
+            raise ValueError("objection schema invalid: objection")
+        if severity not in {"low", "med", "high"}:
+            raise ValueError("objection schema invalid: severity")
+        if confidence_adjustment not in {"none", "downgrade"}:
+            raise ValueError("objection schema invalid: confidence_adjustment")
+        objections[symbol] = {
+            "symbol": symbol,
+            "objection": objection,
+            "severity": severity,
+            "confidence_adjustment": confidence_adjustment,
+        }
+    return objections
+
+
+def _downgrade_confidence(confidence: str) -> str:
+    if confidence == "high":
+        return "med"
+    if confidence == "med":
+        return "low"
+    return "low"
+
+
+def _objection_prompt(cards: list[dict[str, Any]]) -> str:
+    payload = [
+        {
+            "symbol": card.get("symbol"),
+            "slot": card.get("slot"),
+            "stance": card.get("stance"),
+            "confidence": card.get("confidence"),
+            "rationale": card.get("rationale"),
+            "evidence_summary": card.get("_evidence_summary"),
+        }
+        for card in cards
+    ]
+    return OBJECTION_PROMPT_TEMPLATE.format(cards_json=_json_dumps(payload))
+
+
+def _apply_objections(cards: list[dict[str, Any]], objections: dict[str, dict[str, str]]) -> None:
+    for card in cards:
+        objection = objections.get(str(card.get("symbol") or ""))
+        if not objection:
+            card["objection"] = None
+            continue
+        card["objection"] = objection
+        if objection["severity"] == "high":
+            card["confidence"] = _downgrade_confidence(str(card.get("confidence") or "low"))
 
 
 def _connect(db_path: str | Path | None = None) -> sqlite3.Connection:
@@ -341,6 +461,7 @@ def build_discretion_cards(
     provider_name = _provider_name(provider)
     cards: list[dict[str, Any]] = []
     degradations: dict[str, int] = {}
+    skipped = 0
     with _connect(db_path) as con:
         for entry in selected:
             slot = str(entry["slot"])
@@ -368,13 +489,35 @@ def build_discretion_cards(
                     "provider": provider_name,
                     "as_of": day,
                     "created_at": _now_iso(),
+                    "_evidence_summary": context_text[:600],
                 }
-                _upsert_card(db_path, card)
                 cards.append(card)
             except Exception as exc:  # noqa: BLE001 - observe-only layer must not block M63.
                 reason = f"{type(exc).__name__}: {exc}"
                 degradations[reason] = degradations.get(reason, 0) + 1
-    skipped = sum(degradations.values())
+                skipped += 1
+        if cards:
+            try:
+                objection_data = provider.complete_structured(
+                    prompt=_objection_prompt(cards),
+                    tool=OBJECTION_TOOL,
+                    system=OBJECTION_SYSTEM_PROMPT,
+                    max_tokens=900,
+                    model_tier="fast",
+                )
+                objections = _validate_objections(
+                    objection_data,
+                    {str(card["symbol"]) for card in cards},
+                )
+                _apply_objections(cards, objections)
+            except Exception as exc:  # noqa: BLE001 - adversarial review degrades without blocking cards.
+                reason = f"反方审视失败: {type(exc).__name__}: {exc}"
+                degradations[reason] = degradations.get(reason, 0) + 1
+                for card in cards:
+                    card["objection"] = None
+        for card in cards:
+            card.pop("_evidence_summary", None)
+            _upsert_card(db_path, card)
     degradation_items = [{"reason": reason, "count": count} for reason, count in degradations.items()]
     texts = [f"裁量层完成: {len(cards)} 支"] if cards else []
     texts.extend(f"裁量层降级: {item['reason']} {item['count']} 支" for item in degradation_items)
@@ -397,11 +540,15 @@ def render_card_lines(result: dict[str, Any] | None) -> list[str]:
         return ["裁量层: 未运行"]
     lines: list[str] = []
     for card in result.get("cards") or []:
-        lines.append(
+        line = (
             f"{card.get('symbol')} 倾向:{render_stance(str(card.get('stance') or ''))} "
             f"信心:{card.get('confidence')}; 理由:{card.get('rationale')}; "
             f"时机:{card.get('timing_note') or '-'}; 再评估:{card.get('reevaluation_trigger')}"
         )
+        objection = card.get("objection") if isinstance(card.get("objection"), dict) else None
+        if objection and objection.get("severity") in {"med", "high"}:
+            line += f"; ⚖️ 反方: {_sanitize_render_text(str(objection.get('objection') or ''))}"
+        lines.append(line)
     for item in result.get("degradations") or []:
         lines.append(f"裁量层降级: {item.get('reason')} {item.get('count')} 支")
     return lines or ["裁量层: 暂无参考卡"]
