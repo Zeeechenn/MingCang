@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timedelta
 
 
 def _init_minimal_db(path):
@@ -103,6 +104,7 @@ def _init_minimal_db(path):
 
 
 def test_m59_panel_schema_has_required_sections(tmp_path):
+    from backend.tools.m63_render import assert_no_trade_words
     from backend.tools.m59_panel import build_panel, render_markdown
 
     db_path = tmp_path / "m59.sqlite"
@@ -116,12 +118,17 @@ def test_m59_panel_schema_has_required_sections(tmp_path):
             VALUES ('300308', '2026-07-03', 72.5, '买入', '高', 100, 130)
             """
         )
-        con.execute(
-            """
-            INSERT INTO prices(symbol, date, open, high, low, close, volume)
-            VALUES ('300308', '2026-07-03', 110, 112, 108, 111, 1000)
-            """
-        )
+        start = datetime(2026, 6, 19)
+        for idx in range(15):
+            close = 100.0 + idx
+            day = (start + timedelta(days=idx)).date().isoformat()
+            con.execute(
+                """
+                INSERT INTO prices(symbol, date, open, high, low, close, volume)
+                VALUES ('300308', ?, ?, ?, ?, ?, ?)
+                """,
+                (day, close, close + 1, close - 1, close, 100000 + idx * 10000),
+            )
 
     panel = build_panel(db_path=db_path, as_of="2026-07-03", universe_path=tmp_path / "missing.json")
 
@@ -136,7 +143,11 @@ def test_m59_panel_schema_has_required_sections(tmp_path):
     }
     assert panel["buy_candidates"]["items"][0]["llm_discretion"] is None
     assert panel["buy_candidates"]["items"][0]["llm_layer"] == "not_implemented"
-    assert "买入候选" in render_markdown(panel)
+    assert panel["buy_candidates"]["items"][0]["entry_card"]["status"] == "ok"
+    markdown = render_markdown(panel)
+    assert "候选区" in markdown
+    assert "V1 立即" in markdown
+    assert_no_trade_words(markdown)
 
     # M59.1 plain-language summary: top-level JSON field + markdown header line.
     assert "summary" in panel
@@ -144,7 +155,6 @@ def test_m59_panel_schema_has_required_sections(tmp_path):
     assert panel["summary"]["position_count"] == 0
     assert panel["summary"]["near_stop_loss_count"] == 0
     assert "今日候选1只" in panel["summary"]["text"]
-    markdown = render_markdown(panel)
     assert markdown.splitlines()[0] == panel["summary"]["text"]
 
 
@@ -248,7 +258,7 @@ def test_m59_panel_bottom_20_momentum_cross_section(tmp_path):
     assert risk["section_name"] == "风险工程区"
     warnings = risk["momentum_tail"]["items"]
     assert [item["symbol"] for item in warnings] == ["B"]
-    assert warnings[0]["warning_note"] == "预警≠卖出指令"
+    assert warnings[0]["warning_note"] == "预警≠处置指令"
     assert warnings[0]["in_position"] is True
     assert warnings[0]["momentum_score"] == -0.05
 
@@ -446,7 +456,7 @@ def test_m59_panel_watchtower_followups_reads_latest_watchtower_file(tmp_path):
     assert followups["as_of"] == "2026-07-03"
     assert len(followups["items"]) == 1
     assert followups["items"][0]["symbol"] == "603259"
-    assert followups["items"][0]["followup_note"] == "触发≠买入,待 LLM 确认层(Phase 2)"
+    assert followups["items"][0]["followup_note"] == "触发≠结论,待 LLM 确认层(Phase 2)"
     assert "跟进候选" in render_markdown(panel)
 
 
@@ -496,7 +506,7 @@ def test_m59_panel_watchtower_confirm_missing_when_no_file(tmp_path):
     assert confirm["items"] == []
     assert confirm["source_file"] is None
     assert any("missing:no_confirm_output_in" in flag for flag in confirm["flags"])
-    assert "跟进关注≠买入建议" in confirm["note"]
+    assert "跟进关注≠条件结论" in confirm["note"]
     markdown = render_markdown(panel)
     assert "确认层裁量" in markdown
     assert "missing:no_confirm_output_in" in markdown

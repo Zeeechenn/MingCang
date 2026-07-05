@@ -52,6 +52,8 @@ RUNTIME_CONFIG_KEYS = {
     "max_position_per_stock",
     "max_position_per_sector",
     "max_total_equity_pct",
+    "entry_risk_budget_pct",
+    "entry_account_size",
     "financial_backfill_years",
     "tavily_supplement_threshold",
     "anspire_news_days",
@@ -106,6 +108,8 @@ def _runtime_config_payload() -> dict:
         "max_position_per_stock": settings.max_position_per_stock,
         "max_position_per_sector": settings.max_position_per_sector,
         "max_total_equity_pct": settings.max_total_equity_pct,
+        "entry_risk_budget_pct": settings.entry_risk_budget_pct,
+        "entry_account_size": settings.entry_account_size,
         "data_draft": {
             "financial_backfill_years": settings.financial_backfill_years,
             "tavily_supplement_threshold": settings.tavily_supplement_threshold,
