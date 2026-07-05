@@ -14,6 +14,11 @@
 - 已核对本次公开入口说明：`mingcang stock` 仍是只读 `stock-context`；M63 日常入口仍由 `m63_daily` 三个 mode 加 `m63_weekly` / `m63_research` / `m63_opinion` 承载，未发现破坏性 CLI 变更。
 
 ### Added / 新增
+- **买卖操作闭环一期（R1/D0/D1/D2/D6/D7,2026-07-05）**:论点合流(forward_thesis 为唯一权威存储,watchlist 降级主题视图,7主题落库)→论点触发器(条件编译器7模板,40条件36条数据化,thesis_validation 进研究队列/thesis_invalidation 出持仓论点风险警示)→入场条件卡(V1/V2/V3 实算价位量能风险线+单笔风险预算参考股数,单票模式)→入场准备度分(四维透明记点+否决项,三道校准门未过即如实渲染"仅证据清单",校准转前向攒样本)→入场演练场(历史触发 PIT 回放+随机对照臂+分箱校准,零 LLM)→裁量层反方审视步(批量最强反驳,severity=high 强制降档)。分数定位=证据清单可视化,非预测。
+- **M57 记忆自进化 Phase 1**:EvolutionTrace(三时间戳双时间轴+七仓 namespace)/TaskCapsule(盘后自动落胶囊)/ContextGovernor(常驻+检索两层,预算裁剪,注入去重)/memory.correct+archive 确认制 action;方案附录 A/B 收 MemOS/Mem0/Zep-Graphiti/Letta 机制归口(不引框架)。
+- **Web 日常页**:M63 报告四 tab+待研究队列+M59 裁量参考区(仅供参考角标),只读 API 六端点(路径白名单防穿越)。
+- **评审修复轮(13项闭环)**:语言守卫全出口统一(strict/sanitize 双档)/m60_second_entry 接线断裂修复/main_net 缺失禁填0/Piotroski 分母归一传导/公司事件 PIT 类型门统一/数据合同全品类+降级 coverage_gap:/failure: 分级止噪/trigger_quality 消费接线;复检 13 项 9PASS 4PARTIAL 全收口。
+- **M58 网格 harness 收官**:holdout 冲突显式报错+statistical_gate(DSR/PBO);全量网格(695支×966日×26trials)终局确认价格系无统计可辩护优势(选股位 DSR=0.0/p=1.0)。
 - **盲裁验收 harness**(`backend/tools/blind_adjudication.py`):判断类功能的常态化 A/B 验收工具——两臂回答确定性盲化(甲/乙)、DB 真实结局对照、多裁判(claude/codex 跨模型)结构化投票、answer_key 隔离、多数票汇总。M61 P4 判断门以此完成 10 案例×双模型 60 票终裁(净版 full 6 : starved 3 : 平 1,跨模型方向一致 9/10),裁决工件在 `paper_trading/m61_out/adjudication_h1_expansion_20260705.json`(本地运行数据,不入库)。`m61_judgment_gate` 增 `--cases-file` 支持外部历史案例集(半年窗口回放)。
 - **M59 裁量层四条硬规则**(规格 `docs/dev/M59_ADJUDICATION_RULES.md`,盲裁证据驱动):R1 每条风险警示强制带确定性保护动作(实算止损位/减仓比例);R2 观望类结论必须带可观测再评估触发,copilot 增 `reentry_trigger` 字段与 `trigger_quality` 降级标记;R3 持仓体检增 `atr14`/`stop_gap_atr`/`stop_flags`(止损贴身 <1.5×ATR 与动量股静态止盈标旗);R4 财务质量旗标(CFO<净利/流动比率<1/毛利率过薄)进候选区与体检并渲染仓位收缩建议。面板保持只读,不改官方信号。
 
