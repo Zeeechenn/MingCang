@@ -145,7 +145,7 @@ make demo
 python3 -m backend.tools.m63_daily --mode premarket
 ```
 
-只想先看系统长什么样，用 `make demo`；想知道今天开盘前该检查哪些风险和事件，跑 `premarket`；需要收盘后做正式复盘，跑 `postmarket`；一周结束要看标签、触发器和经验归因，跑 `weekly`。日常 Web 入口在前端导航的"日常"页，对应路由 `/daily`，展示 M63 报告和 M59 裁量参考卡。
+只想先看系统长什么样，用 `make demo`；想知道今天开盘前该检查哪些风险和事件，跑 `premarket`；需要收盘后做正式复盘，跑 `postmarket`；一周结束要看标签、触发器和经验归因，跑 `weekly`。日常 Web 入口在前端导航的"日常"页，对应路由 `/daily`，日常页=盘前/盘中/盘后/周末四份报告+待研究队列+裁量参考区。
 
 ---
 
@@ -252,6 +252,11 @@ python3 -m backend.agent.cli memory-snapshot --pretty
 ```
 
 这里能看到分层记忆、审计日志和记忆促进状态：哪些规则 / 教训已可信，哪些还在待定。记忆只参与提示上下文，不参与官方信号打分；可信记忆会在你下次研究同一只票或同一赛道时自动注入，提醒你过去验证过什么、证伪过什么。M57 自进化仍在开发中，当前不会让 LLM 自己把待定记忆升级成可信记忆。
+
+输出怎么读：
+- `ai_memory_count` = 已确认记忆条数。
+- `stock_memory` = 按股沉淀的研究痕迹。
+- `decision_memory` = 分层决策记忆；L0-L4 分层详见 docs，`memory-snapshot` 显示的是汇总计数。
 
 ---
 

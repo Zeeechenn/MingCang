@@ -143,7 +143,7 @@ make demo
 python3 -m backend.tools.m63_daily --mode premarket
 ```
 
-Use `make demo` when you only want to see the product; run `premarket` when you want the pre-open checklist of events and risks; run `postmarket` when you need the after-close review; run `weekly` when the week ends and you want labels, triggers, and attribution checked together. The web daily entry lives in the frontend navigation as "日常" at `/daily`, showing M63 reports and M59 discretionary reference cards.
+Use `make demo` when you only want to see the product; run `premarket` when you want the pre-open checklist of events and risks; run `postmarket` when you need the after-close review; run `weekly` when the week ends and you want labels, triggers, and attribution checked together. The web daily entry lives in the frontend navigation as "日常" at `/daily`: the Daily page shows the pre-market, intraday, post-market, and weekly reports, plus the research queue and discretionary reference area.
 
 ---
 
@@ -249,6 +249,11 @@ python3 -m backend.agent.cli memory-snapshot --pretty
 ```
 
 This shows layered memory, the audit log, and promotion status: which rules/lessons are trusted and which are still pending. Memory only participates as prompt context; it does not score official signals. Trusted memory is injected the next time you research the same stock or theme, reminding you what was validated or falsified before. M57 self-evolution is still under development, so the current system does not let an LLM promote pending memory into trusted memory by itself.
+
+How to read the output:
+- `ai_memory_count` = confirmed memory item count.
+- `stock_memory` = per-stock research traces.
+- `decision_memory` = layered decision memory; see docs for L0-L4, while `memory-snapshot` shows aggregate counts.
 
 ---
 

@@ -57,6 +57,7 @@ def _write_universe(tmp_path: Path, symbols: list[str]) -> Path:
 def test_r1_event_warnings_always_include_protective_action(tmp_path):
     from backend.data.database import CorporateEvent
     from backend.tools.m59_panel import build_panel, render_markdown
+    from backend.tools.m63_render import assert_no_trade_words
 
     db_path, engine, db = _file_db(tmp_path)
     try:
@@ -88,6 +89,8 @@ def test_r1_event_warnings_always_include_protective_action(tmp_path):
 
     items = {item["symbol"]: item for item in panel["risk_warnings"]["event_warnings"]["items"]}
     assert "止损上移至 85.0" in items["600001"]["protective_action"]
+    assert "事件日前评估降仓" in items["600001"]["protective_action"]
+    assert_no_trade_words(items["600001"]["protective_action"])
     assert items["600002"]["protective_action"].startswith("数据不足,无法给出动作")
     assert "缺:price,atr14" in items["600002"]["protective_action"]
     assert "→ 动作:" in render_markdown(panel)

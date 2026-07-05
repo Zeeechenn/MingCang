@@ -585,6 +585,45 @@ def test_panel_lines_surface_hard_rule_fields():
     assert "质量旗标: missing:piotroski(建议仓位上限减半)" in text
 
 
+def test_postmarket_report_keeps_protective_action_lines_readable_after_guard():
+    report = m63_daily.build_postmarket_report(
+        no_llm=True,
+        step_overrides={
+            "m61_backfill_drip": lambda: {"skipped": True, "reason": "unit"},
+            "m54_daily_accrual": lambda: {"skipped": True, "reason": "--no-llm"},
+            "m60_watchtower": lambda: {"triggered": [], "pending": []},
+            "m60_second_entry": lambda: {"skipped": True, "reason": "unit"},
+            "m58_exit_shadow": lambda: {"open_position_count": 0, "no_divergence_yet": True, "meta": {"window": "unit"}},
+            "m59_panel": lambda: {
+                "summary": {"text": "面板"},
+                "buy_candidates": {"items": []},
+                "position_health": {"items": []},
+                "risk_warnings": {
+                    "event_warnings": {
+                        "items": [
+                            {
+                                "symbol": "603986",
+                                "name": "兆易创新",
+                                "protective_action": "事件日前评估降仓;若持仓,止损上移至 85.0(=现价-1.5×ATR14)",
+                            }
+                        ]
+                    },
+                    "momentum_tail": {"items": []},
+                    "concentration": {"items": []},
+                },
+            },
+            "m59_discretion": lambda: {"skipped": True, "reason": "--no-llm"},
+            "trigger_router": lambda: {"pending": [], "queue_path": "unit", "history_path": "unit"},
+            "task_capsule": lambda: {"skipped": True, "reason": "unit"},
+        },
+    )
+
+    protective_lines = [line for line in report["text"].splitlines() if "保护动作:" in line]
+    assert protective_lines
+    assert all("[操作词已屏蔽]" not in line for line in protective_lines)
+    assert any("事件日前评估降仓" in line for line in protective_lines)
+
+
 def test_panel_lines_explain_missing_stop_distance_and_avoid_holding():
     lines = m63_daily._panel_lines(
         {
@@ -613,12 +652,15 @@ def test_panel_lines_explain_missing_stop_distance_and_avoid_holding():
 
 def test_glossary_footnote_only_lists_terms_present():
     text = render_report(
-        [("术语", ["ATR 用于止损位计算,观察哨触发 sector_resonance"])],
-        glossary_terms={"ATR", "EPS", "观察哨", "sector_resonance"},
+        [("术语", ["ATR 用于止损位计算,观察哨触发 sector_resonance,1.5×ATR 进入影子出场 accrual"])],
+        glossary_terms={"ATR", "EPS", "观察哨", "sector_resonance", "1.5×ATR", "影子出场", "accrual"},
     )
 
     assert "- ATR:" in text
     assert "- 止损位:" in text
     assert "- 观察哨:" in text
     assert "- sector_resonance:" in text
+    assert "- 1.5×ATR:" in text
+    assert "- 影子出场:" in text
+    assert "- accrual:" in text
     assert "- EPS:" not in text

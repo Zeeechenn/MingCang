@@ -44,6 +44,19 @@ REGIME_FLAT_BAND = 0.02
 # 贴近止损阈值:距止损缓冲空间(distance_to_stop_loss_pct) <= 此值(%)时计入"贴近止损"人话摘要计数。
 STOP_LOSS_PROXIMITY_PCT = 5.0
 MAX_POSITION_WEIGHT_PCT = 15.0
+PROTECTIVE_ACTION_WORDING_MAP = {
+    "清仓": "离场评估",
+    "卖出": "离场",
+    "减仓": "降仓",
+    "加仓": "提仓评估",
+}
+
+
+def _protective_action_text(text: str) -> str:
+    safe_text = text
+    for source, replacement in PROTECTIVE_ACTION_WORDING_MAP.items():
+        safe_text = safe_text.replace(source, replacement)
+    return safe_text
 
 
 def _connect_readonly(db_path: Path) -> sqlite3.Connection:
@@ -205,7 +218,9 @@ def _event_protective_action(con: sqlite3.Connection, symbol: str, as_of: str) -
     current_stop = _latest_open_position_stop(con, symbol)
     atr_stop = current - 1.5 * atr
     raised_stop = max(current_stop, atr_stop) if current_stop is not None else atr_stop
-    return f"事件日前评估减仓;若持仓,止损上移至 {round(raised_stop, 2)}(=现价-1.5×ATR14)"
+    return _protective_action_text(
+        f"事件日前评估减仓;若持仓,止损上移至 {round(raised_stop, 2)}(=现价-1.5×ATR14)"
+    )
 
 
 def _pct(value: float | None) -> float | None:
@@ -830,7 +845,7 @@ def _build_concentration(position_items: list[dict[str, Any]]) -> dict[str, Any]
                 "symbol": entry["symbol"],
                 "name": entry["name"],
                 "weight_pct": entry["weight_pct"],
-                "protective_action": (
+                "protective_action": _protective_action_text(
                     f"集中度超限:建议减仓至{MAX_POSITION_WEIGHT_PCT}%以内"
                     if (entry["weight_pct"] or 0) > MAX_POSITION_WEIGHT_PCT
                     else f"集中度未超{MAX_POSITION_WEIGHT_PCT}%单仓阈值,维持观察"
@@ -852,7 +867,7 @@ def _momentum_protective_action(item: dict[str, Any], regime_reliable: bool | No
     if regime_reliable is False:
         return "下行市动量末档失效,仅观察;若已持仓,观察触发:收盘跌破近5日低点即减半"
     if item.get("in_position"):
-        return "动量降级:建议减仓至50%;若连续2日仍在末档,再降至25%"
+        return _protective_action_text("动量降级:建议减仓至50%;若连续2日仍在末档,再降至25%")
     return "动量末档候选:暂停新增仓位,等待脱离bottom20%后再评估"
 
 

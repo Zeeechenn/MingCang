@@ -214,6 +214,7 @@ def test_m59_panel_summary_counts_positions_near_stop_loss(tmp_path):
 
 def test_m59_panel_bottom_20_momentum_cross_section(tmp_path):
     from backend.tools.m59_panel import build_panel
+    from backend.tools.m63_render import assert_no_trade_words
 
     db_path = tmp_path / "momentum.sqlite"
     universe_path = tmp_path / "universe.json"
@@ -261,6 +262,7 @@ def test_m59_panel_bottom_20_momentum_cross_section(tmp_path):
     assert warnings[0]["warning_note"] == "预警≠处置指令"
     assert warnings[0]["in_position"] is True
     assert warnings[0]["momentum_score"] == -0.05
+    assert_no_trade_words(warnings[0]["protective_action"])
 
     # Regime downgrade: the momentum tail must self-report whether it applies today.
     assert risk["market_regime"]["value"] in {"up", "down", "flat", "unknown"}
@@ -274,6 +276,8 @@ def test_m59_panel_bottom_20_momentum_cross_section(tmp_path):
     assert concentration["max_position_symbol"] == "B"
     assert concentration["max_position_weight_pct"] == 100.0
     assert concentration["top3_weight_pct"] == 100.0
+    assert "集中度超限:建议降仓" in concentration["items"][0]["protective_action"]
+    assert_no_trade_words(concentration["items"][0]["protective_action"])
 
     # Stop-loss buffer ranking: B has no stop_loss on this position, so it is explicitly missing.
     buffer_ranking = risk["stop_loss_buffer_ranking"]
