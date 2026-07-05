@@ -28,6 +28,7 @@ from backend.data.models import (  # noqa: F401  re-exported for backward compat
     LlmUsageLog,
     LongTermLabel,
     MarketSnapshot,
+    MarketTemperatureSnapshot,
     MemoryAtom,
     MemoryProfile,
     MemoryPromotionCandidate,

@@ -499,10 +499,60 @@ def test_ifind_shareholders_undated_uses_fetch_date_provider_suffix(monkeypatch)
     assert rows[0]["total_shares"] == 10000.0
 
 
+def test_eastmoney_fflow_history_maps_fixture_and_filters(monkeypatch):
+    from backend.data.category_registry import FetchRequest
+    import backend.data.category_fetchers as fetchers
+
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "data": {
+                    "klines": [
+                        "2026-06-30,100,10,20,30,40,1,2,3,4,5,6,7,8,9",
+                        "2026-07-01,200,11,21,31,41,1,2,3,4,5,6,7,8,9",
+                    ]
+                }
+            }
+
+    def fake_get(url, params, headers, timeout):
+        captured.update({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr(fetchers.requests, "get", fake_get)
+    monkeypatch.setattr(fetchers, "_utcnow", lambda: datetime(2026, 7, 5, 9, 0))
+    monkeypatch.setattr(fetchers._EASTMONEY_THROTTLE, "wait", lambda: None)
+
+    rows = fetchers.fetch_fund_flow_eastmoney_fflow_history(
+        FetchRequest(symbol="603986", start=date(2026, 7, 1), end=date(2026, 7, 4), limit=120)
+    )
+
+    assert captured["url"] == fetchers.EASTMONEY_FFLOW_HISTORY_URL
+    assert captured["params"]["secid"] == "1.603986"
+    assert captured["params"]["lmt"] == "120"
+    assert captured["params"]["fields2"] == fetchers.EASTMONEY_FFLOW_HISTORY_FIELDS2
+    assert captured["headers"]["Referer"] == "https://quote.eastmoney.com"
+    assert captured["headers"]["Origin"] == "https://quote.eastmoney.com"
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["trade_date"] == datetime(2026, 7, 1)
+    assert row["main_net"] == 200.0
+    assert row["small_net"] == 11.0
+    assert row["medium_net"] == 21.0
+    assert row["large_net"] == 31.0
+    assert row["super_large_net"] == 41.0
+    assert row["provider"] == "eastmoney_fflow_history"
+
+
 def test_save_helpers_are_idempotent(test_db):
     from backend.data.category_fetchers import (
         save_announcements,
         save_corporate_events,
+        save_fund_flows,
         save_holder_snapshots,
         save_lhb,
         save_research_reports,
@@ -564,6 +614,19 @@ def test_save_helpers_are_idempotent(test_db):
             "provider": "ifind_shareholders",
         }
     ]
+    flow_rows = [
+        {
+            "symbol": "300308",
+            "trade_date": datetime(2026, 6, 1),
+            "main_net": 1.0,
+            "super_large_net": 2.0,
+            "large_net": 3.0,
+            "medium_net": 4.0,
+            "small_net": 5.0,
+            "provider": "eastmoney_fflow",
+        }
+    ]
+    history_flow_rows = [{**flow_rows[0], "provider": "eastmoney_fflow_history", "main_net": 99.0}]
 
     assert save_announcements(announcement_rows, test_db) == 1
     assert save_announcements(announcement_rows, test_db) == 0
@@ -575,6 +638,9 @@ def test_save_helpers_are_idempotent(test_db):
     assert save_corporate_events(event_rows, test_db) == 0
     assert save_holder_snapshots(holder_rows, test_db) == 1
     assert save_holder_snapshots(holder_rows, test_db) == 0
+    assert save_fund_flows(flow_rows, test_db) == 1
+    assert save_fund_flows(flow_rows, test_db) == 0
+    assert save_fund_flows(history_flow_rows, test_db) == 0
 
 
 def test_backfill_continues_past_failing_stock(tmp_path, monkeypatch, test_db, capsys):

@@ -146,9 +146,24 @@ def _backfill_stock_category(
     degradations: list[dict] = []
     saver = SAVE_HELPERS[category]
     windows = _ten_day_windows(start, end) if category == "announcements" else [(start, end)]
+    # 熔断:连续传输级失败(封禁/代理断连)即停,防止批量轰炸把出口 IP 打进临时黑名单(07-05 实证教训)
+    transport_failure_streak = 0
+    TRANSPORT_BREAKER_LIMIT = 3
+    TRANSPORT_MARKERS = ("ProxyError", "RemoteDisconnected", "Max retries exceeded", "ConnectionError", "SSLError")
 
     for stock in stocks:
         symbol = stock["symbol"]
+        if transport_failure_streak >= TRANSPORT_BREAKER_LIMIT:
+            degradations.append(
+                _record_degradation(
+                    category,
+                    category,
+                    f"failure:transport_circuit_breaker(连续{transport_failure_streak}次传输失败,剩余标的跳过)",
+                    {"symbol": symbol},
+                    db,
+                )
+            )
+            break
         for window_start, window_end in windows:
             try:
                 result = fetch_by_category(
@@ -157,7 +172,7 @@ def _backfill_stock_category(
                         symbol=symbol,
                         start=window_start,
                         end=window_end,
-                        limit=20 if category == "announcements" else 50,
+                        limit=20 if category == "announcements" else 120 if category == "fund_flow" else 50,
                         extra={"name": stock.get("name") or symbol},
                     ),
                     db=db,
@@ -179,7 +194,10 @@ def _backfill_stock_category(
                             db,
                         )
                     )
+                    if any(m in str(d.get("error") or "") for d in result.degradations for m in TRANSPORT_MARKERS):
+                        transport_failure_streak += 1
                     continue
+                transport_failure_streak = 0
                 inserted += saver(result.rows, db)
             except Exception as exc:  # noqa: BLE001 - per-stock resilience
                 db.rollback()

@@ -160,6 +160,27 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_m59_discretion_cards_symbol
             ON m59_discretion_cards(symbol)
         """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS market_temperature_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snap_date DATETIME NOT NULL,
+                pool_type TEXT NOT NULL,
+                code TEXT NOT NULL,
+                name TEXT,
+                price REAL,
+                fields_json TEXT NOT NULL,
+                fetched_at DATETIME,
+                UNIQUE(snap_date, pool_type, code)
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_market_temperature_snapshots_date
+            ON market_temperature_snapshots(snap_date)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_market_temperature_snapshots_pool_code
+            ON market_temperature_snapshots(pool_type, code)
+        """))
 
         position_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(positions)")).fetchall()]
         for col, ddl in {

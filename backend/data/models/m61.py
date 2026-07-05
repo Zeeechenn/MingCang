@@ -111,6 +111,24 @@ class FundFlow(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class MarketTemperatureSnapshot(Base):
+    """Observe-only postmarket snapshot for limit-up board pools."""
+
+    __tablename__ = "market_temperature_snapshots"
+    __table_args__ = (
+        UniqueConstraint("snap_date", "pool_type", "code", name="uq_market_temperature_snap_pool_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snap_date: Mapped[datetime] = mapped_column(DateTime, index=True)
+    pool_type: Mapped[str] = mapped_column(String, index=True)
+    code: Mapped[str] = mapped_column(String, index=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fields_json: Mapped[str] = mapped_column(Text)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class OverseasSnapshot(Base):
     """Research-only overseas leading-indicator snapshot."""
 
