@@ -105,6 +105,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m63_trade_journal",
+        "category": "stable",
+        "purpose": "D8 trade-level review journal: idempotently snapshots new open positions and completes closed-position outcomes for weekly attribution.",
+        "read_write_boundary": "Writes only the trade_journal table in the configured SQLite database; reads positions/signals/labels/prices for observe-only attribution, never mutates positions or signals.",
+        "recommended_entrypoint": "python3 -m backend.tools.m63_trade_journal --as-of <YYYY-MM-DD>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m63_research",
         "category": "stable",
         "purpose": "M63-2 随时式 full-stack research CLI: resolve a symbol/theme, run bounded category backfill, labels, deep research, copilot refresh, watchlist upsert, and consolidated report rendering.",

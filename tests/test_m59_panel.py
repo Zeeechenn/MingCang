@@ -212,6 +212,82 @@ def test_m59_panel_summary_counts_positions_near_stop_loss(tmp_path):
     assert "持仓1只其中1只贴近止损" in panel["summary"]["text"]
 
 
+def test_m59_panel_focus_mode_keeps_candidate_rendering_unchanged(tmp_path, monkeypatch):
+    from backend.config import settings
+    from backend.tools.m59_panel import build_panel, render_markdown
+
+    db_path = tmp_path / "focus.sqlite"
+    with _init_minimal_db(db_path) as con:
+        con.execute("INSERT INTO stocks(symbol, name, market, active) VALUES ('300308', '中际旭创', 'CN', 1)")
+        con.execute(
+            """
+            INSERT INTO signals(symbol, date, composite_score, recommendation, confidence, stop_loss, take_profit)
+            VALUES ('300308', '2026-07-03', 72.5, '买入', '高', 100, 130)
+            """
+        )
+        con.execute(
+            "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES ('300308', '2026-07-03', 100, 101, 99, 100, 1000)"
+        )
+
+    monkeypatch.setattr(settings, "portfolio_mode", "focus")
+    panel = build_panel(db_path=db_path, as_of="2026-07-03", universe_path=tmp_path / "missing.json")
+    markdown = render_markdown(panel)
+
+    assert panel["portfolio_mode"] == "focus"
+    assert "等权参考" not in markdown
+    assert "否决区" not in markdown
+    assert "| 300308 | 中际旭创 | 72.5 | 100.0 | 130.0 | not_implemented | - |" in markdown
+
+
+def test_m59_panel_diversified_mode_splits_vetoes_and_renders_equal_weight(tmp_path, monkeypatch):
+    from backend.config import settings
+    from backend.tools.m59_panel import build_panel, render_markdown
+
+    db_path = tmp_path / "diversified.sqlite"
+    with _init_minimal_db(db_path) as con:
+        con.executemany(
+            "INSERT INTO stocks(symbol, name, market, active) VALUES (?, ?, 'CN', 1)",
+            [("300308", "中际旭创"), ("600000", "浦发银行"), ("000001", "平安银行")],
+        )
+        con.executemany(
+            """
+            INSERT INTO signals(symbol, date, composite_score, recommendation, confidence, stop_loss, take_profit)
+            VALUES (?, '2026-07-03', ?, '买入', '高', 90, 130)
+            """,
+            [("300308", 72.5), ("600000", 70), ("000001", 69)],
+        )
+        con.executemany(
+            "INSERT INTO prices(symbol, date, open, high, low, close, volume) VALUES (?, '2026-07-03', 100, 101, 99, 100, 1000)",
+            [("300308",), ("600000",), ("000001",)],
+        )
+        con.execute(
+            """
+            INSERT INTO long_term_labels(symbol, date, label, score, expires_at, quality, created_at)
+            VALUES ('600000', '2026-07-03', '规避', 20, '2026-07-20', 'ok', '2026-07-03')
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO positions(symbol, name, market, quantity, avg_cost, opened_at, stop_loss, take_profit, status)
+            VALUES ('300308', '中际旭创', 'CN', 3, 100, '2026-07-01', 90, 130, 'open'),
+                   ('000001', '平安银行', 'CN', 2, 100, '2026-07-01', 90, 130, 'open'),
+                   ('600000', '浦发银行', 'CN', 1, 100, '2026-07-01', 90, 130, 'open')
+            """
+        )
+
+    monkeypatch.setattr(settings, "portfolio_mode", "diversified")
+    panel = build_panel(db_path=db_path, as_of="2026-07-03", universe_path=tmp_path / "missing.json")
+    markdown = render_markdown(panel)
+
+    assert panel["portfolio_mode"] == "diversified"
+    assert [item["symbol"] for item in panel["buy_candidates"]["items"]] == ["300308", "000001"]
+    assert panel["buy_candidates"]["vetoed_items"][0]["symbol"] == "600000"
+    assert "等权参考:若同时持有 2 支候选,每支≈资金/2(受单股上限15.0%约束)" in markdown
+    assert "## 否决区" in markdown
+    assert "600000" in markdown
+    assert "组合集中度:前三仓占比100.0%" in markdown
+
+
 def test_m59_panel_bottom_20_momentum_cross_section(tmp_path):
     from backend.tools.m59_panel import build_panel
     from backend.tools.m63_render import assert_no_trade_words

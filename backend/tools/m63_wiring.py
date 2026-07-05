@@ -33,6 +33,7 @@ WIRING_MAP: dict[str, WiringEntry] = {
     "backend.tools.m61_backfill": {"bucket": "daily_postmarket", "reason": "盘后滴灌补数为主,深研也会调用"},
     "backend.tools.m63_render": {"bucket": "manual_only", "reason": "M63渲染库本体,由其他M63工具调用"},
     "backend.tools.m63_daily": {"bucket": "daily_postmarket", "reason": "M63盘前/盘中/盘后主入口;主接线按盘后"},
+    "backend.tools.m63_trade_journal": {"bucket": "daily_postmarket", "reason": "D8交易级复盘台账,盘后幂等同步开平仓归因"},
     "backend.tools.m63_research": {"bucket": "research", "reason": "随时式深研入口"},
     "backend.tools.m63_opinion": {"bucket": "trigger", "reason": "喂观点生成R4触发队列"},
     "backend.tools.m63_weekly": {"bucket": "weekly", "reason": "固定式周末体检入口"},

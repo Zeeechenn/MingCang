@@ -26,6 +26,10 @@ def _db(tmp_path: Path) -> Path:
                 opened_at TEXT,
                 stop_loss REAL,
                 take_profit REAL,
+                closed_at TEXT,
+                close_price REAL,
+                realized_pnl REAL,
+                realized_pnl_pct REAL,
                 status TEXT
             );
             CREATE TABLE prices(
@@ -232,6 +236,63 @@ def test_postmarket_final_text_uses_sanitize_language_guard(tmp_path):
     assert "强烈推荐" not in result["text"]
     assert "[操作词已屏蔽]" in result["text"]
     assert "语言守卫" in result["text"]
+
+
+def test_trade_journal_syncs_open_and_close_idempotently(tmp_path):
+    from backend.tools import m63_trade_journal
+
+    db_path = _db(tmp_path)
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            """
+            INSERT INTO signals(symbol, date, composite_score, recommendation, confidence, stop_loss, take_profit)
+            VALUES ('300308', '2026-07-05', 68.5, '考虑买入', '中', 96, 128)
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO long_term_labels(symbol, date, label, score, expires_at, quality, created_at)
+            VALUES ('300308', '2026-07-05', '可关注', 72, '2026-07-15', 'ok', '2026-07-05')
+            """
+        )
+
+    first = m63_trade_journal.sync_trade_journal(db_path=db_path, as_of="2026-07-05")
+    second = m63_trade_journal.sync_trade_journal(db_path=db_path, as_of="2026-07-05")
+
+    assert first["opened"] == 1
+    assert second["opened"] == 0
+    with sqlite3.connect(db_path) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute("SELECT * FROM trade_journal").fetchall()
+        assert len(rows) == 1
+        snapshot = json.loads(rows[0]["entry_snapshot_json"])
+        assert snapshot["entry_card"]["symbol"] == "300308"
+        assert snapshot["long_term_label"]["label"] == "可关注"
+        assert snapshot["trigger_state"]["signal"]["recommendation"] == "考虑买入"
+
+        con.execute(
+            """
+            UPDATE positions
+            SET status='closed', closed_at='2026-07-08', close_price=108,
+                realized_pnl=80, realized_pnl_pct=8.0
+            WHERE symbol='300308'
+            """
+        )
+
+    close_first = m63_trade_journal.sync_trade_journal(db_path=db_path, as_of="2026-07-08")
+    close_second = m63_trade_journal.sync_trade_journal(db_path=db_path, as_of="2026-07-08")
+
+    assert close_first["closed"] == 1
+    assert close_second["closed"] == 0
+    with sqlite3.connect(db_path) as con:
+        con.row_factory = sqlite3.Row
+        row = con.execute("SELECT * FROM trade_journal").fetchone()
+        outcome = json.loads(row["outcome_json"])
+        assert row["closed_at"] == "2026-07-08"
+        assert row["exit_price"] == 108
+        assert outcome["return_pct"] == 8.0
+        assert outcome["holding_days"] == 7
+        assert outcome["touched_stop_loss"] is True
 
 
 def test_trigger_r1_enqueues_beyond_limit_and_auto_refreshes_first_n(tmp_path, monkeypatch):

@@ -245,6 +245,69 @@ def test_weekly_final_text_uses_sanitize_language_guard(tmp_path, monkeypatch):
     assert "语言守卫" in result["text"]
 
 
+def test_weekly_renders_trade_journal_attribution_and_readiness_band_stats(tmp_path, monkeypatch):
+    from backend.tools import m63_weekly
+
+    db_path = _db(tmp_path / "m63.db")
+    universe = tmp_path / "universe.json"
+    _write_universe(universe)
+    monkeypatch.setattr(m63_daily, "DEFAULT_UNIVERSE_PATHS", (universe,))
+    with sqlite3.connect(db_path) as con:
+        con.execute(
+            """
+            CREATE TABLE trade_journal(
+                id INTEGER PRIMARY KEY,
+                symbol TEXT,
+                opened_at TEXT,
+                entry_price REAL,
+                entry_snapshot_json TEXT,
+                closed_at TEXT,
+                exit_price REAL,
+                exit_reason TEXT,
+                outcome_json TEXT,
+                UNIQUE(symbol, opened_at)
+            )
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO trade_journal(symbol, opened_at, entry_price, entry_snapshot_json, closed_at, exit_price, exit_reason, outcome_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "300308",
+                "2026-07-01",
+                100,
+                json.dumps(
+                    {
+                        "entry_basis_summary": "信号=关注; 长期标签=可关注; 准备度=72/高",
+                        "entry_readiness": {"score": 72, "band": {"label": "高"}},
+                    },
+                    ensure_ascii=False,
+                ),
+                "2026-07-05",
+                109,
+                "manual_review",
+                json.dumps({"return_pct": 9.0, "holding_days": 4, "win": True}, ensure_ascii=False),
+            ),
+        )
+
+    result = m63_weekly.run_weekly(
+        db_path=db_path,
+        as_of="2026-07-05",
+        no_llm=True,
+        queue_path=tmp_path / "queue.json",
+        history_path=tmp_path / "history.json",
+        watchlist_dir=tmp_path / "empty-watchlists",
+        output_dir=tmp_path / "out",
+        exit_shadow_builder=lambda **_: {"trade_differences": []},
+    )
+
+    assert "交易归因" in result["text"]
+    assert "300308 2026-07-01→2026-07-05 入场:信号=关注; 长期标签=可关注; 准备度=72/高 结局:+9.0%/4天 离场:manual_review" in result["text"]
+    assert "准备度高:1/1 胜率100.0%(样本不足)" in result["text"]
+
+
 def test_weekly_data_health_caps_degradation_groups():
     from backend.tools import m63_weekly
 

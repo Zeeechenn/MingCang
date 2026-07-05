@@ -453,6 +453,87 @@ def _lines_attribution(attribution: dict[str, Any]) -> list[str]:
     return lines or ["本周归因未返回有效条目"]
 
 
+def _trade_journal_rows(con: sqlite3.Connection, *, start: str, end: str) -> list[dict[str, Any]]:
+    if not m63_daily._table_exists(con, "trade_journal"):
+        return []
+    cols = m63_daily._columns(con, "trade_journal")
+    required = {"symbol", "opened_at", "entry_snapshot_json", "closed_at", "exit_reason", "outcome_json"}
+    if not required <= cols:
+        return []
+    value_cols = [
+        "symbol",
+        "opened_at",
+        "entry_snapshot_json",
+        "closed_at",
+        "exit_reason",
+        "outcome_json",
+        "entry_price" if "entry_price" in cols else "NULL AS entry_price",
+        "exit_price" if "exit_price" in cols else "NULL AS exit_price",
+    ]
+    rows = con.execute(
+        f"""
+        SELECT {', '.join(value_cols)}
+        FROM trade_journal
+        WHERE closed_at IS NOT NULL
+          AND date(closed_at) >= date(?)
+          AND date(closed_at) <= date(?)
+        ORDER BY date(closed_at), symbol, opened_at
+        """,
+        (start, end),
+    ).fetchall()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        data = dict(row)
+        try:
+            snapshot = json.loads(data.get("entry_snapshot_json") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            snapshot = {}
+        try:
+            outcome = json.loads(data.get("outcome_json") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            outcome = {}
+        data["entry_snapshot"] = snapshot if isinstance(snapshot, dict) else {}
+        data["outcome"] = outcome if isinstance(outcome, dict) else {}
+        items.append(data)
+    return items
+
+
+def _readiness_band(snapshot: dict[str, Any]) -> str:
+    readiness = snapshot.get("entry_readiness") or {}
+    band = readiness.get("band") or {}
+    return str(band.get("label") or band.get("range") or "unknown")
+
+
+def _lines_trade_attribution(rows: list[dict[str, Any]]) -> list[str]:
+    if not rows:
+        return ["本周无已平仓交易记录"]
+    lines: list[str] = []
+    stats: dict[str, dict[str, int]] = {}
+    for row in rows:
+        snapshot = row.get("entry_snapshot") or {}
+        outcome = row.get("outcome") or {}
+        basis = str(snapshot.get("entry_basis_summary") or "入场依据缺失")
+        return_pct = outcome.get("return_pct")
+        return_text = "-" if return_pct is None else f"{float(return_pct):+.1f}%"
+        holding_days = outcome.get("holding_days")
+        holding_text = "-" if holding_days is None else f"{holding_days}天"
+        lines.append(
+            f"{row['symbol']} {row['opened_at']}→{row['closed_at']} "
+            f"入场:{basis} 结局:{return_text}/{holding_text} 离场:{row.get('exit_reason') or '-'}"
+        )
+        band = _readiness_band(snapshot)
+        stat = stats.setdefault(band, {"total": 0, "wins": 0})
+        stat["total"] += 1
+        if outcome.get("win") is True or (return_pct is not None and float(return_pct) > 0):
+            stat["wins"] += 1
+    for band, stat in sorted(stats.items()):
+        total = stat["total"]
+        pct = stat["wins"] / total * 100 if total else 0
+        suffix = "(样本不足)" if total < 5 else ""
+        lines.append(f"准备度{band}:{stat['wins']}/{total} 胜率{pct:.1f}%{suffix}")
+    return lines
+
+
 def _write_report(as_of: str, text: str, output_dir: Path = OUTPUT_DIR) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / f"weekly_{as_of}.md"
@@ -483,6 +564,7 @@ def run_weekly(
         expiring = _expiring_labels(con, universe, as_of=day)
         concentration = _sector_concentration(con, watchlist_dir)
         data_health = _data_health(con, start=start, end=day)
+        trade_journal = _trade_journal_rows(con, start=start, end=day)
     exit_divergences = _exit_shadow_divergences(exit_shadow_builder, db_path=db_path, as_of=day)
     queue_week = [item for item in queue if _in_week(item.get("created_at"), start, day) or _in_week(item.get("done_at"), start, day)]
     facts = {
@@ -523,6 +605,7 @@ def run_weekly(
 
     sections = [
         ("周归因", _lines_attribution(attribution)),
+        ("交易归因", _lines_trade_attribution(trade_journal)),
         (
             "触发器审计",
             [

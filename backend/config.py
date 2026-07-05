@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 from urllib.parse import unquote
 
 from pydantic import Field, model_validator
@@ -149,6 +149,7 @@ class Settings(BaseSettings):
 
     # 阶段B 综合分 → 仓位映射（每只股最大权重）
     position_sizing_enabled: bool = True
+    portfolio_mode: Literal["focus", "diversified"] = "focus"
     max_position_per_stock: float = 0.15      # 单股最大仓位
     max_position_per_sector: float = 0.30     # 单板块最大仓位
     max_total_equity_pct: float = 0.80        # 股票总仓位上限

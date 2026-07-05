@@ -49,6 +49,7 @@ POSTMARKET_STEP_MODULES = {
     "backend.tools.m59_panel",
     "backend.tools.m59_discretion",
     "backend.tools.m63_daily",
+    "backend.tools.m63_trade_journal",
     "backend.tools.coverage_snapshot",
     "backend.tools.long_term_constraint_impact",
     "backend.tools.m52_flow_floor",
@@ -446,6 +447,12 @@ def _run_panel(as_of: str) -> dict[str, Any]:
     from backend.tools.m59_panel import build_panel
 
     return build_panel(as_of=as_of)
+
+
+def _run_trade_journal(db_path: str | Path | None, as_of: str) -> dict[str, Any]:
+    from backend.tools.m63_trade_journal import sync_trade_journal
+
+    return sync_trade_journal(db_path=db_path, as_of=as_of)
 
 
 def _run_discretion(panel: dict[str, Any], db_path: str | Path | None, as_of: str) -> dict[str, Any]:
@@ -972,6 +979,7 @@ def build_postmarket_report(
     steps.append(_step_result("m54_daily_accrual", overrides.get("m54_daily_accrual", lambda: _run_accrual(day, no_llm=no_llm))))
     steps.append(_step_result("m58_exit_shadow", overrides.get("m58_exit_shadow", _run_exit_shadow)))
     steps.append(_step_result("m59_panel", overrides.get("m59_panel", lambda: _run_panel(day))))
+    steps.append(_step_result("m63_trade_journal", overrides.get("m63_trade_journal", lambda: _run_trade_journal(db_path, day))))
     panel = next((step["result"] for step in steps if step["name"] == "m59_panel" and step["ok"]), None)
     if panel is not None:
         from backend.tools.m59_discretion import m59_discretion_enabled

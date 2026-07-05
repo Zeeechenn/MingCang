@@ -15,7 +15,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from backend.config import default_sqlite_path
+from backend.config import default_sqlite_path, settings
 from backend.data.context_builder import corporate_event_visible_as_of
 from backend.data.degradation import recent_degradations
 from backend.data.fundamentals import compute_piotroski_factors
@@ -30,6 +30,7 @@ DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
 # reads the latest one, it never triggers a scan itself.
 DEFAULT_WATCHTOWER_OUTPUT_DIR = Path("/private/tmp")
 BUY_RECOMMENDATIONS = {"买", "买入", "强买", "考虑买入", "watch/考虑买入"}
+LONG_TERM_VETO_LABELS = {"规避", "不关注", "回避", "avoid"}
 
 # 2026-07-03 网格证伪:动量末档(bottom20%)在下行市反向(弱股反弹),不能当避雷器用,
 # 仅上行/震荡市参考。regime 判定复用 m58 的池等权均线趋势函数,短窗5日 vs 长窗20日。
@@ -1271,6 +1272,44 @@ def _attach_entry_readiness(
         )
 
 
+def _portfolio_mode() -> str:
+    return settings.portfolio_mode if settings.portfolio_mode in {"focus", "diversified"} else "focus"
+
+
+def _candidate_veto_reasons(item: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    label = ((item.get("research_reference") or {}).get("long_term_label") or {}).get("label")
+    if str(label or "") in LONG_TERM_VETO_LABELS:
+        reasons.append(f"长期标签{label}")
+    quality_flags = item.get("quality_flags") or []
+    if quality_flags:
+        reasons.append("质量旗标:" + ",".join(str(flag) for flag in quality_flags))
+    readiness_vetoes = (item.get("entry_readiness") or {}).get("vetoes") or []
+    if any("论点证伪警报" in str(veto) for veto in readiness_vetoes):
+        reasons.append("论点证伪警报")
+    return reasons
+
+
+def _apply_portfolio_mode(buy_candidates: dict[str, Any], mode: str) -> dict[str, Any]:
+    items = list(buy_candidates.get("items") or [])
+    if mode != "diversified":
+        buy_candidates["vetoed_items"] = []
+        return buy_candidates
+    kept: list[dict[str, Any]] = []
+    vetoed: list[dict[str, Any]] = []
+    for item in items:
+        reasons = _candidate_veto_reasons(item)
+        if reasons:
+            blocked = dict(item)
+            blocked["veto_reasons"] = reasons
+            vetoed.append(blocked)
+        else:
+            kept.append(item)
+    buy_candidates["items"] = kept
+    buy_candidates["vetoed_items"] = vetoed
+    return buy_candidates
+
+
 def build_panel(
     *,
     db_path: str | Path | None = None,
@@ -1299,8 +1338,11 @@ def build_panel(
                 db_session,
                 risk_warnings.get("market_regime") or {},
             )
+            mode = _portfolio_mode()
+            buy_candidates = _apply_portfolio_mode(buy_candidates, mode)
             return {
                 "schema_version": "postmarket_panel.v1",
+                "portfolio_mode": mode,
                 "summary": _build_summary(buy_candidates, position_health, risk_warnings),
                 "header": _build_header(con, resolved_as_of),
                 "buy_candidates": buy_candidates,
@@ -1357,9 +1399,23 @@ def render_markdown(panel: dict[str, Any]) -> str:
         f"- 行情参考: {market_reference_line}",
         "",
         "## ① 候选区",
-        "| symbol | name | score | stop_loss | take_profit | llm_layer | 质量 | 研究参考 |",
-        "|---|---|---:|---:|---:|---|---|---|",
     ]
+    mode = panel.get("portfolio_mode") or "focus"
+    if mode == "diversified":
+        n_candidates = len(panel["buy_candidates"]["items"])
+        if n_candidates:
+            lines.append(
+                f"等权参考:若同时持有 {n_candidates} 支候选,每支≈资金/{n_candidates}"
+                f"(受单股上限{settings.max_position_per_stock:.1%}约束)"
+            )
+        else:
+            lines.append("等权参考:当前无非否决候选")
+    lines.extend(
+        [
+            "| symbol | name | score | stop_loss | take_profit | llm_layer | 质量 | 研究参考 |",
+            "|---|---|---:|---:|---:|---|---|---|",
+        ]
+    )
     for item in panel["buy_candidates"]["items"]:
         quality_flags = item.get("quality_flags") or []
         quality_text = (
@@ -1379,6 +1435,18 @@ def render_markdown(panel: dict[str, Any]) -> str:
             lines.append(f"  - {render_readiness_line(readiness)}")
         for entry_line in render_entry_card_compact(entry_card):
             lines.append(f"  - {entry_line}")
+    vetoed = panel["buy_candidates"].get("vetoed_items") or []
+    if mode == "diversified":
+        lines.extend(["", "## 否决区"])
+        if vetoed:
+            lines.append("| symbol | name | 否决原因 |")
+            lines.append("|---|---|---|")
+            for item in vetoed:
+                lines.append(
+                    f"| {item['symbol']} | {item.get('name') or ''} | {', '.join(item.get('veto_reasons') or [])} |"
+                )
+        else:
+            lines.append("暂无")
     lines.extend(
         [
             "",
@@ -1400,6 +1468,10 @@ def render_markdown(panel: dict[str, Any]) -> str:
     momentum_tail = risk["momentum_tail"]
     concentration = risk["concentration"]
     buffer_ranking = risk["stop_loss_buffer_ranking"]
+    if mode == "diversified":
+        lines.append(
+            f"组合集中度:前三仓占比{concentration.get('top3_weight_pct')}%"
+        )
     lines.extend(
         [
             "",
