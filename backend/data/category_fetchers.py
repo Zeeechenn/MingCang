@@ -872,6 +872,90 @@ def fetch_fund_flow_eastmoney_fflow_history(request: FetchRequest) -> list[dict]
     return rows
 
 
+SINA_MONEYFLOW_HISTORY_URL = (
+    "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/MoneyFlow.ssl_qsfx_lscjfb"
+)
+SINA_MONEYFLOW_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://finance.sina.com.cn/",
+}
+_SINA_THROTTLE = SharedThrottle()
+
+
+def _sina_daima(symbol: str) -> str:
+    if symbol.startswith("6"):
+        return f"sh{symbol}"
+    if symbol.startswith(("4", "8", "92")):
+        return f"bj{symbol}"
+    return f"sz{symbol}"
+
+
+def _parse_sina_moneyflow_item(item: dict[str, Any], symbol: str, fetched_at: datetime) -> dict | None:
+    # Sina 逐日资金流: r0=超大单, r1=大单, r2=中单, r3=小单（净额单位:元）。
+    # 主力净额口径与东财一致 = 超大单净额 + 大单净额。
+    trade_date = _parse_datetime(item.get("opendate"))
+    super_large_net = _to_float(item.get("r0_net"))
+    large_net = _to_float(item.get("r1_net"))
+    if trade_date is None or super_large_net is None or large_net is None:
+        return None
+    main_net = super_large_net + large_net
+    return {
+        "symbol": symbol,
+        "trade_date": trade_date,
+        "main_net": main_net,
+        "super_large_net": super_large_net,
+        "large_net": large_net,
+        "medium_net": _to_float(item.get("r2_net")),
+        "small_net": _to_float(item.get("r3_net")),
+        "metric": "main_net",
+        "value": main_net,
+        "currency": "CNY",
+        "source": "sina_moneyflow_history",
+        "provider": "sina_moneyflow_history",
+        "fetched_at": fetched_at,
+    }
+
+
+def fetch_fund_flow_sina_history(request: FetchRequest) -> list[dict]:
+    if not request.symbol:
+        raise ValueError("symbol is required for sina_moneyflow_history")
+    _SINA_THROTTLE.wait()
+    response = requests.get(
+        SINA_MONEYFLOW_HISTORY_URL,
+        params={
+            "page": "1",
+            "num": str(request.limit or 120),
+            "sort": "opendate",
+            "asc": "0",
+            "daima": _sina_daima(request.symbol),
+        },
+        headers=SINA_MONEYFLOW_HEADERS,
+        timeout=10,
+    )
+    response.raise_for_status()
+    payload = json.loads(response.text)
+    if not isinstance(payload, list):
+        raise ValueError("sina_moneyflow_history payload is not a list")
+
+    fetched_at = _utcnow()
+    rows = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        row = _parse_sina_moneyflow_item(item, request.symbol, fetched_at)
+        if row is None:
+            continue
+        if request.start and row["trade_date"].date() < request.start:
+            continue
+        if request.end and row["trade_date"].date() > request.end:
+            continue
+        rows.append(row)
+    return rows
+
+
 def _overseas_row(item: dict[str, Any], symbol: str, name: str, fetched_at: datetime) -> dict | None:
     date_value = _first_present(item, ("日期", "交易日期", "date", "snap_date"))
     close = _to_float(_first_present(item, ("收盘价", "收盘", "最新价", "close")))
@@ -1265,6 +1349,23 @@ def _probe_eastmoney_fflow_history() -> bool:
         return False
 
 
+def _probe_sina_moneyflow() -> bool:
+    try:
+        _SINA_THROTTLE.wait()
+        response = requests.get(
+            SINA_MONEYFLOW_HISTORY_URL,
+            params={"page": "1", "num": "1", "sort": "opendate", "asc": "0", "daima": "sh601869"},
+            headers=SINA_MONEYFLOW_HEADERS,
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = json.loads(response.text)
+        return bool(isinstance(payload, list) and payload and payload[0].get("opendate"))
+    except Exception as exc:
+        logger.debug("sina_moneyflow_history probe failed: %s", exc)
+        return False
+
+
 def _probe_ifind_global() -> bool:
     if not settings.ifind_mcp_enabled or not settings.ifind_mcp_token:
         return False
@@ -1326,6 +1427,15 @@ register_category_provider(
         fetch=fetch_fund_flow_eastmoney_fflow,
         probe=_probe_eastmoney_fflow,
         priority=10,
+    )
+)
+register_category_provider(
+    CategoryProvider(
+        name="sina_moneyflow_history",
+        category="fund_flow",
+        fetch=fetch_fund_flow_sina_history,
+        probe=_probe_sina_moneyflow,
+        priority=11,
     )
 )
 register_category_provider(

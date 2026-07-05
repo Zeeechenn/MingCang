@@ -548,6 +548,58 @@ def test_eastmoney_fflow_history_maps_fixture_and_filters(monkeypatch):
     assert row["provider"] == "eastmoney_fflow_history"
 
 
+def test_sina_moneyflow_history_maps_fixture_and_filters(monkeypatch):
+    import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
+
+    captured = {}
+
+    class FakeResponse:
+        text = (
+            '[{"opendate":"2026-07-01","r0_net":"100.5","r1_net":"-40.5",'
+            '"r2_net":"7.0","r3_net":"-3.0"},'
+            '{"opendate":"2026-06-30","r0_net":"11.0","r1_net":"22.0",'
+            '"r2_net":"1.0","r3_net":"2.0"}]'
+        )
+
+        def raise_for_status(self):
+            return None
+
+    def fake_get(url, params, headers, timeout):
+        captured.update({"url": url, "params": params, "headers": headers, "timeout": timeout})
+        return FakeResponse()
+
+    monkeypatch.setattr(fetchers.requests, "get", fake_get)
+    monkeypatch.setattr(fetchers, "_utcnow", lambda: datetime(2026, 7, 6, 9, 0))
+    monkeypatch.setattr(fetchers._SINA_THROTTLE, "wait", lambda: None)
+
+    rows = fetchers.fetch_fund_flow_sina_history(
+        FetchRequest(symbol="300759", start=date(2026, 7, 1), end=date(2026, 7, 4), limit=120)
+    )
+
+    assert captured["url"] == fetchers.SINA_MONEYFLOW_HISTORY_URL
+    assert captured["params"]["daima"] == "sz300759"
+    assert captured["params"]["num"] == "120"
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["trade_date"] == datetime(2026, 7, 1)
+    assert row["super_large_net"] == 100.5
+    assert row["large_net"] == -40.5
+    assert row["main_net"] == 60.0
+    assert row["medium_net"] == 7.0
+    assert row["small_net"] == -3.0
+    assert row["provider"] == "sina_moneyflow_history"
+
+
+def test_sina_daima_prefixes():
+    import backend.data.category_fetchers as fetchers
+
+    assert fetchers._sina_daima("601869") == "sh601869"
+    assert fetchers._sina_daima("300759") == "sz300759"
+    assert fetchers._sina_daima("002821") == "sz002821"
+    assert fetchers._sina_daima("830799") == "bj830799"
+
+
 def test_save_helpers_are_idempotent(test_db):
     from backend.data.category_fetchers import (
         save_announcements,
