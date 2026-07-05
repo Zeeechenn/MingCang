@@ -257,20 +257,20 @@ DATABASE_URL=sqlite:////absolute/path/to/mingcang.db
 MINGCANG_AGENT_MODE=local
 ```
 
-Default local mode uses `AI_PROVIDER=local_cli`, preferring your logged-in local AI runtime and requiring no cloud LLM key. Fill the keys below only when enabling the matching provider or feature:
+Default local mode uses `AI_PROVIDER=local_cli`, preferring your logged-in local AI runtime and requiring no cloud LLM key; market data and news default to key-free sources (Eastmoney etc.). **The base flow runs with zero keys.** Fill the keys below only when enabling the matching provider or feature:
 
-| Variable | When to set | Notes |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` | Anthropic Claude runtime key. |
-| `OPENAI_API_KEY` | `AI_PROVIDER=openai` | OpenAI or compatible API key. |
-| `OPENAI_BASE_URL` | OpenAI-compatible gateway | Leave empty for OpenAI's official endpoint. |
-| `TUSHARE_TOKEN` | Tushare Pro A-share data supplement | Optional market-data provider. |
-| `TICKFLOW_API_KEY` | `TICKFLOW_ENABLED=true` | TickFlow market-data provider key. |
-| `IFIND_MCP_TOKEN` | `IFIND_MCP_ENABLED=true` | iFinD observe-only adapter token. |
-| `TAVILY_API_KEY` | Real-time news/search supplement | Used when DB news is insufficient. |
-| `ANSPIRE_API_KEY` | Deep research or strict event-news retrieval | Anspire search key. |
-| `BARK_KEY` | iOS Bark notifications | Optional notification key. |
-| `MINGCANG_AGENT_API_KEY` | `MINGCANG_AGENT_MODE=remote` | Required for remote agent exposure; local mode does not need it. |
+| Variable | When to set | Where to get it | Cost |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` | [console.anthropic.com](https://console.anthropic.com/) | Paid, usage-based |
+| `OPENAI_API_KEY` | `AI_PROVIDER=openai` | [platform.openai.com](https://platform.openai.com/api-keys) | Paid, usage-based |
+| `OPENAI_BASE_URL` | OpenAI-compatible gateway | Leave empty for OpenAI's official endpoint | — |
+| `TUSHARE_TOKEN` | Tushare Pro A-share data supplement | [tushare.pro](https://tushare.pro/register) | Free signup; points system unlocks endpoints |
+| `TICKFLOW_API_KEY` | `TICKFLOW_ENABLED=true` | [tickflow.org](https://tickflow.org/) | Free tier available |
+| `IFIND_MCP_TOKEN` | `IFIND_MCP_ENABLED=true` | [mcp.51ifind.com](https://mcp.51ifind.com/) (iFinD MCP by Hithink/同花顺) | Free tier (daily/monthly caps); paid personal plan is roomier |
+| `TAVILY_API_KEY` | Real-time news/search supplement | [tavily.com](https://www.tavily.com/) | Free monthly quota |
+| `ANSPIRE_API_KEY` | Deep research or strict event-news retrieval | [anspire.cn](https://www.anspire.cn/) | Paid, prepaid credits |
+| `BARK_KEY` | iOS Bark notifications | [Bark iOS App](https://github.com/Finb/Bark) (device key auto-generated in app) | Free |
+| `MINGCANG_AGENT_API_KEY` | `MINGCANG_AGENT_MODE=remote` | Generate any strong random string yourself; not a third-party key | — |
 
 Remote exposure is opt-in and read-only by default:
 

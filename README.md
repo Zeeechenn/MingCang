@@ -257,20 +257,20 @@ DATABASE_URL=sqlite:////absolute/path/to/mingcang.db
 MINGCANG_AGENT_MODE=local
 ```
 
-默认本地模式使用 `AI_PROVIDER=local_cli`，优先走本机已登录的本地 AI 运行时，不需要云端 LLM key。只有启用对应 provider 或能力时，才需要填写下面的 key：
+默认本地模式使用 `AI_PROVIDER=local_cli`，优先走本机已登录的本地 AI 运行时，不需要云端 LLM key；行情/新闻默认走东财等免 key 源。**零 key 也能跑通基础流程**，只有启用对应 provider 或能力时，才需要填写下面的 key：
 
-| 变量 | 何时填写 | 说明 |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` | Anthropic Claude 运行时 key。 |
-| `OPENAI_API_KEY` | `AI_PROVIDER=openai` | OpenAI 或兼容接口 key。 |
-| `OPENAI_BASE_URL` | 使用 OpenAI 兼容网关时 | 留空表示 OpenAI 官方地址。 |
-| `TUSHARE_TOKEN` | 需要 Tushare Pro A 股数据补充时 | 可选行情 provider。 |
-| `TICKFLOW_API_KEY` | `TICKFLOW_ENABLED=true` | TickFlow 行情 provider key。 |
-| `IFIND_MCP_TOKEN` | `IFIND_MCP_ENABLED=true` | iFinD MCP observe-only 适配器 token。 |
-| `TAVILY_API_KEY` | 需要实时新闻或搜索补充时 | DB 新闻不足时可补充 Tavily。 |
-| `ANSPIRE_API_KEY` | deep research 或严格事件新闻抓取 | Anspire 搜索 key。 |
-| `BARK_KEY` | 需要 iOS Bark 推送时 | 可选通知 key。 |
-| `MINGCANG_AGENT_API_KEY` | `MINGCANG_AGENT_MODE=remote` | 远程 agent 暴露必须设置；本地模式不需要。 |
+| 变量 | 何时填写 | 获取地址 | 费用 |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` | [console.anthropic.com](https://console.anthropic.com/) | 付费按量 |
+| `OPENAI_API_KEY` | `AI_PROVIDER=openai` | [platform.openai.com](https://platform.openai.com/api-keys) | 付费按量 |
+| `OPENAI_BASE_URL` | 使用 OpenAI 兼容网关时 | 留空表示 OpenAI 官方地址 | — |
+| `TUSHARE_TOKEN` | 需要 Tushare Pro A 股数据补充时 | [tushare.pro](https://tushare.pro/register) | 免费注册，积分制解锁接口 |
+| `TICKFLOW_API_KEY` | `TICKFLOW_ENABLED=true` | [tickflow.org](https://tickflow.org/) | 有免费额度 |
+| `IFIND_MCP_TOKEN` | `IFIND_MCP_ENABLED=true` | [mcp.51ifind.com](https://mcp.51ifind.com/)（同花顺 iFinD MCP） | 有免费档（日/月双层限额），个人付费档更宽 |
+| `TAVILY_API_KEY` | 需要实时新闻或搜索补充时 | [tavily.com](https://www.tavily.com/) | 有免费月度额度 |
+| `ANSPIRE_API_KEY` | deep research 或严格事件新闻抓取 | [anspire.cn](https://www.anspire.cn/) | 付费充值按量 |
+| `BARK_KEY` | 需要 iOS Bark 推送时 | [Bark iOS App](https://github.com/Finb/Bark)（App 内自动生成设备 key） | 免费 |
+| `MINGCANG_AGENT_API_KEY` | `MINGCANG_AGENT_MODE=remote` | 自行生成任意强随机串，非第三方申请 | — |
 
 远程暴露是 opt-in，默认只读：
 
