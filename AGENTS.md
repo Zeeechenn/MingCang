@@ -199,4 +199,7 @@ cd frontend && npm run dev
 - 周末 weekly: `python3 -m backend.tools.m63_weekly --no-llm`
 - 研究 <目标> on-demand: `python3 -m backend.tools.m63_research --target <目标>`
 - 喂观点: `python3 -m backend.tools.m63_opinion --text '<观点内容>' --source manual`
+- 看 vs 研：只想读某只股票的现有上下文（零成本）用 `backend.agent.cli stock-context`；
+  要产出新研究结论（消耗 LLM、登记研究队列）用 `m63_research`。深研模块直调
+  （`backend.research.deep_research`）属高级用法，绕过 m63 路由与队列登记，日常勿用。
 - 数据任务先查 `docs/data-sources/` 手册。

@@ -1037,6 +1037,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed-queries", default="", help="逗号分隔 Tavily seed queries，用于首轮纯内存补证")
     args = parser.parse_args(argv)
 
+    print("提示：日常研究入口是 `python3 -m backend.tools.m63_research --target <目标>`；直调本模块绕过 m63 路由与研究队列登记。")
+
     from backend.data.database import SessionLocal
 
     db = SessionLocal()

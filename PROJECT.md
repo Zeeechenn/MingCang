@@ -87,7 +87,7 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 | `backend/research/case.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/dossier.py`, `backend/research/gate_b_recorder.py` | 把 dossier 派生成 ResearchCase、quality gate 和 validity card。 |
 | `backend/research/case_view.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py` | 聚合 thesis/review/forward/theme 记录供 Case View 读取。 |
 | `backend/research/copilot.py` | M63 现役 | active | `backend/api/routes/research.py`, `backend/tools/m63_research.py` | 生成单股研究副驾驶影子结论。 |
-| `backend/research/deep_research.py` | M63 现役 | active | `backend/api/routes/research.py`, `backend/research/research_report_gate.py`, `backend/tools/m63_research.py` | 执行手动周末/主题深研并在写入前过报告门。 |
+| `backend/research/deep_research.py` | M63 现役 | active | `backend/api/routes/research.py`, `backend/research/research_report_gate.py`, `backend/tools/m63_research.py` | 执行手动周末/主题深研并在写入前过报告门。日常入口经 `m63_research` 路由；模块直调属高级用法（R2 收敛）。 |
 | `backend/research/dossier.py` | M63 现役 | active | `backend/api/routes/research.py` | 汇总单股研究 dossier 供 API 和 M63 研究上下文使用。 |
 | `backend/research/forward_thesis.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/watchlist.py`, `backend/tools/m45_import_track_theses.py`, `backend/tools/m60_thesis_sync.py`, `backend/tools/m60_watchtower.py` | 存储前瞻 thesis、置信区间和证据清单。 |
 | `backend/research/gate_b_recorder.py` | ATLAS-dormant | gate-guarded | `backend/tools/atlas_stage2b_strict_gate.py`, `backend/tools/atlas_test4_stage2b_shadow.py`, `backend/tools/gate_b_tracker.py` | Atlas Gate-B 前瞻观察记录和报告工具层。 |
