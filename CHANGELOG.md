@@ -8,8 +8,14 @@
 
 ## [Unreleased]
 
+_（下一版工作累积区）_
+
+---
+
+## [v0.6.0] Trading operation loop, review orchestration, memory self-evolution & release hardening / 买卖操作闭环、复盘编排、记忆自进化与发布加固（2026-07-05）
+
 ### Upgrade notes / 升级说明
-- Schema 初始化仍由 `python3 backend/data/database.py` 幂等执行；项目现状是 SQLAlchemy `create_all` + runtime schema 补丁并行维护，历史评审记录已建议 Alembic，但本发布包不引入新的 Alembic 迁移要求。
+- 本版明确 `init_db()`（`Base.metadata.create_all` + `_ensure_runtime_schema`）为唯一 schema 权威路径；Alembic 已显式退役（`alembic/DORMANT.md`，启动链与 CI 均不调用 `alembic upgrade`，保留仅作历史）。schema 漂移由 `tests/test_schema_authority.py` 的 golden 快照守卫强制把关：任何 ORM 或 runtime DDL 改动都会让它变红，须显式重生成 golden。Schema 初始化仍由 `python3 backend/data/database.py` 幂等执行。
 - 本次补齐的环境变量均已有 `backend/config.py` 默认值；`.env.example` 仅补公开配置面和占位符，未要求新增必填 key。
 - 已核对本次公开入口说明：`mingcang stock` 仍是只读 `stock-context`；M63 日常入口仍由 `m63_daily` 三个 mode 加 `m63_weekly` / `m63_research` / `m63_opinion` 承载，未发现破坏性 CLI 变更。
 
@@ -30,6 +36,33 @@
 - 将当前仓库授权从 MIT License 调整为 PolyForm Noncommercial License 1.0.0；当前及后续版本允许非商业使用、修改与分发，不再允许未经授权的商业使用。
 - 同步更新 README / README_EN badge 与授权说明、`pyproject.toml` 项目元数据、`CONTRIBUTING.md` 贡献说明。
 - 压缩 `docs/ROADMAP.md`：把两个已彻底完成的里程碑（M50、M55）的完整详情段从活跃路线图下沉，活跃表只保留进行中/未启动/触发待命工作线；权威技术详情仍在 `docs/dev/m50_research_report_gate_spec.md` 与 `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md`，里程碑级承重点见下。目的：减少 fresh agent 每次读 ROADMAP 的上下文体积。
+
+### 发布工程与加固 / Release engineering & hardening（外部代码评审收口 + 类型门清零）
+
+本版对照一次外部代码评审做了系统性加固，均未改官方信号 / 仓位 / scheduler / production weights / 研究裁量逻辑（observe-only 与打分口径不变）。
+
+Added / 新增
+- **Schema 单一权威守卫**（`tests/test_schema_authority.py`）：以 golden 快照冻结 `init_db()` 全量 schema（56 张表，PRAGMA 结构化、抗空白/注释），任何 ORM 模型或 runtime DDL 漂移都会让 CI 变红、须显式重生成 golden——补齐此前"三源（ORM `create_all` + runtime 裸 DDL + Alembic）无强制对齐"的缺口。Alembic 同步显式退役（`alembic/DORMANT.md`）。
+- **防未来函数（PIT）守卫专项测试**（`tests/test_lookahead_guard.py`）：`evidence/lookahead.py` 覆盖率 0% → 100%（只读契约、status→动作映射、只读开库路径），把量化系统核心安全路径纳入回归网。
+- **前端测试与 lint 基建**：接入 vitest + jsdom + @testing-library 端到端冒烟测试（`npm test` 现真正运行单测），ESLint 9 flat config（react-hooks 正确性 + 死代码，advisory 非阻断），playwright 纳入 devDependencies（修复干净检出跑 `npm run smoke` 缺依赖）。
+- **CI/工具链**：pre-commit 增 gitleaks 密钥扫描；pytest 增 `slow`/`integration` 分级 marker；pre-commit ruff 版本对齐 `pyproject`（v0.15.20）。
+
+Changed / 变更
+- **前端环境化配置**：API baseURL、请求超时、健康轮询间隔改读 `import.meta.env`（`VITE_API_BASE` / `VITE_API_TIMEOUT_MS` / `VITE_HEALTH_POLL_MS`），均以现值兜底，不改默认行为；换环境不再需要改代码。
+- **HTTP 边界**：CORS `allow_methods`/`allow_headers` 从通配 `*` 收敛为显式白名单（origins 早已收敛）。
+- **数据库连接**：engine 增 `pool_pre_ping` + `pool_recycle`（SQLite 无害，迁 Postgres 防 stale connection）。
+- **LLM provider**：新增统一 `LLM_REQUEST_TIMEOUT_SECONDS`（默认 60s）用于 openai/anthropic；补齐 Anthropic 此前缺失的显式请求超时；重复的重试装饰器抽到 `llm/base.py`（`llm_retry` + `LLMFatalResult`），鉴权/非法请求类致命错误不再触发退避重试（避免白烧 3× 退避）。
+- **Docker**：新增 `.dockerignore`（把本地数据库、虚拟环境、`node_modules`、个人数据挡在构建上下文外）；后端镜像改以非 root 用户运行；移除把 `.env.example` 烘进镜像的步骤。
+
+Fixed / 修复
+- **全局异常处理**：未捕获异常统一转为脱敏 JSON（`{"detail":"Internal Server Error"}`），不再向客户端泄露栈追踪；`/health` 改为真正 ping 数据库（`SELECT 1`），数据库不可用时返回 503/degraded。
+- **配置 fail-closed 守卫**：本地 agent 模式（绕过写鉴权）与非本地 CORS origin 的危险组合在启动时 fail-closed（默认 localhost 配置不受影响）。
+- **后端类型门清零**：`mypy backend` 由 58 个错误清到 0（补标注 / None 守卫 / 等价改写，零行为回归），CI "Backend lint/typecheck" 门转绿。
+- **可审计性**：收口一批 `except Exception` 静默吞错——单一 JSON 解析窄化为具体异常类型，其余静默 fallback 补日志。
+- **测试隔离**：M59 裁量层"禁用即无步骤"测试改用显式置 env 为 falsy（不再依赖运行环境的 `.env` 灰度状态）。
+
+Safety / 安全边界
+- 以上加固不改任何官方信号、止损止盈、仓位写入、scheduler、production weights 或研究裁量结论；发布前门：后端 `pytest` 全绿、`mypy backend` 0 error、前端 tsc + vitest + build 绿。
 
 ### Completed milestone records / 完成里程碑归档（原在 ROADMAP 活跃段，现下沉）
 - **M61 数据基建统筹改造(P0-P4,2026-07-04~05)**:数据源手册库7份+源体检harness+发牌表;中度重构七簇(品类无关注册表+数据合同接线、公告/研报/龙虎榜/公司事件/股东五品类落地、flow腿补建、Piotroski无增发因子修复、声明-验证CI强制关联、静默吞错清剿、统一stock context builder);消费端三件(长期标签/copilot+面板/观察哨)接统一上下文包;判断门盲裁终裁:10案例(半年窗口跨regime)×双模型60票,净版 full-context 6:starved 3:平1,跨模型方向一致9/10,判定=数据价值成立、纪律必须规则化;公司事件PIT语义修复;002821/300759盲区股历史回填;300759复权断点qfq重抓修复(-58%假断崖消除)。

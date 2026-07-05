@@ -8,9 +8,10 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.5.2`; the latest
-documented release is `v0.5.2` track-analyst de-personalization and M51 plan
-archive in `CHANGELOG.md`.
+Current release surface: package/API/frontend versions are `0.6.0`; the latest
+documented release is `v0.6.0` — trading operation loop, review orchestration,
+memory self-evolution (M57 Phase 1), and an external-review hardening pass
+(see `CHANGELOG.md`).
 
 ## Current State
 
@@ -22,7 +23,7 @@ archive in `CHANGELOG.md`.
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
 | quant_score provenance | LGBM served through 2026-06-05; since the 2026-06-06 rename the model file was never migrated to `~/.mingcang/models/`, so `quant_score` has silently been the `placeholder_v0` momentum fallback (0.6×mom5 + 0.4×mom20). Fixed 2026-07-03: missing model now emits an explicit one-time warning and `quant_model` provenance is persisted per signal into `decision_runs.input_snapshot_json` (regression: `tests/test_quant_model_degradation.py`). Momentum fallback deliberately kept serving (M26 gates failed → `keep_quant_disabled`; LGBM in-service ICIR ≈ 0.07); production composite unaffected (`WEIGHT_QUANT=0.0`). Caveat: the Saturday 09:00 `job_train_model` cron would write a fresh model and flip serving back to LGBM if the scheduler daemon runs |
-| completed history | v0.3.3–v0.5.2 / M45–M55: see `CHANGELOG.md` (not restated here) |
+| completed history | v0.3.3–v0.6.0 / M45–M55: see `CHANGELOG.md` (not restated here) |
 | paper trading test2 | v1 ended 2026-07-02 (10 trades, 60% win, +19.53% weighted); **v2 started 2026-07-03**: exit params unchanged per M21.4 decision C (single-variable), direction-only evidence as before |
 | M51 external borrowing | suspended 2026-07-03 (star-growth strategy deferred); landed pieces kept in service: D1 DSR/PBO/trial-count contract in `m29_hypothesis_registry`, report-pack v1 adapter |
 | M44 / Atlas | **archived REJECT 2026-07-03**: Gate-B historical backfill verdict REJECT (delta -0.59pp), relaxed gate variants all worse, Stage 2b overlay 8.0% vs baseline 27.95%. Research-artifacts-as-signal-filter line falsified. L0-L4 memory / cases / review loop / evidence ledger kept as infrastructure for M57 (no scoring role); evidence accrual stopped; `ATLAS_ENABLED=false` permanent |
@@ -79,12 +80,12 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last full recorded gate for v0.5.2 on 2026-06-15:
+Last full recorded gate for v0.6.0 on 2026-07-05:
 `make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 RUFF_CACHE_DIR=/private/tmp/mingcang_ruff_cache
 MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache` passed locally: ruff passed,
-mypy passed, backend pytest reported 1214 passed / 5 skipped, frontend
-typecheck/Vite test/build passed, and frontend lint-summary passed. GitHub CI
+mypy passed (0 errors), backend pytest reported 1657 passed / 5 skipped,
+frontend typecheck/Vite test/build passed, and frontend lint-summary passed. GitHub CI
 should still be checked after push before treating the release as remote-green.
 
 For release-quality work, treat `make verify` as the canonical gate.
