@@ -108,6 +108,9 @@
 | Memory Summarizer | 对记忆进行摘要，降低上下文膨胀。 | `backend/memory/summarizer.py` | 维护者/影子 | 可能写摘要。 |
 | Bias Override | 对已知偏差做显式覆盖或提醒。 | `backend/memory/bias_override.py` | 影子 | 用于风险提醒。 |
 | Should Remember | 判断某条内容是否值得记忆。 | `backend/memory/should_remember.py` | 影子 | 不直接写入，辅助候选。 |
+| Evolution Trace | 记忆自进化轨迹：三时间戳双时间轴 + 七仓 namespace，记录记忆从产生到确认/归档的演进。 | `backend/memory/evolution_trace.py` | 维护者/影子 | 治理=LLM 初审 + 人工复核。 |
+| Task Capsule | 盘后自动落任务胶囊，沉淀当日决策上下文供后续检索。 | 盘后链 | 维护者 | 写胶囊；不改信号。 |
+| Context Governor | 常驻 + 检索两层记忆治理：预算裁剪、注入去重，控制上下文膨胀。 | `backend/memory/context_governor.py` | 维护者/影子 | 只治理注入，不改信号。 |
 
 ## 7. 新闻和数据
 
@@ -200,6 +203,8 @@
 
 ## 12. Scheduler 和工作流
 
+说明：盘前/盘中/盘后/周末的日常操作现由 M63 六命令编排（见 §16）；`backend/jobs/*` 为其底层 job，`m63_daily --mode postmarket` 内部已编排盘后链。
+
 | 功能 | 功能说明 | 入口 | 状态 | 写入/信号/Key |
 |---|---|---|---|---|
 | Scheduler | 定时注册和管理盘前/盘后/周末 job。 | `backend/scheduler.py` | 维护者 | 默认关闭。 |
@@ -256,3 +261,21 @@
 | Frontend Build | Vite production build。 | `npm run build` | 维护者 | 写 build artifact。 |
 | Lint/Format | ruff、ESLint、format checks。 | Makefile | 维护者 | 不改业务行为。 |
 | Changelog | 记录已完成历史。 | `CHANGELOG.md` | 常用/维护者 | 文档。 |
+
+## 16. 每日操作闭环（M63 复盘编排 + M59 盘后面板）
+
+面向"每日盘后操作"的工作流层：把触发判断、入场时机、持仓纪律和复盘归因编排成一条可读的日常流程。面板与卡片均为**只读展示 + 人工确认**，不改官方信号、不自动下单。
+
+| 功能 | 功能说明 | 入口 | 状态 | 写入/信号/Key |
+|---|---|---|---|---|
+| M63 日常编排 | 六个工作流入口把盘前/盘中/盘后/周末/随时研究/喂观点统一成人话命令，盘后 mode 内部编排复盘链与触发路由。 | `m63_daily --mode premarket\|intraday\|postmarket`、`m63_weekly`、`m63_research`、`m63_opinion` | 常用 | 盘后可写复盘/触发队列；盘后决策 mode 走 LLM。 |
+| M59 盘后面板 | 盘后决策面板：买入候选 + 持仓体检 + 风险警示 + 财务质量旗标，一屏看清当日操作。 | `m63_daily --mode postmarket`、`m59_panel`、Web `/daily` | 常用/只读 | 只读展示；不改官方信号。 |
+| 四条硬规则 | R1 每条风险警示带确定性保护动作（实算止损/减仓比例）；R2 观望结论带可观测再评估触发；R3 持仓体检出 `atr14`/`stop_gap_atr`/`stop_flags`（止损贴身<1.5×ATR、动量股静态止盈标旗）；R4 财务质量旗标进候选与体检。 | m59_panel | 常用 | 影响用户理解，不制造 alpha。 |
+| LLM 裁量层 | 候选内选股裁量、清仓决断、加减仓时机、复盘归因提炼；带反方审视步。 | `M59_DISCRETION_ENABLED`（默认关，灰度） | 影子/默认关 | 做裁量不打分；不覆盖官方信号。 |
+| 入场条件卡 | V1/V2/V3 给出实算价位/量能/风险线 + 单笔风险预算参考股数（单票模式）。 | 面板 / 条件卡 | 常用/只读 | 展示；`ENTRY_ACCOUNT_SIZE` 空时只给公式。 |
+| 入场准备度分 | 四维透明记点 + 否决项；三道校准门未过时如实渲染"仅证据清单"，校准转前向攒样本。 | 面板 | 常用/只读 | 不是预测，是证据清单可视化。 |
+| 入场演练场 | 历史触发 PIT 回放 + 随机对照臂 + 分箱校准，验证入场机制。 | `m58_entry_arena` | 维护者/只读 | 零 LLM；只给证据。 |
+| 论点触发器 | `ForwardThesis` 为唯一权威存储；validation 触发进研究队列，invalidation 触发出持仓论点风险警示。 | 触发路由 / 研究队列 | 影子/常用 | 出警示，不自动交易。 |
+| M60 观察哨 | 盘后确定性检测价格/量能/新高/新闻/板块共振触发，带研究上下文的 LLM 确认层；第二时间入场影子台账 observe-only。 | `m60_watchtower` | 常用/影子 | 检测只读；影子台账不改信号。 |
+| 交易级复盘台账 | 开仓记 snapshot（准备度/触发器/条件卡），平仓补结局，周报按准备度 band 归因。 | 复盘链 / `m63_weekly` | 常用 | 写台账；不改信号。 |
+| 分散持仓模式 | `PORTFOLIO_MODE=diversified` 提供等权参考 + 否决区 + 集中度视图；`focus` 单票模式为默认、不变。 | `PORTFOLIO_MODE` | 可选 | 只给组合参考。 |

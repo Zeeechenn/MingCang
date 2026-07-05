@@ -4,6 +4,8 @@
 
 ## 1. CLI
 
+这些是 Pi 壳工作流合同；日常操作的当前入口是下面的 M63 六命令。
+
 | 命令 | 说明 |
 |---|---|
 | `mingcang help` | 查看 launcher 帮助。 |
@@ -31,11 +33,24 @@
 | `python3 -m backend.agent.cli action <name> --payload-json '<json>' --pretty` | action dry-run。 |
 | `python3 -m backend.agent.cli action <name> --payload-json '<json>' --confirm --pretty` | 确认执行 action。 |
 
+M63 日常编排 / M59 面板：
+
+| 命令 | 说明 |
+|---|---|
+| `python3 -m backend.tools.m63_daily --mode premarket` | 盘前看。 |
+| `python3 -m backend.tools.m63_daily --mode intraday` | 盘中记。 |
+| `python3 -m backend.tools.m63_daily --mode postmarket` | 盘后决；内部编排旧盘后链。 |
+| `python3 -m backend.tools.m63_weekly` | 周末体检 + 归因 + 触发器审计。 |
+| `python3 -m backend.tools.m63_research --target <代码|主题>` | 随时研究。 |
+| `python3 -m backend.tools.m63_opinion --text "..." --source manual` | 喂观点。 |
+| `python3 -m backend.tools.m59_panel` | 盘后面板：只读展示买入候选、持仓体检、风险警示和财务质量旗标；不改官方信号。 |
+
 ## 2. Frontend Routes
 
 | Route | 页面 |
 |---|---|
 | `/` | 脉冲 / 自选首页。 |
+| `/daily` | 日常页（M63 盘前/盘中/盘后/周末四份报告 + 待研究队列 + 裁量参考区）。 |
 | `/stock/:symbol` | 单股详情。 |
 | `/reviews` | 复盘中心。 |
 | `/positions` | 持仓设置。 |
@@ -79,6 +94,10 @@
 | `TRAILING_STOP_ENABLED` | `true` | ATR 移动止损启用。 |
 | `TRAILING_ATR_MULT` | `2.5` | 移动止损 ATR 倍数。 |
 | `TAKE_PROFIT_EXIT_ENABLED` | `false` | 固定止盈不强平。 |
+| `M59_DISCRETION_ENABLED` | `false` | M59 LLM 裁量层灰度，默认关。 |
+| `PORTFOLIO_MODE` | `focus` | focus/diversified。 |
+| `ENTRY_RISK_BUDGET_PCT` | `1.5` | 单笔风险预算%。 |
+| `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | openai/anthropic 单次超时。 |
 | `SCHEDULER_ENABLED` | `false` | 默认不自动跑 scheduler。 |
 | `KRONOS_ENABLED` | `false` | Kronos 默认关闭。 |
 | `ATLAS_ENABLED` | `false` | Atlas 架构默认 dormant。 |
@@ -100,6 +119,7 @@
 | `backend/analysis/` | 技术、情绪、量化分析。 |
 | `backend/decision/` | 信号聚合和决策证据。 |
 | `backend/research/` | dossier、copilot、deep research、thesis。 |
+| `backend/tools/` | M63 日常编排、M59 面板、M60 观察哨、M61 数据工具等操作/研究工具。 |
 | `backend/memory/` | ai_memory、stock_memory、audit。 |
 | `backend/agent/` | CLI、action registry、MCP、安全边界。 |
 | `backend/jobs/` | 盘前/盘中/盘后/周末工作流。 |

@@ -33,6 +33,7 @@
     mingcang doctor
     mingcang stock 300308
     mingcang project
+    python3 -m backend.tools.m63_daily --mode postmarket
     ```
 
 ## 快速链接
@@ -109,7 +110,13 @@
 
     ---
 
-    按盘前、盘中、盘后、周末组织研究节奏。
+    M63 六命令按盘前看、盘中记、盘后决、周末体检、随时研究、喂观点组织日常节奏。
+
+-   __盘后操作面板__
+
+    ---
+
+    买入候选 + 持仓体检 + 风险警示→保护动作 + 财务质量旗标，面板只读、LLM 做裁量不打分。
 
 -   __LLM 研究__
 
