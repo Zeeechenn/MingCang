@@ -13,6 +13,7 @@ import subprocess
 import time
 
 from backend.config import settings
+from backend.llm.base import LLMFatalResult as _FatalResult
 from backend.llm.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -22,12 +23,6 @@ def _model_for_tier(model_tier: str) -> str:
     if model_tier == "capable":
         return settings.local_cli_model_capable
     return settings.local_cli_model_fast
-
-
-class _FatalResult(Exception):
-    """非可重试错误（子进程超时等），携带已计算的最终结果直接返回。"""
-    def __init__(self, result: dict) -> None:
-        self.result = result
 
 
 def _cli_retry(max_attempts: int = 3, delay: float = 2.0):

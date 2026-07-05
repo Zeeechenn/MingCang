@@ -1,32 +1,14 @@
-import functools
 import json
 import logging
-import time
 from typing import Any
 
+import openai
+
 from backend.config import settings
-from backend.llm.base import LLMProvider
+from backend.llm.base import LLMFatalResult, LLMProvider, llm_retry
 
 logger = logging.getLogger(__name__)
 
-
-def _llm_retry(max_attempts: int = 3, delay: float = 2.0):
-    """LLM 调用指数退避重试（网络错误 / 限速 / 服务端 5xx）"""
-    def decorator(fn):
-        @functools.wraps(fn)
-        def wrapper(*args, **kwargs):
-            for attempt in range(max_attempts):
-                result = fn(*args, **kwargs)
-                if result:  # 非空 dict 表示成功
-                    return result
-                if attempt < max_attempts - 1:
-                    wait = delay * (2 ** attempt)
-                    logger.warning("%s 返回空结果（第%d次），%.1fs后重试",
-                                   fn.__qualname__, attempt + 1, wait)
-                    time.sleep(wait)
-            return {}
-        return wrapper
-    return decorator
 
 def _model_for_tier(model_tier: str) -> str:
     if model_tier == "capable":
@@ -47,7 +29,10 @@ class OpenAIProvider(LLMProvider):
             from openai import OpenAI
         except ImportError:
             raise RuntimeError("openai 包未安装，运行：pip install openai") from None
-        kwargs: dict[str, Any] = {"api_key": api_key, "timeout": 30.0}
+        kwargs: dict[str, Any] = {
+            "api_key": api_key,
+            "timeout": settings.llm_request_timeout_seconds,
+        }
         if base_url:
             kwargs["base_url"] = base_url
             # OpenRouter 要求这两个 header 用于路由追踪
@@ -57,7 +42,7 @@ class OpenAIProvider(LLMProvider):
             }
         self._client = OpenAI(**kwargs)
 
-    @_llm_retry(max_attempts=3, delay=2.0)
+    @llm_retry(max_attempts=3, delay=2.0)
     def complete_structured(
         self,
         prompt: str,
@@ -88,6 +73,10 @@ class OpenAIProvider(LLMProvider):
             )
             args = resp.choices[0].message.tool_calls[0].function.arguments
             return self._safe_json_loads(args)
+        except (openai.AuthenticationError, openai.PermissionDeniedError,
+                openai.BadRequestError) as e:
+            logger.error("OpenAIProvider fatal (no retry): %s", e)
+            raise LLMFatalResult({}) from e
         except Exception as e:
             logger.warning("OpenAIProvider.complete_structured failed: %s", e)
             return {}

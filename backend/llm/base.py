@@ -1,4 +1,37 @@
+import functools
+import logging
+import time
 from abc import ABC, abstractmethod
+
+logger = logging.getLogger(__name__)
+
+
+class LLMFatalResult(Exception):
+    """不可重试的错误（鉴权失败/请求非法等），携带最终结果直接返回，跳过退避重试。"""
+    def __init__(self, result: dict) -> None:
+        self.result = result
+
+
+def llm_retry(max_attempts: int = 3, delay: float = 2.0):
+    """LLM 调用退避重试：空结果才重试；LLMFatalResult 直接返回其 result 不重试。"""
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_attempts):
+                try:
+                    result = fn(*args, **kwargs)
+                except LLMFatalResult as e:
+                    return e.result
+                if result:
+                    return result
+                if attempt < max_attempts - 1:
+                    wait = delay * (2 ** attempt)
+                    logger.warning("%s 返回空结果（第%d次），%.1fs后重试",
+                                   fn.__qualname__, attempt + 1, wait)
+                    time.sleep(wait)
+            return {}
+        return wrapper
+    return decorator
 
 
 class LLMProvider(ABC):

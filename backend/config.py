@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     local_cli_model_capable: str = "claude-sonnet-4-6"
     local_cli_timeout_seconds: int = 90
     local_cli_prefer_codex: bool = True
+    llm_request_timeout_seconds: float = 60.0   # openai/anthropic 单次请求超时
     qlib_train_ic_floor: float = 0.04
     qlib_train_icir_floor: float = 0.4
     qlib_train_require_monotonic: bool = True
@@ -353,6 +354,18 @@ class Settings(BaseSettings):
             raise ValueError("entry_risk_budget_pct must be >= 0")
         if self.entry_account_size is not None and self.entry_account_size < 0:
             raise ValueError("entry_account_size must be >= 0")
+        if self.mingcang_agent_mode == "local":
+            def _is_local_origin(origin: str) -> bool:
+                from urllib.parse import urlparse
+                host = (urlparse(origin).hostname or "").lower()
+                return host in {"localhost", "127.0.0.1", "0.0.0.0", "::1", ""}
+
+            non_local = [o for o in self.cors_origins_list if not _is_local_origin(o)]
+            if non_local:
+                raise ValueError(
+                    "mingcang_agent_mode=local 绕过 agent 写鉴权，但 CORS_ORIGINS 放开了非本地来源 "
+                    f"{non_local}；请设 MINGCANG_AGENT_MODE=remote（配 API key）或把 CORS_ORIGINS 限制到 localhost"
+                )
         return self
 
 

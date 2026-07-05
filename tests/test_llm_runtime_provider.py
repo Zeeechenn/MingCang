@@ -26,6 +26,21 @@ def _mock_provider(outputs: list[dict]) -> MagicMock:
     return provider
 
 
+def test_llm_retry_returns_fatal_result_without_retry():
+    from backend.llm.base import LLMFatalResult, llm_retry
+
+    calls = 0
+
+    @llm_retry(max_attempts=3, delay=0)
+    def fatal_call():
+        nonlocal calls
+        calls += 1
+        raise LLMFatalResult({"fatal": True})
+
+    assert fatal_call() == {"fatal": True}
+    assert calls == 1
+
+
 def test_local_cli_runtime_provider_is_available_without_cloud_keys():
     from backend.llm.factory import has_runtime_llm_provider, runtime_readiness
 

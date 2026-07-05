@@ -5,12 +5,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from backend.api.routes import router
 from backend.config import settings
 from backend.data.database import init_db
+from backend.data.orm import engine
 from backend.logging_config import configure_logging
 from backend.observability import (
     CORRELATION_ID_HEADER,
@@ -47,8 +50,13 @@ app = FastAPI(title="MingCang API", version=APP_VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,   # env: CORS_ORIGINS（逗号分隔，默认 Vite dev server）
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        CORRELATION_ID_HEADER,
+        "X-MingCang-Agent-API-Key",
+    ],
     expose_headers=[CORRELATION_ID_HEADER],
 )
 
@@ -77,10 +85,31 @@ async def correlation_id_middleware(request: Request, call_next):
     finally:
         clear_correlation_id()
 
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """把未处理异常转成脱敏 JSON，避免栈追踪泄露给客户端。"""
+    request_logger.exception(
+        "http.unhandled",
+        method=request.method,
+        path=request.url.path,
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+
+
 app.include_router(router, prefix="/api")
 
 
 @app.get("/health")
-def health() -> dict:
-    """Simple liveness check endpoint."""
-    return {"status": "ok"}
+def health(response: Response) -> dict:
+    """Liveness + 轻量 DB 探活。"""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        request_logger.exception("health.db_check_failed")
+        db_ok = False
+    if not db_ok:
+        response.status_code = 503
+    return {"status": "ok" if db_ok else "degraded", "db": db_ok}

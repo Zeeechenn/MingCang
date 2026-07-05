@@ -49,3 +49,26 @@ def test_default_database_url_uses_mingcang_db_even_when_legacy_exists(monkeypat
     monkeypatch.setattr(config, "_MINGCANG_DB_PATH", mingcang_path)
 
     assert config._default_database_url() == f"sqlite:///{mingcang_path}"
+
+
+def test_local_agent_mode_rejects_non_local_cors_origin():
+    import pytest
+
+    from backend.config import Settings
+
+    with pytest.raises(ValueError, match="mingcang_agent_mode=local"):
+        Settings(
+            mingcang_agent_mode="local",
+            cors_origins="http://localhost:5173,https://example.com",
+        )
+
+
+def test_remote_agent_mode_allows_non_local_cors_origin():
+    from backend.config import Settings
+
+    settings = Settings(
+        mingcang_agent_mode="remote",
+        cors_origins="https://example.com",
+    )
+
+    assert settings.cors_origins_list == ["https://example.com"]
