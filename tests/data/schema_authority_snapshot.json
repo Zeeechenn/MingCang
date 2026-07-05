@@ -1,0 +1,5208 @@
+{
+  "ai_memory": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "key",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "value",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "category",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": "'global'",
+        "name": "scope",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "ttl_days",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "scope",
+          "category"
+        ],
+        "name": "idx_ai_memory_scope_cat",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "key",
+          "scope"
+        ],
+        "name": "sqlite_autoindex_ai_memory_1",
+        "unique": 1
+      }
+    ]
+  },
+  "announcements": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "content",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "ann_type",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "published_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "source_url",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "published_at"
+        ],
+        "name": "ix_announcements_published_at",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_announcements_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "audit_log_fts": {
+    "columns": [
+      {
+        "default": null,
+        "name": "timestamp",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "event_type",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "content",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "related_symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "related_scope",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      }
+    ],
+    "indexes": []
+  },
+  "audit_log_fts_config": {
+    "columns": [
+      {
+        "default": null,
+        "name": "k",
+        "notnull": 1,
+        "pk": 1,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "v",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "k"
+        ],
+        "name": "sqlite_autoindex_audit_log_fts_config_1",
+        "unique": 1
+      }
+    ]
+  },
+  "audit_log_fts_content": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "c0",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "c1",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "c2",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "c3",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "c4",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      }
+    ],
+    "indexes": []
+  },
+  "audit_log_fts_data": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "block",
+        "notnull": 0,
+        "pk": 0,
+        "type": "BLOB"
+      }
+    ],
+    "indexes": []
+  },
+  "audit_log_fts_docsize": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "sz",
+        "notnull": 0,
+        "pk": 0,
+        "type": "BLOB"
+      }
+    ],
+    "indexes": []
+  },
+  "audit_log_fts_idx": {
+    "columns": [
+      {
+        "default": null,
+        "name": "segid",
+        "notnull": 1,
+        "pk": 1,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "term",
+        "notnull": 1,
+        "pk": 2,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "pgno",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "segid",
+          "term"
+        ],
+        "name": "sqlite_autoindex_audit_log_fts_idx_1",
+        "unique": 1
+      }
+    ]
+  },
+  "chat_messages": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "session_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "role",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "content",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "payload_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "session_id",
+          "created_at"
+        ],
+        "name": "idx_chat_messages_session_created",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "session_id"
+        ],
+        "name": "ix_chat_messages_session_id",
+        "unique": 0
+      }
+    ]
+  },
+  "chat_sessions": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "mode",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "archived_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "summary",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "summary_until_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "id"
+        ],
+        "name": "sqlite_autoindex_chat_sessions_1",
+        "unique": 1
+      }
+    ]
+  },
+  "corporate_events": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "event_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "event_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "detail",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "event_date"
+        ],
+        "name": "ix_corporate_events_event_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_corporate_events_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "decision_memory_layered": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "layer",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "content",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "layer"
+        ],
+        "name": "ix_decision_memory_layered_layer",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_decision_memory_layered_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "layer"
+        ],
+        "name": "sqlite_autoindex_decision_memory_layered_1",
+        "unique": 1
+      }
+    ]
+  },
+  "decision_runs": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "run_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "run_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "profile",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "rule_version",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "recommendation",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "composite_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "input_snapshot_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "agent_outputs_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "risk_decision_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "final_action_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "eval_result_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "notes",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol",
+          "as_of"
+        ],
+        "name": "idx_decision_runs_symbol_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "ix_decision_runs_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "run_id"
+        ],
+        "name": "ix_decision_runs_run_id",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "run_type"
+        ],
+        "name": "ix_decision_runs_run_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_decision_runs_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "run_id"
+        ],
+        "name": "sqlite_autoindex_decision_runs_1",
+        "unique": 1
+      }
+    ]
+  },
+  "degradation_events": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "ts",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "component",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "category",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "error",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR(500)"
+      },
+      {
+        "default": null,
+        "name": "context_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "category"
+        ],
+        "name": "ix_degradation_events_category",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "component"
+        ],
+        "name": "ix_degradation_events_component",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "provider"
+        ],
+        "name": "ix_degradation_events_provider",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "ts"
+        ],
+        "name": "ix_degradation_events_ts",
+        "unique": 0
+      }
+    ]
+  },
+  "evolution_traces": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "trace_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "namespace",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "subject",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "symbols_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "themes_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "content",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "payload_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "source_type",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "source_ref",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "stale_after",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "event_time",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "ingestion_time",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "invalidated_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "invalidated_at"
+        ],
+        "name": "idx_evolution_traces_invalidated",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "namespace",
+          "as_of"
+        ],
+        "name": "idx_evolution_traces_namespace_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "trace_type",
+          "ingestion_time"
+        ],
+        "name": "idx_evolution_traces_type_ingestion",
+        "unique": 0
+      }
+    ]
+  },
+  "financial_metrics": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "report_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "disclosure_date",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "period_type",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "revenue",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "revenue_yoy",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "net_profit",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "net_profit_yoy",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "total_assets",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "total_equity",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "long_term_debt",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "current_ratio",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "operating_cf",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "shares_outstanding",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "gross_margin",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "roe",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "asset_turnover",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "raw_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "disclosure_date"
+        ],
+        "name": "ix_financial_metrics_disclosure_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "report_date"
+        ],
+        "name": "ix_financial_metrics_report_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_financial_metrics_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "report_date"
+        ],
+        "name": "sqlite_autoindex_financial_metrics_1",
+        "unique": 1
+      }
+    ]
+  },
+  "forward_theses": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "statement",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "horizon_date",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "confidence_low",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "confidence_high",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "evidence_manifest_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "invalidation_conditions_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "follow_up_metrics_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "next_review_date",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "review_cadence_days",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "thesis_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "theme_hypothesis_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "universe_snapshot_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "status"
+        ],
+        "name": "idx_forward_theses_status",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "idx_forward_theses_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "status"
+        ],
+        "name": "ix_forward_theses_status",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_forward_theses_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "statement",
+          "horizon_date"
+        ],
+        "name": "sqlite_autoindex_forward_theses_1",
+        "unique": 1
+      },
+      {
+        "columns": [
+          null,
+          null,
+          "statement",
+          null,
+          null
+        ],
+        "name": "uq_forward_theses_symbol_statement_horizon_norm",
+        "unique": 1
+      }
+    ]
+  },
+  "fund_flows": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "trade_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "main_net",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "super_large_net",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "large_net",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "medium_net",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "small_net",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_fund_flows_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "trade_date"
+        ],
+        "name": "ix_fund_flows_trade_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "trade_date",
+          "provider"
+        ],
+        "name": "sqlite_autoindex_fund_flows_1",
+        "unique": 1
+      }
+    ]
+  },
+  "gate_b_observations": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "signal_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "signal_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "label_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "gate_pass_full",
+        "notnull": 1,
+        "pk": 0,
+        "type": "BOOLEAN"
+      },
+      {
+        "default": null,
+        "name": "gate_pass_variant",
+        "notnull": 1,
+        "pk": 0,
+        "type": "BOOLEAN"
+      },
+      {
+        "default": null,
+        "name": "card_pass",
+        "notnull": 1,
+        "pk": 0,
+        "type": "BOOLEAN"
+      },
+      {
+        "default": null,
+        "name": "ready_variant",
+        "notnull": 1,
+        "pk": 0,
+        "type": "BOOLEAN"
+      },
+      {
+        "default": null,
+        "name": "recommendation",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "composite_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "entry_close",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "horizon_days",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "forward_status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "realized_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "forward_return_raw",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "forward_return_net",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "blockers_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "blockers_variant_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "checks_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "gate_b_tracker_version",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "recorded_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "idx_gate_b_obs_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "signal_date"
+        ],
+        "name": "idx_gate_b_obs_signal_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "idx_gate_b_obs_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "ix_gate_b_observations_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "signal_date"
+        ],
+        "name": "ix_gate_b_observations_signal_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_gate_b_observations_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "signal_id",
+          "as_of"
+        ],
+        "name": "sqlite_autoindex_gate_b_observations_1",
+        "unique": 1
+      }
+    ]
+  },
+  "holder_snapshots": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "report_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "total_shares",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "float_shares",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "top10_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "holder_count",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "report_date"
+        ],
+        "name": "ix_holder_snapshots_report_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_holder_snapshots_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "index_prices": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "close",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "change_pct",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "source",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "adjustment",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "date"
+        ],
+        "name": "ix_index_prices_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_index_prices_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "lhb_records": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "trade_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "reason",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "net_buy_amount",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "buy_seats_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "sell_seats_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_lhb_records_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "trade_date"
+        ],
+        "name": "ix_lhb_records_trade_date",
+        "unique": 0
+      }
+    ]
+  },
+  "llm_usage_log": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "bucket",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "tokens_in",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "tokens_out",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "cost_estimate_cny",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "bucket"
+        ],
+        "name": "ix_llm_usage_log_bucket",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "created_at"
+        ],
+        "name": "ix_llm_usage_log_created_at",
+        "unique": 0
+      }
+    ]
+  },
+  "long_term_labels": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "label",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "score",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "votes_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "key_findings_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "expires_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "quality",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "constraint_eligible",
+        "notnull": 1,
+        "pk": 0,
+        "type": "BOOLEAN"
+      },
+      {
+        "default": null,
+        "name": "quality_notes_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "date"
+        ],
+        "name": "ix_long_term_labels_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_long_term_labels_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "date"
+        ],
+        "name": "sqlite_autoindex_long_term_labels_1",
+        "unique": 1
+      }
+    ]
+  },
+  "m59_discretion_cards": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "slot",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "card_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "inputs_digest",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "idx_m59_discretion_cards_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "idx_m59_discretion_cards_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "as_of",
+          "symbol",
+          "slot"
+        ],
+        "name": "sqlite_autoindex_m59_discretion_cards_1",
+        "unique": 1
+      }
+    ]
+  },
+  "market_snapshots": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market_cap",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "float_market_cap",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "shares_outstanding",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "north_net_buy",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "margin_balance",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "large_order_net_inflow",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "source",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol",
+          "date"
+        ],
+        "name": "idx_market_snapshots_symbol_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "date"
+        ],
+        "name": "ix_market_snapshots_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_market_snapshots_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "date"
+        ],
+        "name": "sqlite_autoindex_market_snapshots_1",
+        "unique": 1
+      }
+    ]
+  },
+  "market_temperature_snapshots": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "snap_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "pool_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "code",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "price",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "fields_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "snap_date"
+        ],
+        "name": "idx_market_temperature_snapshots_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "pool_type",
+          "code"
+        ],
+        "name": "idx_market_temperature_snapshots_pool_code",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "code"
+        ],
+        "name": "ix_market_temperature_snapshots_code",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "pool_type"
+        ],
+        "name": "ix_market_temperature_snapshots_pool_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "snap_date"
+        ],
+        "name": "ix_market_temperature_snapshots_snap_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "snap_date",
+          "pool_type",
+          "code"
+        ],
+        "name": "sqlite_autoindex_market_temperature_snapshots_1",
+        "unique": 1
+      }
+    ]
+  },
+  "memory_atoms": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "scope_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "scope_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "memory_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "summary",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "evidence_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "source_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source_ref",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "trust_state",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "importance",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "confidence",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "valid_from",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "valid_to",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "ttl_days",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "review_case_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "stock_memory_item_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "promoted_by",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "refuted_by",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "refutation_reason",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "last_used_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "review_case_id"
+        ],
+        "name": "idx_memory_atoms_review_case",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "scope_type",
+          "scope_key",
+          "trust_state"
+        ],
+        "name": "idx_memory_atoms_scope_trust",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "source_ref"
+        ],
+        "name": "idx_memory_atoms_source_ref",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "memory_type"
+        ],
+        "name": "ix_memory_atoms_memory_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "review_case_id"
+        ],
+        "name": "ix_memory_atoms_review_case_id",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "scope_key"
+        ],
+        "name": "ix_memory_atoms_scope_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "scope_type"
+        ],
+        "name": "ix_memory_atoms_scope_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "source_ref"
+        ],
+        "name": "ix_memory_atoms_source_ref",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "source_type"
+        ],
+        "name": "ix_memory_atoms_source_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "trust_state"
+        ],
+        "name": "ix_memory_atoms_trust_state",
+        "unique": 0
+      }
+    ]
+  },
+  "memory_profiles": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "profile_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "profile_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "summary",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "atom_ids_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "trust_state",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source_ref",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "profile_type",
+          "profile_key",
+          "trust_state"
+        ],
+        "name": "idx_memory_profiles_type_trust",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "profile_key"
+        ],
+        "name": "ix_memory_profiles_profile_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "profile_type"
+        ],
+        "name": "ix_memory_profiles_profile_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "trust_state"
+        ],
+        "name": "ix_memory_profiles_trust_state",
+        "unique": 0
+      }
+    ]
+  },
+  "memory_promotion_candidates": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "review_case_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "memory_atom_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "stock_memory_item_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "summary",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "memory_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source_trust",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source_ref",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "importance",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "confidence",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "promoted_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "rejected_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "source_trust"
+        ],
+        "name": "ix_memory_promotion_candidates_source_trust",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_memory_promotion_candidates_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "memory_recall_fts": {
+    "columns": [
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "body",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "namespace",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "tags",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      }
+    ],
+    "indexes": []
+  },
+  "memory_recall_fts_config": {
+    "columns": [
+      {
+        "default": null,
+        "name": "k",
+        "notnull": 1,
+        "pk": 1,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "v",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "k"
+        ],
+        "name": "sqlite_autoindex_memory_recall_fts_config_1",
+        "unique": 1
+      }
+    ]
+  },
+  "memory_recall_fts_data": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "block",
+        "notnull": 0,
+        "pk": 0,
+        "type": "BLOB"
+      }
+    ],
+    "indexes": []
+  },
+  "memory_recall_fts_docsize": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "sz",
+        "notnull": 0,
+        "pk": 0,
+        "type": "BLOB"
+      }
+    ],
+    "indexes": []
+  },
+  "memory_recall_fts_idx": {
+    "columns": [
+      {
+        "default": null,
+        "name": "segid",
+        "notnull": 1,
+        "pk": 1,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "term",
+        "notnull": 1,
+        "pk": 2,
+        "type": ""
+      },
+      {
+        "default": null,
+        "name": "pgno",
+        "notnull": 0,
+        "pk": 0,
+        "type": ""
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "segid",
+          "term"
+        ],
+        "name": "sqlite_autoindex_memory_recall_fts_idx_1",
+        "unique": 1
+      }
+    ]
+  },
+  "memory_recall_index": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "source",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "source_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "namespace",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "subject",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "body",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "tags",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "event_time",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "ingestion_time",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "invalidated_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": "0",
+        "name": "supports_as_of",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "namespace",
+          "symbol",
+          "supports_as_of"
+        ],
+        "name": "idx_memory_recall_index_filters",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "ingestion_time",
+          "invalidated_at",
+          "updated_at"
+        ],
+        "name": "idx_memory_recall_index_time",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "source",
+          "source_id"
+        ],
+        "name": "sqlite_autoindex_memory_recall_index_1",
+        "unique": 1
+      }
+    ]
+  },
+  "memory_scenarios": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "scope_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "scope_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "summary",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "atom_ids_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "trust_state",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source_ref",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "scope_type",
+          "scope_key",
+          "trust_state"
+        ],
+        "name": "idx_memory_scenarios_scope_trust",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "scope_key"
+        ],
+        "name": "ix_memory_scenarios_scope_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "scope_type"
+        ],
+        "name": "ix_memory_scenarios_scope_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "trust_state"
+        ],
+        "name": "ix_memory_scenarios_trust_state",
+        "unique": 0
+      }
+    ]
+  },
+  "news": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "url",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "published_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "source",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "summary",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "content",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "sentiment_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_news_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "url"
+        ],
+        "name": "sqlite_autoindex_news_1",
+        "unique": 1
+      }
+    ]
+  },
+  "overseas_snapshots": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "snap_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "close",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "chg_pct_1d",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "chg_pct_20d",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "snap_date"
+        ],
+        "name": "ix_overseas_snapshots_snap_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_overseas_snapshots_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "snap_date",
+          "provider"
+        ],
+        "name": "sqlite_autoindex_overseas_snapshots_1",
+        "unique": 1
+      }
+    ]
+  },
+  "pending_ai_actions": {
+    "columns": [
+      {
+        "default": null,
+        "name": "action_id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "action",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "payload_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "result_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "user_message",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "executed_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "action"
+        ],
+        "name": "ix_pending_ai_actions_action",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "action_id"
+        ],
+        "name": "sqlite_autoindex_pending_ai_actions_1",
+        "unique": 1
+      }
+    ]
+  },
+  "positions": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "quantity",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "avg_cost",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "opened_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "stop_loss",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "take_profit",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "closed_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "close_price",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "realized_pnl",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "realized_pnl_pct",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol",
+          "status"
+        ],
+        "name": "idx_positions_symbol_status",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "opened_at"
+        ],
+        "name": "ix_positions_opened_at",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_positions_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "prices": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "open",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "high",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "low",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "close",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "volume",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "atr14",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "source",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "adjustment",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "date"
+        ],
+        "name": "ix_prices_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_prices_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "date"
+        ],
+        "name": "sqlite_autoindex_prices_1",
+        "unique": 1
+      }
+    ]
+  },
+  "research_reports": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "org_name",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "rating",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "eps_forecast_y1",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "eps_forecast_y2",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "publish_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "info_code",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "fetched_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "publish_date"
+        ],
+        "name": "ix_research_reports_publish_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_research_reports_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "research_states": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "thesis",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "risks_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "open_questions_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "copilot_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "last_signal_summary",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "last_review_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_research_states_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "sqlite_autoindex_research_states_1",
+        "unique": 1
+      }
+    ]
+  },
+  "review_cases": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "signal_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "thesis_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "research_case_symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "research_case_as_of",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "position_case_ref_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "outcome_correct",
+        "notnull": 0,
+        "pk": 0,
+        "type": "BOOLEAN"
+      },
+      {
+        "default": null,
+        "name": "next_day_return",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "composite_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "recommendation",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "attribution_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "review_payload_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "ix_review_cases_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_review_cases_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "as_of"
+        ],
+        "name": "sqlite_autoindex_review_cases_1",
+        "unique": 1
+      }
+    ]
+  },
+  "review_runs": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "kind",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "summary",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "path",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "payload_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "kind",
+          "as_of"
+        ],
+        "name": "idx_review_runs_kind_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "ix_review_runs_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "kind"
+        ],
+        "name": "ix_review_runs_kind",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "kind",
+          "as_of"
+        ],
+        "name": "sqlite_autoindex_review_runs_1",
+        "unique": 1
+      }
+    ]
+  },
+  "sentiment_cache": {
+    "columns": [
+      {
+        "default": null,
+        "name": "cache_key",
+        "notnull": 1,
+        "pk": 1,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "titles_hash",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "result_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol",
+          "titles_hash"
+        ],
+        "name": "idx_sentiment_cache_symbol_hash",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_sentiment_cache_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "titles_hash"
+        ],
+        "name": "ix_sentiment_cache_titles_hash",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "cache_key"
+        ],
+        "name": "sqlite_autoindex_sentiment_cache_1",
+        "unique": 1
+      }
+    ]
+  },
+  "signals": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "quant_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "technical_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "sentiment_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "composite_score",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "recommendation",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "confidence",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "stop_loss",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "take_profit",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "limit_status",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "llm_rationale",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "rule_version",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "data_timestamp",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "date"
+        ],
+        "name": "ix_signals_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_signals_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "stock_memory_items": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "memory_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "summary",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "evidence_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "source_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source_ref",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "importance",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "confidence",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "ttl_days",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "last_used_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "status",
+          "updated_at"
+        ],
+        "name": "idx_stock_memory_status_updated",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "memory_type"
+        ],
+        "name": "idx_stock_memory_symbol_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "memory_type"
+        ],
+        "name": "ix_stock_memory_items_memory_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "source_type"
+        ],
+        "name": "ix_stock_memory_items_source_type",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "status"
+        ],
+        "name": "ix_stock_memory_items_status",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_stock_memory_items_symbol",
+        "unique": 0
+      }
+    ]
+  },
+  "stocks": {
+    "columns": [
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 1,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "active",
+        "notnull": 1,
+        "pk": 0,
+        "type": "BOOLEAN"
+      },
+      {
+        "default": null,
+        "name": "industry",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "added_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "sqlite_autoindex_stocks_1",
+        "unique": 1
+      }
+    ]
+  },
+  "task_capsules": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "capsule_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "task_type",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": "'owner'",
+        "name": "user_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "symbols_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "themes_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "goal",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "confirmed_facts",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "decisions",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "open_loops",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "next_actions",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "used_memory_refs",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "artifact_refs",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": "'draft'",
+        "name": "trust_state",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "token_estimate",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "event_time",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "ingestion_time",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "invalidated_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "idx_task_capsules_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "user_id",
+          "created_at"
+        ],
+        "name": "idx_task_capsules_user_created",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "capsule_id"
+        ],
+        "name": "sqlite_autoindex_task_capsules_1",
+        "unique": 1
+      }
+    ]
+  },
+  "theme_hypotheses": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "theme_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "statement",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "beneficiary_tiers_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "evidence_gaps_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "invalidation_conditions_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "ai_supply_chain_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "forward_evidence_ref_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "theme_id"
+        ],
+        "name": "ix_theme_hypotheses_theme_id",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "theme_id",
+          "statement"
+        ],
+        "name": "sqlite_autoindex_theme_hypotheses_1",
+        "unique": 1
+      }
+    ]
+  },
+  "theme_records": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "theme_name",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "description",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "theme_name"
+        ],
+        "name": "ix_theme_records_theme_name",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "theme_name"
+        ],
+        "name": "sqlite_autoindex_theme_records_1",
+        "unique": 1
+      }
+    ]
+  },
+  "thesis_confidence_entries": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "thesis_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "score",
+        "notnull": 1,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "thesis_id"
+        ],
+        "name": "ix_thesis_confidence_entries_thesis_id",
+        "unique": 0
+      }
+    ]
+  },
+  "thesis_records": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "title",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "kill_conditions_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "update_cadence_days",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "research_case_symbol",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "research_case_as_of",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "review_case_ref_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_thesis_records_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "title"
+        ],
+        "name": "sqlite_autoindex_thesis_records_1",
+        "unique": 1
+      }
+    ]
+  },
+  "universe_snapshots": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "universe_hash",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR(64)"
+      },
+      {
+        "default": null,
+        "name": "cutoff_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market_filter",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "symbols_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "n_symbols",
+        "notnull": 1,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "provenance_completeness_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "context",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "cutoff_date",
+          "market_filter"
+        ],
+        "name": "idx_universe_snapshots_cutoff_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "universe_hash"
+        ],
+        "name": "idx_universe_snapshots_hash",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "cutoff_date"
+        ],
+        "name": "ix_universe_snapshots_cutoff_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "universe_hash"
+        ],
+        "name": "ix_universe_snapshots_universe_hash",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "cutoff_date",
+          "market_filter",
+          "universe_hash"
+        ],
+        "name": "sqlite_autoindex_universe_snapshots_1",
+        "unique": 1
+      }
+    ]
+  }
+}

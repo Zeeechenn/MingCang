@@ -1,4 +1,10 @@
-"""Alembic environment for MingCang.
+"""DORMANT — 见 alembic/DORMANT.md。
+
+Alembic 已退役：本项目 schema 权威路径是 backend/data/database.py::init_db()
+（create_all + _ensure_runtime_schema），启动链与 CI 均不调用 alembic upgrade。
+本文件保留仅作历史/未来 Postgres 评估参考。
+
+Alembic environment for MingCang.
 
 Target metadata is ``backend.data.orm.Base.metadata`` (all 31 ORM models, which
 register on it via the ``backend.data.models`` package).  The DB URL comes from
