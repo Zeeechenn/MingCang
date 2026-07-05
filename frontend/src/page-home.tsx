@@ -19,7 +19,7 @@ const QUICK_PROMPTS = [
 
 const HELP_CAPABILITIES = [
   ['研究标的', '查个股案卷、今日裁决、长期标签、研究副驾驶影子意见。', 'search'],
-  ['生成报告', '把研究过程压缩成复盘、证伪清单、来源摘要和后续任务。', 'reports'],
+  ['日常工作流', '盘前看、盘中记、盘后决、周末体检、研究 <目标>、喂观点。', 'schedule'],
   ['驾驶台展示', '把文字结论变成分数、仪表、来源、动作卡和风险表单。', 'pulse'],
   ['Agent 动作', '加自选、写复盘、改规则、配置凭证;写入前都先确认。', 'agents'],
   ['终端与副驾驶', '终端是全系统入口;研究副驾驶负责个股深度研究链。', 'admin'],
@@ -467,6 +467,7 @@ function HelpPanel({ onRun }: any) {
           ))}
         </div>
         <div className="prompt-row">
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => navigate('/daily')}>打开日常</button>
           {QUICK_PROMPTS.map(([label, prompt]) => (
             <button key={prompt} type="button" className="btn btn-sm" onClick={() => onRun(prompt)}>{label}</button>
           ))}

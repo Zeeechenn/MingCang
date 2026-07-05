@@ -8,6 +8,7 @@ import { createRoot } from 'react-dom/client';
 import { FirstRunWizard, Tour } from './onboarding';
 import { AdminPage } from './page-admin';
 import { ChatPage } from './page-chat';
+import { DailyPage } from './page-daily';
 import { HealthPage } from './page-health';
 import { HomePage } from './page-home';
 import { PositionsPage } from './page-positions';
@@ -28,6 +29,7 @@ import './page-stock';
 import './page-positions';
 import './page-home';
 import './page-chat';
+import './page-daily';
 import './page-health';
 import './page-admin';
 import { startLive } from './live';
@@ -38,6 +40,7 @@ const THEME_KEY = 'mc_proto_theme_v1';
 
 const NAV = [
   ['/', '明仓终端', 'chat'],
+  ['/daily', '日常', 'schedule'],
   ['/pulse', '今日裁决', 'pulse'],
   ['/stocks', '个股案卷', 'search'],
   ['/reports', '复盘案卷', 'reports'],
@@ -171,6 +174,7 @@ function App() {
   else if (route.page === 'home') page = <HomePage />;
   else if (route.page === 'stocks') page = <StocksPage />;
   else if (route.page === 'reports') page = <ReportsPage />;
+  else if (route.page === 'daily') page = <DailyPage />;
   else if (route.page === 'memory' || route.page === 'reviews') page = <ReportsPage />;
   else if (route.page === 'positions') page = <PositionsPage />;
   else if (route.page === 'chat') page = <ChatPage />;

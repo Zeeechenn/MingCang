@@ -100,6 +100,16 @@ export const getWatchlist = () => request('/watchlist')
 
 export const getDashboardSummary = () => request('/dashboard/summary')
 
+export const getM63Reports = (mode = '') =>
+  request(`/m63/reports${mode ? `?mode=${encodeURIComponent(mode)}` : ''}`)
+
+export const getLatestM63Report = (mode) =>
+  request(`/m63/reports/${encodeURIComponent(mode)}/latest`)
+
+export const getM63Queue = () => request('/m63/queue')
+
+export const getLatestM59Discretion = () => request('/m59/discretion/latest')
+
 export const getPositions = (status = 'open') => request(`/positions?status=${status}`)
 
 export const createPosition = (payload) =>
