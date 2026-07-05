@@ -19,7 +19,7 @@
 https://github.com/simonlin1212/a-stock-data  
 https://github.com/simonlin1212/a-stock-data/blob/main/SKILL.md  
 https://github.com/simonlin1212/a-stock-data/blob/main/CHANGELOG.md  
-本地口径参考：[DATA_AUDIT_DEMAND.md](/Users/zeeechenn/mingcang/docs/dev/DATA_AUDIT_DEMAND.md)、[a-stock-data.md](/Users/zeeechenn/mingcang/docs/data-sources/a-stock-data.md)、[ifind.md](/Users/zeeechenn/mingcang/docs/data-sources/ifind.md)、[akshare.md](/Users/zeeechenn/mingcang/docs/data-sources/akshare.md)。
+本地口径参考：[DATA_AUDIT_DEMAND.md](docs/dev/DATA_AUDIT_DEMAND.md)、[a-stock-data.md](docs/data-sources/a-stock-data.md)、[ifind.md](docs/data-sources/ifind.md)、[akshare.md](docs/data-sources/akshare.md)。
 
 ## 接入方案与工作量
 
