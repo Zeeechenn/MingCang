@@ -27,6 +27,7 @@ WIRING_MAP: dict[str, WiringEntry] = {
     "backend.tools.long_term_constraint_impact": {"bucket": "daily_postmarket", "reason": "长期标签与日信号约束影响读数"},
     "backend.tools.m59_panel": {"bucket": "daily_postmarket", "reason": "盘后核心面板"},
     "backend.tools.m59_entry_card": {"bucket": "manual_only", "reason": "M59候选区条件卡库函数/单股CLI,由面板消费"},
+    "backend.tools.m59_readiness": {"bucket": "manual_only", "reason": "D0入场准备度证据记点与D7校准,由候选区消费"},
     "backend.tools.m59_discretion": {"bucket": "daily_postmarket", "reason": "盘后LLM裁量参考层,灰度开关控制"},
     "backend.tools.m52_flow_floor": {"bucket": "daily_postmarket", "reason": "资金流融合库函数,由日常评分/面板间接使用"},
     "backend.tools.m61_backfill": {"bucket": "daily_postmarket", "reason": "盘后滴灌补数为主,深研也会调用"},

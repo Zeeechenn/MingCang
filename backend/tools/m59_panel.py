@@ -23,6 +23,7 @@ from backend.data.market_features import FAKE_FEATURE_FLAGS
 from backend.tools import m52_flow_floor as flow_floor
 from backend.tools.m59_entry_card import build_entry_card, render_entry_card_compact
 from backend.tools.m58_grid_backtest import regime_from_pool_equal_weight
+from backend.tools.m59_readiness import build_readiness, render_readiness_line
 
 DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
 # M60 Watchtower Phase 1 writes m60_watchtower_*.json/.md here; the panel only
@@ -1237,6 +1238,24 @@ def _build_data_health(db_session) -> dict[str, Any]:
     }
 
 
+def _attach_entry_readiness(
+    con: sqlite3.Connection,
+    items: list[dict[str, Any]],
+    as_of: str,
+    db_session,
+    market_regime: dict[str, Any],
+) -> None:
+    for item in items:
+        item["entry_readiness"] = build_readiness(
+            con,
+            symbol=str(item["symbol"]),
+            as_of=as_of,
+            entry_card=item.get("entry_card") or {},
+            db_session=db_session,
+            market_regime=market_regime,
+        )
+
+
 def build_panel(
     *,
     db_path: str | Path | None = None,
@@ -1257,6 +1276,13 @@ def build_panel(
             position_health = _build_position_health(con, resolved_as_of, db_session)
             risk_warnings = _build_risk_warnings(
                 con, resolved_as_of, resolved_universe, position_health["items"]
+            )
+            _attach_entry_readiness(
+                con,
+                buy_candidates["items"],
+                resolved_as_of,
+                db_session,
+                risk_warnings.get("market_regime") or {},
             )
             return {
                 "schema_version": "postmarket_panel.v1",
@@ -1333,6 +1359,9 @@ def render_markdown(panel: dict[str, Any]) -> str:
             f"{_format_research_reference(item.get('research_reference'))} |"
         )
         entry_card = item.get("entry_card") or {}
+        readiness = item.get("entry_readiness")
+        if readiness:
+            lines.append(f"  - {render_readiness_line(readiness)}")
         for entry_line in render_entry_card_compact(entry_card):
             lines.append(f"  - {entry_line}")
     lines.extend(

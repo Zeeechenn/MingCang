@@ -57,6 +57,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m59_readiness",
+        "category": "stable",
+        "purpose": "Build D0 entry-readiness evidence point ledger and D7 arena calibration gates for candidate/trigger moments.",
+        "read_write_boundary": "Single-symbol scoring is read-only against SQLite mode=ro; calibration reads D7 arena cases and writes only readiness_calibration JSON/Markdown artifacts under paper_trading/m58_out/arena.",
+        "recommended_entrypoint": "python3 -m backend.tools.m59_readiness --symbol <symbol> --as-of <YYYY-MM-DD>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m59_discretion",
         "category": "stable",
         "purpose": "Build observe-only M59 LLM discretion reference cards for candidate selection and holding decisions.",
