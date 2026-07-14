@@ -29,6 +29,13 @@ from backend.tools import m58_exit_shadow as shadow
 from backend.tools.m58_exit_sweep import ExitVariant
 
 SOURCE_TEXT = Path(shadow.__file__).read_text(encoding="utf-8")
+LOCAL_TEST2_REPLAY_AVAILABLE = (
+    Path(__file__).resolve().parents[1] / "paper_trading" / "test2_ab_data.py"
+).is_file()
+requires_local_test2_replay = pytest.mark.skipif(
+    not LOCAL_TEST2_REPLAY_AVAILABLE,
+    reason="paper_trading/test2 replay helpers are local-only and not checked into CI",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +182,7 @@ def _calm_db(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
+@requires_local_test2_replay
 def test_shadow_exits_earlier_via_floating_take_profit_while_current_stays_open(tmp_path, monkeypatch):
     from backend.backtest import test2_models
     db_path, universe_path = _divergence_db(tmp_path)
@@ -206,6 +214,7 @@ def test_shadow_exits_earlier_via_floating_take_profit_while_current_stays_open(
 # ---------------------------------------------------------------------------
 
 
+@requires_local_test2_replay
 def test_no_divergence_yet_reports_open_position_stop_lines(tmp_path, monkeypatch):
     from backend.backtest import test2_models
     db_path, universe_path = _calm_db(tmp_path)
@@ -230,6 +239,7 @@ def test_no_divergence_yet_reports_open_position_stop_lines(tmp_path, monkeypatc
     assert "持仓中" in md
 
 
+@requires_local_test2_replay
 def test_no_divergence_and_no_open_positions_message(tmp_path, monkeypatch):
     from backend.backtest import test2_models
     db_path = tmp_path / "empty.sqlite"
@@ -252,6 +262,7 @@ def test_no_divergence_and_no_open_positions_message(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+@requires_local_test2_replay
 def test_run_never_mutates_the_source_database(tmp_path, monkeypatch):
     from backend.backtest import test2_models
     db_path, universe_path = _divergence_db(tmp_path)
@@ -265,6 +276,7 @@ def test_run_never_mutates_the_source_database(tmp_path, monkeypatch):
     assert db_path.stat().st_mtime_ns == before_mtime
 
 
+@requires_local_test2_replay
 def test_run_has_no_personal_state_file_dependency(tmp_path, monkeypatch):
     from backend.backtest import test2_models
     db_path, universe_path = _divergence_db(tmp_path)

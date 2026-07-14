@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from backend.research.watchlist import (
     REQUIRED_FIELDS,
+    WATCHLIST_DIR,
     all_watchlist_symbols,
     load_watchlists,
     symbols_by_theme,
@@ -169,7 +172,9 @@ def test_m60_thesis_sync_is_idempotent_and_preserves_conditions(test_db, tmp_pat
 
 
 def test_seed_innovative_drug_file_is_valid():
-    """Guard the shipped Phase 0 seed entry against schema drift."""
+    """Guard the local Phase 0 seed entry against schema drift when present."""
+    if not WATCHLIST_DIR.is_dir():
+        pytest.skip("paper_trading watchlist seeds are local-only and not checked into CI")
     entries, errors = load_watchlists()
     assert errors == []
     innovative_drug = next(e for e in entries if e["theme_key"] == "innovative_drug")

@@ -28,6 +28,7 @@ _（下一版工作累积区）_
 - **危险操作确认**：治理类工作流与持仓新增均在展示目标和影响后要求二次确认；demo 模式不会伪造持久化写入。
 - **日常页与导出真相**：日常页明确为四类只读报告，并把研究/观点录入引导到真实聊天入口；覆盖率 CSV 在 live 模式走真实导出 API，在 demo 模式生成可下载的快照文件。
 - **CI 跨平台截图目录**：browser smoke 不再硬编码 macOS `/private/tmp`，改用系统临时目录并支持 `MC_SMOKE_SHOTS_DIR` 覆盖，可在 GitHub Ubuntu runner 上落截图。
+- **干净检出测试隔离**：仅依赖本机、被 `.gitignore` 排除的 `paper_trading` replay helper 与 watchlist seed 测试在 GitHub 干净检出中精确 skip；不依赖私有数据的 M58 静态边界测试仍照常执行。
 
 ### Changed / 变更
 - **首次使用收敛**：5+12 步引导压缩为 3 步，保留目标选择并将用户送到对应真实页面；导航巡游与 10 个主入口一一对应。
