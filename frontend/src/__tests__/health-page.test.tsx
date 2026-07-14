@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HealthPage } from '../page-health';
-import { refreshCoverage } from '../live';
+import { refreshCoverage } from '../services/live';
 
-vi.mock('../live', () => ({ refreshCoverage: vi.fn(() => Promise.resolve({ status: 'pass' })) }));
+vi.mock('../services/live', () => ({ refreshCoverage: vi.fn(() => Promise.resolve({ status: 'pass' })) }));
 
 describe('HealthPage', () => {
   beforeEach(() => vi.mocked(refreshCoverage).mockClear());

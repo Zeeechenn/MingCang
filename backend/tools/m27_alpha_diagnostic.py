@@ -21,6 +21,11 @@ from backend.analysis.alpha_factors import M27_ALPHA_FEATURE_COLS
 from backend.analysis.event_taxonomy import event_score
 from backend.analysis.qlib_engine import daily_rank_groups, make_rank_labels
 from backend.analysis.sentiment import _cache_key
+from backend.backtest.statistics.cross_sectional import (
+    _safe_spearman,
+    cross_sectional_ic,
+    summarize_ic,
+)
 from backend.config import settings
 from backend.data.database import SessionLocal
 from backend.data.qlib_data import (
@@ -98,16 +103,6 @@ def _round(value: float | int | None, digits: int = 6) -> float | int | None:
     return round(float(value), digits)
 
 
-def _safe_spearman(left: pd.Series, right: pd.Series) -> float | None:
-    data = pd.DataFrame({"left": left, "right": right}).replace([np.inf, -np.inf], np.nan).dropna()
-    if len(data) < 3 or data["left"].nunique() < 2 or data["right"].nunique() < 2:
-        return None
-    corr = data["left"].rank(method="average").corr(data["right"].rank(method="average"))
-    if corr is None or not np.isfinite(corr):
-        return None
-    return float(corr)
-
-
 def add_horizon_labels(panel: pd.DataFrame, horizons: list[int]) -> pd.DataFrame:
     """Add clipped forward-return labels for each requested horizon."""
     if panel.empty:
@@ -124,46 +119,6 @@ def add_horizon_labels(panel: pd.DataFrame, horizons: list[int]) -> pd.DataFrame
             .transform(lambda s, h=horizon: (s.shift(-h) / s - 1).clip(-0.30, 0.30))
         )
     return out.sort_values(["date", "symbol"]).reset_index(drop=True)
-
-
-def cross_sectional_ic(
-    frame: pd.DataFrame,
-    factor_col: str,
-    label_col: str,
-    *,
-    min_names: int = MIN_DAILY_NAMES,
-) -> pd.Series:
-    """Return daily cross-sectional Spearman IC for a factor and label."""
-    rows: list[tuple[pd.Timestamp, float]] = []
-    for date, group in frame.groupby("date", sort=True):
-        data = group[[factor_col, label_col]].replace([np.inf, -np.inf], np.nan).dropna()
-        if len(data) < min_names:
-            continue
-        corr = _safe_spearman(data[factor_col], data[label_col])
-        if corr is not None:
-            rows.append((pd.to_datetime(date), corr))
-    return pd.Series(dict(rows), name="ic", dtype="float64")
-
-
-def summarize_ic(ic: pd.Series) -> dict[str, Any]:
-    """Summarize an IC series with the same mean/std/ICIR shape as Qlib validation."""
-    if ic.empty:
-        return {
-            "ic_days": 0,
-            "ic_mean": None,
-            "ic_std": None,
-            "icir": None,
-            "ic_positive_rate": None,
-        }
-    std = float(ic.std())
-    mean = float(ic.mean())
-    return {
-        "ic_days": int(len(ic)),
-        "ic_mean": _round(mean),
-        "ic_std": _round(std),
-        "icir": _round(mean / std if std > 0 else 0.0),
-        "ic_positive_rate": _round(float((ic > 0).mean())),
-    }
 
 
 def _normalize_sentiment(value: Any) -> float | None:

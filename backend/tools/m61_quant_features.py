@@ -23,8 +23,8 @@ from backend.data.database import (
     ResearchReport,
     Stock,
 )
+from backend.data.flow_floor import compute_s_flow_data
 from backend.data.qlib_data import FEATURE_COLS, _build_features
-from backend.tools.m52_flow_floor import compute_s_flow_data
 
 NON_PRICE_QFEATURE_COLS = {
     "roe",

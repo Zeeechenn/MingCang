@@ -12,7 +12,7 @@ import { TweakColor, TweakRadio, TweakSection, TweakSlider, TweakToggle, TweaksP
 import './boot';
 import './glass.css';
 import './data';
-import { startLive } from './live';
+import { startLive } from './services/live';
 
 const { useState: useMState, useEffect: useMEffect } = React;
 

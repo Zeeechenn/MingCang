@@ -15,8 +15,8 @@ from typing import Any
 
 from backend.config import default_sqlite_path
 from backend.research.watchlist import WATCHLIST_DIR, load_watchlists
-from backend.tools import m63_daily
-from backend.tools.m63_render import enforce_language_guard, render_report, strip_raw_json
+from backend.workflows import m63_daily
+from backend.workflows.render import enforce_language_guard, render_report, strip_raw_json
 
 OUTPUT_DIR = m63_daily.OUTPUT_DIR
 DEFAULT_QUEUE_PATH = m63_daily.DEFAULT_QUEUE_PATH

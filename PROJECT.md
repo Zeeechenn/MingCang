@@ -47,18 +47,33 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 |---|---|---|
 | Runtime config | `backend/config.py` | env vars, paths, scheduling, profile knobs |
 | Database/runtime schema | `backend/data/database.py`, `backend/data/schema_runtime.py`, `backend/data/seed.py` | ORM/session/init compatibility, runtime patches, memory seeds |
-| Market data | `backend/data/market*.py`, `backend/data/providers.py`, `backend/data/global_data.py` | A/HK/US read-only facades, provider fallback, M41 envelopes, M42 write guard |
+| Market data | `backend/data/market*.py`, `backend/data/providers.py`, `backend/data/flow_floor.py`, `backend/data/tavily_news.py` | A/HK/US read-only facades, provider fallback, flow/news acquisition, M41 envelopes, M42 write guard |
 | Decision layer | `backend/decision/` | aggregation, harness, signal policy, decision memory |
 | Research and memory | `backend/research/`, `backend/memory/`, `backend/agents/` | dossier/deep research, layered memory, multi-agent pipelines |
 | Portfolio and risk | `backend/portfolio/`, `backend/ops/kill_switch.py` | sizing, trailing stops, kill switch |
 | API routes | `backend/api/routes/`, `backend/api/schemas.py`, `backend/main.py` | FastAPI app and REST surfaces |
-| Scheduler jobs | `backend/scheduler.py`, `backend/jobs/` | premarket / intraday / postmarket / weekend workflows |
+| Scheduler and workflows | `backend/scheduler.py`, `backend/jobs/`, `backend/workflows/` | scheduled jobs plus stable orchestration facades; API/jobs depend on workflows, not tool implementations |
 | Agent bridge | `backend/agent/` | local CLI, action registry, MCP/tool context |
-| Analysis and backtests | `backend/analysis/`, `backend/backtest/`, `backend/tools/m29_*`, `backend/tools/atlas_test4_stage2b_shadow.py` | quant engine, statistics, forward-evidence tooling, Atlas/test4 non-promoting shadow starter |
-| Tools registry | `backend/tools/registry.py`, `python3 -m backend.agent.cli tools` | M49 classification for retained tools: stable / maintenance / evidence / attic, with purpose and read/write boundaries |
+| Analysis and backtests | `backend/analysis/`, `backend/backtest/`, `backend/evidence/` | quant engine, statistics, backtests and audit/evidence contracts |
+| Tools registry | `backend/tools/registry.py`, `backend/tools/`, `python3 -m backend.agent.cli tools` | CLI, maintenance, experiment and compatibility adapters; stable business modules must not depend on tool implementations |
 | M31/M41/M42/M45 tools | `backend/tools/m31_*`, `backend/tools/m41_*`, `backend/tools/m42_*`, `backend/tools/m45_*` | cache benchmark, probe health, qfq/hfq remediation, source-gated import/scoreboard |
-| Frontend | `frontend/src/page-*.tsx`, `frontend/src/main.tsx` | 平铺单文件页面（page-home/page-daily/page-memory-evolution 等），main.tsx 做 hash 路由 |
+| Frontend | `frontend/src/main.tsx`, `frontend/src/page-*.tsx`, `frontend/src/services/` | hash-routed pages plus canonical API/live service boundary; feature grouping remains incremental M66 work |
 | Public docs | `README.md`, `docs/WHY_NOT_AI_STOCK_PICKER.md`, `docs/assets/` | GitHub-facing product explanation and visuals |
+
+### M66 canonical / compatibility map
+
+New code imports the canonical path. Compatibility paths remain available for at least one release cycle and may still
+be used by CLI commands or external callers.
+
+| Capability | Canonical path | Compatibility path |
+|---|---|---|
+| flow data floor | `backend.data.flow_floor` | `backend.tools.m52_flow_floor` |
+| lookahead audit | `backend.evidence.lookahead_audit` | `backend.tools.m46_5_lookahead_one_time_audit` |
+| quant baseline | `backend.backtest.quant_baseline` | `backend.tools.m26_quant_baseline` |
+| cross-sectional IC | `backend.backtest.statistics.cross_sectional` | exports retained by `backend.tools.m27_alpha_diagnostic` |
+| M63 orchestration | `backend.workflows.m63_daily` | `backend.tools.m63_daily` |
+| M63 report rendering | `backend.workflows.render` | `backend.tools.m63_render` |
+| frontend API/live | `frontend/src/services/api.ts`, `frontend/src/services/live.ts` | `frontend/src/api.ts`, `frontend/src/live.ts` |
 
 ## 研究模块地图
 
@@ -76,7 +91,7 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 | `backend/research/dossier.py` | M63 现役 | active | `backend/api/routes/research.py` | 汇总单股研究 dossier 供 API 和 M63 研究上下文使用。 |
 | `backend/research/forward_thesis.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/watchlist.py`, `backend/tools/m45_import_track_theses.py`, `backend/tools/m60_thesis_sync.py`, `backend/tools/m60_watchtower.py` | 存储前瞻 thesis、置信区间和证据清单。 |
 | `backend/research/gate_b_recorder.py` | ATLAS-dormant | gate-guarded | `backend/tools/atlas_stage2b_strict_gate.py`, `backend/tools/atlas_test4_stage2b_shadow.py`, `backend/tools/gate_b_tracker.py` | Atlas Gate-B 前瞻观察记录和报告工具层。 |
-| `backend/research/research_evidence_defs.py` | M39-M55 论点与门 | gate-guarded | `backend/research/ai_supply_chain_template.py`, `backend/research/research_report_gate.py`, `backend/tools/m45_*.py`, `backend/tools/m63_render.py` | 定义研究证据等级、禁用表述和报告扫描函数。 |
+| `backend/research/research_evidence_defs.py` | M39-M55 论点与门 | gate-guarded | `backend/research/ai_supply_chain_template.py`, `backend/research/research_report_gate.py`, `backend/tools/m45_*.py`, `backend/workflows/render.py` | 定义研究证据等级、禁用表述和报告扫描函数。 |
 | `backend/research/research_report_gate.py` | M39-M55 论点与门 | gate-guarded | `backend/research/deep_research.py` | 在深研报告落盘前执行 M50 报告门。 |
 | `backend/research/review_loop.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/case_view.py`, `backend/tools/m45_falsification_scoreboard.py` | 维护 review case、memory candidate 和独立复核结构门。 |
 | `backend/research/serenity_chokepoint.py` | ATLAS-dormant | dormant | `backend/research/research_report_gate.py(type-only)` | Serenity 方法论形状归 M57 记忆基础设施保留，勿在新功能中引用。 |

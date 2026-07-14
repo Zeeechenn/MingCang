@@ -1,3 +1,4 @@
+"""M63 daily workflow and compatibility-path tests."""
 from __future__ import annotations
 
 import json

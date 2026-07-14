@@ -72,7 +72,7 @@ PYTHONPYCACHEPREFIX=/private/tmp/mingcang_pycache PYTHONPATH=. \
   tests/test_m42_price_quality_guard.py \
   tests/test_m42_remediation_cli.py \
   tests/test_market_data_boundaries.py \
-  tests/test_architecture_boundaries.py \
+  tests/architecture/test_boundaries.py \
   tests/test_m10_quality_scheduler.py \
   tests/test_m15_route_guards.py
 ```

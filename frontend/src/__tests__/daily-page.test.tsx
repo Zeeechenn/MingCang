@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { DailyPage } from '../page-daily';
 
-vi.mock('../api', () => ({
+vi.mock('../services/api', () => ({
   getLatestM59Discretion: vi.fn(() => Promise.resolve([])),
   getLatestM63Report: vi.fn(() => Promise.reject({ status: 404 })),
   getM63Queue: vi.fn(() => Promise.resolve({ pending: [], done: [] })),

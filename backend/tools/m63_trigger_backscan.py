@@ -34,7 +34,7 @@ from backend.tools.m60_watchtower import (
     _table_exists,
     build_watchtower_report_from_entries,
 )
-from backend.tools.m63_daily import R6_CHG_1D_PCT, R6_CHG_5D_PCT, R6_DAMPER_DAYS
+from backend.workflows.m63_daily import R6_CHG_1D_PCT, R6_CHG_5D_PCT, R6_DAMPER_DAYS
 
 DEFAULT_UNIVERSE_PATHS = (
     Path("paper_trading/test2_universe.json"),

@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.config import settings, sqlite_path_from_url
-from backend.tools.m46_5_lookahead_one_time_audit import build_audit
+from backend.evidence.lookahead_audit import build_audit
 
 LOOKAHEAD_CHECK_SCHEMA = "m47_lookahead_standing_check.v1"
 

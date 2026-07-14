@@ -1,3 +1,5 @@
+"""Productized standing lookahead guard tests."""
+
 import sqlite3
 
 from backend.evidence import lookahead

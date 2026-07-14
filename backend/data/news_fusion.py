@@ -82,7 +82,7 @@ def fuse_signal(
 
     Flow is injectable for tests and offline audits. When neither `flow_value`
     nor `flow_provider` is passed, this function attempts a lazy default read
-    from `backend.tools.m52_flow_floor`; any failure degrades to `flow_score=None`
+    from `backend.data.flow_floor`; any failure degrades to `flow_score=None`
     instead of manufacturing a neutral flow signal.
     """
     if len(cluster_scores) != len(clusters):
@@ -242,7 +242,7 @@ def _resolve_flow_score(
 
 def _default_flow_provider(symbol: str, as_of: datetime) -> object | None:
     try:
-        module = import_module("backend.tools.m52_flow_floor")
+        module = import_module("backend.data.flow_floor")
     except Exception as exc:
         logger.warning("default flow provider import failed for %s: %s", symbol, exc)
         emit_degradation(

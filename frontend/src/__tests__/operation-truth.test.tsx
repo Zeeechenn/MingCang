@@ -7,13 +7,13 @@ import {
   runDeepResearch,
   triggerKillSwitch,
   triggerLongTermTeam,
-} from '../api';
+} from '../services/api';
 import { AdminPage } from '../page-admin';
 import { PositionsPage } from '../page-positions';
 import { StockPage } from '../page-stock';
 
-vi.mock('../api', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../api')>();
+vi.mock('../services/api', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../services/api')>();
   return {
     ...original,
     refreshResearchCopilot: vi.fn(() => Promise.resolve({ stance: 'neutral' })),

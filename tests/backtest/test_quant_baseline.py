@@ -1,3 +1,6 @@
+"""Quant baseline compatibility and report tests."""
+
+
 def test_m26_temporary_settings_allows_atomic_quant_profile():
     from backend.config import settings
     from backend.tools.m26_quant_baseline import _temporary_settings

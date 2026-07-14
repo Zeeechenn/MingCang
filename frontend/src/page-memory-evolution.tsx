@@ -8,7 +8,7 @@ import {
   getMemoryEvolutionCandidates,
   promoteMemoryEvolutionCandidate,
   rejectMemoryEvolutionCandidate,
-} from './api';
+} from './services/api';
 import { Badge, Card, Metric, PageHead, Seg, toast } from './shared';
 
 const { useCallback, useEffect, useMemo, useState } = React;

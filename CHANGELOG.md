@@ -8,7 +8,38 @@
 
 ## [Unreleased]
 
-_（下一版工作累积区）_
+### Added / 新增
+
+- **M65 研究可信度 Phase 0-2**：ResearchReportGate 增加稳定、机器可读的检查明细；前端 Evidence
+  Card 严格区分发布时间与抓取时间，并显式展示 `as_of`、新鲜度、来源层级、可用性、风险标记和
+  缺失原因。M57 增加真实 deep-research trace 捕获、过滤 miner 和 Phase 2 评估工具，所有候选继续
+  默认 `pending`，自动 `trusted` 保持为 0。
+
+### Changed / 变更
+
+- **M65 四臂裁决归档**：20 个真实可读案例、19 个行业标签完成 Base / Memory / Serenity / Both
+  共 80 份输出与 20 次单盲评分。Both 相对 Base 的来源忠实率、事实覆盖、矛盾处理和可证伪性均
+  下降，幻觉/事实错误率由 7.10% 升至 9.70%，裁决 `HOLD_STOP_PHASE_3_4`。保留通用 Evidence
+  Card 与结构化 Gate；Serenity 维持默认关闭的人工方法镜头，后续只有重新预注册才能复测。
+- **M66 仓库结构治理首批落地**：路线图从 217 行压缩到活跃工作、触发待命和一行归档索引；资金流、
+  Tavily、lookahead 审计、量化基线/IC 统计、研究 reference/watchtower path 和 M63 编排获得领域
+  canonical path，旧 `backend.tools.*` 入口保留兼容。稳定 core 的静态 core→tools 依赖由架构测试
+  禁止新增，M63 workflow 内部的维护工具调用留待对应领域门面成熟后再迁。
+- **M66 测试与前端首批归位**：8 个关联测试迁入 architecture/backtest/data/evidence/workflows；前端
+  API/live runtime 收进 `src/services/`，生产 import 使用 canonical path，旧平铺入口保留 re-export
+  和兼容测试。真实浏览器验证主页、日报页均正常，控制台无 error/warning。
+
+### Safety / 安全边界
+
+- M65 评估与 M66 结构治理均不改变官方 signal、position、止盈止损、生产权重、scheduler、test2
+  或数据库 schema；旧 CLI/import 入口在结构迁移期间保留兼容。
+
+### Verification / 验证
+
+- `make verify` 全绿：backend pytest `1726 passed / 5 skipped`；ruff、release hygiene、mypy（310 个
+  source files，0 error）通过；前端 typecheck、24 项 Vitest、build、零 warning ESLint 通过。
+- Playwright smoke 覆盖 13 个桌面路由、10 个移动端路由及 live/degraded 数据真相，console/page
+  error 均为 0；另以 Playwright CLI 实看主页与日报页，服务迁移后正常连接本地后端。
 
 ---
 

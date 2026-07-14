@@ -266,7 +266,7 @@ def _validate_card(data: Any, *, slot: str, soft_length: bool = False) -> dict[s
 
 def _sanitize_render_text(value: str) -> str:
     try:
-        from backend.tools.m63_render import sanitize_trade_words
+        from backend.workflows.render import sanitize_trade_words
 
         sanitized, _ = sanitize_trade_words(value)
         return sanitized.strip()

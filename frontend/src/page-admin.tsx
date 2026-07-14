@@ -2,7 +2,13 @@
 // 治理台 — 决策 / 仓位 / Agent / 数据 / 调度 / 熔断 / 记忆 / LLM 成本
 // ============================================================
 import React from 'react';
-import { resetKillSwitch, runDeepResearch, trainModel, triggerKillSwitch, triggerLongTermTeam } from './api';
+import {
+  resetKillSwitch,
+  runDeepResearch,
+  trainModel,
+  triggerKillSwitch,
+  triggerLongTermTeam,
+} from './services/api';
 import { Badge, Card, McIcon, Metric, PageHead, Seg, Toggle, toast, useStore } from './shared';
 const { useState: useAState, useEffect: useAEffect } = React;
 

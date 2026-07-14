@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.data.database import get_db
-from backend.tools.m63_daily import DEFAULT_QUEUE_PATH, OUTPUT_DIR, load_queue
+from backend.workflows.m63_daily import DEFAULT_QUEUE_PATH, OUTPUT_DIR, load_queue
 
 router = APIRouter()
 

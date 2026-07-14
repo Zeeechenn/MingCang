@@ -22,8 +22,9 @@ from backend.data import fundamentals
 from backend.data.database import FinancialMetric, NewsItem, Price, SessionLocal, Stock
 from backend.data.fundamentals import sync_disclosure_dates, sync_financial_metrics, sync_industry
 from backend.data.market import fetch_daily
-from backend.data.news import RawNews, fetch_stock_news_cn, save_news_to_db
+from backend.data.news import fetch_stock_news_cn, save_news_to_db
 from backend.data.quality import build_data_coverage_snapshot
+from backend.data.tavily_news import fetch_tavily_news
 
 logger = logging.getLogger(__name__)
 
@@ -44,52 +45,7 @@ class BackfillStats:
     natural_short_price_symbols: list[str] = field(default_factory=list)
 
 
-def _fetch_tavily_news(stock: Stock, limit: int = 3) -> list[RawNews]:
-    from urllib.parse import urlparse
-
-    import requests
-
-    from backend.config import settings
-
-    if not settings.tavily_api_key:
-        return []
-    symbol = str(stock.symbol)
-    name = str(stock.name)
-    try:
-        resp = requests.post(
-            "https://api.tavily.com/search",
-            json={
-                "api_key": settings.tavily_api_key,
-                "query": f"{name} {symbol} 股票 最新消息 公告 业绩",
-                "search_depth": "basic",
-                "max_results": limit,
-                "days": 1,
-                "include_answer": False,
-            },
-            proxies={"http": "", "https": ""},
-            timeout=15,
-        )
-        resp.raise_for_status()
-    except Exception as exc:
-        logger.warning("tavily news fallback failed %s: %s", symbol, exc)
-        return []
-    items = []
-    for row in resp.json().get("results", []):
-        title = str(row.get("title") or "").strip()
-        url = str(row.get("url") or "").strip()
-        if not title or not url:
-            continue
-        host = urlparse(url).netloc.lower().removeprefix("www.") or "tavily"
-        items.append(
-            RawNews(
-                title=title,
-                url=url,
-                published_at=datetime.now(UTC).replace(tzinfo=None),
-                source=f"tavily:{host}",
-                symbol=symbol,
-            )
-        )
-    return items
+_fetch_tavily_news = fetch_tavily_news
 
 
 def _missing_financial_symbols(db, limit: int | None = None) -> list[Stock]:
@@ -234,7 +190,7 @@ def run_backfill(
                     items = fetch_stock_news_cn(str(stock.symbol), limit=news_limit)
                     inserted = save_news_to_db(items, db)
                     if inserted == 0 and use_tavily:
-                        inserted = save_news_to_db(_fetch_tavily_news(stock, limit=3), db)
+                        inserted = save_news_to_db(fetch_tavily_news(stock, limit=3), db)
                     stats.news_rows_inserted += inserted
                     if inserted:
                         stats.news_symbols_filled += 1

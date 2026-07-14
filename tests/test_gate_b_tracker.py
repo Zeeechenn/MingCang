@@ -630,7 +630,7 @@ def test_report_counts_data_error_rows_in_dq_abort_denominator(test_db):
 
 def test_report_does_not_promote_without_icir_stability_and_coverage(test_db, monkeypatch):
     """A positive spread alone is not enough to PROMOTE under the pre-registered gates."""
-    import backend.tools.m27_alpha_diagnostic as diag
+    import backend.backtest.statistics.cross_sectional as diag
     from backend.research.gate_b_recorder import report
     monkeypatch.setattr(diag, "summarize_ic", lambda _series: {"icir": None, "ic_days": 0})
 

@@ -1,3 +1,5 @@
+"""Canonical lookahead audit and legacy-path compatibility tests."""
+
 from datetime import datetime
 
 

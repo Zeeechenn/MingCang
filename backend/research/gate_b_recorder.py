@@ -716,7 +716,7 @@ def report(db) -> dict:
     try:
         import pandas as pd
 
-        from backend.tools.m27_alpha_diagnostic import cross_sectional_ic, summarize_ic
+        from backend.backtest.statistics.cross_sectional import cross_sectional_ic, summarize_ic
 
         if n_total >= 5:
             df = pd.DataFrame([

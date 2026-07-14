@@ -436,8 +436,9 @@ def _fetch_external_news(
                 if stock is None:
                     items = []
                 else:
-                    from backend.tools.backfill_coverage import _fetch_tavily_news
-                    items = _fetch_tavily_news(stock, limit=5)
+                    from backend.data.tavily_news import fetch_tavily_news
+
+                    items = fetch_tavily_news(stock, limit=5)
             else:
                 items = []
             inserted += save_news_to_db(items, db)

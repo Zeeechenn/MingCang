@@ -12,7 +12,7 @@ def job_m63_postmarket() -> dict:
     def run() -> dict:
         if _kill_switch_guard("m63_postmarket"):
             return {"skipped": "kill_switch"}
-        from backend.tools import m63_daily
+        from backend.workflows import m63_daily
 
         result = m63_daily.build_postmarket_report()
         path = m63_daily.write_report(result["mode"], result["date"], result["text"])

@@ -2,7 +2,7 @@
 // 日常 — M63 日常报告 / M59 裁量参考
 // ============================================================
 import React from 'react';
-import { getLatestM59Discretion, getLatestM63Report, getM63Queue } from './api';
+import { getLatestM59Discretion, getLatestM63Report, getM63Queue } from './services/api';
 import { Badge, Markdown, McIcon, PageHead, navigate } from './shared';
 
 const { useEffect: useDailyEffect, useState: useDailyState } = React;

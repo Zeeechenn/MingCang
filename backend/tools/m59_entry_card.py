@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.config import default_sqlite_path, settings
-from backend.tools.m63_render import assert_no_trade_words, format_cn_number
+from backend.workflows.render import assert_no_trade_words, format_cn_number
 
 DEFAULT_LEDGER_PATH = Path("paper_trading/m60_out/second_entry_ledger.json")
 VARIANT_LABELS = {

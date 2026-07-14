@@ -29,7 +29,7 @@ Context assembly (all read-only, no new writes):
   - the watchlist entry's thesis / validation_conditions / invalidation_conditions
     (``backend.research.watchlist``);
   - the symbol's research reference — long_term_label + research_pointer,
-    same helper M59 uses (``backend.tools.m59_panel._build_research_reference``);
+    same helper M59 uses (``backend.research.reference.build_research_reference``);
   - today's trigger detail (type/value/detail) for this symbol, deduplicated;
   - L0 memory recall when ``settings.research_l0_recall_enabled`` is True,
     via the same ``build_memory_context`` channel used by stock-context /
@@ -46,9 +46,9 @@ from typing import Any
 
 from backend.config import default_sqlite_path, settings
 from backend.llm import get_provider, has_runtime_llm_provider
+from backend.research.reference import build_research_reference
 from backend.research.watchlist import load_watchlists
-from backend.tools.m59_panel import _build_research_reference
-from backend.tools.m60_watchtower import DEFAULT_OUTPUT_DIR as WATCHTOWER_OUTPUT_DIR
+from backend.research.watchtower_paths import DEFAULT_WATCHTOWER_OUTPUT_DIR
 
 SCHEMA_VERSION = "m60_watchtower_confirm.v1"
 CONFIRM_FILENAME_PREFIX = "m60_confirm_"
@@ -363,7 +363,7 @@ def build_confirmation_report(
             symbol_triggers = grouped[symbol]
             themes = sorted({theme for trigger in symbol_triggers for theme in (trigger.get("themes") or [])})
             watchlist_entries = entries_by_symbol.get(symbol, [])
-            research_reference = _build_research_reference(con, symbol, as_of or "")
+            research_reference = build_research_reference(con, symbol, as_of or "")
             memory_recall = _memory_recall_text(db, symbol)
             card = confirm_symbol(
                 symbol=symbol,
@@ -443,7 +443,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--db", type=Path, default=None, help="SQLite DB path; defaults to configured MingCang DB")
     parser.add_argument("--watchlist-dir", type=Path, default=None, help="Watchlist JSON directory")
-    parser.add_argument("--output-dir", type=Path, default=WATCHTOWER_OUTPUT_DIR, help="Where to read/write JSON+Markdown output")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_WATCHTOWER_OUTPUT_DIR,
+        help="Where to read/write JSON+Markdown output",
+    )
     parser.add_argument("--no-write", action="store_true", help="Print only; skip writing output files")
     args = parser.parse_args(argv)
 

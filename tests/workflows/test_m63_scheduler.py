@@ -1,3 +1,4 @@
+"""M63 scheduler adapter tests."""
 from __future__ import annotations
 
 

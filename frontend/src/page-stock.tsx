@@ -2,7 +2,7 @@
 // 单股详情页 — 信号 / 研究 / 证据 / 新闻
 // ============================================================
 import React from 'react';
-import { refreshResearchCopilot, reviewLatestSignal } from './api';
+import { refreshResearchCopilot, reviewLatestSignal } from './services/api';
 import { Badge, Card, MCStore, MKT, Markdown, McIcon, Metric, PageHead, PoolShell, PriceChart, RefreshButton, ScoreBar, Seg, SortSeg, Spark, applyPoolSort, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, toast, useSortCtl, useStockPoolFilter, useStore } from './shared';
 const { useState: useSState, useEffect: useSEffect } = React;
 

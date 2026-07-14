@@ -609,8 +609,8 @@ if __name__ == "__main__":
             db.close()
 
     if args.validate_production:
+        from backend.backtest.quant_baseline import build_current_model_validation
         from backend.data.database import SessionLocal
-        from backend.tools.m26_quant_baseline import build_current_model_validation
 
         db = SessionLocal()
         try:

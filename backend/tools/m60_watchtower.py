@@ -40,9 +40,10 @@ from backend.data.news_evidence import NewsEvidence
 from backend.data.news_trigger import decide_trigger
 from backend.research.forward_thesis import list_theme_forward_theses_from_connection
 from backend.research.watchlist import WATCHLIST_DIR, load_watchlists, themes_by_symbol
+from backend.research.watchtower_paths import DEFAULT_WATCHTOWER_OUTPUT_DIR
 from backend.tools.m60_thesis_conditions import evaluate_condition_spec
 
-DEFAULT_OUTPUT_DIR = Path("/private/tmp")
+DEFAULT_OUTPUT_DIR = DEFAULT_WATCHTOWER_OUTPUT_DIR
 OUTPUT_FILENAME_PREFIX = "m60_watchtower_"
 
 TRIGGER_PRICE_Z = "price_z_anomaly"

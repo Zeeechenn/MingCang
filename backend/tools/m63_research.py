@@ -26,8 +26,8 @@ from backend.research.watchlist import (
     validate_watchlist_entry,
 )
 from backend.tools import m61_backfill
-from backend.tools.m63_daily import DEFAULT_QUEUE_PATH, load_queue, save_queue
-from backend.tools.m63_render import enforce_language_guard, render_report, strip_raw_json
+from backend.workflows.m63_daily import DEFAULT_QUEUE_PATH, load_queue, save_queue
+from backend.workflows.render import enforce_language_guard, render_report, strip_raw_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = REPO_ROOT / "paper_trading" / "m63_out"

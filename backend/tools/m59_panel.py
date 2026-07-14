@@ -16,11 +16,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from backend.config import default_sqlite_path, settings
+from backend.data import flow_floor
 from backend.data.context_builder import corporate_event_visible_as_of
 from backend.data.degradation import recent_degradations
 from backend.data.fundamentals import compute_piotroski_factors
 from backend.data.market_features import FAKE_FEATURE_FLAGS
-from backend.tools import m52_flow_floor as flow_floor
+from backend.research.reference import build_research_reference as _build_research_reference
+from backend.research.watchtower_paths import DEFAULT_WATCHTOWER_OUTPUT_DIR
 from backend.tools.m58_grid_backtest import regime_from_pool_equal_weight
 from backend.tools.m59_entry_card import build_entry_card, render_entry_card_compact
 from backend.tools.m59_readiness import build_readiness, render_readiness_line
@@ -28,7 +30,6 @@ from backend.tools.m59_readiness import build_readiness, render_readiness_line
 DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
 # M60 Watchtower Phase 1 writes m60_watchtower_*.json/.md here; the panel only
 # reads the latest one, it never triggers a scan itself.
-DEFAULT_WATCHTOWER_OUTPUT_DIR = Path("/private/tmp")
 BUY_RECOMMENDATIONS = {"买", "买入", "强买", "考虑买入", "watch/考虑买入"}
 LONG_TERM_VETO_LABELS = {"规避", "不关注", "回避", "avoid"}
 
@@ -241,106 +242,6 @@ def _safe_float(value: Any) -> float | None:
 def _date_only(value: Any) -> str:
     text = str(value)
     return text[:10]
-
-
-def _latest_long_term_label(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str, Any]:
-    """Return the latest still-valid long_term_labels row for symbol, reference-only."""
-    if not _table_exists(con, "long_term_labels"):
-        return {"label": None, "quality": None, "expires_at": None, "status": "missing:table:long_term_labels"}
-    cols = _columns(con, "long_term_labels")
-    if "symbol" not in cols:
-        return {"label": None, "quality": None, "expires_at": None, "status": "missing:columns:symbol"}
-    order_col = "date" if "date" in cols else ("created_at" if "created_at" in cols else None)
-    if order_col is None:
-        return {"label": None, "quality": None, "expires_at": None, "status": "missing:columns:date,created_at"}
-    where_expiry = ""
-    params: list[Any] = [symbol]
-    if "expires_at" in cols:
-        where_expiry = "AND (expires_at IS NULL OR expires_at >= ?)"
-        params.append(as_of)
-    select_cols = [column for column in ("label", "quality", "expires_at", order_col) if column in cols]
-    row = con.execute(
-        f"SELECT {', '.join(select_cols)} FROM long_term_labels WHERE symbol = ? {where_expiry} "
-        f"ORDER BY {order_col} DESC LIMIT 1",
-        params,
-    ).fetchone()
-    if row is None:
-        return {"label": None, "quality": None, "expires_at": None, "status": "missing:no_valid_label"}
-    data = dict(row)
-    return {
-        "label": data.get("label"),
-        "quality": data.get("quality"),
-        "expires_at": data.get("expires_at"),
-        "status": "ok",
-    }
-
-
-def _latest_research_pointer(con: sqlite3.Connection, symbol: str) -> dict[str, Any]:
-    """Return the most recent stock_memory_items research_pointer summary, reference-only."""
-    if not _table_exists(con, "stock_memory_items"):
-        return {"summary": None, "created_at": None, "status": "missing:table:stock_memory_items"}
-    cols = _columns(con, "stock_memory_items")
-    required = {"symbol", "memory_type", "summary", "created_at"}
-    missing = sorted(required - cols)
-    if missing:
-        return {"summary": None, "created_at": None, "status": f"missing:columns:{','.join(missing)}"}
-    row = con.execute(
-        """
-        SELECT summary, created_at
-        FROM stock_memory_items
-        WHERE symbol = ? AND memory_type = 'research_pointer'
-        ORDER BY created_at DESC
-        LIMIT 1
-        """,
-        (symbol,),
-    ).fetchone()
-    if row is None:
-        return {"summary": None, "created_at": None, "status": "missing:no_research_pointer"}
-    return {"summary": row["summary"], "created_at": row["created_at"], "status": "ok"}
-
-
-def _latest_copilot_card(con: sqlite3.Connection, symbol: str) -> dict[str, Any]:
-    """Return persisted research copilot card metadata, reference-only."""
-    if not _table_exists(con, "research_states"):
-        return {"summary": None, "trigger_quality": None, "status": "missing:table:research_states"}
-    cols = _columns(con, "research_states")
-    required = {"symbol", "copilot_json"}
-    missing = sorted(required - cols)
-    if missing:
-        return {"summary": None, "trigger_quality": None, "status": f"missing:columns:{','.join(missing)}"}
-    row = con.execute(
-        """
-        SELECT copilot_json
-        FROM research_states
-        WHERE symbol = ? AND copilot_json IS NOT NULL
-        LIMIT 1
-        """,
-        (symbol,),
-    ).fetchone()
-    if row is None:
-        return {"summary": None, "trigger_quality": None, "status": "missing:no_copilot"}
-    try:
-        card = json.loads(row["copilot_json"])
-    except (TypeError, json.JSONDecodeError) as exc:
-        return {"summary": None, "trigger_quality": None, "status": f"invalid:copilot_json:{exc.__class__.__name__}"}
-    if not isinstance(card, dict):
-        return {"summary": None, "trigger_quality": None, "status": "invalid:copilot_json:not_object"}
-    return {
-        "summary": card.get("summary_opinion"),
-        "stance": card.get("stance"),
-        "reentry_trigger": card.get("reentry_trigger"),
-        "trigger_quality": card.get("trigger_quality") or "ok",
-        "status": "ok",
-    }
-
-
-def _build_research_reference(con: sqlite3.Connection, symbol: str, as_of: str) -> dict[str, Any]:
-    """Deep/long-term research pointers for LLM discretion only; never scored (owner 2026-07-03 软联动裁决)."""
-    return {
-        "long_term_label": _latest_long_term_label(con, symbol, as_of),
-        "research_pointer": _latest_research_pointer(con, symbol),
-        "copilot": _latest_copilot_card(con, symbol),
-    }
 
 
 def _latest_market_reference(con: sqlite3.Connection) -> dict[str, Any]:

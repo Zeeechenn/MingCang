@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import Any
 
 from backend.research.watchlist import WATCHLIST_DIR, load_watchlists
-from backend.tools.m63_daily import DEFAULT_QUEUE_PATH, _enqueue, load_queue, save_queue
-from backend.tools.m63_render import sanitize_trade_words
+from backend.workflows.m63_daily import DEFAULT_QUEUE_PATH, _enqueue, load_queue, save_queue
+from backend.workflows.render import sanitize_trade_words
 
 DEFAULT_OPINIONS_PATH = Path.home() / ".mingcang" / "m63_opinions.jsonl"
 

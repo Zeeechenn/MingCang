@@ -7,8 +7,22 @@ initialization while checking import boundaries.
 import ast
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
+CORE_DOMAIN_DIRS = (
+    "analysis",
+    "api",
+    "backtest",
+    "data",
+    "decision",
+    "evidence",
+    "jobs",
+    "llm",
+    "memory",
+    "ops",
+    "portfolio",
+    "research",
+)
 
 
 def _backend_modules() -> dict[str, Path]:
@@ -95,6 +109,47 @@ def test_api_routes_do_not_directly_import_heavy_provider_clients():
                 offenders.append(f"{path.relative_to(PROJECT_ROOT)} imports {module}")
 
     assert offenders == []
+
+
+def test_core_domains_do_not_import_tool_implementations():
+    """Keep CLI/maintenance adapters downstream of stable domain modules."""
+    offenders: list[str] = []
+    for directory in CORE_DOMAIN_DIRS:
+        for path in (BACKEND_ROOT / directory).rglob("*.py"):
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    imported = [node.module]
+                else:
+                    imported = []
+                for module in imported:
+                    if module == "backend.tools" or module.startswith("backend.tools."):
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)} imports {module}")
+
+    assert offenders == []
+
+
+def test_m66_legacy_modules_alias_canonical_implementations():
+    from backend.backtest import quant_baseline
+    from backend.data import flow_floor
+    from backend.evidence import lookahead_audit
+    from backend.tools import (
+        m26_quant_baseline,
+        m46_5_lookahead_one_time_audit,
+        m52_flow_floor,
+        m63_daily,
+        m63_render,
+    )
+    from backend.workflows import m63_daily as daily_workflow
+    from backend.workflows import render
+
+    assert m26_quant_baseline is quant_baseline
+    assert m46_5_lookahead_one_time_audit is lookahead_audit
+    assert m52_flow_floor is flow_floor
+    assert m63_daily is daily_workflow
+    assert m63_render is render
 
 
 def test_core_facades_stay_below_growth_thresholds():

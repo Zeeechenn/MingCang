@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from statistics import mean
 from typing import Any
 
+from backend.data import flow_floor
 from backend.data.database import (
     Announcement,
     CorporateEvent,
@@ -24,7 +25,6 @@ from backend.data.database import (
 from backend.data.degradation import emit_degradation, recent_degradations
 from backend.data.fundamentals import compute_piotroski_factors
 from backend.data.market_features import FAKE_FEATURE_FLAGS
-from backend.tools import m52_flow_floor as flow_floor
 
 SECTION_ORDER = [
     "price",
