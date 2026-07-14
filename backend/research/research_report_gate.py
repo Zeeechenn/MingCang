@@ -2,7 +2,7 @@
 ResearchReportGate — M50 Phase 1.
 
 Checks every DeepResearchReport before write_text / _persist_report.
-Returns GateVerdict(status, reasons, warnings).
+Returns GateVerdict(status, reasons, warnings, checks).
 
 Import shared constants from research_evidence_defs (never from
 ai_supply_chain_template, those are input-field checks).
@@ -44,6 +44,17 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class GateCheckResult:
+    """Machine-readable result for one stable ResearchReportGate check."""
+
+    check_id: str
+    status: str                       # 'pass' | 'warning' | 'blocked'
+    severity: str                     # 'info' | 'warning' | 'error'
+    message: str
+    evidence_refs: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class GateVerdict:
     """Result of run_research_report_gate.
 
@@ -55,6 +66,44 @@ class GateVerdict:
     status: str                        # 'pass' | 'warning' | 'blocked'
     reasons: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    checks: list[GateCheckResult] = field(default_factory=list)
+
+
+def _check_result(
+    check_id: str,
+    blocked: list[str],
+    warnings: list[str],
+    blocked_from: int,
+    warnings_from: int,
+    *,
+    evidence_refs: tuple[str, ...] = (),
+) -> GateCheckResult:
+    """Summarise messages appended by one legacy check without changing it."""
+    new_blocked = blocked[blocked_from:]
+    new_warnings = warnings[warnings_from:]
+    if new_blocked:
+        return GateCheckResult(
+            check_id=check_id,
+            status="blocked",
+            severity="error",
+            message="；".join(new_blocked),
+            evidence_refs=evidence_refs,
+        )
+    if new_warnings:
+        return GateCheckResult(
+            check_id=check_id,
+            status="warning",
+            severity="warning",
+            message="；".join(new_warnings),
+            evidence_refs=evidence_refs,
+        )
+    return GateCheckResult(
+        check_id=check_id,
+        status="pass",
+        severity="info",
+        message="检查通过",
+        evidence_refs=evidence_refs,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -99,25 +148,77 @@ def run_research_report_gate(
     """
     blocked: list[str] = []
     warnings: list[str] = []
+    checks: list[GateCheckResult] = []
 
+    source_refs = tuple(
+        dict.fromkeys(
+            str(a.news.url or a.news.source or a.title)
+            for a in audits
+            if a.news.url or a.news.source or a.title
+        )
+    )
+
+    blocked_from, warnings_from = len(blocked), len(warnings)
     _check_source_integrity(report, audits, blocked, warnings)
+    checks.append(_check_result(
+        "source_integrity", blocked, warnings, blocked_from, warnings_from,
+        evidence_refs=source_refs,
+    ))
+
+    blocked_from, warnings_from = len(blocked), len(warnings)
     _check_timeline(report, audits, blocked, warnings)
+    checks.append(_check_result(
+        "timeline", blocked, warnings, blocked_from, warnings_from,
+        evidence_refs=source_refs,
+    ))
+
+    blocked_from, warnings_from = len(blocked), len(warnings)
     _check_data_coverage(report, prices, financials, blocked, warnings)
+    checks.append(_check_result(
+        "data_coverage", blocked, warnings, blocked_from, warnings_from,
+        evidence_refs=tuple(str(symbol) for symbol in report.symbols),
+    ))
+
+    blocked_from, warnings_from = len(blocked), len(warnings)
     _check_narrative_evidence(report, audits, weak_source_count, blocked, warnings)
+    checks.append(_check_result(
+        "narrative_evidence", blocked, warnings, blocked_from, warnings_from,
+        evidence_refs=source_refs,
+    ))
     # F1: scan only LLM-generated text, never the full rendered output that
     # contains raw news titles from the source-audit section.
     wording_target = llm_text if llm_text is not None else rendered_text
+
+    blocked_from, warnings_from = len(blocked), len(warnings)
     _check_forbidden_wording(wording_target, blocked, warnings)
+    checks.append(_check_result(
+        "forbidden_wording", blocked, warnings, blocked_from, warnings_from,
+    ))
+
+    blocked_from, warnings_from = len(blocked), len(warnings)
     _check_zh_style(wording_target, warnings)
+    checks.append(_check_result(
+        "zh_style", blocked, warnings, blocked_from, warnings_from,
+    ))
 
     if serenity is not None:
+        blocked_from, warnings_from = len(blocked), len(warnings)
         _check_serenity_layer(serenity, blocked, warnings, quant_text=wording_target)
+        serenity_refs = tuple(
+            str(ref.get("url") or ref.get("title") or ref.get("note"))
+            for ref in (serenity.source_refs or [])
+            if isinstance(ref, dict) and (ref.get("url") or ref.get("title") or ref.get("note"))
+        )
+        checks.append(_check_result(
+            "serenity_method_lens", blocked, warnings, blocked_from, warnings_from,
+            evidence_refs=serenity_refs,
+        ))
 
     if blocked:
-        return GateVerdict(status="blocked", reasons=blocked, warnings=warnings)
+        return GateVerdict(status="blocked", reasons=blocked, warnings=warnings, checks=checks)
     if warnings:
-        return GateVerdict(status="warning", reasons=[], warnings=warnings)
-    return GateVerdict(status="pass", reasons=[], warnings=[])
+        return GateVerdict(status="warning", reasons=[], warnings=warnings, checks=checks)
+    return GateVerdict(status="pass", reasons=[], warnings=[], checks=checks)
 
 
 # ---------------------------------------------------------------------------

@@ -69,7 +69,13 @@ def _canonical_text(value: str) -> str:
     return text_value[:180]
 
 
-def _read_traces(db, *, lookback_days: int | None = None) -> list[dict[str, Any]]:
+def _read_traces(
+    db,
+    *,
+    lookback_days: int | None = None,
+    trace_types: tuple[str, ...] | None = None,
+    source_types: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
     ensure_trace_schema(db)
     params: dict[str, Any] = {}
     where = "WHERE invalidated_at IS NULL"
@@ -84,7 +90,7 @@ def _read_traces(db, *, lookback_days: int | None = None) -> list[dict[str, Any]
         {where}
         ORDER BY id ASC
     """), params).mappings().all()  # noqa: S608 - WHERE fragment is fixed.
-    return [
+    parsed = [
         {
             **dict(row),
             "symbols": _loads_list(row["symbols_json"]),
@@ -93,6 +99,13 @@ def _read_traces(db, *, lookback_days: int | None = None) -> list[dict[str, Any]
         }
         for row in rows
     ]
+    if trace_types:
+        allowed_trace_types = set(trace_types)
+        parsed = [row for row in parsed if row["trace_type"] in allowed_trace_types]
+    if source_types:
+        allowed_source_types = set(source_types)
+        parsed = [row for row in parsed if row["source_type"] in allowed_source_types]
+    return parsed
 
 
 def _groups_by_text(rows: list[dict[str, Any]], predicate) -> dict[str, list[dict[str, Any]]]:
@@ -363,8 +376,20 @@ def _write_candidate(db, candidate: MinedCandidate) -> dict[str, Any]:
     return {"target": target_ref, "promotion_candidate_id": promotion["id"]}
 
 
-def mine_candidates(db, *, min_support: int = DEFAULT_MIN_SUPPORT, lookback_days: int | None = None) -> list[MinedCandidate]:
-    rows = _read_traces(db, lookback_days=lookback_days)
+def mine_candidates(
+    db,
+    *,
+    min_support: int = DEFAULT_MIN_SUPPORT,
+    lookback_days: int | None = None,
+    trace_types: tuple[str, ...] | None = None,
+    source_types: tuple[str, ...] | None = None,
+) -> list[MinedCandidate]:
+    rows = _read_traces(
+        db,
+        lookback_days=lookback_days,
+        trace_types=trace_types,
+        source_types=source_types,
+    )
     candidates: list[MinedCandidate] = []
     candidates.extend(_mine_preferences(rows, min_support=min_support))
     candidates.extend(_mine_rejections(rows, min_support=min_support))
@@ -384,12 +409,26 @@ def run_miner(
     min_support: int = DEFAULT_MIN_SUPPORT,
     cooldown_days: int = DEFAULT_COOLDOWN_DAYS,
     lookback_days: int | None = None,
+    trace_types: tuple[str, ...] | None = None,
+    source_types: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     created: list[dict[str, Any]] = []
     skipped = 0
-    for candidate in mine_candidates(db, min_support=min_support, lookback_days=lookback_days):
+    for candidate in mine_candidates(
+        db,
+        min_support=min_support,
+        lookback_days=lookback_days,
+        trace_types=trace_types,
+        source_types=source_types,
+    ):
         if _source_ref_exists(db, candidate.source_ref, cooldown_days=cooldown_days):
             skipped += 1
             continue
         created.append(_write_candidate(db, candidate))
-    return {"created": len(created), "skipped": skipped, "items": created}
+    return {
+        "created": len(created),
+        "skipped": skipped,
+        "items": created,
+        "trace_types": list(trace_types or ()),
+        "source_types": list(source_types or ()),
+    }

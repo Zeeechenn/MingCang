@@ -10,6 +10,8 @@ def main() -> None:
     parser.add_argument("--min-support", type=int, default=2)
     parser.add_argument("--cooldown-days", type=int, default=7)
     parser.add_argument("--lookback-days", type=int, default=None)
+    parser.add_argument("--trace-type", action="append", default=None)
+    parser.add_argument("--source-type", action="append", default=None)
     parser.add_argument("--pretty", action="store_true")
     args = parser.parse_args()
 
@@ -24,6 +26,8 @@ def main() -> None:
             min_support=args.min_support,
             cooldown_days=args.cooldown_days,
             lookback_days=args.lookback_days,
+            trace_types=tuple(args.trace_type) if args.trace_type else None,
+            source_types=tuple(args.source_type) if args.source_type else None,
         )
     finally:
         db.close()

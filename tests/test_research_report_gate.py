@@ -7,6 +7,7 @@ import pytest
 from backend.data.news_audit import NewsAudit
 from backend.data.news_models import RawNews
 from backend.research.research_report_gate import (
+    GateCheckResult,
     GateVerdict,
     _annotate_warnings,
     run_research_report_gate,
@@ -523,6 +524,60 @@ class TestGateVerdict:
         v = GateVerdict(status="pass")
         assert v.reasons == []
         assert v.warnings == []
+        assert v.checks == []
+
+    def test_structured_checks_are_stable_and_match_verdict(self):
+        report = _make_report(as_of="2026-05-17")
+        future_audit = _make_audit(
+            published_at=datetime(2026, 5, 20, 10, 0, 0),
+            usable=True,
+        )
+        verdict = run_research_report_gate(report, [future_audit], CLEAN_TEXT)
+
+        assert [check.check_id for check in verdict.checks] == [
+            "source_integrity",
+            "timeline",
+            "data_coverage",
+            "narrative_evidence",
+            "forbidden_wording",
+            "zh_style",
+        ]
+        timeline = next(check for check in verdict.checks if check.check_id == "timeline")
+        assert timeline.status == "blocked"
+        assert timeline.severity == "error"
+        assert timeline.evidence_refs == ("https://finance.eastmoney.com/a/test.html",)
+        assert verdict.status == "blocked"
+
+    def test_serenity_check_is_opt_in(self):
+        report = _make_report()
+        audits = [_make_audit(usable=True)]
+        without_serenity = run_research_report_gate(report, audits, CLEAN_TEXT)
+        assert "serenity_method_lens" not in {
+            check.check_id for check in without_serenity.checks
+        }
+
+        serenity = TestSerenityStrictnessLayer()._make_serenity(quick_filter_pass=False)
+        with_serenity = run_research_report_gate(
+            report, audits, CLEAN_TEXT, serenity=serenity
+        )
+        serenity_check = next(
+            check for check in with_serenity.checks
+            if check.check_id == "serenity_method_lens"
+        )
+        assert serenity_check.status == "warning"
+        assert serenity_check.severity == "warning"
+
+    def test_gate_check_result_is_frozen(self):
+        import dataclasses
+
+        result = GateCheckResult(
+            check_id="source_integrity",
+            status="pass",
+            severity="info",
+            message="检查通过",
+        )
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            result.status = "blocked"  # type: ignore[misc]
 
 
 class TestDataCoverageWithRealData:

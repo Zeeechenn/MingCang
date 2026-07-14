@@ -91,3 +91,33 @@ def test_m57_miner_repeated_risk_and_confirmed_action_route_to_pending_atoms(tes
     assert {row["memory_type"] for row in atoms} >= {"risk", "lesson"}
     assert {row["trust_state"] for row in atoms} == {"pending"}
     assert all(json.loads(row["evidence_json"])["source_event_ids"] for row in atoms)
+
+
+def test_m57_miner_trace_filter_excludes_unrelated_capsules(test_db):
+    from backend.memory.evolution_miner import mine_candidates
+    from backend.memory.evolution_trace import NAMESPACE_RESEARCH_THESIS, record_trace
+
+    rows = (
+        ("task_capsule.write", "task_capsule", "capsule"),
+        ("research.deep_research.complete", "decision_run_report", "report-a"),
+        ("research.deep_research.complete", "decision_run_report", "report-b"),
+    )
+    for trace_type, source_type, source_ref in rows:
+        record_trace(
+            test_db,
+            trace_type=trace_type,
+            namespace=NAMESPACE_RESEARCH_THESIS,
+            content="独立研究记录",
+            symbols=["600183"],
+            source_type=source_type,
+            source_ref=source_ref,
+        )
+
+    candidates = mine_candidates(
+        test_db,
+        min_support=2,
+        trace_types=("research.deep_research.complete",),
+        source_types=("decision_run_report",),
+    )
+    candidate = next(item for item in candidates if item.symbol == "600183")
+    assert len(candidate.source_event_ids) == 2

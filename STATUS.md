@@ -58,14 +58,22 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 
 Per-workstream first action and stop condition live in `docs/ROADMAP.md` — the
 single source of truth for sequencing; this file only carries the state snapshot
-above. Live lines as of 2026-07-06: **M58** exit-channel shadow arm (stock-pick
+above. Live lines as of 2026-07-15: **M58** exit-channel shadow arm (stock-pick
 formula terminally falsified; 4-6 week forward run), **M54** news v2 forward
 IC-day accrual (pure-news / announcement-boost / flow-fusion variants all
 non-GO so far; re-adjudicate at IC-days>=20 across regimes), **M57** memory
-self-evolution Phases 1-3 landed (miner + governance console; shadow evaluator
-pending), **M59** post-market panel with LLM-discretion gray release ON,
+self-evolution Phases 1-3 landed; one real-trace/miner/governance round completed
+(2 research traces, duplicate candidate archived, zero trusted), **M59** post-market panel with LLM-discretion gray release ON,
 **M60** watchtower trigger family + second-entry shadow ledger, **M63** daily
-orchestration in routine service. Quant v2 first run missed its gates
+orchestration in routine service. **M65** research-trust Phase 0-2 is complete
+(Evidence Card + structured ResearchReportGate); its four-arm evaluator is landed. The
+Phase 2 is now complete on 20 readable cases / 19 industry labels: 80 arm outputs and 20
+single-blind judgments produced `HOLD_STOP_PHASE_3_4`. Both-vs-Base deltas were negative
+for source fidelity (-2.05pp), fact coverage (-0.90pp), contradiction handling (-0.75pp),
+and falsifiability (-1.70pp); hallucination/error worsened by +2.60pp. Serenity's factorial
+main effect was also negative overall, with only 3/20 cases positive on both contradiction
+handling and falsifiability. Phase 3-4 is not started; Serenity remains a default-off manual
+method lens pending a separately preregistered v1 retest. Quant v2 first run missed its gates
 (IC 0.0215 / ICIR 0.098 vs 0.04 / 0.40); rerun when fund-flow history grows.
 Everything else is archived — see the ROADMAP archive index.
 
@@ -84,9 +92,9 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last recorded full-suite run (2026-07-15, v0.6.2 release candidate): backend
-pytest 1708 passed / 5 skipped; ruff and mypy (0 errors) green; frontend
-typecheck, 20 tests, build, zero-warning ESLint, and desktop/mobile Playwright
+Last recorded full-suite run (2026-07-15, M65 Phase 2 HOLD closure): backend
+pytest 1724 passed / 5 skipped; ruff and mypy (0 errors) green; frontend
+typecheck, 22 tests, build, zero-warning ESLint, and desktop/mobile Playwright
 smoke flows all green. Release tags are published only after the matching
 GitHub CI jobs also pass on the exact release commit.
 

@@ -4,6 +4,7 @@
 import React from 'react';
 import { Badge, Card, Markdown, Metric, PageHead, ScoreBar, fmt, recTone, toast, useStore } from './shared';
 import { packBodyCoverage, packToMarkdown, toResearchReportPack } from './report-pack';
+import type { EvidenceLedgerEntry } from './report-pack';
 const { useState: useRepState, useMemo: useRepMemo, useEffect: useRepEffect } = React;
 
 const ROLE_TONE = (score) => (score > 10 ? 'up' : score < -10 ? 'down' : '');
@@ -263,6 +264,49 @@ function ReportGateSnapshot({ status }: any) {
   );
 }
 
+function freshnessTone(status: string) {
+  if (status === 'fresh' || status === 'current') return 'badge-up';
+  if (status === 'stale' || status === 'expired') return 'badge-warn';
+  return 'badge-dim';
+}
+
+export function EvidenceCard({ entry }: { entry: EvidenceLedgerEntry }) {
+  const tierLabel = entry.tier ? TIER_LABEL[entry.tier] || entry.tier : '层级未知';
+  const usableLabel = entry.usable_known
+    ? (entry.usable ? '可用' : '不可用')
+    : '可用性未知';
+  return (
+    <div className="glass-inset" style={{ padding: '10px 12px' }}>
+      <div className="spread" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="row" style={{ gap: 7, flexWrap: 'wrap' }}>
+            <Badge tone={entry.tier ? TIER_TONE[entry.tier] || 'badge-dim' : 'badge-dim'}>{tierLabel}</Badge>
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>{entry.title}</span>
+          </div>
+          <div className="t-dim" style={{ fontSize: 11.5, marginTop: 4 }}>{entry.source}</div>
+        </div>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <Badge tone={freshnessTone(entry.freshness_status)}>新鲜度 {entry.freshness_status}</Badge>
+          <Badge tone={entry.usable_known && entry.usable ? 'badge-up' : 'badge-dim'}>{usableLabel}</Badge>
+        </div>
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: 6, marginTop: 9 }}>
+        <span className="t-faint" style={{ fontSize: 11 }}>发布时间：{entry.published_at || '未知'}</span>
+        <span className="t-faint" style={{ fontSize: 11 }}>抓取时间：{entry.fetched_at || '未知'}</span>
+        <span className="t-faint" style={{ fontSize: 11 }}>证据截止：{entry.as_of || '未知'}</span>
+      </div>
+      <div className="t-faint" style={{ fontSize: 11, marginTop: 7 }}>
+        风险标记：{entry.risk_flags.length ? entry.risk_flags.join('、') : '无'}
+      </div>
+      {entry.missing_reason && (
+        <div className="t-faint" style={{ fontSize: 11, marginTop: 4 }}>
+          缺失/未知：{entry.missing_reason}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- 深度研究 · 完整报告 ----------
 export function DeepResearchReport({ report }: any) {
   const pack = toResearchReportPack(report);
@@ -274,41 +318,32 @@ export function DeepResearchReport({ report }: any) {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <Badge tone={report.gate_status === 'pass' ? 'badge-up' : report.gate_status === 'warning' ? 'badge-warn' : 'badge-down'}>
-          报告闸门 {report.gate_status === 'pass' ? '通过' : report.gate_status === 'warning' ? 'warning' : 'blocked'}
+        <Badge tone={pack.gate_status === 'pass' ? 'badge-up' : pack.gate_status === 'warning' ? 'badge-warn' : 'badge-down'}>
+          报告闸门 {pack.gate_status === 'pass' ? '通过' : pack.gate_status === 'warning' ? 'warning' : 'blocked'}
         </Badge>
         <Badge tone={recTone(report.stance)}>{report.stance}</Badge>
         <Badge tone="badge-dim">置信 {report.confidence.toFixed(2)}</Badge>
         <Badge tone="badge-accent">pack v1 · {coverage.populated}/{coverage.total}</Badge>
-        <span className="t-faint" style={{ fontSize: 12 }}>{report.symbols.join(' · ')} · {report.as_of}</span>
+        <span className="t-faint" style={{ fontSize: 12 }}>{pack.symbols.join(' · ')} · {pack.as_of}</span>
         <button className="btn btn-small" type="button" onClick={copyPackMarkdown}>复制报告包</button>
       </div>
-      {report.gate_reasons && report.gate_reasons.length > 0 && (
-        <div className="badge badge-warn" style={{ padding: '8px 13px', whiteSpace: 'normal', borderRadius: 11, fontSize: 12.5 }}>⚠ {report.gate_reasons.join(' / ')}</div>
+      {pack.gate_reasons.length > 0 && (
+        <div className="badge badge-warn" style={{ padding: '8px 13px', whiteSpace: 'normal', borderRadius: 11, fontSize: 12.5 }}>⚠ {pack.gate_reasons.join(' / ')}</div>
       )}
 
-      <ReportGateSnapshot status={report.gate_status} />
+      <ReportGateSnapshot status={pack.gate_status} />
 
       {/* 来源审计 */}
       <div>
         <div className="spread" style={{ marginBottom: 8 }}>
           <div className="t-eyebrow">来源审计</div>
-          <span className="t-faint" style={{ fontSize: 11.5 }}>{report.source_count} 源 · 弱证据 {report.weak_source_count}</span>
+          <span className="t-faint" style={{ fontSize: 11.5 }}>{pack.evidence_ledger.length} 源 · 弱证据 {report.weak_source_count || 0}</span>
         </div>
         <div className="grid" style={{ gap: 6 }}>
-          {report.audits.map((a, i) => (
-            <div key={i} className="glass-inset row" style={{ padding: '8px 12px', gap: 10, justifyContent: 'space-between' }}>
-              <div className="row" style={{ gap: 8, minWidth: 0 }}>
-                <Badge tone={TIER_TONE[a.tier]}>{TIER_LABEL[a.tier]}</Badge>
-                <span style={{ fontSize: 12.5, fontWeight: 550, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.source}</span>
-              </div>
-              <div className="row" style={{ gap: 8, flex: 'none' }}>
-                {a.risk_flags && a.risk_flags.map((f) => <Badge key={f} tone="badge-warn">{f}</Badge>)}
-                <Badge tone={a.usable ? 'badge-down' : 'badge-dim'}>{a.usable ? '可用' : '不作唯一证据'}</Badge>
-                <span className="t-num t-faint" style={{ fontSize: 11 }}>{a.published_at.slice(5)}</span>
-              </div>
-            </div>
+          {pack.evidence_ledger.map((entry, index) => (
+            <EvidenceCard key={`${entry.duplicate_group}-${index}`} entry={entry} />
           ))}
+          {!pack.evidence_ledger.length && <div className="empty">暂无可展示的证据卡。</div>}
         </div>
       </div>
 

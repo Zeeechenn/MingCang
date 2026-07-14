@@ -6,6 +6,11 @@ export interface EvidenceLedgerEntry {
   title: string;
   source: string;
   published_at: string;
+  fetched_at: string;
+  as_of: string;
+  freshness_status: string;
+  missing_reason: string;
+  usable_known: boolean;
   score: number;
   usable: boolean;
   risk_flags: string[];
@@ -75,15 +80,41 @@ function isPlaceholder(body: string): boolean {
   return !body.trim() || body.trim() === PLACEHOLDER;
 }
 
-function normalizeEvidenceEntry(value: unknown, index: number): EvidenceLedgerEntry {
+function normalizeEvidenceEntry(value: unknown, index: number, defaultAsOf = ''): EvidenceLedgerEntry {
   const entry = asRecord(value);
   const source = asString(entry.source || entry.source_name || entry.tier, '未知来源');
   const title = asString(entry.title || entry.headline || source);
   const tier = entry.tier || entry.source_tier;
+  const publishedAt = asString(entry.published_at);
+  const fetchedAt = asString(entry.fetched_at);
+  const asOf = asString(entry.as_of, defaultAsOf);
+  const suppliedFreshness = asString(entry.freshness_status || entry.freshness);
+  const freshnessStatus = suppliedFreshness || (entry.stale === true ? 'stale' : 'unknown');
+  const usableKnown = typeof entry.usable === 'boolean';
+  const upstreamMissing = [
+    entry.missing_reason,
+    entry.unknown_reason,
+    entry.gap_reason,
+  ].flatMap((reason) => Array.isArray(reason) ? reason : [reason])
+    .map((reason) => asString(reason).trim())
+    .filter(Boolean);
+  const inferredMissing = [
+    !publishedAt ? '发布时间未提供' : '',
+    !fetchedAt ? '抓取时间未提供' : '',
+    !asOf ? '证据截止时间未提供' : '',
+    !suppliedFreshness && entry.stale !== true ? '新鲜度未提供' : '',
+    !usableKnown ? '可用性未提供' : '',
+  ].filter(Boolean);
+  const missingReason = [...new Set([...upstreamMissing, ...inferredMissing])].join('；');
   return {
     title,
     source,
-    published_at: asString(entry.published_at || entry.fetched_at || entry.date),
+    published_at: publishedAt,
+    fetched_at: fetchedAt,
+    as_of: asOf,
+    freshness_status: freshnessStatus,
+    missing_reason: missingReason,
+    usable_known: usableKnown,
     score: asNumber(entry.score, entry.usable === false ? 40 : 100),
     usable: entry.usable !== false,
     risk_flags: asStringList(entry.risk_flags),
@@ -120,15 +151,18 @@ function normalizePack(value: unknown): ResearchReportPack {
   const pack = asRecord(value);
   const gateStatus = asString(pack.gate_status, 'gate_disabled');
   const blocked = Boolean(pack.blocked || gateStatus === 'blocked');
+  const asOf = asString(pack.as_of);
   return {
     schema_version: RESEARCH_REPORT_PACK_SCHEMA,
     topic: asString(pack.topic),
     symbols: asStringList(pack.symbols),
-    as_of: asString(pack.as_of),
+    as_of: asOf,
     gate_status: gateStatus,
     gate_reasons: asStringList(pack.gate_reasons),
     blocked,
-    evidence_ledger: asArray(pack.evidence_ledger).map(normalizeEvidenceEntry),
+    evidence_ledger: asArray(pack.evidence_ledger).map(
+      (entry, index) => normalizeEvidenceEntry(entry, index, asOf),
+    ),
     body_sections: normalizeSections(pack.body_sections, blocked),
     observe_only: pack.observe_only !== false,
     signal_impact: asString(pack.signal_impact, 'none'),
@@ -141,7 +175,9 @@ function evidenceBody(entries: EvidenceLedgerEntry[]): string {
   return entries.map((entry) => {
     const flags = entry.risk_flags.length ? entry.risk_flags.join('、') : '无风险标记';
     const tier = entry.tier ? ` | 层级：${entry.tier}` : '';
-    return `- [${entry.usable ? '可用' : '不可用'}] ${entry.title}\n  来源：${entry.source}${tier} | 发布：${entry.published_at || '未知日期'} | 评分：${entry.score} | 风险：${flags}`;
+    const usability = entry.usable_known ? (entry.usable ? '可用' : '不可用') : '可用性未知';
+    const missing = entry.missing_reason || '无';
+    return `- [${usability}] ${entry.title}\n  来源：${entry.source}${tier} | 发布：${entry.published_at || '未知'} | 抓取：${entry.fetched_at || '未知'} | 截止：${entry.as_of || '未知'}\n  新鲜度：${entry.freshness_status} | 评分：${entry.score} | 风险：${flags} | 缺失/未知：${missing}`;
   }).join('\n');
 }
 
@@ -188,7 +224,10 @@ function metadataBody(report: Record<string, any>, evidence: EvidenceLedgerEntry
 function legacyPack(report: Record<string, any>): ResearchReportPack {
   const gateStatus = asString(report.gate_status, 'gate_disabled');
   const blocked = Boolean(report.blocked || gateStatus === 'blocked');
-  const evidence = asArray(report.audits).map(normalizeEvidenceEntry);
+  const asOf = asString(report.as_of);
+  const evidence = asArray(report.audits).map(
+    (entry, index) => normalizeEvidenceEntry(entry, index, asOf),
+  );
   const falsification = asStringList(report.falsification);
   const bodySections = blocked ? [] : [
     { number: 1, heading: PACK_SECTION_HEADINGS[0].heading, body: asString(report.summary || report.topic || report.title, PLACEHOLDER) },
@@ -205,7 +244,7 @@ function legacyPack(report: Record<string, any>): ResearchReportPack {
     schema_version: RESEARCH_REPORT_PACK_SCHEMA,
     topic: asString(report.topic || report.title, '研究报告'),
     symbols: asStringList(report.symbols),
-    as_of: asString(report.as_of),
+    as_of: asOf,
     gate_status: gateStatus,
     gate_reasons: asStringList(report.gate_reasons),
     blocked,
