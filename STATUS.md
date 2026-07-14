@@ -87,9 +87,8 @@ make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 Last recorded full-suite run (2026-07-15, v0.6.2 release candidate): backend
 pytest 1708 passed / 5 skipped; ruff and mypy (0 errors) green; frontend
 typecheck, 20 tests, build, zero-warning ESLint, and desktop/mobile Playwright
-smoke flows all green. The latest confirmed remote GitHub CI baseline is
-v0.6.1; the v0.6.2 release commit is validated locally by the same canonical
-gate before push.
+smoke flows all green. Release tags are published only after the matching
+GitHub CI jobs also pass on the exact release commit.
 
 For release-quality work, treat `make verify` as the canonical gate.
 

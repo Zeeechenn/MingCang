@@ -1,9 +1,11 @@
 const { chromium } = require('playwright');
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
 const path = require('node:path');
 
 const baseUrl = process.env.MC_SMOKE_BASE_URL || 'http://127.0.0.1:4174';
+const shotsDir = process.env.MC_SMOKE_SHOTS_DIR || path.join(os.tmpdir(), 'mingcang_frontend_v2', 'shots');
 let staticServer = null;
 
 async function ensureStaticServer() {
@@ -45,7 +47,7 @@ const routes = [
 
 (async () => {
   await ensureStaticServer();
-  fs.mkdirSync('/private/tmp/mingcang_frontend_v2/shots', { recursive: true });
+  fs.mkdirSync(shotsDir, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
   const consoleErrors = [];
@@ -94,13 +96,13 @@ const routes = [
   await page.locator('.desk-pending').getByRole('button', { name: '确认' }).click();
   await page.locator('.desk-pending').getByText('已确认').waitFor({ timeout: 10000 });
   await page.waitForTimeout(900);
-  await page.screenshot({ path: '/private/tmp/mingcang_frontend_v2/shots/v2-home-terminal.png', fullPage: true });
+  await page.screenshot({ path: path.join(shotsDir, 'v2-home-terminal.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileResults = [];
   await page.goto(urlFor('/'), { waitUntil: 'networkidle' });
   await page.waitForSelector('text=明仓终端', { timeout: 10000 });
   await page.waitForTimeout(900);
-  await page.screenshot({ path: '/private/tmp/mingcang_frontend_v2/shots/v2-mobile-home-terminal.png', fullPage: true });
+  await page.screenshot({ path: path.join(shotsDir, 'v2-mobile-home-terminal.png'), fullPage: true });
   for (const [name, path, text] of routes.filter(([name]) => !name.includes('legacy') && name !== 'stock')) {
     await page.goto(urlFor(path), { waitUntil: 'networkidle' });
     await page.waitForSelector(`text=${text}`, { timeout: 10000 });
@@ -115,7 +117,7 @@ const routes = [
     mobileResults.push({ name: `${name}-mobile`, path, ok: true });
   }
   await page.waitForTimeout(900);
-  await page.screenshot({ path: '/private/tmp/mingcang_frontend_v2/shots/v2-mobile-memory.png', fullPage: true });
+  await page.screenshot({ path: path.join(shotsDir, 'v2-mobile-memory.png'), fullPage: true });
 
   await page.goto(urlFor('/'), { waitUntil: 'networkidle' });
   await page.evaluate(() => {
