@@ -51,3 +51,11 @@ vendor/kronos/
 # 本地纸上交易测试材料，不上传到 GitHub
 paper_trading/
 PAPER_TRADING*.md
+
+# Live Track: private-by-default.  Only reviewed orchestration code and a
+# redacted schema example are public; the real universe/state, ledger, logs,
+# and generated subsets must never be committed.
+live_trading/*
+!live_trading/live_funnel.py
+!live_trading/live_state.example.json
+docs/dev/2026-07-07-live-track-design.md

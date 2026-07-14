@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "as_of": "YYYY-MM-DD",
+  "portfolio_value": "100000.00",
+  "positions": [
+    {
+      "symbol": "600000",
+      "market_value": "10000.00"
+    }
+  ]
+}

@@ -3,8 +3,10 @@
 // ============================================================
 
 import React from 'react';
-import { Badge, Card, MKT, PageHead, RefreshButton, navigate, toast } from './shared';
+import { refreshCoverage } from './live';
+import { Badge, Card, MKT, PageHead, RefreshButton, navigate, toast, useStore } from './shared';
 export function HealthPage() {
+  const [state] = useStore();
   const C = window.MC_DATA.COVERAGE;
   const checks = Object.entries(C.checks);
   const allPass = checks.every(([, v]) => v);
@@ -12,11 +14,23 @@ export function HealthPage() {
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="Sources · Read Only" title="来源健康"
-        desc="展示 CN / HK / US 数据包络、提供商回退链、新鲜度策略、反穿越检查和告警。本页只读，不触发任何数据拉取。"
+        desc="展示 CN / HK / US 数据包络、提供商回退链、新鲜度策略、反穿越检查和告警。重新检查只调用只读覆盖接口。"
         right={<div className="row" style={{ gap: 10 }}>
-          <RefreshButton label="重新检查" busyLabel="检查中…" toastMsg="已重新检查数据覆盖与新鲜度(只读探测)" />
+          <RefreshButton label="重新检查" busyLabel="检查中…" onRefresh={refreshCoverage} toastMsg="已重新检查数据覆盖与新鲜度(只读探测)" />
           <Badge tone={C.status === 'pass' && allPass ? 'badge-down' : 'badge-warn'}>{C.status === 'pass' ? '整体通过' : '需复核'}</Badge>
         </div>} />
+
+      <div className="glass-inset spread" style={{ padding: '10px 14px', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div className="t-eyebrow">当前数据来源</div>
+          <div className="t-dim" style={{ fontSize: 12.5, marginTop: 4 }}>
+            {Object.entries(state.liveSources || {}).map(([name, mode]) => `${name}:${mode}`).join(' · ') || '示例快照'}
+          </div>
+        </div>
+        <div className="t-num t-faint" style={{ fontSize: 11.5 }}>
+          覆盖更新时间 {state.coverageUpdatedAt || C.generated_at || '未连接'} · 示例快照 {state.snapshotAsOf || window.MC_DATA.DEMO_META.snapshot_as_of}
+        </div>
+      </div>
 
       <div className="grid pop" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
         {[

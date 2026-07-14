@@ -63,12 +63,12 @@ SHADOW_VARIANT = ExitVariant(3.5, "drawdown_10")
 def v2_window(*, db_path: Path) -> tuple[str, str]:
     """Resolve the test2 v2 replay window: v2 start through latest priced date.
 
-    ``start`` comes from ``paper_trading.test2_ab_models.START_DATE`` -- the
+    ``start`` comes from ``backend.backtest.test2_models.START_DATE`` -- the
     single source of truth test2_ab_runner/test2_ab_cli already use for the
     v2 epoch boundary (reset 2026-07-03 per the v1/v2 epoch split in
     `test2.md`). This module only reads that constant; it never writes it.
     """
-    from paper_trading.test2_ab_models import START_DATE
+    from backend.backtest.test2_models import START_DATE
 
     con = _connect_readonly(db_path)
     try:

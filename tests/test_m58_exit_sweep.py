@@ -102,7 +102,6 @@ def test_cost_deduction_is_40bp_round_trip():
 
 
 def test_holdout_unlock_is_refused_like_m58_grid_backtest():
-    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
     with pytest.raises(NotImplementedError, match="holdout"):
         m58.run_large_sample_sweep(
             db_path=m58.default_sqlite_path(),
@@ -285,7 +284,6 @@ def _seed_synthetic_price_db(db_path, *, n_symbols: int = 10, n_days: int = 320)
 
 
 def test_large_sample_sweep_stays_sane_on_mild_synthetic_data(tmp_path, monkeypatch):
-    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
     """Full run_large_sample_sweep pipeline, all 35 variants, on mild synthetic data.
 
     This exercises the real seam (entry building -> exit simulation ->

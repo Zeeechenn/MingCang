@@ -311,37 +311,13 @@ def system_health(db: Session = Depends(get_db)):
         and not (ks_state and ks_state.get("active"))
     )
 
-    # LLM 成本报警（M25.3）：超预算时写 audit + Bark
+    # GET health stays read-only. Operators can alert from this summary.
     llm_budget_alert = {}
     try:
         from backend.ops.llm_usage import check_daily_budget_alert
         llm_budget_alert = check_daily_budget_alert(
             budget_cny=settings.llm_daily_budget_cny, db=db
         )
-        if llm_budget_alert.get("alert"):
-            try:
-                from backend.notification.bark import send_result
-                send_result(
-                    title="MingCang LLM 日预算超限",
-                    body=(
-                        f"今日 LLM 成本 ¥{llm_budget_alert['today_cny']:.4f}"
-                        f"，预算 ¥{llm_budget_alert['budget_cny']:.2f}"
-                    ),
-                )
-            except Exception:
-                logger.warning("system.system_health: sending LLM budget alert failed, using fallback", exc_info=True)
-                pass
-            try:
-                from backend.memory.audit import audit_write
-                audit_write(
-                    db,
-                    "llm_budget_alert",
-                    f"LLM 日成本 ¥{llm_budget_alert['today_cny']:.4f} 超预算 ¥{llm_budget_alert['budget_cny']:.2f}",
-                    related_scope="global",
-                )
-            except Exception:
-                logger.warning("system.system_health: writing LLM budget audit failed, using fallback", exc_info=True)
-                pass
     except Exception:
         logger.warning("system.system_health: checking LLM budget alert failed, using fallback", exc_info=True)
         pass
@@ -349,7 +325,7 @@ def system_health(db: Session = Depends(get_db)):
     return {
         "healthy": healthy,
         "db_ok": db_ok,
-        "db_path": db_path,
+        "db_path": Path(db_path).name,
         "latest_price_date": latest_price_date,
         "data_age_days": data_age_days,
         "data_stale_threshold_days": kill_switch.DEFAULT_DATA_STALE_DAYS,

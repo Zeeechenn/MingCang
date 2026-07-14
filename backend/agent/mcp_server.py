@@ -22,6 +22,7 @@ from backend.agent.context import (
 )
 from backend.agent.security import require_agent_access
 from backend.data.database import SessionLocal
+from backend.memory.stock_memory import suppress_memory_usage_recording
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -37,7 +38,8 @@ mcp = FastMCP("mingcang")
 def _with_db(fn):
     db = SessionLocal()
     try:
-        return fn(db)
+        with suppress_memory_usage_recording():
+            return fn(db)
     finally:
         db.close()
 

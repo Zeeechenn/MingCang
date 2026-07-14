@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from backend.data.models.degradation import DegradationEvent
 from backend.data.orm import SessionLocal, _utcnow
@@ -46,15 +46,29 @@ def emit_degradation(
                 logger.warning("failed to close degradation DB session")
 
 
-def recent_degradations(hours: int = 24, db=None) -> list[dict]:
-    """Return recent degradation events as plain dictionaries."""
+def recent_degradations(
+    hours: int = 24,
+    db=None,
+    as_of: str | datetime | None = None,
+) -> list[dict]:
+    """Return degradations within a current or replay-anchored time window."""
     own_session = db is None
     session = db or SessionLocal()
     try:
-        since = _utcnow() - timedelta(hours=hours)
+        if as_of is None:
+            anchor = _utcnow()
+        elif isinstance(as_of, datetime):
+            anchor = as_of
+        else:
+            anchor = datetime.fromisoformat(as_of)
+            if len(as_of.strip()) == 10:
+                anchor += timedelta(days=1, microseconds=-1)
+        if anchor.tzinfo is not None:
+            anchor = anchor.astimezone(UTC).replace(tzinfo=None)
+        since = anchor - timedelta(hours=hours)
         rows = (
             session.query(DegradationEvent)
-            .filter(DegradationEvent.ts >= since)
+            .filter(DegradationEvent.ts >= since, DegradationEvent.ts <= anchor)
             .order_by(DegradationEvent.ts.desc())
             .all()
         )

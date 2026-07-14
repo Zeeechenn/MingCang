@@ -10,6 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from backend.config import settings
+from backend.jobs.m63_schedule import job_m63_postmarket, register_m63_postmarket
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +251,7 @@ def job_stoploss_check() -> None:
 
 @tracked_job("train_model")
 def job_train_model() -> None:
-    """每周六重训 LightGBM Alpha 模型（数据不足时自动跳过）"""
+    """每周六训练 LightGBM Alpha 候选模型（不自动晋升生产）。"""
     from backend.jobs.weekend import run_train_model
 
     return run_train_model()
@@ -315,6 +316,7 @@ def start() -> None:
         hour=int(post_h), minute=int(post_m), day_of_week="mon-fri",
     ), id="postmarket", replace_existing=True)
 
+    register_m63_postmarket(scheduler, settings, job_m63_postmarket)
     # 每周六 09:00 重训 LightGBM Alpha 模型
     scheduler.add_job(job_train_model, CronTrigger(
         hour=9, minute=0, day_of_week="sat",

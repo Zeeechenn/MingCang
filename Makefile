@@ -17,7 +17,7 @@ COVERAGE_FILE ?= /tmp/mingcang-coverage
 COVERAGE_XML ?= coverage.xml
 PIP_AUDIT_CACHE_DIR ?= /tmp/mingcang-pip-audit-cache
 
-.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-lint-summary frontend-format-check lint hygiene security dependency-audit fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
+.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-smoke lint hygiene security dependency-audit fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
 
 help:
 	@echo "MingCang Makefile commands:"
@@ -30,8 +30,7 @@ help:
 	@echo "  coverage     跑后端测试并输出覆盖率报告"
 	@echo "  frontend-test 跑前端 node:test 单元测试"
 	@echo "  frontend-lint 跑前端 ESLint（阻塞式，全量输出）"
-	@echo "  frontend-lint-summary 跑前端 ESLint，汇总警告/错误数（非阻塞，已纳入 verify）"
-	@echo "  frontend-format-check 跑前端 Prettier 配置文件检查"
+	@echo "  frontend-smoke 跑 demo / live / 部分实时浏览器冒烟"
 	@echo "  lint         ruff 检查（不修复）"
 	@echo "  hygiene      发布卫生守卫（旧名词/个人路径/凭据模式）"
 	@echo "  security     ruff 安全规则快照（当前不作为硬门槛）"
@@ -39,7 +38,7 @@ help:
 	@echo "  fmt          ruff format + ruff fix"
 	@echo "  typecheck    mypy 类型检查"
 	@echo "  check        lint + typecheck + test 一键全跑（PR 前用）"
-	@echo "  verify       后端/前端/构建全量验证（含 ESLint 汇总，不阻塞构建）"
+	@echo "  verify       后端/前端/构建全量验证（ESLint 错误会阻塞）"
 	@echo "  demo         种子演示数据库并启动后端 + 前端 demo（无需真实 API Key）"
 	@echo "  reproduce-evidence 离线打印 demo 闭环证据（无网络/无 API Key）"
 	@echo "  coverage-snapshot 输出当前数据覆盖快照"
@@ -81,15 +80,10 @@ frontend-test:
 	cd frontend && npm test
 
 frontend-lint:
-	cd frontend && npm run lint
+	cd frontend && npm run eslint
 
-frontend-lint-summary:
-	@echo "--- frontend ESLint summary (advisory, non-blocking) ---"
-	@cd frontend && npm run eslint 2>&1 | tail -8 || true
-	@echo "--- end ESLint summary ---"
-
-frontend-format-check:
-	cd frontend && npm run format:check
+frontend-smoke:
+	cd frontend && npm run smoke
 
 lint:
 	$(RUFF) check backend tests --cache-dir $(RUFF_CACHE_DIR)
@@ -112,7 +106,7 @@ typecheck:
 
 check: lint hygiene typecheck test
 
-verify: lint hygiene typecheck test frontend-test build frontend-lint-summary
+verify: lint hygiene typecheck test frontend-test build frontend-lint frontend-smoke
 
 demo:
 	@echo "=== MingCang Demo Mode ==="

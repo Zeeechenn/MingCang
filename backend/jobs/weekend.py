@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_train_model() -> None:
-    """每周六重训 LightGBM Alpha 模型（数据不足时自动跳过）"""
+    """每周六训练 LightGBM Alpha 候选模型（不自动晋升生产）"""
     from backend.analysis.qlib_engine import train
     from backend.data.database import SessionLocal
 
@@ -15,9 +15,9 @@ def run_train_model() -> None:
     try:
         ok = train(db)
         if ok:
-            logger.info("weekly model training succeeded")
+            logger.info("weekly candidate model training succeeded; awaiting human promotion")
         else:
-            logger.warning("weekly model training skipped (insufficient data)")
+            logger.warning("weekly candidate model training skipped (insufficient data)")
     except Exception as e:
         logger.error("weekly model training failed: %s", e)
     finally:

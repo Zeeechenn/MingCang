@@ -679,7 +679,7 @@ def run_large_sample_sweep(
     include_holdout: bool = False,
     limit_symbols: int | None = None,
 ) -> dict[str, Any]:
-    from paper_trading.test2_ab_models import DEFAULT_MAX_POSITIONS
+    from backend.backtest.test2_models import DEFAULT_MAX_POSITIONS
 
     max_positions = DEFAULT_MAX_POSITIONS
     effective_end = resolve_effective_end(end, include_holdout=include_holdout)
@@ -812,7 +812,7 @@ def run_holdout_adjudication(
         )
     variants = list(HOLDOUT_ADJUDICATION_VARIANTS)
 
-    from paper_trading.test2_ab_models import DEFAULT_MAX_POSITIONS
+    from backend.backtest.test2_models import DEFAULT_MAX_POSITIONS
 
     max_positions = DEFAULT_MAX_POSITIONS
     start, end = holdout_window(db_path=db_path)
@@ -936,8 +936,8 @@ def run_test2_comparison(
     end: str = TEST2_END,
     variants: list[ExitVariant] | None = None,
 ) -> dict[str, Any]:
+    from backend.backtest.test2_models import DEFAULT_MAX_POSITIONS
     from paper_trading.test2_ab_data import load_prices, load_sectors, load_signals, load_universe
-    from paper_trading.test2_ab_models import DEFAULT_MAX_POSITIONS
     from paper_trading.test2_ab_runner import _by_date
     from paper_trading.test2_ab_stats import result_summary
 
@@ -1014,7 +1014,7 @@ def _replay_test2_with_variant(
     sectors: dict[str, str],
     max_positions: int,
 ) -> dict[str, Any]:
-    from paper_trading.test2_ab_models import (
+    from backend.backtest.test2_models import (
         FRAMEWORKS,
         MAX_PER_SECTOR,
         FrameworkResult,

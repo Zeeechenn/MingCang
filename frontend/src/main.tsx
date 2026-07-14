@@ -17,6 +17,7 @@ import { PulsePage } from './page-pulse';
 import { ReportsPage } from './page-reports';
 import { StockPage, StocksPage } from './page-stock';
 import { MKT, McIcon, navigate, useRoute, useStockSuggest, useStore } from './shared';
+import { LiveStatusBadgeView } from './live-status';
 import { TweakColor, TweakRadio, TweakSection, TweakSlider, TweakToggle, TweaksPanel, useTweaks } from './tweaks-panel';
 import './boot';
 import './glass.css';
@@ -87,18 +88,12 @@ function applyTweaks(t, theme) {
 // 数据通道指示:live = 已连接后端,demo = 示例快照,offline = 后端断开
 function LiveBadge() {
   const [state] = useStore();
-  const mode = state.live || 'demo';
-  const live = mode === 'live';
-  const offline = mode === 'offline';
-  const label = live ? '本地后端' : (offline ? '后端断开' : '示例快照');
-  const title = live
-    ? '已连接本地后端:数据来自 /api'
-    : (offline ? '后端连接中断:保留当前页面数据' : '后端未连接:当前展示示例快照');
   return (
-    <span className="nav-status" title={title}>
-      <span className="pulse-dot" style={live ? undefined : { background: 'var(--warn)' }}></span>
-      <span className="nav-local-label">{label}</span>
-    </span>
+    <LiveStatusBadgeView
+      mode={state.live || 'demo'}
+      sources={state.liveSources || {}}
+      snapshotAsOf={state.snapshotAsOf}
+    />
   );
 }
 

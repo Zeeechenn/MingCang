@@ -121,8 +121,18 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Install browser runtime
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
       - name: Run frontend tests
         run: make frontend-test
 
+      - name: Run frontend ESLint gate
+        run: make frontend-lint
+
       - name: Run frontend build
         run: make build
+
+      - name: Run demo and live-mode browser smoke
+        run: make frontend-smoke

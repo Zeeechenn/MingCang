@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     database_url: str = _default_database_url()
     schedule_premarket: str = "08:30"
     schedule_postmarket: str = "16:00"
+    m63_daily_enabled: bool = True
+    schedule_m63_postmarket: str = "17:30"
     tushare_token: str = ""
     tushare_qfq_enabled: bool = False
     tushare_http_base_url: str = "http://api.tushare.pro"

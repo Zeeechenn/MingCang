@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
-from backend.api.schemas import PositionCreate, PositionOut, PositionUpdate
+from backend.api.schemas import PositionClose, PositionCreate, PositionOut, PositionUpdate
 from backend.data.database import Position, Price, Stock, get_db
 
 router = APIRouter()
@@ -115,7 +115,7 @@ def create_position(payload: PositionCreate, db: Session = Depends(get_db)):
 )
 def close_position(
     position_id: int,
-    payload: PositionUpdate | None = None,
+    payload: PositionClose | None = None,
     close_price: float | None = None,
     closed_at: str | None = None,
     db: Session = Depends(get_db),

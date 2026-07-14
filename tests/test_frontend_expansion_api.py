@@ -9,7 +9,7 @@ def test_positions_crud_and_summary(test_db):
         list_positions,
         update_position,
     )
-    from backend.api.schemas import PositionCreate, PositionUpdate
+    from backend.api.schemas import PositionClose, PositionCreate, PositionUpdate
     from backend.data.database import Price, Stock
 
     test_db.add(Stock(symbol="300308", name="中际旭创", market="CN", industry="通信设备", active=True))
@@ -32,7 +32,7 @@ def test_positions_crud_and_summary(test_db):
 
     closed = close_position(
         created.id,
-        PositionUpdate(status="closed", note="止盈平仓"),
+        PositionClose(status="closed", note="止盈平仓"),
         close_price=112,
         closed_at="2026-05-19",
         db=test_db,

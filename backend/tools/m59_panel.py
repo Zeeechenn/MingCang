@@ -1234,11 +1234,11 @@ def _build_summary(
     }
 
 
-def _build_data_health(db_session) -> dict[str, Any]:
+def _build_data_health(db_session, as_of: str) -> dict[str, Any]:
     events: list[dict[str, Any]] = []
     if db_session is not None:
         try:
-            events = recent_degradations(hours=48, db=db_session)
+            events = recent_degradations(hours=48, db=db_session, as_of=as_of)
         except Exception:
             events = []
     grouped = Counter(str(event.get("component")) for event in events if event.get("component"))
@@ -1353,7 +1353,7 @@ def build_panel(
                 "watchtower_followups": _build_watchtower_followups(Path(watchtower_output_dir)),
                 "watchtower_confirm": _build_watchtower_confirm(resolved_confirm_dir),
                 "overseas_reference": _build_overseas_reference(con),
-                "data_health": _build_data_health(db_session),
+                "data_health": _build_data_health(db_session, resolved_as_of),
             }
     finally:
         db_session.close()

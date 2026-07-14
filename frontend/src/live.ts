@@ -7,6 +7,7 @@
 //  4. 写操作统一走 window.MC_API,live 模式调后端,demo 模式由调用方落回本地示例行为
 // ============================================================
 import * as api from './api';
+import { deriveLiveMode } from './live-status';
 
 const HEALTH_POLL_MS = Number(import.meta.env.VITE_HEALTH_POLL_MS) || 30000;
 
@@ -33,7 +34,8 @@ function startHealthMonitor() {
     if (!live) return;
     try {
       await api.getSystemHealth();
-      store().set({ live: 'live' });
+      const sources = store().get().liveSources || {};
+      store().set({ live: deriveLiveMode(sources) });
     } catch (e) {
       live = false;
       atlasOn = false;
@@ -245,7 +247,7 @@ const CHECK_LABEL = {
   financial_coverage_ok: '财务数据完整性', fresh_news_ok: '新闻新鲜度',
 };
 
-function normCoverage(c) {
+export function normCoverage(c) {
   if (!c) return null;
   const checks: Record<string, boolean> = {};
   Object.entries(c.checks || {}).forEach(([k, v]: [string, any]) => {
@@ -262,6 +264,11 @@ function normCoverage(c) {
   });
   return {
     status: allPass ? 'pass' : 'warning',
+    generated_at: c.generated_at || c.as_of || null,
+    summary: c.summary || null,
+    provider_health: c.provider_health || null,
+    freshness_contract: c.freshness_contract || null,
+    cache_policy: c.cache_policy || null,
     provider_chains,
     policies: D().COVERAGE.policies,
     max_lag_days: D().COVERAGE.max_lag_days,
@@ -273,6 +280,27 @@ function normCoverage(c) {
       status: s.latest_price_date ? 'ok' : 'warning',
     })),
   };
+}
+
+export async function refreshCoverage() {
+  try {
+    const coverage = normCoverage(await api.getDataCoverage());
+    if (!coverage) throw new Error('覆盖接口未返回数据');
+    D().COVERAGE = coverage;
+    const current = store().get();
+    const liveSources = { ...(current.liveSources || {}), coverage: 'live' };
+    store().set({
+      live: live ? deriveLiveMode(liveSources) : current.live,
+      liveSources,
+      coverageUpdatedAt: coverage.generated_at || new Date().toISOString(),
+    });
+    return coverage;
+  } catch (error) {
+    const current = store().get();
+    const liveSources = { ...(current.liveSources || {}), coverage: 'error' };
+    store().set({ live: live ? 'degraded' : current.live, liveSources });
+    throw error;
+  }
 }
 
 // ---------- ATLAS 账本归一化 ----------
@@ -335,7 +363,11 @@ export async function startLive() {
     live = false;
     atlasOn = false;
     stopHealthMonitor();
-    store().set({ live: 'demo' });
+    store().set({
+      live: 'demo',
+      liveSources: { watchlist: 'demo', positions: 'demo', reviews: 'demo', system: 'demo', coverage: 'demo' },
+      snapshotAsOf: D().DEMO_META.snapshot_as_of,
+    });
     return; // 后端不可达,保持 demo
   }
   live = true;
@@ -356,6 +388,18 @@ export async function startLive() {
   ]);
   const [posOpen, posClosed, reviews, runtime, sysStatus, sysHealth, llmUsage, memOverview, memList, memAudit, coverage, sessions] =
     results.map((r) => (r.status === 'fulfilled' ? r.value : null));
+  const fulfilled = (index) => results[index].status === 'fulfilled';
+  const liveSources: any = {
+    watchlist: 'live',
+    positions: fulfilled(0) && fulfilled(1) ? 'live' : 'demo',
+    reviews: fulfilled(2) ? 'live' : 'demo',
+    runtime: fulfilled(3) ? 'live' : 'demo',
+    system: fulfilled(4) && fulfilled(5) ? 'live' : 'demo',
+    usage: fulfilled(6) ? 'live' : 'demo',
+    memory: fulfilled(7) && fulfilled(8) ? 'live' : 'demo',
+    coverage: fulfilled(10) ? 'live' : 'demo',
+    sessions: fulfilled(11) ? 'live' : 'demo',
+  };
 
   const Dd = D();
 
@@ -369,8 +413,9 @@ export async function startLive() {
   const positions = [...(posOpen || []), ...(posClosed || [])].map(normPosition);
 
   // 复盘(取最近 8 条详情拿正文)
-  let reviewItems = (Array.isArray(reviews) ? reviews : []).map(normReview);
+  const reviewItems = (Array.isArray(reviews) ? reviews : []).map(normReview);
   const detail = await Promise.allSettled(reviewItems.slice(0, 8).map((r) => api.getReview(r.id)));
+  if (detail.some((result) => result.status === 'rejected')) liveSources.reviews = 'stale';
   detail.forEach((res, i) => {
     if (res.status === 'fulfilled' && res.value) {
       reviewItems[i] = normReview(res.value);
@@ -464,10 +509,15 @@ export async function startLive() {
   const pricePrefetch = wl.slice(0, 30).map((w) =>
     api.getPrices(w.symbol, 120).then((bars) => { Dd.PRICES[w.symbol] = normPrices(bars); }).catch(() => {})
   );
-  await Promise.allSettled(pricePrefetch);
+  const priceResults = await Promise.allSettled(pricePrefetch);
+  liveSources.prices = priceResults.some((result) => result.status === 'rejected') ? 'stale' : 'live';
+  const liveMode = deriveLiveMode(liveSources);
 
   store().set((s) => ({
-    live: 'live',
+    live: liveMode,
+    liveSources,
+    snapshotAsOf: Dd.DEMO_META.snapshot_as_of,
+    coverageUpdatedAt: Dd.COVERAGE.generated_at || null,
     watchlist: wl,
     positions,
     reviews: Dd.REVIEWS.slice(),
@@ -476,7 +526,11 @@ export async function startLive() {
     sessions: chatSessions || s.sessions,
   }));
   startHealthMonitor();
-  window.toast && window.toast('已连接本地后端，数据为实时数据');
+  if (window.toast) {
+    window.toast(liveMode === 'live'
+      ? '已连接本地后端，核心数据域均为实时数据'
+      : `已连接本地后端，部分数据回退到 ${Dd.DEMO_META.snapshot_as_of} 示例快照`);
+  }
 }
 
 // ---------- 个股懒取 ----------
@@ -590,7 +644,7 @@ export const MC_API = {
     const run = kind === 'daily' ? api.ensureDailyReview : api.ensureLongTermReview;
     await run();
     const rows = await api.getReviews();
-    let items = (Array.isArray(rows) ? rows : []).map(normReview);
+    const items = (Array.isArray(rows) ? rows : []).map(normReview);
     const detail = await Promise.allSettled(items.slice(0, 8).map((r) => api.getReview(r.id)));
     detail.forEach((res, i) => { if (res.status === 'fulfilled' && res.value) items[i] = normReview(res.value); });
     if (items.length) { D().REVIEWS = items; store().set({ reviews: items.slice() }); }

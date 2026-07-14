@@ -2,11 +2,16 @@
 LightGBM Alpha 量化引擎（Qlib-style，不依赖 Qlib 数据基础设施）
 
 训练：python3 -m backend.analysis.qlib_engine --train
+人工晋升：python3 -m backend.analysis.qlib_engine --promote-candidate REPORT --confirm-human REVIEWER
 推理：qlib_score(df_raw) → dict  (score: -100 ~ +100)
 
 模型文件：~/.mingcang/models/lgbm_alpha.pkl
 """
+import hashlib
+import json
 import logging
+import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +29,10 @@ _MINGCANG_MODEL_DIR = Path.home() / ".mingcang" / "models"
 MODEL_DIR = _MINGCANG_MODEL_DIR
 MODEL_PATH = MODEL_DIR / "lgbm_alpha.pkl"
 CANDIDATE_MODEL_PATH = MODEL_DIR / "lgbm_alpha_candidate.pkl"
+CANDIDATE_REPORT_PATH = MODEL_DIR / "lgbm_alpha_candidate.validation.json"
+PROMOTION_FORWARD_MAX_AGE_DAYS = 7
+PROMOTION_FORWARD_MIN_OBSERVATIONS = 20
+PROMOTION_MIN_COVERAGE_RATIO = 0.95
 
 
 def daily_rank_groups(df: pd.DataFrame) -> list[int]:
@@ -215,6 +224,163 @@ def _save_model(model, path: Path) -> None:
     joblib.dump(model, path)
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _write_json_atomic(payload: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def promote_candidate(report_path: Path, *, confirmed_by: str) -> dict:
+    """Promote a separately validated candidate after explicit human confirmation."""
+    if not confirmed_by.strip():
+        raise ValueError("explicit human confirmation is required")
+    report = json.loads(Path(report_path).expanduser().read_text(encoding="utf-8"))
+    contract = report.get("promotion_contract")
+    if not isinstance(contract, dict):
+        raise ValueError("validated promotion contract is required")
+    required_gates = (
+        "performance",
+        "nonoverlap",
+        "stride",
+        "fresh_forward",
+        "provenance",
+        "data_quality",
+    )
+    failed_gates = [
+        name
+        for name in required_gates
+        if not isinstance(contract.get(name), dict)
+        or contract[name].get("passed") is not True
+    ]
+    if failed_gates:
+        raise ValueError(f"promotion contract gates failed or missing: {', '.join(failed_gates)}")
+    if not _passes_promotion_gate(report.get("validation") or {}):
+        raise ValueError("promotion performance metrics do not satisfy current thresholds")
+    blockers = contract.get("blockers")
+    if not isinstance(blockers, list) or blockers:
+        raise ValueError("promotion contract blockers must be an empty list")
+    if contract.get("promotable") is not True:
+        raise ValueError("promotion contract must explicitly mark the candidate promotable")
+    nonoverlap = contract["nonoverlap"]
+    try:
+        train_end = datetime.fromisoformat(str(nonoverlap["train_end"]))
+        forward_start = datetime.fromisoformat(str(nonoverlap["forward_start"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("nonoverlap evidence requires valid train_end and forward_start") from exc
+    if train_end >= forward_start:
+        raise ValueError("nonoverlap evidence overlaps the training and forward windows")
+    stride = contract["stride"]
+    try:
+        prediction_stride_days = int(stride["prediction_stride_days"])
+        label_horizon_days = int(stride["label_horizon_days"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("stride evidence requires integer prediction_stride_days and label_horizon_days") from exc
+    if label_horizon_days <= 0 or prediction_stride_days < label_horizon_days:
+        raise ValueError("stride evidence allows overlapping forward labels")
+    fresh_forward = contract["fresh_forward"]
+    try:
+        evaluated_at = datetime.fromisoformat(str(fresh_forward["evaluated_at"]))
+        max_age_days = int(fresh_forward["max_age_days"])
+        observations = int(fresh_forward["observations"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("fresh_forward evidence is incomplete") from exc
+    if evaluated_at.tzinfo is None:
+        raise ValueError("fresh_forward evaluated_at must include a timezone")
+    age = datetime.now(UTC) - evaluated_at.astimezone(UTC)
+    if (
+        max_age_days <= 0
+        or max_age_days > PROMOTION_FORWARD_MAX_AGE_DAYS
+        or age.total_seconds() < 0
+        or age > timedelta(days=max_age_days)
+        or observations < PROMOTION_FORWARD_MIN_OBSERVATIONS
+    ):
+        raise ValueError("fresh_forward evidence is stale or insufficient")
+    provenance = contract["provenance"]
+    dataset_sha256 = str(provenance.get("dataset_sha256") or "")
+    code_version = str(provenance.get("code_version") or "").strip()
+    if (
+        len(dataset_sha256) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in dataset_sha256)
+        or not code_version
+    ):
+        raise ValueError("provenance evidence requires dataset_sha256 and code_version")
+    data_quality = contract["data_quality"]
+    try:
+        coverage_ratio = float(data_quality["coverage_ratio"])
+        feature_null_cells = int(data_quality["feature_null_cells"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("data_quality evidence is incomplete") from exc
+    if coverage_ratio < PROMOTION_MIN_COVERAGE_RATIO or feature_null_cells != 0:
+        raise ValueError("data_quality evidence does not meet coverage and null requirements")
+    candidate_meta = report.get("candidate_model")
+    if not isinstance(candidate_meta, dict):
+        raise ValueError("candidate model metadata is required")
+    try:
+        reported_candidate_path = Path(candidate_meta["path"]).expanduser().resolve()
+        expected_candidate_path = CANDIDATE_MODEL_PATH.expanduser().resolve()
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("candidate model path metadata is invalid") from exc
+    if reported_candidate_path != expected_candidate_path:
+        raise ValueError("candidate model path does not match the configured candidate artifact")
+    if not CANDIDATE_MODEL_PATH.exists():
+        raise ValueError("candidate model artifact is missing")
+    reported_sha256 = str(candidate_meta.get("sha256") or "")
+    actual_sha256 = _sha256_file(CANDIDATE_MODEL_PATH)
+    if reported_sha256 != actual_sha256:
+        raise ValueError("candidate model sha256 does not match the validated artifact")
+    candidate_model, load_error = _load_model_unchecked(CANDIDATE_MODEL_PATH)
+    if load_error or candidate_model is None:
+        raise ValueError(f"candidate model cannot be loaded: {load_error or 'empty model'}")
+    feature_cols, dim_info = _feature_cols_for_model(candidate_model)
+    if feature_cols is None:
+        raise ValueError(f"candidate model feature dimension is incompatible: {dim_info}")
+    if float(settings.weight_quant) != 0.0:
+        raise ValueError("production weight_quant must remain 0 during model promotion")
+
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = MODEL_PATH.with_suffix(f"{MODEL_PATH.suffix}.promote.tmp")
+    try:
+        with CANDIDATE_MODEL_PATH.open("rb") as source, temporary.open("wb") as target:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                target.write(chunk)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, MODEL_PATH)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+    _MODEL_CACHE.update({
+        "path_mtime": None,
+        "model": None,
+        "feature_cols": None,
+        "disabled_reason": None,
+    })
+    promoted_at = datetime.now(UTC).isoformat(timespec="seconds")
+    logger.warning(
+        "candidate model promoted by %s at %s; production weight_quant remains 0",
+        confirmed_by,
+        promoted_at,
+    )
+    return {
+        "status": "promoted",
+        "confirmed_by": confirmed_by.strip(),
+        "promoted_at": promoted_at,
+        "model_path": str(MODEL_PATH),
+        "candidate_sha256": actual_sha256,
+        "validation_report": str(Path(report_path).expanduser()),
+        "production_weight_quant": float(settings.weight_quant),
+    }
+
+
 def qlib_score(df_raw: pd.DataFrame, symbol: str | None = None, db=None) -> dict:
     """
     输入日线 OHLCV DataFrame，返回量化信号得分字典。
@@ -365,20 +531,50 @@ def train(
         metrics.get("icir"),
         (validation.get("gates") or {}).get("pass_monotonic"),
     )
+    data_quality_passed = bool(
+        not df[FEATURE_COLS + ["label"]].isna().any().any()
+        and len(train_df) > 0
+        and len(val_df) > 0
+    )
+    training_blockers = [
+        "stride_validation_missing",
+        "fresh_forward_validation_missing",
+        "provenance_validation_missing",
+    ]
     if not _passes_promotion_gate(validation):
-        logger.warning(
-            "候选模型未通过 promotion gate，保留旧生产模型：IC=%s (floor %.4f), ICIR=%s (floor %.4f), monotonic=%s",
-            metrics.get("ic_mean"),
-            settings.qlib_train_ic_floor,
-            metrics.get("icir"),
-            settings.qlib_train_icir_floor,
-            (validation.get("gates") or {}).get("pass_monotonic"),
-        )
-        return False
-
-    _save_model(model, MODEL_PATH)
-    _MODEL_CACHE.update({"path_mtime": None, "model": None, "feature_cols": None, "disabled_reason": None})
-    logger.info("候选模型通过 promotion gate，已晋升为生产模型：%s", MODEL_PATH)
+        training_blockers.append("performance_gate_failed")
+    if not data_quality_passed:
+        training_blockers.append("data_quality_gate_failed")
+    candidate_report = {
+        "schema_version": 1,
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "candidate_model": {
+            "path": str(CANDIDATE_MODEL_PATH),
+            "sha256": _sha256_file(CANDIDATE_MODEL_PATH),
+            "model_type": model_type,
+            "feature_count": len(FEATURE_COLS),
+        },
+        "validation": validation,
+        "promotion_contract": {
+            "performance": {"passed": _passes_promotion_gate(validation)},
+            "nonoverlap": {
+                "passed": bool(
+                    "date" in train_df.columns
+                    and "date" in val_df.columns
+                    and train_df["date"].max() < val_df["date"].min()
+                ),
+            },
+            "stride": {"passed": False},
+            "fresh_forward": {"passed": False},
+            "provenance": {"passed": False},
+            "data_quality": {"passed": data_quality_passed},
+            "blockers": training_blockers,
+            "promotable": False,
+        },
+    }
+    _write_json_atomic(candidate_report, CANDIDATE_REPORT_PATH)
+    logger.info("候选模型验证报告已保存：%s", CANDIDATE_REPORT_PATH)
+    logger.info("候选模型训练完成，等待独立人工晋升；生产模型未变更：%s", MODEL_PATH)
     return True
 
 
@@ -396,6 +592,8 @@ if __name__ == "__main__":
     parser.add_argument("--include-inactive", action="store_true",
                         help="纳入 active=False 的扩盘股训练（M26.1 用）")
     parser.add_argument("--validate-production", action="store_true")
+    parser.add_argument("--promote-candidate", type=Path, metavar="REPORT")
+    parser.add_argument("--confirm-human", default="", metavar="REVIEWER")
     parser.add_argument("--json-output", default="")
     args = parser.parse_args()
 
@@ -428,6 +626,18 @@ if __name__ == "__main__":
         else:
             print(payload)
         sys.exit(0 if report.get("status") == "ok" else 1)
+
+    if args.promote_candidate:
+        try:
+            result = promote_candidate(
+                args.promote_candidate,
+                confirmed_by=args.confirm_human,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            logger.error("candidate promotion rejected: %s", exc)
+            sys.exit(1)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        sys.exit(0)
 
     parser.print_help()
     sys.exit(1)

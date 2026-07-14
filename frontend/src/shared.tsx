@@ -17,6 +17,8 @@ export const MCStore = (() => {
     runtime: { ...D.RUNTIME },
     memoryItems: D.MEMORY.items.slice(),
     live: 'demo',
+    liveSources: {},
+    snapshotAsOf: D.DEMO_META.snapshot_as_of,
     toast: null,
   };
   const subs = new Set<() => void>();
@@ -422,12 +424,21 @@ export function McIcon({ name, size = 17, style }: any) {
 }
 
 // ---------- 数据刷新按钮(带旋转动效 + 演示同步) ----------
-export function RefreshButton({ label = '刷新', busyLabel = '同步中…', toastMsg, onDone, className = 'btn btn-sm', title }: any) {
+export function RefreshButton({ label = '刷新', busyLabel = '同步中…', toastMsg, onRefresh, onDone, className = 'btn btn-sm', title }: any) {
   const [busy, setBusy] = useState(false);
-  function run() {
+  async function run() {
     if (busy) return;
     setBusy(true);
-    setTimeout(() => { setBusy(false); if (toastMsg) toast(toastMsg); if (onDone) onDone(); }, 850);
+    try {
+      if (onRefresh) await onRefresh();
+      else await new Promise((resolve) => setTimeout(resolve, 850));
+      if (toastMsg) toast(toastMsg);
+      if (onDone) onDone();
+    } catch (error) {
+      toast(error instanceof Error ? `检查失败：${error.message}` : '检查失败', 'warn');
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <button type="button" className={className} disabled={busy} onClick={run} title={title || label}>

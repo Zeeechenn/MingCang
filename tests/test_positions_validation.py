@@ -49,14 +49,14 @@ def test_position_create_accepts_valid_payload_and_adds_stock(test_db):
 
 
 def test_position_update_rejects_invalid_values():
-    from backend.api.schemas import PositionUpdate
+    from backend.api.schemas import PositionClose, PositionUpdate
 
     with pytest.raises(ValidationError):
         PositionUpdate(quantity=-1)
     with pytest.raises(ValidationError):
         PositionUpdate(avg_cost=0)
     with pytest.raises(ValidationError):
-        PositionUpdate(close_price=0)
+        PositionClose(close_price=0)
     with pytest.raises(ValidationError):
         PositionUpdate(status="archived")
 
@@ -79,20 +79,20 @@ def test_close_rejects_second_close_without_rewriting_realized_pnl(test_db):
     from fastapi import HTTPException
 
     from backend.api.routes.positions import close_position, create_position
-    from backend.api.schemas import PositionCreate, PositionUpdate
+    from backend.api.schemas import PositionClose, PositionCreate
     from backend.data.database import Position
 
     created = create_position(PositionCreate(symbol="600519", quantity=2, avg_cost=100), db=test_db)
     first = close_position(
         created.id,
-        payload=PositionUpdate(close_price=110, closed_at="2026-05-20"),
+        payload=PositionClose(close_price=110, closed_at="2026-05-20"),
         db=test_db,
     )
 
     with pytest.raises(HTTPException) as exc:
         close_position(
             created.id,
-            payload=PositionUpdate(close_price=90, closed_at="2026-05-21"),
+            payload=PositionClose(close_price=90, closed_at="2026-05-21"),
             db=test_db,
         )
 
@@ -106,9 +106,9 @@ def test_close_rejects_second_close_without_rewriting_realized_pnl(test_db):
 
 def test_delete_position_keeps_closed_delete_idempotent(test_db):
     from backend.api.routes.positions import close_position, create_position, delete_position
-    from backend.api.schemas import PositionCreate, PositionUpdate
+    from backend.api.schemas import PositionClose, PositionCreate
 
     created = create_position(PositionCreate(symbol="600519", quantity=1, avg_cost=100), db=test_db)
-    close_position(created.id, payload=PositionUpdate(close_price=110), db=test_db)
+    close_position(created.id, payload=PositionClose(close_price=110), db=test_db)
 
     assert delete_position(created.id, db=test_db) == {"status": "already_closed"}

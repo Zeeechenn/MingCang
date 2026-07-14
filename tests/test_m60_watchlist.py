@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from backend.research.watchlist import (
     REQUIRED_FIELDS,
     all_watchlist_symbols,
@@ -171,7 +169,6 @@ def test_m60_thesis_sync_is_idempotent_and_preserves_conditions(test_db, tmp_pat
 
 
 def test_seed_innovative_drug_file_is_valid():
-    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
     """Guard the shipped Phase 0 seed entry against schema drift."""
     entries, errors = load_watchlists()
     assert errors == []

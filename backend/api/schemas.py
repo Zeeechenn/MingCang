@@ -79,7 +79,6 @@ class WatchlistItem(BaseModel):
 
 
 Market = Literal["CN", "HK", "US"]
-PositionStatus = Literal["open", "closed"]
 
 
 class PositionCreate(BaseModel):
@@ -95,6 +94,8 @@ class PositionCreate(BaseModel):
 
 
 class PositionUpdate(BaseModel):
+    """Editable position fields that cannot transition lifecycle state."""
+
     name: str | None = None
     market: Market | None = None
     quantity: float | None = Field(default=None, gt=0)
@@ -102,10 +103,17 @@ class PositionUpdate(BaseModel):
     opened_at: str | None = None
     stop_loss: float | None = Field(default=None, gt=0)
     take_profit: float | None = Field(default=None, gt=0)
+    note: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class PositionClose(PositionUpdate):
+    """Fields accepted only by the dedicated close state-machine endpoint."""
+
     closed_at: str | None = None
     close_price: float | None = Field(default=None, gt=0)
-    note: str | None = None
-    status: PositionStatus | None = None
+    status: Literal["closed"] | None = None
 
 
 class PositionOut(BaseModel):

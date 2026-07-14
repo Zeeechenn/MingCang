@@ -28,7 +28,6 @@ import pytest
 from backend.tools import m58_exit_shadow as shadow
 from backend.tools.m58_exit_sweep import ExitVariant
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_TEXT = Path(shadow.__file__).read_text(encoding="utf-8")
 
 
@@ -177,9 +176,9 @@ def _calm_db(tmp_path: Path) -> Path:
 
 
 def test_shadow_exits_earlier_via_floating_take_profit_while_current_stays_open(tmp_path, monkeypatch):
-    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
+    from backend.backtest import test2_models
     db_path, universe_path = _divergence_db(tmp_path)
-    monkeypatch.setattr("paper_trading.test2_ab_models.START_DATE", "2026-01-04")
+    monkeypatch.setattr(test2_models, "START_DATE", "2026-01-04")
 
     report = shadow.build_shadow_report(db_path=db_path, universe_path=universe_path, run_date="2026-01-09")
 
@@ -208,9 +207,9 @@ def test_shadow_exits_earlier_via_floating_take_profit_while_current_stays_open(
 
 
 def test_no_divergence_yet_reports_open_position_stop_lines(tmp_path, monkeypatch):
-    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
+    from backend.backtest import test2_models
     db_path, universe_path = _calm_db(tmp_path)
-    monkeypatch.setattr("paper_trading.test2_ab_models.START_DATE", "2026-01-04")
+    monkeypatch.setattr(test2_models, "START_DATE", "2026-01-04")
 
     report = shadow.build_shadow_report(db_path=db_path, universe_path=universe_path, run_date="2026-01-09")
 
@@ -232,12 +231,12 @@ def test_no_divergence_yet_reports_open_position_stop_lines(tmp_path, monkeypatc
 
 
 def test_no_divergence_and_no_open_positions_message(tmp_path, monkeypatch):
-    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
+    from backend.backtest import test2_models
     db_path = tmp_path / "empty.sqlite"
     _seed_db(db_path, signals=[], prices=[("ZZZ000", "2026-01-05", 10.0, 10.5, 9.5, 10.0)])
     universe_path = tmp_path / "universe.json"
     _write_universe(universe_path, symbol="ZZZ000", name="Empty")
-    monkeypatch.setattr("paper_trading.test2_ab_models.START_DATE", "2026-01-04")
+    monkeypatch.setattr(test2_models, "START_DATE", "2026-01-04")
 
     report = shadow.build_shadow_report(db_path=db_path, universe_path=universe_path, run_date="2026-01-05")
 
@@ -254,9 +253,9 @@ def test_no_divergence_and_no_open_positions_message(tmp_path, monkeypatch):
 
 
 def test_run_never_mutates_the_source_database(tmp_path, monkeypatch):
-    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
+    from backend.backtest import test2_models
     db_path, universe_path = _divergence_db(tmp_path)
-    monkeypatch.setattr("paper_trading.test2_ab_models.START_DATE", "2026-01-04")
+    monkeypatch.setattr(test2_models, "START_DATE", "2026-01-04")
     before_hash = _sha256(db_path)
     before_mtime = db_path.stat().st_mtime_ns
 
@@ -266,21 +265,17 @@ def test_run_never_mutates_the_source_database(tmp_path, monkeypatch):
     assert db_path.stat().st_mtime_ns == before_mtime
 
 
-def test_run_never_touches_real_test2_ab_state_json(tmp_path, monkeypatch):
-    pytest.importorskip("paper_trading.test2_ab_models", reason="paper_trading/test2 baseline is local-only, not checked into CI")
-    real_state = REPO_ROOT / "paper_trading" / "test2_ab_state.json"
-    assert real_state.exists(), "expected the real test2 v1/v2 state file to exist in this repo"
-    before_hash = _sha256(real_state)
-    before_mtime = real_state.stat().st_mtime_ns
-
+def test_run_has_no_personal_state_file_dependency(tmp_path, monkeypatch):
+    from backend.backtest import test2_models
     db_path, universe_path = _divergence_db(tmp_path)
-    monkeypatch.setattr("paper_trading.test2_ab_models.START_DATE", "2026-01-04")
+    monkeypatch.setattr(test2_models, "START_DATE", "2026-01-04")
+    monkeypatch.chdir(tmp_path)
     report = shadow.build_shadow_report(db_path=db_path, universe_path=universe_path, run_date="2026-01-09")
     shadow.write_report(report, json_path=tmp_path / "r.json", md_path=tmp_path / "r.md")
     shadow.append_history(report, history_path=tmp_path / "history.jsonl")
 
-    assert _sha256(real_state) == before_hash
-    assert real_state.stat().st_mtime_ns == before_mtime
+    assert report["meta"]["run_date"] == "2026-01-09"
+    assert not (tmp_path / "paper_trading").exists()
 
 
 # ---------------------------------------------------------------------------
