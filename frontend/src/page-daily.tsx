@@ -3,7 +3,7 @@
 // ============================================================
 import React from 'react';
 import { getLatestM59Discretion, getLatestM63Report, getM63Queue } from './api';
-import { Badge, Markdown, McIcon, PageHead } from './shared';
+import { Badge, Markdown, McIcon, PageHead, navigate } from './shared';
 
 const { useEffect: useDailyEffect, useState: useDailyState } = React;
 
@@ -153,8 +153,23 @@ export function DailyPage() {
       <PageHead
         eyebrow="Daily Workflow"
         title="日常"
-        desc="明仓按交易节奏分了六个工作流入口：盘前看、盘中记、盘后决、周末体检、研究 <目标>、喂观点。"
+        desc="Web 日常页只读展示盘前、盘中、盘后、周末四类报告；新的研究目标和观点通过研究副驾驶提交，并沿用待确认写入边界。"
       />
+
+      <section className="glass pop" style={{ padding: 14 }} aria-label="研究与观点入口">
+        <div className="spread" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div>
+            <div className="t-eyebrow">On-demand workflow</div>
+            <div className="t-dim" style={{ fontSize: 12.5, marginTop: 3 }}>
+              研究与观点不是本页的假执行按钮；进入真实副驾驶后，写入动作仍需确认。
+            </div>
+          </div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-primary" onClick={() => navigate('/chat')}>研究目标</button>
+            <button type="button" className="btn" onClick={() => navigate('/chat')}>记录观点</button>
+          </div>
+        </div>
+      </section>
 
       <div className="row pop" style={{ gap: 6, flexWrap: 'wrap' }}>
         {DAILY_TABS.map(([id, label]) => (

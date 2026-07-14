@@ -5,6 +5,22 @@
 import React from 'react';
 import { refreshCoverage } from './live';
 import { Badge, Card, MKT, PageHead, RefreshButton, navigate, toast, useStore } from './shared';
+
+function exportCoverageSnapshot(stocks: any[]) {
+  const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const lines = [
+    ['symbol', 'name', 'market', 'latest_price_date', 'status'],
+    ...stocks.map((stock) => [stock.symbol, stock.name, stock.market, stock.latest_price_date, stock.status]),
+  ];
+  const blob = new Blob([`\uFEFF${lines.map((row) => row.map(escape).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'mingcang-coverage-demo.csv';
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export function HealthPage() {
   const [state] = useStore();
   const C = window.MC_DATA.COVERAGE;
@@ -111,7 +127,14 @@ export function HealthPage() {
       </div>
 
       <Card eyebrow="Coverage" title="研究池覆盖状态" className="pop pop-2" pad={false}
-        right={<button className="btn btn-sm" onClick={() => toast('已导出 coverage.csv(演示)')}>导出 CSV</button>}>
+        right={<button className="btn btn-sm" onClick={() => {
+          if (window.MC_LIVE?.isLive()) {
+            window.open('/api/export/coverage.csv', '_blank', 'noopener,noreferrer');
+            return;
+          }
+          exportCoverageSnapshot(C.stocks);
+          toast('已导出示例快照 CSV，未调用后端');
+        }}>导出 CSV</button>}>
         <div style={{ overflowX: 'auto' }} className="scroll-thin">
           <table className="mc-table" style={{ minWidth: 560 }}>
             <thead><tr><th>代码</th><th>名称</th><th>市场</th><th>最新价格日期</th><th>状态</th></tr></thead>

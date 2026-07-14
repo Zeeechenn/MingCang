@@ -2,7 +2,7 @@
 // 主页 — 明仓终端 / 大对话框 / 结果驾驶台
 // ============================================================
 import React from 'react';
-import { Badge, MCStore, MKT, Markdown, McIcon, Spark, fmt, navigate, toast, useStore } from './shared';
+import { Badge, DataSourceNotice, MCStore, MKT, Markdown, McIcon, Spark, fmt, navigate, toast, useStore } from './shared';
 const {
   useState: useHState,
   useRef: useHRef,
@@ -85,7 +85,6 @@ function defaultSignal(state, symbol) {
 }
 
 function buildRun(text, state) {
-  const D = window.MC_DATA;
   const intent = detectIntent(text);
   const symbol = symbolFromText(text);
   const stock = stockOf(symbol, state);
@@ -479,6 +478,8 @@ function HelpPanel({ onRun }: any) {
 
 export function HomePage() {
   const [state, setStore] = useStore();
+  const connected = state.live === 'live' || state.live === 'degraded';
+  const snapshot = state.snapshotAsOf || window.MC_DATA.DEMO_META.snapshot_as_of || '日期未知';
   const scrollRef = useHRef<any>(null);
   const [input, setInput] = useHState('');
   const [busy, setBusy] = useHState(false);
@@ -490,6 +491,10 @@ export function HomePage() {
   }, [messages.length, busy]);
 
   function runCommand(text) {
+    if (connected) {
+      navigate('/chat');
+      return;
+    }
     const command = String(text || input).trim();
     if (!command || busy) return;
     const stamp = new Date().toTimeString().slice(0, 5);
@@ -564,23 +569,37 @@ export function HomePage() {
           <div className="t-eyebrow">明仓终端</div>
           <h1 className="t-hero" style={{ margin: '4px 0 0' }}>明仓终端</h1>
           <p className="t-dim" style={{ margin: '7px 0 0', fontSize: 13.5, maxWidth: 720 }}>
-            直接输入文字使用明仓。研究、复盘、加自选、改规则、更新凭证都先以对话理解，再把结果变成下方驾驶台。
+            {connected
+              ? '已连接本地后端。真实研究、证据读取与待确认动作统一在研究副驾驶中完成。'
+              : `当前未连接后端；下方仅用于体验交互，所有结论和动作都来自 ${snapshot} 示例快照。`}
           </p>
+          <div style={{ marginTop: 10 }}><DataSourceNotice /></div>
         </div>
         <div className="row" style={{ gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Badge tone="badge-accent">本地优先</Badge>
           <Badge tone="badge-dim">写入需确认</Badge>
-          <Badge tone="badge-dim">终端示例</Badge>
+          <Badge tone="badge-dim">{connected ? '真实研究入口' : `示例快照 ${snapshot}`}</Badge>
         </div>
       </header>
 
-      <section className="glass command-center pop-1">
+      {connected ? (
+        <section className="glass pop-1" style={{ padding: 24 }}>
+          <div className="t-eyebrow">真实研究通道</div>
+          <h2 className="t-title" style={{ margin: '6px 0 0', fontSize: 20 }}>使用后端研究副驾驶</h2>
+          <p className="t-dim" style={{ margin: '9px 0 16px', maxWidth: 680, lineHeight: 1.7 }}>
+            首页不再生成预设答案。进入研究副驾驶后，问题会发送到本地后端，并展示实际使用的资源、证据和待确认动作。
+          </p>
+          <button type="button" className="btn btn-primary" onClick={() => navigate('/chat')} aria-label="打开真实研究副驾驶">
+            <McIcon name="chat" size={15} /> 打开真实研究副驾驶
+          </button>
+        </section>
+      ) : <section className="glass command-center pop-1">
         <div className="command-top">
           <div className="row" style={{ gap: 7 }}>
             <span className="terminal-dot red"></span>
             <span className="terminal-dot amber"></span>
             <span className="terminal-dot green"></span>
-            <span className="t-faint">桌面示例通道</span>
+            <span className="t-faint">示例交互 · 数据截至 {snapshot}</span>
           </div>
           <Badge tone={messages.length ? 'badge-accent' : 'badge-dim'}>{messages.length ? '已生成驾驶台' : '等待输入'}</Badge>
         </div>
@@ -613,7 +632,7 @@ export function HomePage() {
             <McIcon name="chat" size={15} /> 发送
           </button>
         </form>
-      </section>
+      </section>}
 
       <ResultDashboard run={lastRun} onConfirm={confirmLatestPending} />
       <HelpPanel onRun={runCommand} />

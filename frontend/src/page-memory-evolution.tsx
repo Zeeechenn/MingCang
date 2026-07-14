@@ -11,7 +11,7 @@ import {
 } from './api';
 import { Badge, Card, Metric, PageHead, Seg, toast } from './shared';
 
-const { useEffect, useMemo, useState } = React;
+const { useCallback, useEffect, useMemo, useState } = React;
 
 const STATUS_OPTIONS = [
   ['pending', '待处理'],
@@ -124,14 +124,13 @@ export function MemoryEvolutionPage() {
   const [acting, setActing] = useState('');
   const [reason, setReason] = useState('');
 
-  async function loadList(nextStatus = status) {
+  const loadList = useCallback(async (nextStatus) => {
     setLoading(true);
     try {
       const payload = await getMemoryEvolutionCandidates(nextStatus, 50, 0);
       const nextItems = payload.items || [];
       setItems(nextItems);
-      const nextId = nextItems.some((item) => item.id === selectedId) ? selectedId : nextItems[0]?.id || null;
-      setSelectedId(nextId);
+      setSelectedId((currentId) => nextItems.some((item) => item.id === currentId) ? currentId : nextItems[0]?.id || null);
     } catch (err: any) {
       setItems([]);
       setSelectedId(null);
@@ -139,9 +138,9 @@ export function MemoryEvolutionPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function loadDetail(id) {
+  const loadDetail = useCallback(async (id) => {
     if (!id) { setDetail(null); return; }
     try {
       setDetail(await getMemoryEvolutionCandidate(id));
@@ -149,10 +148,10 @@ export function MemoryEvolutionPage() {
       setDetail(null);
       toast(`详情加载失败:${err?.message || '后端错误'}`);
     }
-  }
+  }, []);
 
-  useEffect(() => { loadList(status); }, [status]);
-  useEffect(() => { loadDetail(selectedId); }, [selectedId]);
+  useEffect(() => { loadList(status); }, [status, loadList]);
+  useEffect(() => { loadDetail(selectedId); }, [selectedId, loadDetail]);
 
   const counts = useMemo(() => ({
     total: items.length,

@@ -8,10 +8,10 @@ MingCang is an agent-ready, local-first A-share research workspace. It supports
 research, backtests, local validation, memory/context inspection, and code
 maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.6.1`; the latest
-documented release is `v0.6.1` — first-public-CI green pass (lockfile / test
-isolation / DB bootstrap / dependency CVEs) and a README quickstart
-consolidation, on top of the `v0.6.0` feature release (see `CHANGELOG.md`).
+Current release surface: package/API/frontend versions are `0.6.2`; the latest
+documented release is `v0.6.2` — frontend truth and usability closure, guarded
+live/model workflows, and stronger browser/CI release gates (see
+`CHANGELOG.md`).
 
 ## Current State
 
@@ -23,7 +23,7 @@ consolidation, on top of the `v0.6.0` feature release (see `CHANGELOG.md`).
 | entry threshold | `NEW_FRAMEWORK_ENTRY_THRESHOLD=25.0` |
 | Kronos | disabled for production |
 | quant_score provenance | `placeholder_v0` momentum fallback serving deliberately (silent-degradation incident fixed 2026-07-03: explicit warning + per-signal `quant_model` provenance in `decision_runs`; regression `tests/test_quant_model_degradation.py`). Production composite unaffected (`WEIGHT_QUANT=0.0`). Saturday `job_train_model` now writes candidate + validation report only; production promotion is a separate explicit-human action with full contract revalidation and keeps `WEIGHT_QUANT=0.0` |
-| completed history | v0.3.3–v0.6.1 / M45–M55: see `CHANGELOG.md` (not restated here) |
+| completed history | v0.3.3–v0.6.2 / M45–M55: see `CHANGELOG.md` (not restated here) |
 | paper trading test2 | v1 ended 2026-07-02 (10 trades, 60% win, +19.53% weighted); **v2 started 2026-07-03**: exit params unchanged per M21.4 decision C (single-variable), direction-only evidence as before. **Boundary override 2026-07-06 (owner directive)**: LLM treatment arm may exceed ALL hard boundaries — entry threshold 25, per-stock 15%, per-sector 30%, **and total 80% ceiling** — with mandatory per-crossing rationale logging; mechanical control arm (`test2_ab_models.py`) keeps 25/15/30/80 fixed. Scoped to test2 v2 LLM arm ONLY — `config.py` global 15/30/80, copilot shadow, real-position validation, `risk_manager.py` unchanged. No mechanical floor under ~20% drawdown target now; rationale in `paper_trading/test2.md` §规则. Note: this adds a variable to v2, so v2 is no longer a clean single-variable exit-only continuation |
 | M51 external borrowing | suspended 2026-07-03 (star-growth strategy deferred); landed pieces kept in service: D1 DSR/PBO/trial-count contract in `m29_hypothesis_registry`, report-pack v1 adapter |
 | M44 / Atlas | **archived REJECT 2026-07-03**: Gate-B historical backfill verdict REJECT (delta -0.59pp), relaxed gate variants all worse, Stage 2b overlay 8.0% vs baseline 27.95%. Research-artifacts-as-signal-filter line falsified. L0-L4 memory / cases / review loop / evidence ledger kept as infrastructure for M57 (no scoring role); evidence accrual stopped; `ATLAS_ENABLED=false` permanent |
@@ -84,11 +84,12 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last recorded full-suite run (2026-07-06, post-M57-Phase-3): backend pytest
-1665 passed / 5 skipped; ruff, mypy (0 errors), frontend
-typecheck/test/build all green. GitHub CI is green remotely as of v0.6.1
-(Backend lint/typecheck, Backend tests, Security & dependency audit,
-Frontend test/build all pass on `main`).
+Last recorded full-suite run (2026-07-15, v0.6.2 release candidate): backend
+pytest 1708 passed / 5 skipped; ruff and mypy (0 errors) green; frontend
+typecheck, 20 tests, build, zero-warning ESLint, and desktop/mobile Playwright
+smoke flows all green. The latest confirmed remote GitHub CI baseline is
+v0.6.1; the v0.6.2 release commit is validated locally by the same canonical
+gate before push.
 
 For release-quality work, treat `make verify` as the canonical gate.
 

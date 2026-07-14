@@ -52,7 +52,12 @@ export const MC_DATA: any = (function () {
   const last = (s) => PRICES[s][PRICES[s].length - 1];
 
   const SIG_DATE = '2026-06-09';
-  const DEMO_META = { is_demo: true, snapshot_as_of: SIG_DATE, label: '示例快照' };
+  const DEMO_META = {
+    is_demo: true,
+    snapshot_as_of: SIG_DATE,
+    label: '示例快照',
+    provenance: 'frontend_static_snapshot',
+  };
 
   function mkSignal(symbol, rec, score, tech, senti, conf, bull, bear, rationale, bias) {
     const px = last(symbol).close;
@@ -68,7 +73,7 @@ export const MC_DATA: any = (function () {
   const WATCHLIST = [
     {
       symbol: '300308', name: '中际旭创', market: 'CN', industry: '光模块 / AI 算力',
-      long_term_label: { label: '值得持有', score: 72.5, date: '2026-06-08', expires_at: '2026-06-22', constraint_eligible: true, quality: 'pass', key_findings: ['800G 出货持续放量，收入与盈利增速维持高位。', '估值分位偏高，短线信号转弱时应优先降仓。', '行业拥挤度上升，与 300394 暴露需合并计算。'], quality_notes: ['财务数据完整 5 年', '新闻证据 14 条经审计'] },
+      long_term_label: { label: '值得持有', score: 72.5, date: '2026-06-08', expires_at: '2026-06-22', constraint_eligible: true, quality: 'pass', key_findings: ['800G 出货持续放量，收入与盈利增速维持高位。', '估值分位偏高，短线信号转弱时应优先降仓。', '行业拥挤度上升，与 300394 暴露需合并计算。'], quality_notes: ['财务数据完整 5 年', '4 条新闻证据经审计', '「值得持有」是长期质量标签，不代表当前可加仓'] },
       latest_signal: mkSignal('300308', '可小仓试错', 36.0, 48.0, 0.55, '中',
         ['技术趋势占优，价格站稳关键均线上方', '800G 光模块订单兑现度高，产业催化密集', '长期标签为值得持有，允许短线小仓试错'],
         ['板块拥挤度升高，追高风险加大', '估值分位处于历史 85% 以上', '与同板块持仓暴露重叠，需合并计算'],
@@ -162,14 +167,14 @@ export const MC_DATA: any = (function () {
       id: i + 1, date,
       recommendation: i === 0 ? null : recs[(i + Math.floor(score / 10)) % recs.length],
       composite_score: i === 0 ? score : +(score - (i * 4) + (rnd() - 0.5) * 18).toFixed(1),
-    })).map((r, i, arr) => i === 0 ? { ...r, recommendation: WATCHLIST.find(w => w.symbol === symbol)?.latest_signal?.recommendation || '观望' } : r);
+    })).map((r, i) => i === 0 ? { ...r, recommendation: WATCHLIST.find(w => w.symbol === symbol)?.latest_signal?.recommendation || '观望' } : r);
   }
 
   const EVIDENCE = {
     '300308': [
       { id: 'ev-1', kind: 'decision_run', date: '2026-06-09', title: '盘后决策运行 #482', detail: '技术分 +48.0(趋势/量能/MACD 共振) · 情绪分 +0.55(4 条新闻，2 强 1 中 1 弱) · 长期标签约束通过', status: 'pass' },
       { id: 'ev-2', kind: 'news_audit', date: '2026-06-09', title: '新闻审计', detail: '4 条新闻全部来源可信;1 条传闻类标记 warning，不参与情绪加分', status: 'warning' },
-      { id: 'ev-3', kind: 'risk_check', date: '2026-06-09', title: '风险经理拦截检查', detail: '单股仓位 12.8% < 15% 上限;板块暴露 24.1% < 30% 上限;通过', status: 'pass' },
+      { id: 'ev-3', kind: 'risk_check', date: '2026-06-09', title: '风险经理拦截检查', detail: '基础风控:单股 12.8% < 15%、板块 24.1% < 30%;长期约束:当前 12.8% 高于长期目标 5%，禁止加仓并优先降仓', status: 'warning' },
       { id: 'ev-4', kind: 'lookahead', date: '2026-06-08', title: '反穿越检查', detail: '全部证据时间戳早于信号生成时间，无未来数据', status: 'pass' },
     ],
     _default: [
@@ -204,7 +209,7 @@ export const MC_DATA: any = (function () {
 
   const DOSSIER = {
     '300308': {
-      final_position: '5%', trader_position: '8%', constrained: '已被长期标签约束', constraint_count: 2, conflict_count: 1,
+      final_position: '目标 ≤5%', trader_position: '8%', constrained: '当前 12.8%，高于长期目标，禁止加仓', constraint_count: 2, conflict_count: 1,
       conflicts: [{ severity: 'medium', summary: '短线强趋势 vs 估值分位 85%+:仓位上限从 8% 压缩至 5%' }],
       constraints: [{ summary: '长期标签「值得持有」允许试错，但禁止追高加仓' }, { summary: '与 300394 合并计算板块暴露' }],
       deep_research_count: 2, first_deep_research: '《AI 光模块供需推演 2026-2027》:1.6T 渗透节奏是核心变量，关注北美四大云厂资本开支节奏。',
@@ -404,7 +409,7 @@ export const MC_DATA: any = (function () {
       ],
       trader: { position_pct: 8.0, reasoning: '技术主导 + 景气催化，交易视角建议试错仓 8%。' },
       risk: { approved: true, trader_position_pct: 8.0, adjusted_position_pct: 5.0, veto_reason: null,
-        risk_notes: ['单股仓位 12.8% < 15% 上限', '板块暴露 24.1% < 30% 上限', '长期标签约束:试错仓 8% → 5%'] },
+        risk_notes: ['基础单股上限:12.8% < 15%', '板块暴露 24.1% < 30%', '长期目标仓位:当前 12.8% > 5%，禁止加仓并优先降仓'] },
     },
     '002230': {
       symbol: '002230', name: '科大讯飞', date: SIG_DATE, used_llm: true, round_count: 3,
@@ -861,7 +866,7 @@ export const MC_DATA: any = (function () {
   };
 
   const SYSTEM = {
-    version: '0.5.2', release: [['v0.5.2', '去人格化重命名'], ['Status', '安全版本面'], ['Atlas', '休眠静默'], ['Quant', '生产关闭']],
+    version: '0.6.2', release: [['v0.6.2', '前端可信闭环'], ['Live Track', '安全收口'], ['模型晋升', '人工确认'], ['Quant', '生产关闭']],
     market_overview: { available: true, name: '沪深300', close: 4082.35, change_pct: 0.42, date: '2026-06-09',
       indices: [
         { name: '上证指数', close: 3421.56, change_pct: 0.38 },
@@ -914,7 +919,7 @@ export const MC_DATA: any = (function () {
   const CHAT_SCRIPTS = [
     { match: /添加自选|加自选|watchlist/i, reply: '好的，我准备把该标的加入自选池。添加后系统会在下次收盘后自动生成信号。\n\n请确认以下操作:', action: { id: 'act-1', action: 'watchlist.add', payload: { symbol: '002475', name: '立讯精密', market: 'CN' }, risk: 'medium' }, resources: ['stocks/search'] },
     { match: /添加持仓|买入|position/i, reply: '我已解析出持仓参数。**注意:明仓不接券商，这只是记录，不会真实下单。**\n\n请确认以下操作:', action: { id: 'act-2', action: 'position.add', payload: { symbol: '300308', quantity: 100, avg_cost: 150.0, market: 'CN' }, risk: 'high' }, resources: ['positions'] },
-    { match: /研究|分析|怎么看/i, reply: '## 研究摘要\n\n基于最新信号与证据链:\n\n- **官方建议**:可小仓试错(综合分 +36.0，置信度中)\n- **多方**:技术趋势占优;产业催化密集;长期标签允许试错\n- **空方**:板块拥挤度历史高位;估值分位 85%+\n- **风险经理**:单股 12.8% < 15% 上限，通过;但与 300394 需合并计算暴露\n\n**裁决**:趋势与景气共振，但估值已部分透支。规则内小仓试错，禁止追高。', resources: ['signals/300308/latest', 'signals/300308/evidence', 'memory/context'] },
+    { match: /研究|分析|怎么看/i, reply: '## 研究摘要\n\n基于最新信号与证据链:\n\n- **官方建议**:可小仓试错(综合分 +36.0，置信度中)\n- **多方**:技术趋势占优;产业催化密集;长期标签允许试错\n- **空方**:板块拥挤度历史高位;估值分位 85%+\n- **风险经理**:基础上限为 15%，但当前单股 12.8% 高于长期目标 5%;禁止加仓，且与 300394 需合并计算暴露\n\n**裁决**:趋势与景气共振，但估值已部分透支。当前仓位应优先降至长期目标，不得追高。', resources: ['signals/300308/latest', 'signals/300308/evidence', 'memory/context'] },
     { match: /复盘/i, reply: '今日复盘(2026-06-09)已生成:\n\n- 当日信号 6 条:试错 2 · 观察 3 · 规避 1\n- 大盘扩散度中性，不适合大幅提高总仓位\n- 300308 接近止盈观察线，明日重点看量\n\n完整报告可在「复盘」页查看。', resources: ['reviews/daily/2026-06-09'] },
     { match: /止损|风险/i, reply: '当前持仓风险状态:\n\n| 标的 | 现价距止损 | 状态 |\n|---|---|---|\n| 300308 | +7.5% | 安全，移动止损已上移 |\n| 600519 | +6.4% | 安全 |\n| 000725 | +3.1% | 接近观察线 |\n\n移动止损(ATR 跟踪)已启用，触发时会通过复盘和推送提醒，**不会自动卖出**。', resources: ['positions', 'config/trailing_stop'] },
   ];

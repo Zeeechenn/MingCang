@@ -2,7 +2,8 @@
 // 治理台 — 决策 / 仓位 / Agent / 数据 / 调度 / 熔断 / 记忆 / LLM 成本
 // ============================================================
 import React from 'react';
-import { Badge, Card, MCStore, McIcon, Metric, PageHead, Seg, Toggle, toast, useStore } from './shared';
+import { resetKillSwitch, runDeepResearch, trainModel, triggerKillSwitch, triggerLongTermTeam } from './api';
+import { Badge, Card, McIcon, Metric, PageHead, Seg, Toggle, toast, useStore } from './shared';
 const { useState: useAState, useEffect: useAEffect } = React;
 
 const ADMIN_SECTIONS = [
@@ -85,7 +86,7 @@ function PortfolioSection({ cfg, set }: any) {
         <NumSlider value={cfg.max_total_pct} onChange={(v) => set({ max_total_pct: v })} min={10} max={100} unit="%" />
       </SettingRow>
       <SettingRow label="新信号试错仓" hint="新信号默认映射的初始小仓位">
-        <NumSlider value={cfg.new_signal_trial_pct} onChange={(v) => set({ new_signal_trial_pct: v })} min={1} max={20} unit="%" />
+        <div className="row" style={{ gap: 7 }}><span className="t-num">{cfg.new_signal_trial_pct}%</span><Badge tone="badge-dim">需修改 .env 后重启</Badge></div>
       </SettingRow>
       <SettingRow label="ATR 移动止损" hint="用 trailing ATR 保护趋势浮盈;触发时提醒，不自动卖出">
         <Toggle on={cfg.trailing_stop} onChange={(v) => set({ trailing_stop: v })} label="移动止损" />
@@ -98,9 +99,23 @@ function AgentsSection({ cfg, set }: any) {
   const [topic, setTopic] = useAState('');
   const [symbols, setSymbols] = useAState('');
   const [running, setRunning] = useAState('');
-  function run(kind, label) {
+  const [confirming, setConfirming] = useAState('');
+  async function run(kind, label) {
     setRunning(kind);
-    setTimeout(() => { setRunning(''); toast(`${label}已完成(演示):结果写入研究状态，不覆盖官方信号`); }, 1800);
+    setConfirming('');
+    try {
+      if (kind === 'deep') {
+        const parsedSymbols = symbols.split(/[,，\s]+/).map((value) => value.trim()).filter(Boolean);
+        await runDeepResearch({ topic: topic.trim(), symbols: parsedSymbols, as_of: null });
+      } else {
+        await triggerLongTermTeam();
+      }
+      toast(`${label}已提交到后端，结果不会覆盖官方信号`);
+    } catch (error: any) {
+      toast(`${label}失败:${error?.message || '后端错误'}`);
+    } finally {
+      setRunning('');
+    }
   }
   return (
     <div>
@@ -117,15 +132,16 @@ function AgentsSection({ cfg, set }: any) {
         <Toggle on={cfg.long_term_constraints} onChange={(v) => set({ long_term_constraints: v })} label="长期约束" />
       </SettingRow>
       <SettingRow label="LLM Provider" hint="local_cli 模式无需 API Key，使用本地 agent">
-        <Seg value={cfg.llm_provider} options={[['local_cli', 'local_cli'], ['anthropic', 'anthropic'], ['openai', 'openai 兼容']]} onChange={(v) => set({ llm_provider: v })} />
+        <div className="row" style={{ gap: 7 }}><Badge tone="badge-accent">{cfg.llm_provider}</Badge><span className="t-faint" style={{ fontSize: 11.5 }}>需修改 .env 后重启</span></div>
       </SettingRow>
       <div className="glass-inset" style={{ padding: 14, marginTop: 14 }}>
         <div className="t-eyebrow">手动触发(需确认 · 会调用 LLM / 搜索)</div>
         <div className="row" style={{ marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
           <input className="field" style={{ flex: 1, minWidth: 170 }} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="深度研究主题，如:AI 光模块供需" />
           <input className="field" style={{ width: 150 }} value={symbols} onChange={(e) => setSymbols(e.target.value)} placeholder="标的，逗号分隔" />
-          <button className="btn btn-sm" disabled={!topic || running === 'deep'} onClick={() => run('deep', '深度研究')}>{running === 'deep' ? '研究中…' : '运行深度研究'}</button>
-          <button className="btn btn-sm" disabled={running === 'lt'} onClick={() => run('lt', '长期研究团队')}>{running === 'lt' ? '运行中…' : '运行长期团队'}</button>
+          <button className="btn btn-sm" disabled={!topic || !!running} onClick={() => confirming === 'deep' ? run('deep', '深度研究') : setConfirming('deep')}>{running === 'deep' ? '研究中…' : confirming === 'deep' ? '确认运行深度研究' : '运行深度研究'}</button>
+          <button className="btn btn-sm" disabled={!!running} onClick={() => confirming === 'lt' ? run('lt', '长期研究团队') : setConfirming('lt')}>{running === 'lt' ? '运行中…' : confirming === 'lt' ? '确认运行长期团队' : '运行长期团队'}</button>
+          {confirming && <button className="btn btn-sm btn-quiet" onClick={() => setConfirming('')}>取消</button>}
         </div>
       </div>
       <ActionRegistryPanel />
@@ -196,7 +212,7 @@ function ScheduleSection({ cfg, set }: any) {
   return (
     <div>
       <SettingRow label="调度器" hint="默认关闭(手动模式);开启后按 A股交易日历自动运行盘前 / 盘后任务">
-        <Toggle on={cfg.scheduler_enabled} onChange={(v) => set({ scheduler_enabled: v })} label="调度器" />
+        <div className="row" style={{ gap: 7 }}><Badge tone={cfg.scheduler_enabled ? 'badge-up' : 'badge-dim'}>{cfg.scheduler_enabled ? '已启用' : '未启用'}</Badge><span className="t-faint" style={{ fontSize: 11.5 }}>需修改 .env 后重启</span></div>
       </SettingRow>
       <SettingRow label="每日复盘时间" hint="收盘后生成当日信号与复盘">
         <input className="field" type="time" style={{ width: 110 }} value={cfg.daily_review_time} onChange={(e) => set({ daily_review_time: e.target.value })} />
@@ -228,6 +244,32 @@ function ScheduleSection({ cfg, set }: any) {
 
 function RiskSection({ cfg, set }: any) {
   const [confirming, setConfirming] = useAState(false);
+  const [busy, setBusy] = useAState(false);
+  async function trigger() {
+    setBusy(true);
+    try {
+      await triggerKillSwitch('web_governance');
+      set({ kill_switch: true });
+      setConfirming(false);
+      toast('熔断已由后端触发:调度与写入已阻断', 'warn');
+    } catch (error: any) {
+      toast(`触发熔断失败:${error?.message || '后端错误'}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function reset() {
+    setBusy(true);
+    try {
+      await resetKillSwitch();
+      set({ kill_switch: false });
+      toast('后端熔断已复位，系统恢复正常');
+    } catch (error: any) {
+      toast(`复位熔断失败:${error?.message || '后端错误'}`);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div>
       <div className="glass-inset" style={{ padding: 16, borderColor: cfg.kill_switch ? 'var(--up)' : undefined }}>
@@ -242,10 +284,10 @@ function RiskSection({ cfg, set }: any) {
             </div>
           </div>
           {cfg.kill_switch ? (
-            <button className="btn btn-primary" onClick={() => { set({ kill_switch: false }); toast('熔断已复位，系统恢复正常'); }}>复位熔断</button>
+            <button className="btn btn-primary" disabled={busy} onClick={reset}>{busy ? '处理中…' : '复位熔断'}</button>
           ) : confirming ? (
             <div className="row" style={{ gap: 6 }}>
-              <button className="btn btn-danger" style={{ borderColor: 'var(--up)', color: 'var(--up)' }} onClick={() => { set({ kill_switch: true }); setConfirming(false); toast('熔断已触发:调度与写入已阻断', 'warn'); }}>确认触发</button>
+              <button className="btn btn-danger" disabled={busy} style={{ borderColor: 'var(--up)', color: 'var(--up)' }} onClick={trigger}>{busy ? '处理中…' : '确认触发'}</button>
               <button className="btn btn-quiet" onClick={() => setConfirming(false)}>取消</button>
             </div>
           ) : (
@@ -257,7 +299,7 @@ function RiskSection({ cfg, set }: any) {
         <Badge tone="badge-dim">未配置 Key</Badge>
       </SettingRow>
       <SettingRow label="LLM 预算报警" hint="7 天 LLM 成本超过 ¥10 时提醒;当前 ¥3.42">
-        <Toggle on={true} onChange={() => toast('预算报警保持开启(演示)')} label="预算报警" />
+        <div className="row" style={{ gap: 7 }}><Badge tone="badge-up">当前开启</Badge><span className="t-faint" style={{ fontSize: 11.5 }}>暂无网页配置接口</span></div>
       </SettingRow>
     </div>
   );
@@ -297,8 +339,7 @@ function MemorySectionPanel() {
                         .then(() => toast('记忆候选已确认升级为 trusted'))
                         .catch((e) => {
                           if (!e || !e.demo) { toast(`升级失败:${e?.message || '后端错误'}`); return; }
-                          MCStore.set((st) => ({ memoryItems: st.memoryItems.map((x) => x.id === m.id ? { ...x, trust: 'trusted' } : x) }));
-                          toast('记忆候选已确认升级为 trusted(演示)');
+                          toast('示例模式不会升级记忆；连接本地后端后再试');
                         });
                     }}>确认升级</button>
                   )}
@@ -309,8 +350,7 @@ function MemorySectionPanel() {
                           .then(() => toast('记忆已删除，审计日志保留'))
                           .catch((e) => {
                             if (!e || !e.demo) { toast(`删除失败:${e?.message || '后端错误'}`); return; }
-                            MCStore.set((st) => ({ memoryItems: st.memoryItems.filter((x) => x.id !== m.id) }));
-                            toast('记忆已删除，审计日志保留(演示)');
+                            toast('示例模式不会删除记忆；连接本地后端后再试');
                           });
                       }}>确认</button>
                       <button className="btn btn-sm btn-quiet" onClick={() => setConfirmDel(null)}>取消</button>
@@ -379,6 +419,20 @@ function LLMCostSection() {
 
 function AdminSidebar() {
   const S = window.MC_DATA.SYSTEM;
+  const [trainConfirm, setTrainConfirm] = useAState(false);
+  const [training, setTraining] = useAState(false);
+  async function startTraining() {
+    setTraining(true);
+    try {
+      await trainModel();
+      toast('模型训练任务已提交到后端');
+      setTrainConfirm(false);
+    } catch (error: any) {
+      toast(`模型训练启动失败:${error?.message || '后端错误'}`);
+    } finally {
+      setTraining(false);
+    }
+  }
   return (
     <div className="grid" style={{ gap: 10, alignContent: 'start' }}>
       <div className="glass" style={{ padding: '14px 16px' }}>
@@ -396,13 +450,18 @@ function AdminSidebar() {
             <div key={k} className="spread"><span className="t-faint">{k}</span><span style={{ fontWeight: 570 }}>{v}</span></div>
           ))}
         </div>
-        <button className="btn btn-sm" style={{ marginTop: 12, width: '100%' }} onClick={() => toast('量化生产关闭中，训练入口仅维护者可用(演示)')}>触发模型训练</button>
+        <button className="btn btn-sm" disabled={training} style={{ marginTop: 12, width: '100%' }} onClick={() => trainConfirm ? startTraining() : setTrainConfirm(true)}>{training ? '提交中…' : trainConfirm ? '确认触发模型训练' : '触发模型训练'}</button>
       </div>
       <div className="glass" style={{ padding: '14px 16px' }}>
         <div className="t-eyebrow">导出</div>
         <div className="grid" style={{ gap: 6, marginTop: 10 }}>
-          {['信号 CSV', '持仓 CSV', '复盘 CSV', '盘后 HTML 报告'].map((l) => (
-            <button key={l} className="btn btn-sm" onClick={() => toast(`已导出${l}(演示)`)}>{l}</button>
+          {[
+            ['信号 CSV', '/api/export/signals.csv'],
+            ['持仓 CSV', '/api/export/positions.csv'],
+            ['复盘 CSV', '/api/export/reviews.csv'],
+            ['盘后 HTML 报告', '/api/export/postmarket-review.html'],
+          ].map(([label, path]) => (
+            <button key={label} className="btn btn-sm" onClick={() => window.open(path, '_blank')}>{label}</button>
           ))}
         </div>
       </div>
@@ -410,10 +469,7 @@ function AdminSidebar() {
   );
 }
 
-function CredRow({ item, configured, onSave }: any) {
-  const [val, setVal] = useAState('');
-  const [editing, setEditing] = useAState(false);
-  const disabled = item.disabled;
+function CredRow({ item }: any) {
   return (
     <div className="cred-row">
       <div style={{ minWidth: 0 }}>
@@ -423,33 +479,12 @@ function CredRow({ item, configured, onSave }: any) {
         </div>
         <div className="t-faint" style={{ fontSize: 12, marginTop: 3, lineHeight: 1.5 }}>{item.hint}</div>
       </div>
-      <div className="cred-action">
-        {disabled ? (
-          <Badge tone="badge-dim">本地模式 · 无需 Key</Badge>
-        ) : configured && !editing ? (
-          <div className="row" style={{ gap: 8 }}>
-            <Badge tone="badge-up">已配置</Badge>
-            <span className="t-num t-faint" style={{ fontSize: 12 }}>sk-····{item.tail}</span>
-            <button className="btn btn-sm btn-quiet" onClick={() => setEditing(true)}>更新</button>
-          </div>
-        ) : (
-          <div className="row" style={{ gap: 6 }}>
-            <input className="field" type="password" style={{ width: 170 }} value={val} onChange={(e) => setVal(e.target.value)} placeholder={item.placeholder} />
-            <button className="btn btn-sm btn-primary" disabled={!val} onClick={() => { onSave(item.id, val); setVal(''); setEditing(false); }}>保存</button>
-            {configured && <button className="btn btn-sm btn-quiet" onClick={() => setEditing(false)}>取消</button>}
-          </div>
-        )}
-      </div>
+      <div className="cred-action"><Badge tone="badge-dim">仅支持手动配置</Badge></div>
     </div>
   );
 }
 
 function ApiKeySection({ cfg }: any) {
-  const [configured, setConfigured] = useAState({ tavily: true });
-  function save(id) {
-    setConfigured((c) => ({ ...c, [id]: true }));
-    toast('凭证已加密保存到本地 .env(演示);不进 Git，不上云');
-  }
   const llmLocal = cfg.llm_provider === 'local_cli';
   const llmEnv = cfg.llm_provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : cfg.llm_provider === 'openai' ? 'OPENAI_API_KEY' : 'AI_PROVIDER=local_cli';
   const groups = [
@@ -483,14 +518,14 @@ function ApiKeySection({ cfg }: any) {
   return (
     <div>
       <div className="glass-inset" style={{ padding: '12px 15px', marginBottom: 4, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)' }}>
-        <b style={{ color: 'var(--ink)' }}>本地优先</b> · 所有凭证只写入本机 <code style={{ fontFamily: 'var(--font-mono)' }}>.env</code>，不进 Git、不上云。Demo 模式不需要任何 Key。
+        <b style={{ color: 'var(--ink)' }}>本地优先</b> · 网页端不会写入 <code style={{ fontFamily: 'var(--font-mono)' }}>.env</code> 或接收明文密钥。请在本机配置后重启后端；密钥不进 Git、不上传浏览器存储。
       </div>
       {groups.map((g) => (
         <div key={g.label} style={{ marginTop: 16 }}>
           <div className="t-eyebrow" style={{ marginBottom: 2 }}>{g.label}</div>
           <div className="grid" style={{ gap: 0 }}>
             {g.keys.map((k) => (
-              <CredRow key={k.id} item={k} configured={!!configured[k.id]} onSave={save} />
+              <CredRow key={k.id} item={k} />
             ))}
           </div>
         </div>
@@ -511,12 +546,10 @@ export function AdminPage() {
   function set(patch) { setCfg((c) => ({ ...c, ...patch })); setSaved(false); }
   function save() {
     window.MC_LIVE.saveRuntime(cfg)
-      .then(() => { setSaved(true); toast('配置已保存到后端 · 部分参数将在下次决策运行生效'); })
+      .then(() => { setSaved(true); toast('运行时配置已由后端应用 · 仅当前进程有效，重启后按 .env 恢复'); })
       .catch((e) => {
         if (!e || !e.demo) { toast(`保存失败:${e?.message || '后端错误'}`); return; }
-        MCStore.set({ runtime: cfg });
-        setSaved(true);
-        toast('配置草稿已保存(演示) · 部分参数将在下次决策运行生效');
+        toast('示例模式不会保存配置；连接本地后端后再试');
       });
   }
   const idx = ADMIN_SECTIONS.findIndex(([id]) => id === active);
@@ -539,7 +572,7 @@ export function AdminPage() {
     apikey: <ApiKeySection cfg={cfg} />,
     data: <DataSection cfg={cfg} set={set} />,
     schedule: <ScheduleSection cfg={cfg} set={set} />,
-    risk: <RiskSection cfg={cfg} set={set} />,
+    risk: <RiskSection cfg={cfg} set={(patch: any) => setCfg((current) => ({ ...current, ...patch }))} />,
     memory: <MemorySectionPanel />,
     llmcost: <LLMCostSection />,
   }[active];

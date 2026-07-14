@@ -3,7 +3,7 @@
 // ============================================================
 import React from 'react';
 import { DebateReport } from './page-reports';
-import { Badge, Card, MCStore, MKT, Metric, Modal, PageHead, PoolShell, RefreshButton, ScoreBar, SortSeg, Spark, applyPoolSort, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, toast, useSortCtl, useStockPoolFilter, useStockSuggest, useStore } from './shared';
+import { Badge, Card, DataSourceNotice, MCStore, MKT, Metric, Modal, PageHead, PoolShell, RefreshButton, ScoreBar, SortSeg, Spark, applyPoolSort, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, toast, useSortCtl, useStockPoolFilter, useStockSuggest, useStore } from './shared';
 const { useState: usePState, useMemo: usePMemo } = React;
 
 const RELEASE_DISMISS_KEY = 'mc_release_dismissed_v1';
@@ -12,11 +12,11 @@ function ReleaseStrip() {
   const SYS = window.MC_DATA.SYSTEM;
   // 关闭后记住当前版本号;只有发布新版本(version 变化)时才会再次出现
   const [dismissed, setDismissed] = usePState(() => {
-    try { return localStorage.getItem(RELEASE_DISMISS_KEY) === SYS.version; } catch (e) { return false; }
+    try { return localStorage.getItem(RELEASE_DISMISS_KEY) === SYS.version; } catch { return false; }
   });
   if (dismissed) return null;
   function close() {
-    try { localStorage.setItem(RELEASE_DISMISS_KEY, SYS.version); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(RELEASE_DISMISS_KEY, SYS.version); } catch { /* ignore */ }
     setDismissed(true);
   }
   return (
@@ -209,24 +209,6 @@ function MarketHeaderWidget() {
         </div>
       ))}
     </div>
-  );
-}
-
-function DataHealthGlance() {
-  const C = window.MC_DATA.COVERAGE;
-  const fresh = C.stocks.filter((s) => s.status === 'ok').length;
-  return (
-    <Card eyebrow="Source Trust" title="来源与反穿越状态" className="pop pop-2"
-      right={<button className="btn btn-sm" onClick={() => navigate('/health')}>查看</button>}>
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        <Metric label="覆盖状态" value={C.status === 'pass' ? '通过' : '异常'} tone={C.status === 'pass' ? 'up' : 'down'} />
-        <Metric label="价格滞后" value={`${C.max_lag_days.CN} 天`} sub="A股容忍内" />
-        <Metric label="告警" value={`${C.warnings.length} 条`} tone={C.warnings.length ? 'warn' : ''} />
-      </div>
-      <div className="t-faint" style={{ fontSize: 11.5, marginTop: 10, lineHeight: 1.55 }}>
-        本地优先回退链 akshare → tushare_qfq → 本地缓存 · {fresh}/{C.stocks.length} 标的价格新鲜 · 反穿越检查通过。
-      </div>
-    </Card>
   );
 }
 
@@ -517,6 +499,7 @@ export function PulsePage() {
           <RefreshButton toastMsg="已同步盘后快照 · 行情与信号已刷新" />
           <MarketHeaderWidget />
         </div>} />
+      <DataSourceNotice />
       <ReleaseStrip />
       <TodayCall watchlist={watchlist} />
       <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) 330px', gap: 14 }} data-grid="pulse-cols">

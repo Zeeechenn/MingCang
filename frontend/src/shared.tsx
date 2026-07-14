@@ -4,7 +4,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { MC_DATA } from './data';
-const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } = React;
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 // ---------- 极简全局 store ----------
 export const MCStore = (() => {
@@ -263,7 +263,7 @@ export function PriceChart({ symbol, signal }: any) {
 }
 
 // ---------- Markdown ----------
-export function inline(text: any, key?: any) {
+export function inline(text: any) {
   const parts = String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((p, i) => {
     if (p.startsWith('**') && p.endsWith('**')) return <strong key={i} style={{ color: 'var(--ink)', fontWeight: 650 }}>{p.slice(2, -2)}</strong>;
@@ -346,15 +346,57 @@ export function PageHead({ eyebrow, title, desc, right }: any) {
   );
 }
 
+// ---------- 页内数据来源 ----------
+// 导航栏状态在窄屏会收起；关键页面仍需就地说明数据来自后端还是示例快照。
+export function DataSourceNotice() {
+  const [state] = useStore();
+  const mode = state.live || 'demo';
+  const snapshot = state.snapshotAsOf || window.MC_DATA.DEMO_META.snapshot_as_of || '日期未知';
+  const connected = mode === 'live' || mode === 'degraded';
+  const label = mode === 'live'
+    ? '数据来源：本地后端 /api · 实时'
+    : mode === 'degraded'
+      ? `数据来源：本地后端 /api · 部分数据回退至示例快照 ${snapshot}`
+      : `数据来源：示例快照 · ${snapshot}`;
+  return (
+    <div role="status" aria-live="polite" className="glass-inset"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 10px', width: 'fit-content', maxWidth: '100%', fontSize: 12, color: 'var(--ink-2)' }}>
+      <span className="pulse-dot" style={{ background: connected ? 'var(--up)' : 'var(--warn)', flex: 'none' }}></span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 // ---------- 股票搜索建议 ----------
 export function useStockSuggest(query, market) {
-  return useMemo(() => {
+  const [state] = useStore();
+  const [remote, setRemote] = useState<{ key: string; rows: any[] }>({ key: '', rows: [] });
+  const q = query.trim();
+  const key = `${market}:${q.toLowerCase()}`;
+  const local = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
     return window.MC_DATA.SEARCH_POOL
       .filter((s) => (market === 'all' || s.market === market) && (s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)))
       .slice(0, 6);
   }, [query, market]);
+  const connected = state.live === 'live' || state.live === 'degraded';
+
+  useEffect(() => {
+    let current = true;
+    if (q.length < 2 || !connected || !window.MC_LIVE?.searchStocks) {
+      setRemote({ key: '', rows: [] });
+      return () => { current = false; };
+    }
+    const timer = setTimeout(() => {
+      window.MC_LIVE.searchStocks(q, market)
+        .then((rows) => { if (current) setRemote({ key, rows: Array.isArray(rows) ? rows.slice(0, 8) : [] }); })
+        .catch(() => { if (current) setRemote({ key, rows: [] }); });
+    }, 180);
+    return () => { current = false; clearTimeout(timer); };
+  }, [q, market, key, connected]);
+
+  return connected && remote.key === key ? remote.rows : local;
 }
 
 // ---------- 弹层 Modal（portal 到 body,确保悬浮全屏,不被 glass 卡的 backdrop-filter/overflow 裁剪）----------
@@ -576,7 +618,7 @@ export function PoolShell({ items, defaultCount = 8, renderCard, renderRow, card
 Object.assign(window, {
   MCStore, useStore, toast, useRoute, navigate, fmt, CCY, MKT,
   recTone, ltTone, pnlClass,
-  Card, Metric, Badge, Toggle, Seg, ScoreBar, Spark, PriceChart, Markdown, PageHead, Modal, McIcon, RefreshButton,
+  Card, Metric, Badge, Toggle, Seg, ScoreBar, Spark, PriceChart, Markdown, PageHead, DataSourceNotice, Modal, McIcon, RefreshButton,
   PoolShell, SortSeg, useSortCtl, applyPoolSort, dailyChangePct, useStockPoolFilter,
   useStockSuggest, mcInline: inline,
 });

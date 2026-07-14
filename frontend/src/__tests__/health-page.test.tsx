@@ -15,4 +15,15 @@ describe('HealthPage', () => {
 
     await waitFor(() => expect(refreshCoverage).toHaveBeenCalledTimes(1));
   });
+
+  it('opens the real coverage CSV endpoint when the backend is live', () => {
+    window.MC_LIVE = { isLive: vi.fn(() => true) } as any;
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(<HealthPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 CSV' }));
+
+    expect(open).toHaveBeenCalledWith('/api/export/coverage.csv', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
+  });
 });

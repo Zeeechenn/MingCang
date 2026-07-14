@@ -62,9 +62,9 @@ Look at 300308. Combine signals, news, long-term labels, and past memory, then g
 
 The default local mode prefers your logged-in local AI runtime. You only need cloud model, search, or data-provider keys when you explicitly enable those features.
 
-### Optional: Frontend Preview
+### Optional: Local Web Workbench
 
-The frontend can display local sample data, dossiers, and daily panels, but it is still being polished after the refactor. To take a quick look:
+The frontend covers research overview, stock search, dossiers, positions, daily reports, memory, and governance. To try the full flow first, run the isolated demo:
 
 ```bash
 git clone https://github.com/Zeeechenn/MingCang.git
@@ -72,7 +72,7 @@ cd MingCang
 make demo
 ```
 
-Then open <http://127.0.0.1:5173>. Demo data and real data are separate; the demo is only for trying the flow and does not represent your actual watchlist or research conclusions.
+Then open <http://127.0.0.1:5173>. Demo and live data are strictly separated, and the interface keeps the active data mode visible. Demo content is only for trying the flow and does not represent your actual watchlist, positions, or research conclusions. Start the API and frontend in development mode when you want to connect local data.
 
 ![MingCang frontend preview: decision dossier](docs/assets/screenshot-watchlist.png)
 
@@ -240,7 +240,7 @@ Plain English: record why something is worth researching, decide whether it is a
 | Daily reports | Cover pre-market, intraday, post-market, and weekend health checks, with internal terms translated into research questions. |
 | LLM discretion layer | Supports candidate comparison, hold/exit interpretation, timing notes, and review attribution; gray-release off by default, and enabled output is still reference-only. |
 | Blind judging | Judgment features can be evaluated through cross-model blind judging and forward validation before affecting production judgment. |
-| Web frontend | Local workbench and daily pages exist, but the refactored product experience is still being polished; agent-first is recommended. |
+| Web frontend | Covers research, stock search, dossiers, positions, daily reports, memory, and governance; live/degraded/demo state stays visible, writes require confirmation, and desktop/mobile flows are browser-tested. |
 
 ---
 

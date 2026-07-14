@@ -24,6 +24,7 @@ node_modules/
 dist/
 site/
 .superpowers/
+.playwright-cli/
 .codegraph/
 *.egg-info/
 .DS_Store

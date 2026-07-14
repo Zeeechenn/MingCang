@@ -343,7 +343,13 @@ export const reviewLatestSignal = (symbol) =>
 export const triggerLongTermTeam = () =>
   request(`/long-term/run`, { method: 'POST' })
 
-export const runDeepResearch = ({ topic, symbols = [], as_of = null }) =>
+export interface DeepResearchPayload {
+  topic: string
+  symbols?: string[]
+  as_of?: string | null
+}
+
+export const runDeepResearch = ({ topic, symbols = [], as_of = null }: DeepResearchPayload) =>
   request('/research/deep/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

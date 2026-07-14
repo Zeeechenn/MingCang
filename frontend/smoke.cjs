@@ -29,12 +29,15 @@ function urlFor(path) {
 }
 const routes = [
   ['home-terminal', '/', '明仓终端'],
+  ['daily', '/#/daily', '日常'],
   ['pulse', '/#/pulse', '今日持仓裁决'],
+  ['stocks', '/#/stocks', '个股案卷'],
   ['reports', '/#/reports', '复盘案卷'],
   ['memory-legacy', '/#/memory', '复盘案卷'],
   ['reviews-legacy', '/#/reviews', '复盘案卷'],
   ['chat', '/#/chat', '研究副驾驶'],
   ['positions', '/#/positions', '持仓纪律'],
+  ['memory-evolution', '/#/memory-evolution', '记忆进化'],
   ['health', '/#/health', '来源健康'],
   ['admin', '/#/admin', '规则与信任治理台'],
   ['stock', '/#/stock/300308', '个股案卷'],
@@ -52,6 +55,23 @@ const routes = [
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
   page.on('pageerror', (err) => pageErrors.push(err.message));
+
+  // 首次打开必须呈现可操作的三步向导，并让目标选择真正落到推荐页面。
+  await page.goto(urlFor('/'), { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    localStorage.removeItem('mc_proto_wizard_done_v1');
+    localStorage.removeItem('mc_onboarding_goal_v1');
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.getByRole('dialog', { name: '欢迎使用明仓' }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: /研究一只股票/ }).click();
+  await page.getByRole('button', { name: '继续' }).click();
+  await page.getByRole('button', { name: '继续' }).click();
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: '完成并进入' }).click();
+  await page.waitForURL(/#\/stocks$/);
+  const selectedGoal = await page.evaluate(() => localStorage.getItem('mc_onboarding_goal_v1'));
+  if (selectedGoal !== 'research') throw new Error(`onboarding goal was not persisted: ${selectedGoal}`);
 
   await page.addInitScript(() => localStorage.setItem('mc_proto_wizard_done_v1', '1'));
   const results = [];
@@ -81,15 +101,31 @@ const routes = [
   await page.waitForSelector('text=明仓终端', { timeout: 10000 });
   await page.waitForTimeout(900);
   await page.screenshot({ path: '/private/tmp/mingcang_frontend_v2/shots/v2-mobile-home-terminal.png', fullPage: true });
-  for (const [name, path, text] of [
-    ['reports-mobile', '/#/reports', '复盘案卷'],
-  ]) {
+  for (const [name, path, text] of routes.filter(([name]) => !name.includes('legacy') && name !== 'stock')) {
     await page.goto(urlFor(path), { waitUntil: 'networkidle' });
     await page.waitForSelector(`text=${text}`, { timeout: 10000 });
-    mobileResults.push({ name, path, ok: true });
+    const navVisible = await page.locator('.navlinks').isVisible();
+    const statusVisible = await page.locator('.nav-status').isVisible();
+    const mobileLabelVisible = await page.getByText('页面导航', { exact: true }).isVisible();
+    const activeLinks = await page.locator('.navlink[aria-current="page"]').count();
+    const viewportFits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+    if (!navVisible || !statusVisible || !mobileLabelVisible || activeLinks !== 1 || !viewportFits) {
+      throw new Error(`mobile navigation failed on ${path}: ${JSON.stringify({ navVisible, statusVisible, mobileLabelVisible, activeLinks, viewportFits })}`);
+    }
+    mobileResults.push({ name: `${name}-mobile`, path, ok: true });
   }
   await page.waitForTimeout(900);
   await page.screenshot({ path: '/private/tmp/mingcang_frontend_v2/shots/v2-mobile-memory.png', fullPage: true });
+
+  await page.goto(urlFor('/'), { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    document.body.tabIndex = -1;
+    document.body.focus();
+  });
+  await page.keyboard.press('Tab');
+  const skipFocused = await page.evaluate(() => document.activeElement?.classList.contains('skip-link'));
+  await page.evaluate(() => document.body.removeAttribute('tabindex'));
+  if (!skipFocused) throw new Error('keyboard focus should start at the skip link');
 
   let coverageFails = false;
   await page.route('**/api/**', async (route) => {

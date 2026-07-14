@@ -316,7 +316,7 @@ export function ChatPage() {
         sid = s.id;
         setActiveId(sid);
       }
-    } catch (e) { /* 会话创建失败时按无会话发送 */ }
+    } catch { /* 会话创建失败时按无会话发送 */ }
 
     const history = (MCStore.get().sessions.find((s) => s.id === sid)?.messages || [])
       .filter((m) => m.role === 'user' ? m.content : m.answer)

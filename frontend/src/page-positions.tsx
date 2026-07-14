@@ -2,7 +2,7 @@
 // 持仓页 — 记录 / 平仓 / 已实现盈亏(不接券商,不自动交易)
 // ============================================================
 import React from 'react';
-import { Badge, CCY, Card, MCStore, MKT, PageHead, RefreshButton, fmt, navigate, pnlClass, toast, useStockSuggest, useStore } from './shared';
+import { Badge, CCY, Card, MKT, PageHead, RefreshButton, fmt, navigate, pnlClass, toast, useStockSuggest, useStore } from './shared';
 const { useState: usePoState, useMemo: usePoMemo } = React;
 
 function PositionForm() {
@@ -13,6 +13,7 @@ function PositionForm() {
   const [cost, setCost] = usePoState('');
   const sugg = useStockSuggest(q, market);
   const [picked, setPicked] = usePoState(false);
+  const [pending, setPending] = usePoState<any>(null);
 
   function pickStock(s) {
     setQ(s.symbol); setName(s.name); setMarket(s.market); setPicked(true);
@@ -20,22 +21,17 @@ function PositionForm() {
   function submit(e) {
     e.preventDefault();
     if (!q.trim() || !qty || !cost) return;
-    const done = () => { toast(`已记录持仓 ${name || q}(仅记录，不会真实下单)`); setQ(''); setName(''); setQty(''); setCost(''); setPicked(false); };
-    window.MC_LIVE.createPosition({ symbol: q.trim(), name: name.trim() || q.trim(), market, quantity: Number(qty), avg_cost: Number(cost) })
+    setPending({ symbol: q.trim(), name: name.trim() || q.trim(), market, quantity: Number(qty), avg_cost: Number(cost) });
+  }
+  function confirm() {
+    if (!pending) return;
+    const payload = pending;
+    const done = () => { toast(`已记录持仓 ${payload.name}(仅记录，不会真实下单)`); setQ(''); setName(''); setQty(''); setCost(''); setPicked(false); setPending(null); };
+    window.MC_LIVE.createPosition(payload)
       .then(done)
       .catch((err) => {
         if (!err || !err.demo) { toast(`添加失败:${err?.message || '后端错误'}`); return; }
-        const px = window.MC_DATA.PRICES[q.trim()];
-        const latest = px ? px[px.length - 1].close : Number(cost);
-        MCStore.set((st) => ({
-          positions: [...st.positions, {
-            id: Date.now(), symbol: q.trim(), name: name.trim() || q.trim(), market,
-            status: 'open', quantity: Number(qty), avg_cost: Number(cost), latest_price: latest,
-            stop_loss: +(latest * 0.93).toFixed(2), take_profit: +(latest * 1.12).toFixed(2),
-            entry_date: '2026-06-11',
-          }],
-        }));
-        done();
+        toast('示例模式不会写入持仓；连接本地后端后再试');
       });
   }
 
@@ -68,6 +64,18 @@ function PositionForm() {
         <input className="field" value={cost} onChange={(e) => setCost(e.target.value.replace(/[^\d.]/g, ''))} placeholder="成本价" inputMode="decimal" />
         <button className="btn btn-primary" disabled={!q || !qty || !cost} type="submit">添加</button>
       </div>
+      {pending && (
+        <div className="glass-inset" style={{ padding: '12px 14px', marginTop: 10 }} role="status">
+          <div style={{ fontSize: 13.5, fontWeight: 650 }}>{pending.name} · {pending.symbol}</div>
+          <div className="t-dim" style={{ fontSize: 12.5, marginTop: 4 }}>
+            {MKT[pending.market]} · {fmt.money(pending.quantity)} 股 · 成本 {fmt.price(pending.avg_cost)}。确认后仅写入明仓持仓账本，不会真实下单。
+          </div>
+          <div className="row" style={{ gap: 6, marginTop: 10 }}>
+            <button className="btn btn-sm btn-primary" type="button" onClick={confirm}>确认写入持仓</button>
+            <button className="btn btn-sm btn-quiet" type="button" onClick={() => setPending(null)}>返回修改</button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
@@ -83,14 +91,7 @@ function CloseButton({ item }: any) {
       .then(() => toast(`已平仓 ${item.name}，盈亏记入已实现`))
       .catch((err) => {
         if (!err || !err.demo) { toast(`平仓失败:${err?.message || '后端错误'}`); return; }
-        MCStore.set((st) => ({
-          positions: st.positions.map((x) => x.id === item.id ? {
-            ...x, status: 'closed', close_price: p, opened_at: x.entry_date, closed_at: '2026-06-11',
-            realized_pnl: +((p - x.avg_cost) * x.quantity).toFixed(0),
-            realized_pnl_pct: +(((p - x.avg_cost) / x.avg_cost) * 100).toFixed(2),
-          } : x),
-        }));
-        toast(`已平仓 ${item.name}，盈亏记入已实现`);
+        toast('示例模式不会平仓；连接本地后端后再试');
       });
   }
   if (!open) return <button className="btn btn-sm" onClick={() => { setOpen(true); setPrice(String(item.latest_price)); }}>平仓</button>;
@@ -233,8 +234,7 @@ export function PositionsPage() {
                               .then(() => toast('平仓记录已删除'))
                               .catch((err) => {
                                 if (!err || !err.demo) { toast(`删除失败:${err?.message || '后端错误'}`); return; }
-                                MCStore.set((st) => ({ positions: st.positions.filter((x) => x.id !== p.id) }));
-                                toast('平仓记录已删除');
+                                toast('示例模式不会删除平仓记录；连接本地后端后再试');
                               });
                           }}>确认删除</button>
                           <button className="btn btn-sm btn-quiet" onClick={() => setConfirmDel(null)}>取消</button>

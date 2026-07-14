@@ -2,6 +2,7 @@
 // 单股详情页 — 信号 / 研究 / 证据 / 新闻
 // ============================================================
 import React from 'react';
+import { refreshResearchCopilot, reviewLatestSignal } from './api';
 import { Badge, Card, MCStore, MKT, Markdown, McIcon, Metric, PageHead, PoolShell, PriceChart, RefreshButton, ScoreBar, Seg, SortSeg, Spark, applyPoolSort, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, toast, useSortCtl, useStockPoolFilter, useStore } from './shared';
 const { useState: useSState, useEffect: useSEffect } = React;
 
@@ -145,9 +146,18 @@ function LongTermPanel({ stock }: any) {
   const [busy, setBusy] = useSState(false);
   const [notice, setNotice] = useSState('');
   const label = stock.long_term_label;
-  function review() {
+  async function review() {
     setBusy(true);
-    setTimeout(() => { setBusy(false); setNotice('最新信号复盘已完成:归因已写入研究状态，1 条记忆候选待确认。'); toast('复盘完成，产生 1 条记忆候选'); }, 1400);
+    setNotice('');
+    try {
+      await reviewLatestSignal(stock.symbol);
+      setNotice('最新信号复盘已完成，研究状态已由后端更新。');
+      toast('复盘完成，结果已写入研究状态');
+    } catch (error: any) {
+      toast(`复盘失败:${error?.message || '后端错误'}`);
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <Card eyebrow="长期标签 / 信号复盘" title="长期标签如何约束短线动作" tour="long-term"
@@ -225,9 +235,17 @@ function CopilotCard({ symbol }: any) {
   const [refreshed, setRefreshed] = useSState(false);
   const c = pick(window.MC_DATA.COPILOT, symbol);
   const toneMap = { support: 'badge-up', caution: 'badge-warn', oppose: 'badge-down', neutral: 'badge-dim' };
-  function refresh() {
+  async function refresh() {
     setBusy(true);
-    setTimeout(() => { setBusy(false); setRefreshed(true); toast('副驾驶影子意见已刷新(LLM 调用 ¥0.06)'); }, 1600);
+    try {
+      await refreshResearchCopilot(symbol);
+      setRefreshed(true);
+      toast('副驾驶影子意见已由后端刷新');
+    } catch (error: any) {
+      toast(`副驾驶刷新失败:${error?.message || '后端错误'}`);
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <Card eyebrow="LLM 副驾驶 · 影子轨" title="副驾驶影子意见，不覆盖官方" tour="copilot"
@@ -564,8 +582,6 @@ export function StocksPage() {
   const watchSyms = new Set(watch.map((w) => w.symbol));
   const watchFiltered = watch.filter(match);
   const otherFiltered = filtered.filter((s) => !watchSyms.has(s.symbol));
-  const gridStyle = { gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 };
-
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="Stocks" title="个股案卷"
@@ -604,7 +620,7 @@ export function StocksPage() {
 }
 
 export function StockPage({ symbol }: any) {
-  const [state] = useStore();
+  useStore();
   // live 模式下懒取该股的 K线/新闻/证据/归因/案卷,数据落地后 poke store 重渲染
   useSEffect(() => { if (window.MC_LIVE) window.MC_LIVE.ensureSymbol(symbol); }, [symbol]);
   const stock = getStock(symbol);

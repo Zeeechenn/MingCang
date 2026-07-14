@@ -12,6 +12,40 @@ _（下一版工作累积区）_
 
 ---
 
+## [v0.6.2] Frontend trust closure & guarded workflow hardening / 前端可信闭环与受控工作流加固（2026-07-15）
+
+本版以真实用户流程为验收单位，补齐 Web 前端与后端能力的接线、数据真相、操作确认、移动端和无障碍体验，同时收紧 live/model 工作流的人工晋升边界。明仓仍不连接券商、不自动下单，production quant weight 保持 `0.0`。
+
+### Added / 新增
+- **真实浏览器发布门**：Playwright 覆盖 13 个桌面路由、10 个移动端主页面、首次使用流程、demo/live/degraded 数据状态、标的检索和控制台错误；CI 将前端 ESLint 与浏览器 smoke 设为阻断门。
+- **Live Track M64 安全漏斗**：新增 fail-closed、只读的 live funnel 脚手架，状态与产物限制在本机私有目录；没有券商执行、自动交易或隐式生产晋升入口。
+- **候选模型人工晋升**：训练任务只生成 candidate 与验证报告，生产 promotion 必须由独立、显式的人类确认动作触发并重新校验完整合同。
+
+### Fixed / 修复
+- **真实数据与 demo 真相**：首页不再在 live/degraded 模式生成硬编码“研究结论”；demo 持续显示快照日期与模式，300308 示例的评分、证据、仓位和结论自洽。
+- **前后端接线补齐**：标的搜索可查询关注列表外的新股票；个股复盘、副驾驶、深度研究、长期团队、模型训练、kill switch、持仓新增和导出均接到真实后端能力。
+- **移除假成功**：浏览器不再假装保存 API key、`.env`、provider、scheduler 或试验比例；只读配置明确标注需在本机配置并重启，运行时配置成功提示明确仅作用于当前后端进程。
+- **危险操作确认**：治理类工作流与持仓新增均在展示目标和影响后要求二次确认；demo 模式不会伪造持久化写入。
+- **日常页与导出真相**：日常页明确为四类只读报告，并把研究/观点录入引导到真实聊天入口；覆盖率 CSV 在 live 模式走真实导出 API，在 demo 模式生成可下载的快照文件。
+
+### Changed / 变更
+- **首次使用收敛**：5+12 步引导压缩为 3 步，保留目标选择并将用户送到对应真实页面；导航巡游与 10 个主入口一一对应。
+- **移动端与无障碍**：移动端持续显示页面导航和数据模式，触控目标至少 44px；补齐跳转主内容、键盘焦点、对话框 focus trap / Esc、`aria-current`、toast live region 与 reduced-motion。
+- **加载性能**：路由改为 `React.lazy` 分包，首包由约 501KB / gzip 153KB 降至约 322KB / gzip 108KB。
+- **公开说明同步**：中英文 README 将 Web 从“重构后仍在打磨的预览”更新为经过桌面/移动端流程验证的本地工作台，并继续强调 demo 与真实数据严格隔离。
+
+### Safety / 安全边界
+- Web 不写入密钥或本机 `.env`，不通过前端静默改变 provider、scheduler、production weights 或交易风险规则。
+- 模型训练不等于生产晋升；promotion 继续要求显式人工确认，production quant weight 保持 `WEIGHT_QUANT=0.0`。
+- Live Track 保持 fail-closed、只读和本机私有；明仓不连接券商、不自动下单，也不提供投资建议。
+- test2 v2 的 LLM treatment boundary override 仅作用于该实验臂并记录越界理由；机械 control 与全局真实持仓校验保持原边界。
+
+### Verification / 验证
+- `make verify` 全绿：backend pytest `1708 passed / 5 skipped`，ruff、release hygiene、mypy（297 个 source files，0 error）通过。
+- 前端 typecheck、20 项 Vitest、build、零 warning ESLint 全绿；Playwright 桌面/移动端 smoke 无 console error / page error。
+
+---
+
 ## [v0.6.1] CI green & README quickstart consolidation / CI 转绿与 README 快速开始收敛（2026-07-06）
 
 紧随 v0.6.0——首次把 `main` 推上 GitHub 后，CI 首跑暴露并修复一批既存的本地/CI 环境差异（此前 `main` 从未 push，CI 从未真正跑绿），并顺手收紧了首页。均不改任何官方信号、仓位、scheduler、production weights 或研究裁量逻辑。

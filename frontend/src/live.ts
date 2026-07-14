@@ -36,7 +36,7 @@ function startHealthMonitor() {
       await api.getSystemHealth();
       const sources = store().get().liveSources || {};
       store().set({ live: deriveLiveMode(sources) });
-    } catch (e) {
+    } catch {
       live = false;
       atlasOn = false;
       stopHealthMonitor();
@@ -359,7 +359,7 @@ export async function startLive() {
   let watchlist;
   try {
     watchlist = await api.getWatchlist();
-  } catch (e) {
+  } catch {
     live = false;
     atlasOn = false;
     stopHealthMonitor();
@@ -386,7 +386,7 @@ export async function startLive() {
     api.getDataCoverage(),
     api.getChatSessions(),
   ]);
-  const [posOpen, posClosed, reviews, runtime, sysStatus, sysHealth, llmUsage, memOverview, memList, memAudit, coverage, sessions] =
+  const [posOpen, posClosed, reviews, runtime, sysStatus, sysHealth, llmUsage, memOverview, memList, _memAudit, coverage, sessions] =
     results.map((r) => (r.status === 'fulfilled' ? r.value : null));
   const fulfilled = (index) => results[index].status === 'fulfilled';
   const liveSources: any = {
@@ -500,7 +500,7 @@ export async function startLive() {
       Dd.FORWARD_THESES = lists
         .flatMap((r) => (r.status === 'fulfilled' ? (r.value.items || []) : []))
         .map(normForwardThesis);
-    } catch (e) {
+    } catch {
       atlasOn = false;
     }
   }
@@ -603,12 +603,26 @@ async function refreshCore() {
       watchlist: watch,
       positions: [...(posOpen || []), ...(posClosed || [])].map(normPosition),
     });
-  } catch (e) { /* 刷新失败保持现状 */ }
+  } catch { /* 刷新失败保持现状 */ }
 }
 
 export const MC_API = {
   isLive,
   ensureSymbol,
+  async searchStocks(query, market = 'CN') {
+    await ensureLive();
+    const markets = market === 'all' ? ['CN', 'HK', 'US'] : [market];
+    const results = await Promise.allSettled(markets.map((item) => api.searchStocks(query, item)));
+    const seen = new Set<string>();
+    return results
+      .flatMap((result) => (result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []))
+      .filter((item) => {
+        if (!item?.symbol || seen.has(item.symbol)) return false;
+        seen.add(item.symbol);
+        return true;
+      })
+      .slice(0, 8);
+  },
   async addWatch(symbol, name, market) {
     await ensureLive();
     await api.addStock(symbol, name, market);
