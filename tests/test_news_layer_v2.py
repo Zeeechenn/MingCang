@@ -133,3 +133,71 @@ def test_evidence_from_db_is_strictly_point_in_time_and_maps_content_provider(te
     assert item.provider == "anspire"
     assert item.content == "公司公告拟回购股份。"
     assert item.content_status == "full"
+
+
+def test_pyramid_receives_real_price_volume_inputs_and_exposes_trigger_reasons():
+    from backend.data.news_evidence import NewsEvidence
+    from backend.data.news_layer_v2 import score_news_v2
+    from backend.data.news_trigger import REASON_PRICE_ANOMALY, REASON_PRICE_VOLUME_SKIPPED
+
+    evidence = [
+        NewsEvidence(
+            symbol="600001",
+            title="公司日常经营信息更新",
+            url="https://example.com/price-trigger",
+            published_at=BASE_TIME,
+            source_name="unit",
+            provider="unit",
+        )
+    ]
+    with patch("backend.data.news_layer_v2.extract_clusters") as extractor:
+        from backend.data.news_extraction import score_cluster_title_only
+
+        extractor.side_effect = lambda clusters, tier: [score_cluster_title_only(item) for item in clusters]
+        signal = score_news_v2(
+            evidence,
+            BASE_TIME,
+            price_change_pct=6.2,
+            volume_ratio=1.1,
+        )
+
+    assert REASON_PRICE_ANOMALY in signal.trigger_reasons
+    assert REASON_PRICE_VOLUME_SKIPPED not in signal.trigger_reasons
+
+
+def test_pyramid_process_cache_is_isolated_by_namespace_and_tier():
+    from backend.data.news_evidence import NewsEvidence
+    from backend.data.news_layer_v2 import score_news_v2
+    from backend.data.news_trigger import TriggerDecision
+
+    evidence = [
+        NewsEvidence(
+            symbol="600099",
+            title="公司日常经营信息更新",
+            url="https://example.com/cache-namespace",
+            published_at=BASE_TIME,
+            source_name="unit",
+            provider="unit",
+        )
+    ]
+    no_trigger = TriggerDecision(
+        symbol="600099",
+        as_of=BASE_TIME,
+        triggered=False,
+        reasons=["price_volume_input_missing"],
+    )
+    with patch("backend.data.news_layer_v2.decide_trigger", return_value=no_trigger):
+        left = score_news_v2(
+            evidence,
+            BASE_TIME,
+            flow_value=-1.0,
+            cache_namespace="experiment-a",
+        )
+        right = score_news_v2(
+            evidence,
+            BASE_TIME,
+            flow_value=1.0,
+            cache_namespace="experiment-b",
+        )
+
+    assert left.composite != right.composite

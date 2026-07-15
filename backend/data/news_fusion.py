@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from importlib import import_module
 from operator import attrgetter
@@ -59,6 +59,9 @@ class NewsSignalV2:
     # AttributionCard from backend.data.news_trigger to avoid a fusion->trigger
     # import edge here; typed loosely (Any) so this module stays independent.
     attribution_card: Any | None = None
+    # Deterministic L1 reasons are persisted by M68 so operators can tell
+    # whether LLM spend came from an event, price/volume anomaly, or fallback.
+    trigger_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

@@ -116,6 +116,9 @@ def run_daily_accrual(
 
         inserted_total = 0
         fetch_failed = 0
+        collection_outcomes: dict[str, str] = {
+            target["symbol"]: "not_run" for target in targets
+        }
         if fetch_content:
             for target in targets:
                 symbol, name = target["symbol"], target["name"]
@@ -125,8 +128,10 @@ def run_daily_accrual(
                     items.extend(fetch_stock_news_anspire(symbol, name))
                     items.extend(fetch_news_ifind(symbol, name))
                     inserted_total += save_news_to_db(items, active_db)
+                    collection_outcomes[symbol] = "success"
                 except Exception as exc:  # pragma: no cover - operator resilience, mirrors m54_content_backfill.
                     fetch_failed += 1
+                    collection_outcomes[symbol] = "failed"
                     logger.warning("M54 daily accrual content fetch skipped %s: %s", symbol, exc)
                     active_db.rollback()
 
@@ -199,6 +204,7 @@ def run_daily_accrual(
             "n_symbols_total": len(targets),
             "content_inserted": inserted_total,
             "content_fetch_failed": fetch_failed,
+            "collection_outcomes": collection_outcomes,
             "n_scored_new": n_scored_new,
             "n_cache_hit_skipped": n_cache_hit,
             "n_score_failed": n_score_failed,

@@ -1,6 +1,6 @@
 """ORM models package — domain-split, re-exported for a stable import surface.
 
-All 31 models register on the shared ``backend.data.orm.Base``.
+All models register on the shared ``backend.data.orm.Base``.
 """
 from backend.data.models.chat import (
     ChatMessage,
@@ -42,6 +42,10 @@ from backend.data.models.memory import (
     MemoryPromotionCandidate,
     MemoryScenario,
     StockMemoryItem,
+)
+from backend.data.models.news_shadow import (
+    NewsShadowFeedback,
+    NewsShadowRun,
 )
 from backend.data.models.review import (
     ReviewCase,
@@ -108,4 +112,6 @@ __all__ = [
     "ReviewCase",
     "UniverseSnapshot",
     "GateBObservation",
+    "NewsShadowRun",
+    "NewsShadowFeedback",
 ]

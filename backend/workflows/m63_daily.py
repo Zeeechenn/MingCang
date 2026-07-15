@@ -10,7 +10,7 @@ import sqlite3
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from backend.config import default_sqlite_path
 from backend.workflows.render import (
@@ -44,6 +44,7 @@ POSTMARKET_STEP_MODULES = {
     "backend.tools.m60_watchtower",
     "backend.tools.m60_second_entry",
     "backend.tools.m54_daily_accrual",
+    "backend.tools.m68_news_shadow",
     "backend.tools.m58_exit_shadow",
     "backend.tools.m59_panel",
     "backend.tools.m59_discretion",
@@ -433,6 +434,50 @@ def _run_accrual(as_of: str, *, no_llm: bool) -> dict[str, Any]:
     if no_llm:
         return {"skipped": True, "reason": "--no-llm:跳过会消耗LLM的accrual scoring", "progress": compute_progress()}
     return run_daily_accrual(date=as_of)
+
+
+def _run_news_shadow(
+    as_of: str,
+    *,
+    no_llm: bool,
+    db_path: str | Path | None,
+    collection_outcomes: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Run the bounded M68 mirror; never writes the official signal path."""
+    from backend.config import settings
+
+    if no_llm:
+        return {"skipped": True, "reason": "--no-llm:跳过可能消耗LLM的新闻金字塔生产镜像"}
+    if not settings.news_shadow_enabled:
+        return {"skipped": True, "reason": "NEWS_SHADOW_ENABLED=false"}
+
+    from sqlalchemy import Table, create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.data.models.news_shadow import NewsShadowFeedback, NewsShadowRun
+    from backend.data.news_shadow import run_production_mirror
+
+    resolved = Path(db_path) if db_path is not None else default_sqlite_path()
+    engine = create_engine(f"sqlite:///{resolved}", connect_args={"check_same_thread": False})
+    cast(Table, NewsShadowRun.__table__).create(bind=engine, checkfirst=True)
+    cast(Table, NewsShadowFeedback.__table__).create(bind=engine, checkfirst=True)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    try:
+        with _connect(resolved) as con:
+            focus_symbols = sorted(_holding_symbols(con) | _universe_symbols(con))
+        return run_production_mirror(
+            as_of=as_of,
+            db=db,
+            symbols=focus_symbols or None,
+            limit=settings.news_shadow_stock_limit,
+            tier=settings.news_shadow_model_tier,
+            lookback_days=settings.news_shadow_lookback_days,
+            collection_outcomes=collection_outcomes,
+        )
+    finally:
+        db.close()
+        engine.dispose()
 
 
 def _run_exit_shadow() -> dict[str, Any]:
@@ -976,6 +1021,28 @@ def build_postmarket_report(
     steps.append(_step_result("m60_watchtower", overrides.get("m60_watchtower", lambda: __import__("backend.tools.m60_watchtower", fromlist=["build_watchtower_report"]).build_watchtower_report(db_path=db_path, as_of=day))))
     steps.append(_step_result("m60_second_entry", overrides.get("m60_second_entry", lambda: _run_second_entry_ledger(db_path, day))))
     steps.append(_step_result("m54_daily_accrual", overrides.get("m54_daily_accrual", lambda: _run_accrual(day, no_llm=no_llm))))
+    accrual_result: dict[str, Any] = next(
+        (
+            step["result"]
+            for step in steps
+            if step["name"] == "m54_daily_accrual" and step["ok"] and isinstance(step["result"], dict)
+        ),
+        {},
+    )
+    steps.append(
+        _step_result(
+            "m68_news_shadow",
+            overrides.get(
+                "m68_news_shadow",
+                lambda: _run_news_shadow(
+                    day,
+                    no_llm=no_llm,
+                    db_path=db_path,
+                    collection_outcomes=accrual_result.get("collection_outcomes"),
+                ),
+            ),
+        )
+    )
     steps.append(_step_result("m58_exit_shadow", overrides.get("m58_exit_shadow", _run_exit_shadow)))
     steps.append(_step_result("m59_panel", overrides.get("m59_panel", lambda: _run_panel(day))))
     steps.append(_step_result("m63_trade_journal", overrides.get("m63_trade_journal", lambda: _run_trade_journal(db_path, day))))
@@ -1022,6 +1089,7 @@ def build_postmarket_report(
 
     failures = [f"⚠️ {step['name']} 失败:{step['error']}" for step in steps if not step["ok"]]
     accrual: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m54_daily_accrual" and step["ok"]), {})
+    news_shadow: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m68_news_shadow" and step["ok"]), {})
     exit_shadow: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m58_exit_shadow" and step["ok"]), {})
     pending = router.get("pending", []) if isinstance(router, dict) else []
     sections = [
@@ -1046,6 +1114,25 @@ def build_postmarket_report(
             [
                 accrual.get("reason", "已运行") if isinstance(accrual, dict) and accrual.get("skipped") else "已运行",
                 f"gate:{((accrual.get('progress') or {}).get('gate') if isinstance(accrual, dict) else '-')}",
+            ],
+        ),
+        (
+            "新闻金字塔生产镜像",
+            [
+                news_shadow.get("reason", "已运行")
+                if isinstance(news_shadow, dict) and news_shadow.get("skipped")
+                else "已运行(只读反事实,不改生产动作)",
+                f"覆盖:{news_shadow.get('n_symbols', '-')} / 状态:{news_shadow.get('counts', {})}",
+                f"事件关注:{news_shadow.get('event_risk_counts', {})}(只表示复核优先级,不预测方向)",
+                *[
+                    f"{item.get('symbol')} {item.get('level')} 事件关注 / "
+                    f"主因:{item.get('main_cause') or '-'} / 置信:{item.get('confidence', '-')} / "
+                    f"重检论点:{'是' if item.get('thesis_recheck') else '否'} / "
+                    f"原因:{','.join(item.get('reasons') or [])} / "
+                    f"降级:{','.join(item.get('degradation_flags') or []) or '-'}"
+                    for item in (news_shadow.get("attention") or [])[:5]
+                ],
+                f"token增量:{news_shadow.get('tokens_spent', '未知')}",
             ],
         ),
         (

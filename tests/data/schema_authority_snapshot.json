@@ -3639,6 +3639,405 @@
       }
     ]
   },
+  "news_shadow_feedback": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "run_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "evidence_ref",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "category",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "preferred_path",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "category"
+        ],
+        "name": "ix_news_shadow_feedback_category",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "evidence_ref"
+        ],
+        "name": "ix_news_shadow_feedback_evidence_ref",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "run_id"
+        ],
+        "name": "ix_news_shadow_feedback_run_id",
+        "unique": 0
+      }
+    ]
+  },
+  "news_shadow_runs": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "run_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "profile",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "legacy_signal_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "legacy_signal_date",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "legacy_sentiment_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "legacy_composite_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "legacy_recommendation",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "legacy_summary",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "pyramid_sentiment_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "pyramid_composite",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "news_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "flow_score",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "confidence",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "counterfactual_composite",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "counterfactual_recommendation",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "counterfactual_note",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "score_delta",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "would_change_action",
+        "notnull": 1,
+        "pk": 0,
+        "type": "BOOLEAN"
+      },
+      {
+        "default": null,
+        "name": "event_risk_level",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "event_risk_reasons_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "price_change_pct",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "volume_ratio",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "trigger_reasons_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "attribution_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "evidence_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "degradation_flags_json",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "model_tier",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "cache_version",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "latency_ms",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "tokens_spent",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "error",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "ix_news_shadow_runs_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "event_risk_level"
+        ],
+        "name": "ix_news_shadow_runs_event_risk_level",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "profile"
+        ],
+        "name": "ix_news_shadow_runs_profile",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "run_id"
+        ],
+        "name": "ix_news_shadow_runs_run_id",
+        "unique": 1
+      },
+      {
+        "columns": [
+          "status"
+        ],
+        "name": "ix_news_shadow_runs_status",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_news_shadow_runs_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "as_of",
+          "profile"
+        ],
+        "name": "sqlite_autoindex_news_shadow_runs_1",
+        "unique": 1
+      }
+    ]
+  },
   "overseas_snapshots": {
     "columns": [
       {

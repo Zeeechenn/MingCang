@@ -34,6 +34,7 @@ explicitly on HOLD.
 | M29 | mechanism (hypothesis registry / readiness / evidence ledger) folded into M58 as infrastructure; no standalone line |
 | remote agent mode | opt-in only; read-only by default |
 | repository structure | M66 first batch landed: stable core has no static `backend.tools` dependency; legacy CLI/import paths remain compatible |
+| M68 news pyramid | **production-shaped mirror is trial-ready, not production direction authority**: M63 runs a bounded (default 20) holdings/test2/biaodi1 shadow step, writes only `news_shadow_*`, and exposes event-review priority plus legacy/pyramid counterfactuals. Official `signals`, weights, stops, positions and test2 are unchanged |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
 to keep runtime LLM token use bounded. Multi-agent research remains available
@@ -66,6 +67,14 @@ single source of truth for sequencing. Live lines as of 2026-07-15:
 
 - **M54 / M58 / M59 / M60 / M63** continue their existing forward-accrual,
   shadow, gray-release, watchtower and daily-orchestration duties.
+- **M68** has completed its first trial slice: real DB evidence/price-volume inputs,
+  explicit no-news/fetch/scoring states, a bounded M63 mirror step, three-bucket
+  review queue, read-only API, `/news-shadow` trial UI and evidence-bound operator
+  feedback. Its operating judgment is deliberately asymmetric: emotion/news is
+  first used to surface event and volatility review risk; direction remains a
+  shadow counterfactual until the existing M54 IC/ICIR/monotonicity/regime gates pass.
+  Persistent extraction-cache replay, frozen-evidence reruns and a measured
+  production v2-full token comparison remain open.
 - **M66** has completed its first structural batch: stable core imports canonical
   data/backtest/evidence/research/workflow modules; eight related tests are grouped
   by domain; frontend API/live code is under `src/services/`. Remaining work is
@@ -107,6 +116,13 @@ truth checks all green with no console or page errors. A focused live-browser
 check also verified HK 2/2 and US 3/3 market filters and visible shadow/no-order
 badges. Release tags are published only after the matching GitHub CI jobs also
 pass on the exact release commit.
+
+Current M68 worktree verification (2026-07-15): an initialized isolated DB
+produced backend `1730 passed / 12 skipped`; ruff, release hygiene and mypy
+(315 source files) are green. Frontend typecheck, 26 Vitest checks, production
+build and zero-warning ESLint are green; Playwright smoke covered 14 desktop
+and 11 mobile routes including `/news-shadow`, with no console/page errors.
+This is worktree evidence, not a published release or GitHub CI claim.
 
 For release-quality work, treat `make verify` as the canonical gate.
 

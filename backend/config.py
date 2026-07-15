@@ -295,6 +295,14 @@ class Settings(BaseSettings):
     # posture whenever the pyramid itself is turned on).
     news_v2_pyramid_trigger_only: bool = True
 
+    # M68: production-shaped, observe-only mirror. The daily M63 workflow may
+    # score a bounded focus-universe slice and writes only news_shadow_* rows.
+    # It has no authority over official signals, weights, positions, or stops.
+    news_shadow_enabled: bool = True
+    news_shadow_stock_limit: int = 20
+    news_shadow_lookback_days: int = 3
+    news_shadow_model_tier: str = "capable"
+
     # Bark 推送通知（可选，iOS App）
     bark_key: str = ""                    # Bark App 设备密钥
     bark_server: str = "https://api.day.app"  # 自建 Bark 服务时可替换

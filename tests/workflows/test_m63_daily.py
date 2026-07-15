@@ -215,6 +215,42 @@ def test_postmarket_runs_second_entry_after_watchtower(tmp_path):
     assert "m60_second_entry:OK" in report["text"]
 
 
+def test_postmarket_runs_bounded_news_shadow_after_accrual(tmp_path):
+    db_path = _db(tmp_path)
+    report = m63_daily.build_postmarket_report(
+        db_path=db_path,
+        as_of="2026-07-05",
+        no_llm=False,
+        queue_path=tmp_path / "queue.json",
+        history_path=tmp_path / "history.json",
+        step_overrides={
+            "m61_backfill_drip": lambda: {},
+            "m60_watchtower": lambda: {"summary": {"text": "观察哨完成"}, "triggers": []},
+            "m60_second_entry": lambda: {},
+            "m54_daily_accrual": lambda: {"progress": {"gate": {"passed": False}}},
+            "m68_news_shadow": lambda: {
+                "n_symbols": 20,
+                "counts": {"evidence": 8, "no_evidence": 12},
+                "event_risk_counts": {"high": 2, "medium": 3, "unavailable": 15},
+                "attention": [
+                    {"symbol": "603986", "level": "high", "reasons": ["new_announcement_event"]}
+                ],
+                "tokens_spent": 321,
+            },
+            "m58_exit_shadow": lambda: {"meta": {"window": {}}, "no_divergence_yet": True, "open_position_count": 1},
+            "m59_panel": lambda: {"summary": {"text": "面板"}, "position_health": {"items": []}, "risk_warnings": {"event_warnings": {"items": []}}},
+            "trigger_router": lambda: {"queue_path": "q", "history_path": "h", "pending": []},
+        },
+    )
+
+    names = [step["name"] for step in report["steps"]]
+    assert names.index("m54_daily_accrual") < names.index("m68_news_shadow") < names.index("m58_exit_shadow")
+    assert "覆盖:20" in report["text"]
+    assert "只读反事实" in report["text"]
+    assert "603986 high 事件关注" in report["text"]
+    assert "不预测方向" in report["text"]
+
+
 def test_postmarket_final_text_uses_sanitize_language_guard(tmp_path):
     db_path = _db(tmp_path)
     result = m63_daily.build_postmarket_report(

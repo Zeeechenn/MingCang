@@ -29,7 +29,7 @@ from backend.data.news_evidence import NewsEvidence
 from backend.data.news_extraction import ClusterScore, extract_clusters, score_cluster_title_only
 from backend.data.news_fusion import NewsSignalV2, fuse_signal
 from backend.data.news_scope import plan_scope_sharing
-from backend.data.news_trigger import decide_trigger
+from backend.data.news_trigger import PreviousTriggerState, decide_trigger
 from backend.ops.llm_budget import check_budget
 
 # Degradation flags appended by the pyramid orchestrator. These live alongside
@@ -43,8 +43,8 @@ PYRAMID_BUDGET_EXCEEDED = "BUDGET_EXCEEDED"
 # populated when news_v2_pyramid_enabled is False). Deliberately in-memory:
 # 7a/7b provide the deterministic trigger/scope *decisions*, this module owns
 # reusing prior results across calls within a process.
-_SHARED_DIGEST_CACHE: dict[str, ClusterScore] = {}
-_SYMBOL_LAST_SIGNAL_CACHE: dict[str, NewsSignalV2] = {}
+_SHARED_DIGEST_CACHE: dict[tuple[str, str, str], ClusterScore] = {}
+_SYMBOL_LAST_SIGNAL_CACHE: dict[tuple[str, str, str], NewsSignalV2] = {}
 
 
 def score_news_v2(
@@ -53,6 +53,10 @@ def score_news_v2(
     *,
     tier: str = "capable",
     flow_value: float | None = None,
+    previous_state: PreviousTriggerState | None = None,
+    price_change_pct: float | None = None,
+    volume_ratio: float | None = None,
+    cache_namespace: str = "default",
 ) -> NewsSignalV2:
     """Score already-collected news evidence through the M54 v2 observe-only stack."""
     clusters = cluster_evidence(evidence)
@@ -64,7 +68,16 @@ def score_news_v2(
             as_of,
             flow_value=flow_value,
         )
-    return _score_news_v2_pyramid(clusters, as_of, tier=tier, flow_value=flow_value)
+    return _score_news_v2_pyramid(
+        clusters,
+        as_of,
+        tier=tier,
+        flow_value=flow_value,
+        previous_state=previous_state,
+        price_change_pct=price_change_pct,
+        volume_ratio=volume_ratio,
+        cache_namespace=cache_namespace,
+    )
 
 
 def _score_news_v2_pyramid(
@@ -73,29 +86,52 @@ def _score_news_v2_pyramid(
     *,
     tier: str,
     flow_value: float | None,
+    previous_state: PreviousTriggerState | None,
+    price_change_pct: float | None,
+    volume_ratio: float | None,
+    cache_namespace: str,
 ) -> NewsSignalV2:
     """Pyramid path: L1 trigger gate -> L2 scope-shared digest cache -> 7c budget guardrail."""
     if not clusters:
         return fuse_signal([], clusters, as_of, flow_value=flow_value)
 
     symbol = clusters[0].symbol
+    symbol_cache_key = (cache_namespace, tier, symbol)
     pyramid_flags: list[str] = []
     attribution_card = None
+    trigger_reasons: list[str] = []
 
     if settings.news_v2_pyramid_trigger_only:
-        trigger_decision = decide_trigger(symbol, as_of, clusters)
+        trigger_decision = decide_trigger(
+            symbol,
+            as_of,
+            clusters,
+            previous_state=previous_state,
+            price_change_pct=price_change_pct,
+            volume_ratio=volume_ratio,
+        )
+        trigger_reasons = list(trigger_decision.reasons)
         if not trigger_decision.triggered:
             pyramid_flags.append(PYRAMID_NOT_TRIGGERED)
-            cached_signal = _SYMBOL_LAST_SIGNAL_CACHE.get(symbol)
+            cached_signal = _SYMBOL_LAST_SIGNAL_CACHE.get(symbol_cache_key)
             if cached_signal is not None:
-                return _with_extra_flags(cached_signal, pyramid_flags)
+                return _with_trigger_metadata(
+                    _with_extra_flags(cached_signal, pyramid_flags),
+                    trigger_reasons=trigger_reasons,
+                    attribution_card=None,
+                )
             # No prior cached result to reuse yet — score deterministically
             # (title-only, zero LLM calls) rather than spending budget on an
             # untriggered symbol.
             cluster_scores = [score_cluster_title_only(cluster) for cluster in clusters]
             signal = fuse_signal(cluster_scores, clusters, as_of, flow_value=flow_value)
             signal = _with_extra_flags(signal, pyramid_flags)
-            _SYMBOL_LAST_SIGNAL_CACHE[symbol] = signal
+            signal = _with_trigger_metadata(
+                signal,
+                trigger_reasons=trigger_reasons,
+                attribution_card=None,
+            )
+            _SYMBOL_LAST_SIGNAL_CACHE[symbol_cache_key] = signal
             return signal
         attribution_card = trigger_decision.attribution_card
 
@@ -120,20 +156,24 @@ def _score_news_v2_pyramid(
                 scores_by_id[cid] = score
 
         for shared_key, member_ids in scope_plan.shared_clusters.items():
-            cached_score = _SHARED_DIGEST_CACHE.get(shared_key)
+            digest_cache_key = (cache_namespace, tier, shared_key)
+            cached_score = _SHARED_DIGEST_CACHE.get(digest_cache_key)
             if cached_score is None:
                 representative = cluster_by_id[member_ids[0]]
                 cached_score = extract_clusters([representative], tier=tier)[0]
-                _SHARED_DIGEST_CACHE[shared_key] = cached_score
+                _SHARED_DIGEST_CACHE[digest_cache_key] = cached_score
             for cid in member_ids:
                 scores_by_id[cid] = cached_score
 
     cluster_scores = [scores_by_id[cluster.cluster_id] for cluster in clusters]
     signal = fuse_signal(cluster_scores, clusters, as_of, flow_value=flow_value)
     signal = _with_extra_flags(signal, pyramid_flags)
-    if attribution_card is not None:
-        signal.attribution_card = attribution_card
-    _SYMBOL_LAST_SIGNAL_CACHE[symbol] = signal
+    signal = _with_trigger_metadata(
+        signal,
+        trigger_reasons=trigger_reasons,
+        attribution_card=attribution_card,
+    )
+    _SYMBOL_LAST_SIGNAL_CACHE[symbol_cache_key] = signal
     return signal
 
 
@@ -147,6 +187,20 @@ def _with_extra_flags(signal: NewsSignalV2, extra_flags: list[str]) -> NewsSigna
         if flag not in flags:
             flags.append(flag)
     return dataclasses.replace(signal, degradation_flags=flags)
+
+
+def _with_trigger_metadata(
+    signal: NewsSignalV2,
+    *,
+    trigger_reasons: list[str],
+    attribution_card: object | None,
+) -> NewsSignalV2:
+    """Attach current-run L1 metadata without mutating shared cached signals."""
+    return dataclasses.replace(
+        signal,
+        trigger_reasons=list(trigger_reasons),
+        attribution_card=attribution_card,
+    )
 
 
 def evidence_from_db(
@@ -197,6 +251,10 @@ def news_v2_score_from_db(
     tier: str = "capable",
     flow_value: float | None = None,
     include_announcements: bool = False,
+    previous_state: PreviousTriggerState | None = None,
+    price_change_pct: float | None = None,
+    volume_ratio: float | None = None,
+    cache_namespace: str = "default",
 ) -> NewsSignalV2:
     """Load PIT DB evidence and score it through the M54 v2 stack."""
     evidence = evidence_from_db(
@@ -211,6 +269,10 @@ def news_v2_score_from_db(
         as_of,
         tier=tier,
         flow_value=flow_value,
+        previous_state=previous_state,
+        price_change_pct=price_change_pct,
+        volume_ratio=volume_ratio,
+        cache_namespace=cache_namespace,
     )
 
 

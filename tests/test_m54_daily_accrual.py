@@ -94,6 +94,7 @@ def test_run_daily_accrual_scores_new_date_and_reports_progress(test_db, tmp_pat
     assert result["market_open"] is True
     assert sorted(fetch_calls) == symbols
     assert result["content_inserted"] == 2
+    assert result["collection_outcomes"] == {"000001": "success", "000002": "success"}
     assert result["n_scored_new"] == 2
     assert result["n_cache_hit_skipped"] == 0
     assert result["n_triggered"] == 1

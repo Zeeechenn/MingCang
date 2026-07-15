@@ -169,6 +169,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m68_news_shadow",
+        "category": "stable",
+        "purpose": "Run the M68 production-data news pyramid mirror and persist diagnostic legacy-vs-pyramid comparisons.",
+        "read_write_boundary": "Reads production-shaped news/prices/signals and writes only news_shadow_runs/news_shadow_feedback; never mutates official signals, weights, positions, stops, scheduler policy, or test2.",
+        "recommended_entrypoint": "python3 -m backend.tools.m68_news_shadow --date <YYYY-MM-DD> --limit 20",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m63_trade_journal",
         "category": "stable",
         "purpose": "D8 trade-level review journal: idempotently snapshots new open positions and completes closed-position outcomes for weekly attribution.",

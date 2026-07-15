@@ -21,6 +21,7 @@ from backend.api.routes import (
     memory,
     model,
     news,
+    news_shadow,
     positions,
     prices,
     research,
@@ -46,6 +47,7 @@ router.include_router(model.router)
 router.include_router(system.router)
 router.include_router(dashboard.router)
 router.include_router(news.router)
+router.include_router(news_shadow.router)
 router.include_router(research.router)
 router.include_router(reviews.router)
 router.include_router(skills.router)

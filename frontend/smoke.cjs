@@ -41,6 +41,7 @@ const routes = [
   ['positions', '/#/positions', '持仓纪律'],
   ['memory-evolution', '/#/memory-evolution', '记忆进化'],
   ['health', '/#/health', '来源健康'],
+  ['news-shadow', '/#/news-shadow', '新闻金字塔试用台'],
   ['admin', '/#/admin', '规则与信任治理台'],
   ['stock-cn', '/#/stock/CN/300308', '正式信号'],
   ['stock-hk', '/#/stock/HK/00700', '仅观察 · 非灰度白名单'],

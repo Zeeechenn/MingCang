@@ -18,4 +18,5 @@ interface Window {
   PulsePage: any;
   HealthPage: any;
   MemoryEvolutionPage: any;
+  NewsShadowPage: any;
 }

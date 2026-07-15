@@ -8,7 +8,38 @@
 
 ## [Unreleased]
 
-_（下一版工作累积区）_
+### Added / 新增
+
+- **M68 新闻金字塔生产镜像**：新增独立 `news_shadow_runs` / `news_shadow_feedback`
+  契约、有界手动 CLI 与 M63 盘后 step；同日并排保存正式 legacy、pyramid、
+  机械只替换情绪腿的反事实与 `would_change_action`，不写正式 `signals`。
+- **可诊断试用面**：新增 `/api/news-shadow/*` 只读查询/健康端点、`/news-shadow`
+  前端页和专用反馈端点；可同屏查看价量输入、触发、AttributionCard、证据清单、
+  链路错误与中文降级说明，反馈可绑定具体 evidence id。
+- **三桶复核**：默认优先审查全部动作分歧、全部高重要性未触发与重启稳定的
+  对照抽样；反馈类型固定到漏抓/时效/重复/关联/分类/方向/重要性/触发/融合/解释层。
+
+### Changed / 变更
+
+- M54 日常采集增加 per-symbol `success | failed | not_run` 结果，M68 因而能区分
+  已核验无新闻、本轮未采集与抓取失败。金字塔 L1 触发接入真实单日涨跌与
+  完整 20 日量比，并将进程缓存按 namespace/tier 隔离，避免 M54/M68 或模型层级串数据。
+- M63 盘后报告增加事件关注镜像，展示等级、主因、置信、thesis recheck、触发/降级
+  flags；该等级只表示复核优先级，不表示涨跌预测。
+
+### Safety / 安全边界
+
+- M68 落实的判断是：A 股情绪/事件证据先用于解释波动幅度与事件风险；尚不支持
+  “单靠情绪稳定预测方向”。事件镜像可先试用，方向替换仍必须另过 M54 统计门与
+  owner 显式确认。本批不改正式权重、止盈止损、仓位、scheduler 时序或 test2。
+
+### Verification / 验证
+
+- M68/M54/M63 聚焦后端回归 `51 passed`；schema golden 幂等重生成并通过。
+  完整初始化临时库下的全量后端 `1730 passed / 12 skipped`，ruff、发布卫生和 mypy
+  （315 个 source files）全绿。前端 TypeScript、26 项 Vitest、production build、零 warning
+  ESLint 通过；Playwright smoke 覆盖 14 个桌面路由与 11 个移动路由（含 M68），
+  console/page error 均为 0。
 
 ---
 

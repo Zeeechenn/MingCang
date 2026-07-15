@@ -25,6 +25,7 @@ const ReportsPage = React.lazy(() => import('./page-reports').then((module) => (
 const ChatPage = React.lazy(() => import('./page-chat').then((module) => ({ default: module.ChatPage })));
 const PositionsPage = React.lazy(() => import('./page-positions').then((module) => ({ default: module.PositionsPage })));
 const MemoryEvolutionPage = React.lazy(() => import('./page-memory-evolution').then((module) => ({ default: module.MemoryEvolutionPage })));
+const NewsShadowPage = React.lazy(() => import('./page-news-shadow').then((module) => ({ default: module.NewsShadowPage })));
 const HealthPage = React.lazy(() => import('./page-health').then((module) => ({ default: module.HealthPage })));
 const AdminPage = React.lazy(() => import('./page-admin').then((module) => ({ default: module.AdminPage })));
 
@@ -39,6 +40,7 @@ const NAV = [
   ['/chat', '研究副驾驶', 'chat'],
   ['/positions', '持仓纪律', 'positions'],
   ['/memory-evolution', '记忆进化', 'memory'],
+  ['/news-shadow', '新闻试用', 'pulse'],
   ['/health', '来源健康', 'health'],
   ['/admin', '治理台', 'admin'],
 ];
@@ -129,6 +131,7 @@ function App() {
   else if (route.page === 'memory' || route.page === 'reviews') page = <ReportsPage />;
   else if (route.page === 'positions') page = <PositionsPage />;
   else if (route.page === 'memory-evolution') page = <MemoryEvolutionPage />;
+  else if (route.page === 'news-shadow') page = <NewsShadowPage />;
   else if (route.page === 'chat') page = <ChatPage />;
   else if (route.page === 'health') page = <HealthPage />;
   else if (route.page === 'admin') page = <AdminPage />;

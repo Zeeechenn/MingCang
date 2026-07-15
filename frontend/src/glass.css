@@ -359,6 +359,18 @@ select.field { appearance: none; -webkit-appearance: none; cursor: pointer; }
 .row { display: flex; gap: 10px; align-items: center; }
 .spread { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 
+.news-shadow-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .news-shadow-layout { grid-template-columns: minmax(0, 1fr); }
+  [data-grid="news-shadow-filters"] { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
 .card-head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 15px 18px 13px; border-bottom: 1px solid var(--hairline-soft);

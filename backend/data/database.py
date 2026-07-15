@@ -2,7 +2,7 @@
 import surface.
 
 The engine / session / declarative ``Base`` now live in :mod:`backend.data.orm`
-and the 31 ORM models in the :mod:`backend.data.models` package.  This module
+and the ORM models in the :mod:`backend.data.models` package.  This module
 re-exports them and owns runtime schema migration + ``init_db``.
 """
 import re
@@ -35,6 +35,8 @@ from backend.data.models import (  # noqa: F401  re-exported for backward compat
     MemoryPromotionCandidate,
     MemoryScenario,
     NewsItem,
+    NewsShadowFeedback,
+    NewsShadowRun,
     OverseasSnapshot,
     PendingAIAction,
     Position,
