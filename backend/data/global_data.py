@@ -234,8 +234,15 @@ def pit_gate_for_layer(layer: str, normalized_row: dict[str, Any] | None = None)
     return GateResult("passed_for_read_only", [], [schema["decision_visibility_rule"]])
 
 
-def _latest_price_payload(db, symbol: str) -> dict[str, Any] | None:
-    price = db.query(Price).filter(Price.symbol == symbol).order_by(desc(Price.date)).first()
+def _latest_price_payload(db, symbol: str, market: str) -> dict[str, Any] | None:
+    from backend.data.market_profiles import instrument_key
+
+    price = (
+        db.query(Price)
+        .filter(Price.asset_key == instrument_key(market, symbol))
+        .order_by(desc(Price.date))
+        .first()
+    )
     if price is None:
         return None
     return {
@@ -253,10 +260,17 @@ def _latest_price_payload(db, symbol: str) -> dict[str, Any] | None:
     }
 
 
-def _recent_price_rows(db, symbol: str, limit: int = DEFAULT_PRICE_QUALITY_POLICY.recent_window) -> list[Price]:
+def _recent_price_rows(
+    db,
+    symbol: str,
+    market: str,
+    limit: int = DEFAULT_PRICE_QUALITY_POLICY.recent_window,
+) -> list[Price]:
+    from backend.data.market_profiles import instrument_key
+
     return (
         db.query(Price)
-        .filter(Price.symbol == symbol)
+        .filter(Price.asset_key == instrument_key(market, symbol))
         .order_by(desc(Price.date))
         .limit(limit)
         .all()
@@ -281,8 +295,8 @@ def build_global_data_context(
     capability = _capability_for(market, layer)
     source = "local_price_db" if layer in {"quote", "kline"} else "capability_catalog"
     is_price_layer = layer in {"quote", "kline"}
-    row = _latest_price_payload(db, symbol) if is_price_layer else None
-    recent_rows = _recent_price_rows(db, symbol) if is_price_layer else []
+    row = _latest_price_payload(db, symbol, market) if is_price_layer else None
+    recent_rows = _recent_price_rows(db, symbol, market) if is_price_layer else []
     quality_gate = (
         evaluate_price_quality(market=market, row=row, recent_rows=recent_rows).to_payload()
         if is_price_layer

@@ -42,7 +42,9 @@ const routes = [
   ['memory-evolution', '/#/memory-evolution', '记忆进化'],
   ['health', '/#/health', '来源健康'],
   ['admin', '/#/admin', '规则与信任治理台'],
-  ['stock', '/#/stock/300308', '个股案卷'],
+  ['stock-cn', '/#/stock/CN/300308', '正式信号'],
+  ['stock-hk', '/#/stock/HK/00700', '仅观察 · 非灰度白名单'],
+  ['stock-us', '/#/stock/US/AAPL', '仅观察 · 非灰度白名单'],
 ];
 
 (async () => {
@@ -103,7 +105,7 @@ const routes = [
   await page.waitForSelector('text=明仓终端', { timeout: 10000 });
   await page.waitForTimeout(900);
   await page.screenshot({ path: path.join(shotsDir, 'v2-mobile-home-terminal.png'), fullPage: true });
-  for (const [name, path, text] of routes.filter(([name]) => !name.includes('legacy') && name !== 'stock')) {
+  for (const [name, path, text] of routes.filter(([name]) => !name.includes('legacy'))) {
     await page.goto(urlFor(path), { waitUntil: 'networkidle' });
     await page.waitForSelector(`text=${text}`, { timeout: 10000 });
     const navVisible = await page.locator('.navlinks').isVisible();

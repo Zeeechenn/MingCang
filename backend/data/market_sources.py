@@ -156,6 +156,22 @@ def fetch_cn_daily_tickflow(symbol: str, days: int = 365) -> pd.DataFrame:
 
 
 @_retry(max_attempts=3, delay=1.0)
+def fetch_hk_daily_tickflow(symbol: str, days: int = 365) -> pd.DataFrame:
+    """Hong Kong daily data via TickFlow split/dividend forward adjustment."""
+    from backend.data.tickflow import fetch_tickflow_daily
+
+    return fetch_tickflow_daily(symbol, "HK", days=days, adjust="forward")
+
+
+@_retry(max_attempts=3, delay=1.0)
+def fetch_us_daily_tickflow(symbol: str, days: int = 365) -> pd.DataFrame:
+    """US daily data via TickFlow split/dividend forward adjustment."""
+    from backend.data.tickflow import fetch_tickflow_daily
+
+    return fetch_tickflow_daily(symbol, "US", days=days, adjust="forward")
+
+
+@_retry(max_attempts=3, delay=1.0)
 def fetch_cn_daily_tushare_qfq(symbol: str, days: int = 365) -> pd.DataFrame:
     """A-share qfq daily data via Tushare Pro daily + adj_factor."""
     if not settings.tushare_qfq_enabled:
@@ -203,6 +219,19 @@ def fetch_hk_daily(symbol: str, days: int = 365) -> pd.DataFrame:
     df.index = df.index.strftime("%Y-%m-%d")
     df.index.name = "date"
     return df[["Open", "High", "Low", "Close", "Volume"]].rename(columns=str.lower)
+
+
+def fetch_global_index_yfinance(index_symbol: str, days: int = 365) -> pd.DataFrame:
+    """Fetch a HK/US benchmark index through Yahoo Finance."""
+    ticker = yf.Ticker(index_symbol)
+    df = ticker.history(period=f"{days}d", interval="1d", auto_adjust=True)
+    if df.empty:
+        raise ValueError(f"No yfinance index data for {index_symbol}")
+    df.index = df.index.strftime("%Y-%m-%d")
+    df.index.name = "date"
+    out = df[["Close"]].rename(columns={"Close": "close"})
+    out["change_pct"] = out["close"].pct_change() * 100
+    return out
 
 
 @_retry(max_attempts=3, delay=1.0)

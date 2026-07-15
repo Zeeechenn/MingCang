@@ -1,7 +1,7 @@
 """M61 category data models."""
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, Integer, String, Text, UniqueConstraint, event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.data.orm import Base, _utcnow
@@ -14,6 +14,9 @@ class Announcement(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String, index=True)
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    market: Mapped[str] = mapped_column(String, default="CN", index=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str] = mapped_column(String)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
     ann_type: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -21,6 +24,24 @@ class Announcement(Base):
     source_url: Mapped[str | None] = mapped_column(String, nullable=True)
     provider: Mapped[str] = mapped_column(String)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+def _fill_announcement_identity(_mapper, _connection, target: Announcement) -> None:
+    from backend.data.market_profiles import (
+        get_market_profile,
+        instrument_key,
+        normalize_market,
+        normalize_symbol,
+    )
+
+    target.market = normalize_market(target.market)
+    target.symbol = normalize_symbol(target.symbol, target.market)
+    target.asset_key = instrument_key(target.market, target.symbol)
+    target.currency = target.currency or get_market_profile(target.market).currency
+
+
+event.listen(Announcement, "before_insert", _fill_announcement_identity)
+event.listen(Announcement, "before_update", _fill_announcement_identity)
 
 
 class ResearchReport(Base):

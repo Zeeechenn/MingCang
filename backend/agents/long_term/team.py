@@ -187,4 +187,5 @@ class LongTermTeam:
             constraint_eligible=constraint_eligible,
             quality_notes=quality_notes,
             prompt_version=PROMPT_VERSION,
+            market="CN",
         )

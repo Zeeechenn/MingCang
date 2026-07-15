@@ -3,18 +3,25 @@
 // ============================================================
 import React from 'react';
 import { refreshResearchCopilot, reviewLatestSignal } from './services/api';
-import { Badge, Card, MCStore, MKT, Markdown, McIcon, Metric, PageHead, PoolShell, PriceChart, RefreshButton, ScoreBar, Seg, SortSeg, Spark, applyPoolSort, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, toast, useSortCtl, useStockPoolFilter, useStore } from './shared';
+import { Badge, CCY, Card, MCStore, MKT, Markdown, McIcon, Metric, PageHead, PoolShell, PriceChart, RefreshButton, ScoreBar, Seg, SortSeg, Spark, applyPoolSort, assetKey, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, scopedData, stockPath, toast, useSortCtl, useStockPoolFilter, useStore } from './shared';
 const { useState: useSState, useEffect: useSEffect } = React;
 
-function getStock(symbol) {
-  return MCStore.get().watchlist.find((w) => w.symbol === symbol)
-    || window.MC_DATA.SEARCH_POOL.find((s) => s.symbol === symbol)
-    || { symbol, name: symbol, market: 'CN' };
+function getStock(symbol, market) {
+  const matches = (item) => item.symbol === symbol && (!market || item.market === market);
+  return MCStore.get().watchlist.find(matches)
+    || window.MC_DATA.SEARCH_POOL.find(matches)
+    || { symbol, name: symbol, market: market || 'CN' };
 }
-function pick(map, symbol) { return map[symbol] || map._default; }
+function pick(map, symbol, market) { return scopedData(map, symbol, market); }
+
+const MARKET_RULES = {
+  CN: { scope: '正式信号', weights: '技术 60% · 情绪 40%', settlement: 'T+1 · 当日买入不可卖', lot: '100 股整手', limit: '涨跌停约束', timezone: 'Asia/Shanghai' },
+  HK: { scope: '灰度影子 · 零仓位', weights: '技术 65% · 情绪 35%', settlement: 'T+2 · 可当日卖出', lot: '整手 + 碎股', limit: '无固定日涨跌停', timezone: 'Asia/Hong_Kong' },
+  US: { scope: '灰度影子 · 零仓位', weights: '技术 75% · 情绪 25%', settlement: 'T+1 · 可当日卖出', lot: '1 股起 · 支持碎股能力', limit: 'LULD 波动保护', timezone: 'America/New_York' },
+};
 
 function StockHeader({ stock, signal }: any) {
-  const px = window.MC_DATA.PRICES[stock.symbol];
+  const px = scopedData(window.MC_DATA.PRICES, stock.symbol, stock.market);
   const lastPx = px && px[px.length - 1];
   const chg = lastPx && px[px.length - 2] ? (lastPx.close - px[px.length - 2].close) / px[px.length - 2].close * 100 : null;
   return (
@@ -35,6 +42,8 @@ function StockHeader({ stock, signal }: any) {
             <span className="t-num t-dim" style={{ fontSize: 15 }}>{stock.symbol}</span>
             {signal && <Badge tone={recTone(signal.recommendation)}>{signal.recommendation}</Badge>}
             <Badge tone="badge-dim">{MKT[stock.market]}</Badge>
+            {stock.gray && <Badge tone="badge-accent">灰度影子 · 不下单</Badge>}
+            {stock.observe && <Badge tone="badge-warn">仅观察</Badge>}
           </div>
           <div className="t-dim" style={{ marginTop: 5, fontSize: 13 }}>
             {stock.industry || '未标注行业'} · 裁决证据 · 来源门控 · 复盘记忆
@@ -45,7 +54,7 @@ function StockHeader({ stock, signal }: any) {
             <div className="glass-inset" style={{ padding: '8px 14px', textAlign: 'right' }}>
               <div className="t-eyebrow">最新收盘</div>
               <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
-                <span className="t-num" style={{ fontSize: 17, fontWeight: 650 }}>{lastPx.close.toFixed(2)}</span>
+                <span className="t-num" style={{ fontSize: 17, fontWeight: 650 }}>{stock.currency || ({ CN: 'CNY', HK: 'HKD', US: 'USD' })[stock.market]} {lastPx.close.toFixed(2)}</span>
                 {chg !== null && <span className={`t-num ${pnlClass(chg)}`} style={{ fontSize: 13, fontWeight: 600 }}>{fmt.signedPct(chg)}</span>}
               </div>
             </div>
@@ -68,10 +77,31 @@ function StockHeader({ stock, signal }: any) {
   );
 }
 
+function MarketRuleStrip({ stock, signal }: any) {
+  const rule = MARKET_RULES[stock.market] || MARKET_RULES.CN;
+  const scope = stock.market === 'CN' ? rule.scope : (stock.gray ? rule.scope : '仅观察 · 非灰度白名单');
+  return (
+    <div className="glass-inset pop" style={{ padding: '11px 14px' }} data-testid="market-rule-strip">
+      <div className="spread" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <Badge tone={stock.market === 'CN' ? 'badge-down' : (stock.gray ? 'badge-accent' : 'badge-warn')}>{scope}</Badge>
+          <Badge tone="badge-dim">{MKT[stock.market]} · {stock.currency || CCY[stock.market]}</Badge>
+          <Badge tone="badge-dim">{rule.weights}</Badge>
+          <Badge tone="badge-dim">quant 0%</Badge>
+        </div>
+        <div className="t-faint" style={{ fontSize: 11.5 }}>
+          {rule.settlement} · {rule.lot} · {rule.limit} · {stock.timezone || rule.timezone}
+          {signal?.rule_version ? ` · ${signal.rule_version}` : ''}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CaseLoopPanel({ stock, signal }: any) {
-  const c = pick(window.MC_DATA.CASE_LOOP, stock.symbol);
+  const c = pick(window.MC_DATA.CASE_LOOP, stock.symbol, stock.market);
   const sourceTotal = c.source_mix.reduce((a, [, n]) => a + n, 0) || 1;
-  const finalPosition = pick(window.MC_DATA.DOSSIER, stock.symbol).final_position;
+  const finalPosition = pick(window.MC_DATA.DOSSIER, stock.symbol, stock.market).final_position;
   return (
     <section className="glass pop pop-1" style={{ overflow: 'hidden' }}>
       <div className="card-head">
@@ -161,7 +191,9 @@ function LongTermPanel({ stock }: any) {
   }
   return (
     <Card eyebrow="长期标签 / 信号复盘" title="长期标签如何约束短线动作" tour="long-term"
-      right={<button className="btn btn-sm" disabled={busy} onClick={review}>{busy ? '复盘中…' : '复盘最新信号'}</button>}>
+      right={stock.market === 'CN'
+        ? <button className="btn btn-sm" disabled={busy} onClick={review}>{busy ? '复盘中…' : '复盘最新信号'}</button>
+        : <Badge tone="badge-accent">灰度只读 · 不写学习记忆</Badge>}>
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
         <div className="glass-inset" style={{ padding: 13 }}>
           <div className="t-eyebrow">长期观点</div>
@@ -195,8 +227,35 @@ function LongTermPanel({ stock }: any) {
   );
 }
 
-function DossierPanel({ symbol, signal }: any) {
-  const d = pick(window.MC_DATA.DOSSIER, symbol);
+function GraySignalPanel({ stock, signal }: any) {
+  const weights = stock.market === 'HK' ? '技术 65% / 情绪 35%' : '技术 75% / 情绪 25%';
+  return (
+    <Card eyebrow={stock.gray ? 'Gray Signal' : 'Observe Only'} title={stock.gray ? '灰度信号与准入边界' : '观察规则与灰度准入边界'} tour="analysis"
+      right={<Badge tone={stock.gray ? 'badge-accent' : 'badge-warn'}>{stock.gray ? '影子 · 仓位 0' : '非白名单 · 无信号'}</Badge>}>
+      {signal ? (
+        <React.Fragment>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: 8 }}>
+            <Metric label="综合分" value={fmt.signed(signal.composite_score)} tone={pnlClass(signal.composite_score)} sub={signal.recommendation} />
+            <Metric label="技术" value={fmt.signed(signal.technical_score)} tone={pnlClass(signal.technical_score)} sub={weights} />
+            <Metric label="情绪" value={fmt.signed(signal.sentiment_score, 2)} tone={pnlClass(signal.sentiment_score)} sub="本市场独立提示词与缓存" />
+            <Metric label="量化" value="0%" sub="不复用 A 股训练模型" />
+          </div>
+          <div className="glass-inset" style={{ padding: '10px 13px', marginTop: 10, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)' }}>
+            该信号仅用于港美股灰度研究和回放：不触发提醒、不创建订单、不写真实持仓、不进入 CN 官方信号。
+            <div className="t-num t-faint" style={{ marginTop: 5 }}>
+              {signal.rule_version || 'market gray rule'} · 数据截止 {signal.data_timestamp || signal.date || '—'}
+            </div>
+          </div>
+        </React.Fragment>
+      ) : (
+        <div className="empty">该标的当前没有 close-confirmed 灰度信号，继续保持仅观察。</div>
+      )}
+    </Card>
+  );
+}
+
+function DossierPanel({ symbol, market, signal }: any) {
+  const d = pick(window.MC_DATA.DOSSIER, symbol, market);
   return (
     <Card eyebrow="研究档案" title="仓位裁决案卷" right={signal && <Badge tone={recTone(signal.recommendation)}>{signal.recommendation}</Badge>}>
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
@@ -230,10 +289,10 @@ function DossierPanel({ symbol, signal }: any) {
   );
 }
 
-function CopilotCard({ symbol }: any) {
+function CopilotCard({ symbol, market }: any) {
   const [busy, setBusy] = useSState(false);
   const [refreshed, setRefreshed] = useSState(false);
-  const c = pick(window.MC_DATA.COPILOT, symbol);
+  const c = pick(window.MC_DATA.COPILOT, symbol, market);
   const toneMap = { support: 'badge-up', caution: 'badge-warn', oppose: 'badge-down', neutral: 'badge-dim' };
   async function refresh() {
     setBusy(true);
@@ -286,8 +345,8 @@ function CopilotCard({ symbol }: any) {
   );
 }
 
-function EvidencePanel({ symbol }: any) {
-  const items = pick(window.MC_DATA.EVIDENCE, symbol);
+function EvidencePanel({ symbol, market }: any) {
+  const items = pick(window.MC_DATA.EVIDENCE, symbol, market);
   const KIND = { decision_run: '决策运行', news_audit: '新闻审计', risk_check: '风控检查', lookahead: '反穿越' };
   return (
     <Card eyebrow="Evidence" title="证据链与反穿越检查" tour="evidence" right={<Badge tone="badge-dim">{items.length} 条</Badge>}>
@@ -307,9 +366,9 @@ function EvidencePanel({ symbol }: any) {
   );
 }
 
-function EvalPanel({ symbol }: any) {
+function EvalPanel({ symbol, market }: any) {
   const [days, setDays] = useSState(60);
-  const ev = pick(window.MC_DATA.EVAL, symbol);
+  const ev = pick(window.MC_DATA.EVAL, symbol, market);
   const scale = days / 60;
   const total = Math.max(2, Math.round(ev.total * scale));
   const hit = Math.max(1, Math.round(ev.hit * scale));
@@ -354,8 +413,8 @@ function HistoryPanel({ symbol, score }: any) {
   );
 }
 
-function NewsSidebar({ symbol }: any) {
-  const news = window.MC_DATA.NEWS[symbol] || window.MC_DATA.NEWS._default;
+function NewsSidebar({ symbol, market }: any) {
+  const news = pick(window.MC_DATA.NEWS, symbol, market);
   return (
     <Card eyebrow="News · 48h" title="来源审计后的新闻情绪" pad={false} tour="news"
       right={<RefreshButton toastMsg={`新闻已刷新`} />}>
@@ -380,8 +439,8 @@ function NewsSidebar({ symbol }: any) {
   );
 }
 
-function AnalysisPanel({ symbol }: any) {
-  const text = window.MC_DATA.ANALYSIS[symbol] || window.MC_DATA.ANALYSIS._default;
+function AnalysisPanel({ symbol, market }: any) {
+  const text = pick(window.MC_DATA.ANALYSIS, symbol, market);
   return (
     <Card eyebrow="Analysis" title="裁决摘要" tour="analysis">
       <Markdown text={text} />
@@ -392,15 +451,16 @@ function AnalysisPanel({ symbol }: any) {
   );
 }
 
-function ShortTermSignalPanel({ symbol, signal }: any) {
-  const f = pick(window.MC_DATA.SIGNAL_FACTORS, symbol);
+function ShortTermSignalPanel({ symbol, market, signal }: any) {
+  const f = pick(window.MC_DATA.SIGNAL_FACTORS, symbol, market);
+  const weights = market === 'HK' ? { technical: 0.65, sentiment: 0.35 } : market === 'US' ? { technical: 0.75, sentiment: 0.25 } : { technical: 0.6, sentiment: 0.4 };
   if (!signal) return null;
   return (
     <Card eyebrow="短期信号 · 因子分解" title="短线证据如何进入裁决"
       right={<Badge tone={pnlClass(signal.composite_score)}>综合 {fmt.signed(signal.composite_score)}</Badge>}>
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
         <div>
-          <div className="t-eyebrow">技术因子(权重 0.6)</div>
+          <div className="t-eyebrow">技术因子(权重 {weights.technical.toFixed(2)})</div>
           <div className="grid" style={{ gap: 0, marginTop: 4 }}>
             {f.technical.map((t, i) => (
               <div key={i} className="row" style={{ justifyContent: 'space-between', gap: 10, padding: '9px 0', borderBottom: i < f.technical.length - 1 ? '1px solid var(--hairline-soft)' : 'none' }}>
@@ -417,7 +477,7 @@ function ShortTermSignalPanel({ symbol, signal }: any) {
           </div>
         </div>
         <div>
-          <div className="t-eyebrow">情感构成(权重 0.4)</div>
+          <div className="t-eyebrow">情感构成(权重 {weights.sentiment.toFixed(2)})</div>
           <div className="glass-inset" style={{ padding: 13, marginTop: 4 }}>
             <div className="spread"><span style={{ fontSize: 13, fontWeight: 550 }}>情感分(−1 / +1)</span><span className={`t-num ${pnlClass(f.sentiment.score)}`} style={{ fontSize: 17, fontWeight: 700 }}>{fmt.signed(f.sentiment.score, 2)}</span></div>
             <div className="row" style={{ gap: 6, marginTop: 11, flexWrap: 'wrap' }}>
@@ -435,11 +495,11 @@ function ShortTermSignalPanel({ symbol, signal }: any) {
   );
 }
 
-function FinancialsPanel({ symbol }: any) {
-  const fin = pick(window.MC_DATA.FINANCIALS, symbol);
+function FinancialsPanel({ symbol, market }: any) {
+  const fin = pick(window.MC_DATA.FINANCIALS, symbol, market);
   return (
     <Card eyebrow="公司财务状况" title="质量 · 成长 · 估值" tour="financials"
-      right={<Badge tone={fin.quality === 'pass' ? 'badge-up' : 'badge-warn'}>{fin.quality === 'pass' ? `财务完整 ${fin.years} 年` : '证据不足'}</Badge>}>
+      right={<Badge tone={fin.quality === 'pass' ? 'badge-up' : 'badge-warn'}>{fin.quality === 'pass' ? `财务可用 ${fin.periods || fin.years} 期` : '证据不足'}</Badge>}>
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 8 }}>
         {fin.metrics.map(([l, v, sub, tone], i) => (
           <div key={i} className="glass-inset" style={{ padding: '10px 13px' }}>
@@ -455,8 +515,8 @@ function FinancialsPanel({ symbol }: any) {
             <thead>
               <tr style={{ color: 'var(--ink-3)', textAlign: 'right' }}>
                 <th style={{ textAlign: 'left', fontWeight: 550, padding: '6px 8px' }}>年度</th>
-                <th style={{ fontWeight: 550, padding: '6px 8px' }}>营收(亿)</th>
-                <th style={{ fontWeight: 550, padding: '6px 8px' }}>净利(亿)</th>
+                <th style={{ fontWeight: 550, padding: '6px 8px' }}>营收(亿 {CCY[market] || market})</th>
+                <th style={{ fontWeight: 550, padding: '6px 8px' }}>净利(亿 {CCY[market] || market})</th>
                 <th style={{ fontWeight: 550, padding: '6px 8px' }}>ROE</th>
                 <th style={{ fontWeight: 550, padding: '6px 8px' }}>毛利率</th>
               </tr>
@@ -477,7 +537,7 @@ function FinancialsPanel({ symbol }: any) {
       )}
       <div className="grid" style={{ gap: 7, marginTop: 12 }}>
         <div className="glass-inset" style={{ padding: '9px 13px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}><b style={{ color: 'var(--ink)' }}>现金流</b> · {fin.cash_flow}</div>
-        <div className="glass-inset" style={{ padding: '9px 13px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}><b style={{ color: 'var(--ink)' }}>QFII</b> · {fin.qfii}</div>
+        <div className="glass-inset" style={{ padding: '9px 13px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}><b style={{ color: 'var(--ink)' }}>来源与 PIT</b> · {fin.provenance || fin.qfii}</div>
       </div>
     </Card>
   );
@@ -486,21 +546,25 @@ function FinancialsPanel({ symbol }: any) {
 function StockTile({ s }: any) {
   const sig = s.latest_signal;
   return (
-    <a className="glass-inset stock-tile" onClick={() => navigate(`/stock/${s.symbol}`)}>
+    <a className="glass-inset stock-tile" onClick={() => navigate(stockPath(s.symbol, s.market))}>
       <div className="spread" style={{ alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
           <div className="t-num t-faint" style={{ fontSize: 11.5, marginTop: 1 }}>{s.symbol} · {s.industry || MKT[s.market]}</div>
         </div>
-        {sig ? <Badge tone={recTone(sig.recommendation)}>{sig.recommendation}</Badge> : <Badge tone="badge-dim">{MKT[s.market]}</Badge>}
+        <div className="row" style={{ gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {s.gray && <Badge tone="badge-accent">影子 · 不下单</Badge>}
+          {s.observe && <Badge tone="badge-warn">仅观察</Badge>}
+          {sig ? <Badge tone={recTone(sig.recommendation)}>{sig.recommendation}</Badge> : <Badge tone="badge-dim">{MKT[s.market]}</Badge>}
+        </div>
       </div>
       <div className="spread" style={{ marginTop: 12, alignItems: 'flex-end' }}>
         {sig ? <span className={`t-num ${pnlClass(sig.composite_score)}`} style={{ fontSize: 22, fontWeight: 700 }}>{fmt.signed(sig.composite_score)}</span>
           : <span className="t-faint" style={{ fontSize: 12 }}>observe-only</span>}
         <div style={{ textAlign: 'right' }}>
-          <Spark symbol={s.symbol} />
-          {dailyChangePct(s.symbol) != null && (
-            <div className={`t-num ${pnlClass(dailyChangePct(s.symbol))}`} style={{ fontSize: 11.5, fontWeight: 650 }}>{fmt.signedPct(dailyChangePct(s.symbol))}</div>
+          <Spark symbol={s.symbol} market={s.market} />
+          {dailyChangePct(s.symbol, s.market) != null && (
+            <div className={`t-num ${pnlClass(dailyChangePct(s.symbol, s.market))}`} style={{ fontSize: 11.5, fontWeight: 650 }}>{fmt.signedPct(dailyChangePct(s.symbol, s.market))}</div>
           )}
         </div>
       </div>
@@ -517,15 +581,17 @@ function StockTile({ s }: any) {
 // 列表行视图:一行一条,补上涨跌、止损止盈与长期标签信息
 function StockRow({ s }: any) {
   const sig = s.latest_signal;
-  const chg = dailyChangePct(s.symbol);
+  const chg = dailyChangePct(s.symbol, s.market);
   return (
-    <a className="row" style={{ padding: '9px 14px', gap: 12, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(`/stock/${s.symbol}`)}>
+    <a className="row" style={{ padding: '9px 14px', gap: 12, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(stockPath(s.symbol, s.market))}>
       <div style={{ width: 132, flex: 'none', minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
         <div className="t-num t-faint" style={{ fontSize: 11 }}>{s.symbol}</div>
       </div>
       <span className="t-faint" style={{ width: 116, flex: 'none', fontSize: 11.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.industry || MKT[s.market]}</span>
-      <span style={{ width: 84, flex: 'none' }}>
+      <span className="row" style={{ width: 132, flex: 'none', gap: 5, flexWrap: 'wrap' }}>
+        {s.gray && <Badge tone="badge-accent">影子</Badge>}
+        {s.observe && <Badge tone="badge-warn">观察</Badge>}
         {sig ? <Badge tone={recTone(sig.recommendation)}>{sig.recommendation}</Badge> : <Badge tone="badge-dim">{MKT[s.market]}</Badge>}
       </span>
       <span className={`t-num ${sig ? pnlClass(sig.composite_score) : 't-faint'}`} style={{ width: 52, flex: 'none', fontSize: 14, fontWeight: 700, textAlign: 'right' }}>
@@ -560,8 +626,8 @@ function StockPoolCard({ eyebrow, title, items, defaultCount = 8, extraRight = n
       {items.length === 0 ? (empty || <div className="empty">暂无标的。</div>) : (
         <PoolShell items={applyPoolSort(f.filtered, sort)} defaultCount={defaultCount} unit="只" cardMin={220}
           empty={<div className="empty">没有匹配的标的，试试清除筛选条件。</div>}
-          renderCard={(s) => <StockTile key={s.symbol} s={s} />}
-          renderRow={(s) => <StockRow key={s.symbol} s={s} />} />
+          renderCard={(s) => <StockTile key={s.asset_key || assetKey(s.symbol, s.market)} s={s} />}
+          renderRow={(s) => <StockRow key={s.asset_key || assetKey(s.symbol, s.market)} s={s} />} />
       )}
     </Card>
   );
@@ -573,15 +639,15 @@ export function StocksPage() {
   const [market, setMarket] = useSState('all');
   const watch = state.watchlist;
   const pool = React.useMemo(() => window.MC_DATA.SEARCH_POOL.map((s) => {
-    const w = watch.find((x) => x.symbol === s.symbol);
+    const w = watch.find((x) => (x.asset_key || assetKey(x.symbol, x.market)) === (s.asset_key || assetKey(s.symbol, s.market)));
     return w ? { ...s, ...w } : s;
   }), [watch]);
   const ql = q.trim().toLowerCase();
   const match = (s) => (market === 'all' || s.market === market) && (!ql || s.symbol.toLowerCase().includes(ql) || s.name.toLowerCase().includes(ql) || (s.industry || '').toLowerCase().includes(ql));
   const filtered = pool.filter(match);
-  const watchSyms = new Set(watch.map((w) => w.symbol));
+  const watchKeys = new Set(watch.map((w) => w.asset_key || assetKey(w.symbol, w.market)));
   const watchFiltered = watch.filter(match);
-  const otherFiltered = filtered.filter((s) => !watchSyms.has(s.symbol));
+  const otherFiltered = filtered.filter((s) => !watchKeys.has(s.asset_key || assetKey(s.symbol, s.market)));
   return (
     <div className="grid" style={{ gap: 14 }}>
       <PageHead eyebrow="Stocks" title="个股案卷"
@@ -593,7 +659,7 @@ export function StocksPage() {
             <McIcon name="search" size={18} style={{ color: 'var(--ink-3)' }} />
             <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus
               placeholder="搜索代码或名称，如 300308 / 中际旭创 / 立讯精密"
-              onKeyDown={(e) => { if (e.key === 'Enter' && filtered[0]) navigate(`/stock/${filtered[0].symbol}`); }} />
+              onKeyDown={(e) => { if (e.key === 'Enter' && filtered[0]) navigate(stockPath(filtered[0].symbol, filtered[0].market)); }} />
           </div>
           <Seg value={market} options={[['all', '全部'], ['CN', 'A股'], ['HK', '港股'], ['US', '美股']]} onChange={setMarket} />
         </div>
@@ -619,38 +685,43 @@ export function StocksPage() {
   );
 }
 
-export function StockPage({ symbol }: any) {
+export function StockPage({ symbol, market }: any) {
   useStore();
   // live 模式下懒取该股的 K线/新闻/证据/归因/案卷,数据落地后 poke store 重渲染
-  useSEffect(() => { if (window.MC_LIVE) window.MC_LIVE.ensureSymbol(symbol); }, [symbol]);
-  const stock = getStock(symbol);
+  useSEffect(() => { if (window.MC_LIVE) window.MC_LIVE.ensureSymbol(symbol, market); }, [symbol, market]);
+  const stock = getStock(symbol, market);
   const signal = stock.latest_signal;
   return (
     <div className="grid" style={{ gap: 14 }}>
       <StockHeader stock={stock} signal={signal} />
-      <CaseLoopPanel stock={stock} signal={signal} />
+      <MarketRuleStrip stock={stock} signal={signal} />
+      {stock.market === 'CN' && <CaseLoopPanel stock={stock} signal={signal} />}
       <Card eyebrow="主图 · 120 个交易日" title="价格与风险参考线" className="pop pop-1" tour="chart"
         right={signal && <span className="t-faint" style={{ fontSize: 12 }}>虚线为系统计算的 ATR 止损 / 盈亏比止盈参考</span>}>
-        <PriceChart symbol={symbol} signal={signal} />
+        <PriceChart symbol={symbol} market={stock.market} signal={signal} />
       </Card>
       {!signal && (
         <div className="empty pop pop-1">
-          <b>该标的暂无正式信号。</b>{stock.market !== 'CN' ? ' 港股 / 美股为 observe-only，数据仅用于观察，不进入 CN 官方信号。' : ' 等待下次盘后决策运行。'}
+          <b>该标的暂无信号。</b>{stock.gray ? ' 已进入港美股灰度池，等待本市场收盘确认后的影子信号。' : (stock.market !== 'CN' ? ' 当前仅观察，需进入灰度白名单才会生成影子信号。' : ' 等待下次 A 股盘后决策运行。')}
         </div>
       )}
       <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) 340px', gap: 14 }} data-grid="stock-cols">
         <div className="grid pop pop-2" style={{ gap: 14 }}>
-          <AnalysisPanel symbol={symbol} />
-          <ShortTermSignalPanel symbol={symbol} signal={signal} />
+          {stock.market === 'CN'
+            ? <React.Fragment>
+                <AnalysisPanel symbol={symbol} market={stock.market} />
+                <ShortTermSignalPanel symbol={symbol} market={stock.market} signal={signal} />
+              </React.Fragment>
+            : <GraySignalPanel stock={stock} signal={signal} />}
           <LongTermPanel stock={stock} />
-          <DossierPanel symbol={symbol} signal={signal} />
-          <FinancialsPanel symbol={symbol} />
-          <CopilotCard symbol={symbol} />
-          <EvidencePanel symbol={symbol} />
-          <EvalPanel symbol={symbol} />
-          <HistoryPanel symbol={symbol} score={signal?.composite_score ?? 0} />
+          {stock.market === 'CN' && <DossierPanel symbol={symbol} market={stock.market} signal={signal} />}
+          <FinancialsPanel symbol={symbol} market={stock.market} />
+          {stock.market === 'CN' && <CopilotCard symbol={symbol} market={stock.market} />}
+          {stock.market === 'CN' && <EvidencePanel symbol={symbol} market={stock.market} />}
+          <EvalPanel symbol={symbol} market={stock.market} />
+          {stock.market === 'CN' && <HistoryPanel symbol={symbol} score={signal?.composite_score ?? 0} />}
         </div>
-        <div className="pop pop-2"><NewsSidebar symbol={symbol} /></div>
+        <div className="pop pop-2"><NewsSidebar symbol={symbol} market={stock.market} /></div>
       </div>
     </div>
   );

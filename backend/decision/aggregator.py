@@ -422,19 +422,25 @@ def aggregate_v2(
     return result
 
 
-def save_signal(symbol: str, date: str, result: dict, db) -> None:
+def save_signal(symbol: str, date: str, result: dict, db, market: str | None = None) -> None:
     """
     将 aggregate() 结果写入 Signal 表（upsert：同一 symbol+date 存在则覆盖更新）。
     """
     import json
 
     from backend.config import settings
-    from backend.data.database import Signal, Stock
-    from backend.decision.market_policy import is_production_signal_market
+    from backend.data.database import Signal
+    from backend.data.instruments import resolve_stock
+    from backend.decision.market_policy import signal_scope_for
 
-    stock = db.query(Stock).filter(Stock.symbol == symbol).first()
-    if stock is not None and not is_production_signal_market(stock.market):
-        raise ValueError(f"official signals are CN-only; {symbol} market={stock.market} is observe-only")
+    stock = resolve_stock(db, symbol, market=market)
+    resolved_market = stock.market if stock is not None else (market or "CN")
+    signal_scope = signal_scope_for(resolved_market, stock.symbol if stock is not None else symbol)
+    if signal_scope == "observe_only":
+        raise ValueError(
+            f"official signals are CN-only unless allowlisted gray; "
+            f"{symbol} market={resolved_market} is observe-only"
+        )
 
     arb = result.get("llm_arbitration")
     rationale_json = json.dumps(arb, ensure_ascii=False) if arb else None
@@ -442,7 +448,8 @@ def save_signal(symbol: str, date: str, result: dict, db) -> None:
     data_timestamp = result.get("data_timestamp", date)
 
     existing = db.query(Signal).filter(
-        Signal.symbol == symbol, Signal.date == date
+        Signal.asset_key == (stock.asset_key if stock is not None else f"CN:{symbol}"),
+        Signal.date == date,
     ).first()
 
     if existing:
@@ -458,9 +465,13 @@ def save_signal(symbol: str, date: str, result: dict, db) -> None:
         existing.llm_rationale = rationale_json
         existing.rule_version = rule_version
         existing.data_timestamp = data_timestamp
+        existing.market = resolved_market
+        existing.signal_scope = signal_scope
     else:
         db.add(Signal(
-            symbol=symbol,
+            symbol=stock.symbol if stock is not None else symbol,
+            market=resolved_market,
+            signal_scope=signal_scope,
             date=date,
             quant_score=result["breakdown"]["quant"],
             technical_score=result["breakdown"]["technical"],

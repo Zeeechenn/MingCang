@@ -121,7 +121,7 @@ function App() {
   }, [theme, tweaks]);
 
   let page;
-  if (route.page === 'stock') page = <StockPage symbol={route.symbol} key={route.symbol} />;
+  if (route.page === 'stock') page = <StockPage symbol={route.symbol} market={route.market} key={`${route.market || 'legacy'}:${route.symbol}`} />;
   else if (route.page === 'home') page = <HomePage />;
   else if (route.page === 'stocks') page = <StocksPage />;
   else if (route.page === 'reports') page = <ReportsPage />;
@@ -190,7 +190,7 @@ function App() {
       </main>
 
       <footer style={{ textAlign: 'center', padding: '0 20px 36px', fontSize: 11.5, color: 'var(--ink-3)' }}>
-        明仓 MingCang · 本地优先的 A股研究决策系统 · 证据门控 / 复盘案卷 / 本地记忆 · 输出为研究记录，不构成投资建议
+        明仓 MingCang · 本地优先的 A/HK/US 多市场研究决策系统 · 证据门控 / 复盘案卷 / 本地记忆 · 输出为研究记录，不构成投资建议
       </footer>
 
       {wizardOpen && <FirstRunWizard onDone={() => setWizardOpen(false)} onStartTour={() => setTourOpen(true)} />}

@@ -18,7 +18,7 @@ const ADMIN_SECTIONS = [
   ['agents', '研究团队', '辩论 / 动作', 'agents'],
   ['apikey', '本地凭证', '密钥 / 安全', 'apikey'],
   ['data', '来源与新鲜度', '价格 / 新闻', 'data'],
-  ['schedule', '工作流节奏', 'A股日历', 'schedule'],
+  ['schedule', '工作流节奏', '多市场日历', 'schedule'],
   ['risk', '熔断保护', '风控保护', 'risk'],
   ['memory', '记忆治理', '元数据 / 审计', 'memory'],
   ['llmcost', '研究成本账本', '7 天用量', 'llmcost'],
@@ -242,7 +242,7 @@ function ScheduleSection({ cfg, set }: any) {
         ))}
       </div>
       <div className="glass-inset" style={{ padding: 13, marginTop: 10, fontSize: 12.5, lineHeight: 1.6, color: 'var(--ink-2)' }}>
-        工作流契约:盘前同步数据 / 检查覆盖，盘中只读缓存 / 止损观察，盘后全市场信号 / 复盘 / 导出 / 记忆候选，周末长期标签 / 周度反思。所有写入型 job 默认 dry-run 或 pending confirmation。
+        工作流契约:按 CN / HK / US 各自交易日历与收盘确认运行；盘前同步数据 / 检查覆盖，盘中只读缓存 / 止损观察，盘后分市场信号 / 复盘 / 导出 / 记忆候选，周末长期标签 / 周度反思。港美股仅灰度白名单影子运行，所有写入型 job 默认 dry-run 或 pending confirmation。
       </div>
     </div>
   );

@@ -11,6 +11,10 @@ class StockOut(BaseModel):
     symbol: str
     name: str
     market: str
+    asset_key: str | None = None
+    currency: str | None = None
+    timezone: str | None = None
+    lot_size: int | None = None
 
     model_config = {"from_attributes": True}
 
@@ -25,6 +29,9 @@ class LLMArbitration(BaseModel):
 class SignalOut(BaseModel):
     id: int
     symbol: str
+    market: str = "CN"
+    asset_key: str | None = None
+    signal_scope: str = "production"
     date: str
     composite_score: float
     recommendation: str
@@ -37,6 +44,7 @@ class SignalOut(BaseModel):
     sentiment_score: float | None = None
     llm_arbitration: LLMArbitration | None = None
     rule_version: str | None = None
+    data_timestamp: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -58,6 +66,8 @@ class SignalOut(BaseModel):
 
 class LongTermLabelOut(BaseModel):
     symbol: str
+    market: str = "CN"
+    asset_key: str | None = None
     date: str
     label: str                           # 值得持有/估值偏高/观望/规避
     score: float
@@ -73,6 +83,11 @@ class WatchlistItem(BaseModel):
     symbol: str
     name: str
     market: str
+    asset_key: str | None = None
+    currency: str | None = None
+    timezone: str | None = None
+    lot_size: int | None = None
+    signal_scope: str = "observe_only"
     industry: str | None = None
     latest_signal: SignalOut | None = None
     long_term_label: LongTermLabelOut | None = None
@@ -121,6 +136,8 @@ class PositionOut(BaseModel):
     symbol: str
     name: str
     market: str
+    asset_key: str | None = None
+    currency: str | None = None
     quantity: float
     avg_cost: float
     opened_at: str

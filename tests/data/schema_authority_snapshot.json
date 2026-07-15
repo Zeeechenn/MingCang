@@ -95,6 +95,27 @@
       },
       {
         "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "currency",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "title",
         "notnull": 1,
         "pk": 0,
@@ -144,6 +165,34 @@
       }
     ],
     "indexes": [
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "idx_announcements_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_announcements_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_announcements_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "ix_announcements_market",
+        "unique": 0
+      },
       {
         "columns": [
           "published_at"
@@ -1021,6 +1070,34 @@
       },
       {
         "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "currency",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "source",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "report_date",
         "notnull": 1,
         "pk": 0,
@@ -1149,9 +1226,37 @@
     "indexes": [
       {
         "columns": [
+          "asset_key"
+        ],
+        "name": "idx_financial_metrics_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_financial_metrics_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_financial_metrics_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
           "disclosure_date"
         ],
         "name": "ix_financial_metrics_disclosure_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "ix_financial_metrics_market",
         "unique": 0
       },
       {
@@ -1170,7 +1275,7 @@
       },
       {
         "columns": [
-          "symbol",
+          "asset_key",
           "report_date"
         ],
         "name": "sqlite_autoindex_financial_metrics_1",
@@ -1775,6 +1880,27 @@
       },
       {
         "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "currency",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "date",
         "notnull": 1,
         "pk": 0,
@@ -1819,9 +1945,37 @@
     "indexes": [
       {
         "columns": [
+          "asset_key"
+        ],
+        "name": "idx_index_prices_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_index_prices_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_index_prices_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
           "date"
         ],
         "name": "ix_index_prices_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "ix_index_prices_market",
         "unique": 0
       },
       {
@@ -1996,6 +2150,20 @@
       },
       {
         "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "date",
         "notnull": 1,
         "pk": 0,
@@ -2068,9 +2236,37 @@
     "indexes": [
       {
         "columns": [
+          "asset_key"
+        ],
+        "name": "idx_long_term_labels_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_long_term_labels_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_long_term_labels_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
           "date"
         ],
         "name": "ix_long_term_labels_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "ix_long_term_labels_market",
         "unique": 0
       },
       {
@@ -2082,7 +2278,7 @@
       },
       {
         "columns": [
-          "symbol",
+          "asset_key",
           "date"
         ],
         "name": "sqlite_autoindex_long_term_labels_1",
@@ -2193,6 +2389,27 @@
       },
       {
         "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "currency",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "date",
         "notnull": 1,
         "pk": 0,
@@ -2258,10 +2475,31 @@
     "indexes": [
       {
         "columns": [
+          "asset_key"
+        ],
+        "name": "idx_market_snapshots_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_market_snapshots_market",
+        "unique": 0
+      },
+      {
+        "columns": [
           "symbol",
           "date"
         ],
         "name": "idx_market_snapshots_symbol_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_market_snapshots_asset_key",
         "unique": 0
       },
       {
@@ -2273,6 +2511,13 @@
       },
       {
         "columns": [
+          "market"
+        ],
+        "name": "ix_market_snapshots_market",
+        "unique": 0
+      },
+      {
+        "columns": [
           "symbol"
         ],
         "name": "ix_market_snapshots_symbol",
@@ -2280,7 +2525,7 @@
       },
       {
         "columns": [
-          "symbol",
+          "asset_key",
           "date"
         ],
         "name": "sqlite_autoindex_market_snapshots_1",
@@ -3273,6 +3518,20 @@
       },
       {
         "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "title",
         "notnull": 1,
         "pk": 0,
@@ -3336,6 +3595,34 @@
       }
     ],
     "indexes": [
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "idx_news_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_news_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_news_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "ix_news_market",
+        "unique": 0
+      },
       {
         "columns": [
           "symbol"
@@ -3545,6 +3832,13 @@
       },
       {
         "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "name",
         "notnull": 0,
         "pk": 0,
@@ -3554,6 +3848,13 @@
         "default": null,
         "name": "market",
         "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "currency",
+        "notnull": 0,
         "pk": 0,
         "type": "VARCHAR"
       },
@@ -3652,10 +3953,31 @@
     "indexes": [
       {
         "columns": [
+          "asset_key"
+        ],
+        "name": "idx_positions_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_positions_market",
+        "unique": 0
+      },
+      {
+        "columns": [
           "symbol",
           "status"
         ],
         "name": "idx_positions_symbol_status",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_positions_asset_key",
         "unique": 0
       },
       {
@@ -3687,6 +4009,27 @@
         "default": null,
         "name": "symbol",
         "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "currency",
+        "notnull": 0,
         "pk": 0,
         "type": "VARCHAR"
       },
@@ -3764,9 +4107,37 @@
     "indexes": [
       {
         "columns": [
+          "asset_key"
+        ],
+        "name": "idx_prices_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_prices_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_prices_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
           "date"
         ],
         "name": "ix_prices_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "ix_prices_market",
         "unique": 0
       },
       {
@@ -3778,7 +4149,7 @@
       },
       {
         "columns": [
-          "symbol",
+          "asset_key",
           "date"
         ],
         "name": "sqlite_autoindex_prices_1",
@@ -4300,6 +4671,27 @@
       },
       {
         "default": null,
+        "name": "asset_key",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "market",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "signal_scope",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "date",
         "notnull": 1,
         "pk": 0,
@@ -4400,9 +4792,44 @@
     "indexes": [
       {
         "columns": [
+          "asset_key"
+        ],
+        "name": "idx_signals_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_signals_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
+        ],
+        "name": "ix_signals_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
           "date"
         ],
         "name": "ix_signals_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "ix_signals_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "signal_scope"
+        ],
+        "name": "ix_signals_signal_scope",
         "unique": 0
       },
       {
@@ -4411,6 +4838,14 @@
         ],
         "name": "ix_signals_symbol",
         "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key",
+          "date"
+        ],
+        "name": "sqlite_autoindex_signals_1",
+        "unique": 1
       }
     ]
   },
@@ -4566,9 +5001,16 @@
     "columns": [
       {
         "default": null,
-        "name": "symbol",
+        "name": "asset_key",
         "notnull": 1,
         "pk": 1,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
         "type": "VARCHAR"
       },
       {
@@ -4584,6 +5026,34 @@
         "notnull": 1,
         "pk": 0,
         "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "exchange",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "currency",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "timezone",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "lot_size",
+        "notnull": 0,
+        "pk": 0,
+        "type": "INTEGER"
       },
       {
         "default": null,
@@ -4610,7 +5080,28 @@
     "indexes": [
       {
         "columns": [
+          "asset_key"
+        ],
+        "name": "idx_stocks_asset_key",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "market"
+        ],
+        "name": "idx_stocks_market",
+        "unique": 0
+      },
+      {
+        "columns": [
           "symbol"
+        ],
+        "name": "ix_stocks_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "asset_key"
         ],
         "name": "sqlite_autoindex_stocks_1",
         "unique": 1

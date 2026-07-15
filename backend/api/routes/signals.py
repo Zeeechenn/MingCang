@@ -22,20 +22,27 @@ router = APIRouter()
 # Order matters: /signals/{symbol}/latest must register before /signals/{symbol}
 # so "latest" is not parsed as a symbol.
 @router.get("/signals/{symbol}/latest", response_model=SignalOut)
-def get_latest_signal(symbol: str, db: Session = Depends(get_db)):
+def get_latest_signal(symbol: str, market: str | None = None, db: Session = Depends(get_db)):
     """Return the most recent signal for a symbol."""
-    sig = latest_signal(symbol, db)
+    sig = latest_signal(symbol, db, market=market)
     if not sig:
         raise HTTPException(404, "No signal found")
     return signal_to_schema(sig)
 
 
 @router.get("/signals/{symbol}", response_model=list[SignalOut])
-def get_signals(symbol: str, limit: int = 30, db: Session = Depends(get_db)):
+def get_signals(
+    symbol: str,
+    limit: int = 30,
+    market: str | None = None,
+    db: Session = Depends(get_db),
+):
     """Return the most recent signals for a symbol up to limit."""
+    query = db.query(Signal).filter(Signal.symbol == symbol)
+    if market is not None:
+        query = query.filter(Signal.market == market.upper())
     sigs = (
-        db.query(Signal)
-        .filter(Signal.symbol == symbol)
+        query
         .order_by(Signal.date.desc())
         .limit(limit)
         .all()
@@ -44,16 +51,23 @@ def get_signals(symbol: str, limit: int = 30, db: Session = Depends(get_db)):
 
 
 @router.get("/signals/eval/{symbol}", response_model=SignalEvalOut)
-def eval_signals(symbol: str, days: int = 60, db: Session = Depends(get_db)):
+def eval_signals(
+    symbol: str,
+    days: int = 60,
+    market: str | None = None,
+    db: Session = Depends(get_db),
+):
     """
     Evaluate signal accuracy over the past `days` days. For each signal, the
     next trading day's close vs. the signal-day close is compared against the
     signal direction.
     """
     cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
+    signal_query = db.query(Signal).filter(Signal.symbol == symbol, Signal.date >= cutoff)
+    if market is not None:
+        signal_query = signal_query.filter(Signal.market == market.upper())
     signals = (
-        db.query(Signal)
-        .filter(Signal.symbol == symbol, Signal.date >= cutoff)
+        signal_query
         .order_by(Signal.date.asc())
         .all()
     )
@@ -69,12 +83,12 @@ def eval_signals(symbol: str, days: int = 60, db: Session = Depends(get_db)):
     for sig in signals:
         sig_price = (
             db.query(Price.close)
-            .filter(Price.symbol == symbol, Price.date == sig.date)
+            .filter(Price.asset_key == sig.asset_key, Price.date == sig.date)
             .first()
         )
         next_price = (
             db.query(Price.close)
-            .filter(Price.symbol == symbol, Price.date > sig.date)
+            .filter(Price.asset_key == sig.asset_key, Price.date > sig.date)
             .order_by(Price.date.asc())
             .first()
         )

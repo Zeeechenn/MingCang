@@ -13,7 +13,7 @@ BACKFILL_THRESHOLD_DAYS = 1   # 最新数据距今超过此天数才触发回填
 REFRESH_WINDOW_DAYS = 5  # refresh_today=True 时覆盖回写的最近窗口
 
 
-def load_price_df(symbol: str, db, days: int = 200) -> pd.DataFrame:
+def load_price_df(symbol: str, db, days: int = 200, market: str | None = None) -> pd.DataFrame:
     """
     从 Price 表读取历史行情，返回 OHLCV DataFrame（index=date str，升序）。
     days=200 确保 MA60 / ATR14 有足够数据。
@@ -21,9 +21,11 @@ def load_price_df(symbol: str, db, days: int = 200) -> pd.DataFrame:
     from backend.data.database import Price
 
     cutoff = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+    query = db.query(Price).filter(Price.symbol == symbol, Price.date >= cutoff)
+    if market is not None:
+        query = query.filter(Price.market == market)
     rows = (
-        db.query(Price)
-        .filter(Price.symbol == symbol, Price.date >= cutoff)
+        query
         .order_by(Price.date.asc())
         .all()
     )
@@ -43,24 +45,32 @@ def sync_index_to_db(
     days: int = 365,
     *,
     fetch_cn_index_fn: Callable[..., pd.DataFrame],
+    market: str = "CN",
 ) -> int:
     """
     拉取指数日线并写入 index_prices 表，跳过已存在的日期。
     返回新写入条数。
     """
     from backend.data.database import IndexPrice
+    from backend.data.market_profiles import get_market_profile, instrument_key, normalize_market
 
+    market = normalize_market(market)
+    profile = get_market_profile(market)
+    index_asset_key = instrument_key(market, index_symbol)
     df = fetch_cn_index_fn(index_symbol, days=days)
     source = df.attrs.get("source")
     fetched_at = df.attrs.get("fetched_at")
     adjustment = df.attrs.get("adjustment")
     existing = {
         r[0] for r in db.query(IndexPrice.date)
-        .filter(IndexPrice.symbol == index_symbol).all()
+        .filter(IndexPrice.symbol == index_symbol, IndexPrice.market == market).all()
     }
     records = [
         IndexPrice(
             symbol=index_symbol,
+            asset_key=index_asset_key,
+            market=market,
+            currency=profile.currency,
             date=d,
             close=float(row["close"]),
             change_pct=float(row["change_pct"]) if pd.notna(row.get("change_pct")) else None,
@@ -100,9 +110,21 @@ def backfill_if_needed(
     返回新写入或更新的记录条数。
     """
     from backend.analysis.factors import add_all_factors
-    from backend.data.database import Price, get_latest_price_date
+    from backend.data.database import Price
+    from backend.data.market_profiles import (
+        get_market_profile,
+        instrument_key,
+        normalize_market,
+        normalize_symbol,
+    )
 
-    latest_date_str = get_latest_price_date(symbol, db)
+    market = normalize_market(market)
+    symbol = normalize_symbol(symbol, market)
+    asset_key = instrument_key(market, symbol)
+    profile = get_market_profile(market)
+
+    latest = db.query(Price.date).filter(Price.asset_key == asset_key).order_by(Price.date.desc()).first()
+    latest_date_str = latest[0] if latest else None
 
     if latest_date_str:
         days_old = (date.today() - date.fromisoformat(latest_date_str)).days
@@ -134,7 +156,7 @@ def backfill_if_needed(
     if refresh_today:
         dates_to_replace = list(df_factors.index)
         db.query(Price).filter(
-            Price.symbol == symbol,
+            Price.asset_key == asset_key,
             Price.date.in_(dates_to_replace),
         ).delete(synchronize_session=False)
 
@@ -159,7 +181,7 @@ def backfill_if_needed(
     # ordered ascending so we keep the most-recent ones at the end.
     seed_rows = (
         db.query(Price.close)
-        .filter(Price.symbol == symbol)
+        .filter(Price.asset_key == asset_key)
         .order_by(Price.date.desc())
         .limit(preceding_window)
         .all()
@@ -188,6 +210,9 @@ def backfill_if_needed(
         atr = row.get("atr14")
         records.append(Price(
             symbol=symbol,
+            asset_key=asset_key,
+            market=market,
+            currency=profile.currency,
             date=date_str,
             open=float(row["open"]),
             high=float(row["high"]),

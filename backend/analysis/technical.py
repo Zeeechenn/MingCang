@@ -9,6 +9,35 @@ from backend.config import settings
 
 _MAIN_BOARD_LIMIT_THRESHOLD = 9.5  # 主板涨跌停实际触发阈值（名义10%，实际约9.5%）
 
+_MARKET_TECHNICAL_RULES = {
+    "CN": {
+        "weights": {"trend": 0.40, "rsi": 0.25, "macd": 0.25, "volume": 0.10},
+        "rsi_oversold": 30.0,
+        "rsi_overbought": 70.0,
+        "volume_ratio": 1.20,
+        "version": "cn-current",
+    },
+    "HK": {
+        "weights": {"trend": 0.45, "rsi": 0.20, "macd": 0.25, "volume": 0.10},
+        "rsi_oversold": 28.0,
+        "rsi_overbought": 72.0,
+        "volume_ratio": 1.30,
+        "version": "hk-m67-gray-v1",
+    },
+    "US": {
+        "weights": {"trend": 0.50, "rsi": 0.15, "macd": 0.25, "volume": 0.10},
+        "rsi_oversold": 25.0,
+        "rsi_overbought": 75.0,
+        "volume_ratio": 1.15,
+        "version": "us-m67-gray-v1",
+    },
+}
+
+
+def market_technical_rule(market: str) -> dict:
+    """Return a versioned, research-only technical rule for one market."""
+    return _MARKET_TECHNICAL_RULES.get(str(market).upper(), _MARKET_TECHNICAL_RULES["CN"])
+
 
 def _limit_threshold(symbol: str | None = None) -> float:
     """Return A-share limit threshold by board prefix."""
@@ -59,12 +88,13 @@ def adx_filter_factor(df: pd.DataFrame) -> float:
     return 0.75 + (last_adx - settings.adx_threshold) / (40 - settings.adx_threshold) * 0.25
 
 
-def score_rsi(df: pd.DataFrame) -> float:
+def score_rsi(df: pd.DataFrame, market: str = "CN") -> float:
     """RSI 超买超卖：RSI<30 视为反弹信号；RSI>70 只提示风险，不直接给卖出分。"""
+    rule = market_technical_rule(market)
     rsi = df["rsi14"].iloc[-1]
-    if rsi < 30:
+    if rsi < rule["rsi_oversold"]:
         return 1.0
-    if rsi > 70:
+    if rsi > rule["rsi_overbought"]:
         return 0.0
     # 中性区间线性插值
     return (50 - rsi) / 20.0
@@ -82,14 +112,14 @@ def score_macd(df: pd.DataFrame) -> float:
     return 0.3 if hist.iloc[-1] > 0 else -0.3
 
 
-def score_volume(df: pd.DataFrame) -> float:
+def score_volume(df: pd.DataFrame, market: str = "CN") -> float:
     """成交量确认：近5日均量对比20日均量"""
     vol5 = df["volume"].iloc[-5:].mean()
     vol20 = df["volume"].iloc[-20:].mean()
     ratio = vol5 / vol20 if vol20 > 0 else 1.0
     trend_score = score_trend(df)
     # 放量上涨/缩量下跌为正，放量下跌/缩量上涨为负
-    if ratio > 1.2:
+    if ratio > market_technical_rule(market)["volume_ratio"]:
         return trend_score * 0.5
     return 0.0
 
@@ -129,13 +159,14 @@ def technical_score(df_raw: pd.DataFrame, market: str = "CN", symbol: str | None
     阶段B 升级：综合分乘以 ADX 过滤系数（震荡市衰减 50%）。
     """
     df = add_all_factors(df_raw)
+    rule = market_technical_rule(market)
     scores = {
         "trend": score_trend(df),
-        "rsi": score_rsi(df),
+        "rsi": score_rsi(df, market=market),
         "macd": score_macd(df),
-        "volume": score_volume(df),
+        "volume": score_volume(df, market=market),
     }
-    weights = {"trend": 0.4, "rsi": 0.25, "macd": 0.25, "volume": 0.1}
+    weights = rule["weights"]
     raw_composite = sum(scores[k] * weights[k] for k in scores) * 100
 
     adx_factor = adx_filter_factor(df)
@@ -148,6 +179,7 @@ def technical_score(df_raw: pd.DataFrame, market: str = "CN", symbol: str | None
         "raw_score": round(raw_composite, 1),
         "adx_factor": round(adx_factor, 2),
         "components": scores,
+        "market_rule": rule["version"],
         "limit": limit,
         "latest": {
             "close": last["close"],

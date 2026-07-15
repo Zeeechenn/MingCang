@@ -227,10 +227,12 @@ def fetch_daily_with_fallback(symbol: str, market: str, days: int) -> tuple[pd.D
     raise RuntimeError(f"daily data unavailable for {symbol}: {detail}")
 
 
-def fetch_index_with_fallback(index_symbol: str, days: int) -> tuple[pd.DataFrame, str]:
+def fetch_index_with_fallback(index_symbol: str, days: int, market: str = "CN") -> tuple[pd.DataFrame, str]:
     """Fetch index bars from the first index provider that succeeds."""
     errors: list[str] = []
     for provider in _INDEX_PROVIDERS:
+        if "ALL" not in provider.markets and market not in provider.markets:
+            continue
         if provider.observe_only:
             _health(provider.name)["skipped"] += 1
             errors.append(f"{provider.name}: observe_only")
@@ -248,5 +250,5 @@ def fetch_index_with_fallback(index_symbol: str, days: int) -> tuple[pd.DataFram
         except Exception as e:
             errors.append(f"{provider.name}: {e}")
             _record_provider_failure(provider.name, str(e), provider.cooldown_seconds)
-    detail = "; ".join(errors) or "no index provider"
+    detail = "; ".join(errors) or f"no index provider for market={market}"
     raise RuntimeError(f"index data unavailable for {index_symbol}: {detail}")

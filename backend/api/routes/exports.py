@@ -118,7 +118,7 @@ def _position_review_html(db: Session, day: str) -> str:
     for pos in open_positions:
         latest = (
             db.query(Price.close)
-            .filter(Price.symbol == pos.symbol)
+            .filter(Price.asset_key == pos.asset_key)
             .order_by(Price.date.desc())
             .first()
         )
@@ -376,6 +376,8 @@ def export_signals_csv(
         {
             "date": s.date,
             "symbol": s.symbol,
+            "market": getattr(s, "market", "CN") or "CN",
+            "signal_scope": getattr(s, "signal_scope", "production") or "production",
             "composite_score": round(s.composite_score, 2) if s.composite_score is not None else "",
             "recommendation": s.recommendation,
             "confidence": s.confidence or "",
@@ -392,6 +394,8 @@ def export_signals_csv(
     columns = [
         ("date", "日期"),
         ("symbol", "代码"),
+        ("market", "市场"),
+        ("signal_scope", "信号范围"),
         ("composite_score", "综合分"),
         ("recommendation", "建议"),
         ("confidence", "置信度"),
@@ -418,6 +422,8 @@ def export_positions_csv(
     rows = [
         {
             "symbol": p.symbol,
+            "market": p.market,
+            "currency": p.currency or "",
             "name": p.name or "",
             "status": p.status,
             "opened_at": p.opened_at,
@@ -435,6 +441,8 @@ def export_positions_csv(
     ]
     columns = [
         ("symbol", "代码"),
+        ("market", "市场"),
+        ("currency", "币种"),
         ("name", "名称"),
         ("status", "状态"),
         ("opened_at", "建仓日"),

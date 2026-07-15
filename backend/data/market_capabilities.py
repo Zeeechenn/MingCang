@@ -12,6 +12,13 @@ from backend.data.providers import provider_fallback_chains
 
 SUPPORTED_MARKETS = ("CN", "HK", "US")
 
+_GRAY_DISABLED_PROVIDERS = {
+    ("HK", "fundamentals"): ["hkex_candidate", "yfinance_candidate"],
+    ("HK", "filings"): ["hkexnews_candidate"],
+    ("US", "fundamentals"): ["sec_companyfacts_candidate", "yfinance_candidate"],
+    ("US", "filings"): ["sec_filings_candidate"],
+}
+
 CAPABILITY_LAYERS = (
     {
         "id": "quote",
@@ -216,25 +223,25 @@ _CAPABILITIES: dict[str, dict[str, dict[str, object]]] = {
     },
     "HK": {
         "quote": {
-            "status": "seeded",
-            "stage": "daily_price_bridge",
-            "providers": ["yfinance_hk"],
-            "signal_impact": "none",
-            "notes": ["Daily OHLCV is available; realtime quote parity is not promoted."],
+            "status": "gray",
+            "stage": "market_provider_chain",
+            "providers": ["tickflow_hk", "yfinance_hk"],
+            "signal_impact": "allowlisted_gray_only",
+            "notes": ["Close-confirmed daily data is restricted to explicit gray symbols."],
         },
         "kline": {
-            "status": "seeded",
-            "stage": "daily_price_bridge",
-            "providers": ["yfinance_hk"],
-            "signal_impact": "observe_only_price_context",
-            "notes": ["Uses Yahoo Finance .HK mapping and auto-adjusted daily bars."],
+            "status": "gray",
+            "stage": "normalized_db",
+            "providers": ["tickflow_hk", "yfinance_hk"],
+            "signal_impact": "allowlisted_gray_technical_input",
+            "notes": ["Uses five-digit identity, forward-adjusted bars, and close-confirmed fresh-bar gates."],
         },
         "fundamentals": {
-            "status": "planned",
-            "stage": "candidate_probe",
-            "providers": ["hkex_candidate", "yfinance_candidate"],
-            "signal_impact": "none",
-            "notes": ["Needs field normalization, disclosure timing, and provider health before scoring."],
+            "status": "gray",
+            "stage": "pit_normalized_db",
+            "providers": ["yfinance_global"],
+            "signal_impact": "allowlisted_gray_long_term_input",
+            "notes": ["Periods without an observed earnings disclosure date are rejected."],
         },
         "capital_flow": {
             "status": "planned",
@@ -251,41 +258,41 @@ _CAPABILITIES: dict[str, dict[str, dict[str, object]]] = {
             "notes": ["Options data must remain read-only until schema and quota risks are known."],
         },
         "filings": {
-            "status": "planned",
-            "stage": "candidate_probe",
-            "providers": ["hkexnews_candidate"],
-            "signal_impact": "none",
-            "notes": ["HKEX filings are high-value for research but not normalized yet."],
+            "status": "gray",
+            "stage": "normalized_evidence_db",
+            "providers": ["ifind_notice"],
+            "signal_impact": "allowlisted_gray_research_context",
+            "notes": ["Exact publication timestamps and source URLs are preserved when provided."],
         },
         "tools_fallback": {
-            "status": "seeded",
+            "status": "gray",
             "stage": "provider_observability",
-            "providers": ["provider_fallback_chains", "hk_yfinance_ticker"],
+            "providers": ["provider_fallback_chains", "hk_yfinance_ticker", "market_profiles"],
             "signal_impact": "governance",
             "notes": ["Symbol mapping and provider health are observable for the daily bridge."],
         },
     },
     "US": {
         "quote": {
-            "status": "seeded",
-            "stage": "daily_price_bridge",
-            "providers": ["yfinance_us"],
-            "signal_impact": "none",
-            "notes": ["Daily OHLCV is available; realtime quote parity is not promoted."],
+            "status": "gray",
+            "stage": "market_provider_chain",
+            "providers": ["tickflow_us", "yfinance_us"],
+            "signal_impact": "allowlisted_gray_only",
+            "notes": ["Close-confirmed daily data is restricted to explicit gray symbols."],
         },
         "kline": {
-            "status": "seeded",
-            "stage": "daily_price_bridge",
-            "providers": ["yfinance_us"],
-            "signal_impact": "observe_only_price_context",
-            "notes": ["Uses Yahoo Finance auto-adjusted daily bars."],
+            "status": "gray",
+            "stage": "normalized_db",
+            "providers": ["tickflow_us", "yfinance_us"],
+            "signal_impact": "allowlisted_gray_technical_input",
+            "notes": ["Uses forward-adjusted bars, close-confirmed gates, and US-specific calibration."],
         },
         "fundamentals": {
-            "status": "planned",
-            "stage": "candidate_probe",
-            "providers": ["sec_companyfacts_candidate", "yfinance_candidate"],
-            "signal_impact": "none",
-            "notes": ["SEC XBRL/companyfacts should be normalized before research scoring."],
+            "status": "gray",
+            "stage": "pit_normalized_db",
+            "providers": ["yfinance_global"],
+            "signal_impact": "allowlisted_gray_long_term_input",
+            "notes": ["Periods without an observed earnings disclosure date are rejected."],
         },
         "capital_flow": {
             "status": "planned",
@@ -302,16 +309,16 @@ _CAPABILITIES: dict[str, dict[str, dict[str, object]]] = {
             "notes": ["Option chains are useful for research but must not affect position sizing yet."],
         },
         "filings": {
-            "status": "planned",
-            "stage": "candidate_probe",
-            "providers": ["sec_filings_candidate"],
-            "signal_impact": "none",
-            "notes": ["SEC filings are the next high-value read-only US layer."],
+            "status": "gray",
+            "stage": "normalized_evidence_db",
+            "providers": ["sec_submissions"],
+            "signal_impact": "allowlisted_gray_research_context",
+            "notes": ["Uses official SEC submissions with filing date, form, accession and archive URL."],
         },
         "tools_fallback": {
-            "status": "seeded",
+            "status": "gray",
             "stage": "provider_observability",
-            "providers": ["provider_fallback_chains"],
+            "providers": ["provider_fallback_chains", "market_profiles"],
             "signal_impact": "governance",
             "notes": ["Provider health is observable for the daily bridge."],
         },
@@ -356,6 +363,8 @@ def _market_status(layer_rows: list[dict]) -> str:
         return "blocked"
     if "planned" in statuses:
         return "partial"
+    if "gray" in statuses:
+        return "gray"
     if "observe_only" in statuses:
         return "partial"
     if "seeded" in statuses:
@@ -371,6 +380,17 @@ def build_market_capability_catalog() -> dict:
         for layer in CAPABILITY_LAYERS:
             layer_id = str(layer["id"])
             capability = deepcopy(_CAPABILITIES[market][layer_id])
+            configured_impact = str(capability.get("signal_impact") or "none")
+            if market in {"HK", "US"} and configured_impact.startswith("allowlisted_"):
+                capability["configured_signal_impact"] = configured_impact
+                if not settings.multimarket_gray_enabled:
+                    capability["signal_impact"] = "none"
+                    providers = capability.get("providers")
+                    capability["configured_providers"] = (
+                        list(providers) if isinstance(providers, (list, tuple)) else []
+                    )
+                    if (market, layer_id) in _GRAY_DISABLED_PROVIDERS:
+                        capability["providers"] = _GRAY_DISABLED_PROVIDERS[(market, layer_id)]
             capability.update({
                 "id": layer_id,
                 "label": layer["label"],
@@ -386,8 +406,8 @@ def build_market_capability_catalog() -> dict:
         }
 
     return {
-        "version": "mingcang_market_data_skill_v1",
-        "source": "M41 global market data skill bridge",
+        "version": "mingcang_market_data_m67_v1",
+        "source": "M67 multi-market parity gray bridge",
         "markets": list(SUPPORTED_MARKETS),
         "layers": [
             {
@@ -402,9 +422,8 @@ def build_market_capability_catalog() -> dict:
             "probe_mode": "metadata_only_by_default",
             "write_policy": "no_database_writes",
             "production_signal_rule": (
-                "Only CN production-ready layers are eligible for current signal inputs; "
-                "HK/US non-price layers stay observe-only/planned until field, PIT, "
-                "freshness, and provider-health gates pass."
+                "CN remains production. HK/US normalized price and PIT financial layers may "
+                "feed only explicit gray symbols; no gray output enters live portfolio actions."
             ),
         },
         "agent_facade": {

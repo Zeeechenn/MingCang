@@ -112,11 +112,13 @@ def test_data_coverage_snapshot_exposes_freshness_policy_and_market_chains(test_
 
 
 def test_data_coverage_catalog_covers_cn_hk_us_seven_layers(test_db, monkeypatch):
+    from backend.config import settings
     from backend.data import quality
     from backend.data.database import Price, Stock
     from backend.data.providers import reset_provider_registry
 
     reset_provider_registry()
+    monkeypatch.setattr(settings, "multimarket_gray_enabled", False)
     monkeypatch.setattr(quality, "register_default_market_providers", lambda: None)
     for stock in [
         Stock(symbol="600519", name="Moutai", market="CN", active=True),

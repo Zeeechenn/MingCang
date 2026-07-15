@@ -4,7 +4,7 @@ import logging
 import pandas as pd
 
 from backend.config import settings
-from backend.data.market_persistence import (
+from backend.data.market_persistence import (  # noqa: F401 - compatibility facade re-exports
     BACKFILL_THRESHOLD_DAYS,
     BACKFILL_YEARS,
     REFRESH_WINDOW_DAYS,
@@ -12,7 +12,7 @@ from backend.data.market_persistence import (
 )
 from backend.data.market_persistence import backfill_if_needed as _backfill_if_needed
 from backend.data.market_persistence import sync_index_to_db as _sync_index_to_db
-from backend.data.market_sources import (
+from backend.data.market_sources import (  # noqa: F401 - compatibility facade re-exports
     ak,
     fetch_cn_daily,
     fetch_cn_daily_akshare_em,
@@ -27,11 +27,14 @@ from backend.data.market_sources import (
     fetch_cn_index_eastmoney,
     fetch_cn_index_efinance,
     fetch_cn_index_yfinance,
+    fetch_global_index_yfinance,
     fetch_hk_daily,
+    fetch_hk_daily_tickflow,
     fetch_us_daily,
+    fetch_us_daily_tickflow,
     yf,
 )
-from backend.data.market_utils import (
+from backend.data.market_utils import (  # noqa: F401 - compatibility facade re-exports
     DAILY_PROVIDER_ADJUSTMENTS,
     INDEX_PROVIDER_ADJUSTMENTS,
     _attach_provenance_attrs,
@@ -59,6 +62,8 @@ def register_default_market_providers() -> None:
     """Register default daily/index providers without fetching remote data."""
     if settings.tickflow_enabled and settings.tickflow_api_key:
         register_daily_provider("tickflow_cn", {"CN"}, fetch_cn_daily_tickflow, priority=-10, cooldown_seconds=30)
+        register_daily_provider("tickflow_hk", {"HK"}, fetch_hk_daily_tickflow, priority=-10, cooldown_seconds=30)
+        register_daily_provider("tickflow_us", {"US"}, fetch_us_daily_tickflow, priority=-10, cooldown_seconds=30)
     register_daily_provider("akshare_sina_cn", {"CN"}, fetch_cn_daily_akshare_sina, priority=0, cooldown_seconds=30)
     if _efinance_available():
         register_daily_provider("efinance_cn", {"CN"}, fetch_cn_daily_efinance, priority=10, cooldown_seconds=60)
@@ -76,6 +81,20 @@ def register_default_market_providers() -> None:
     if _efinance_available():
         register_index_provider("efinance_index_cn", fetch_cn_index_efinance, priority=20, cooldown_seconds=60)
     register_index_provider("yfinance_index_cn", fetch_cn_index_yfinance, priority=90, cooldown_seconds=120)
+    register_index_provider(
+        "yfinance_index_hk",
+        fetch_global_index_yfinance,
+        markets={"HK"},
+        priority=10,
+        cooldown_seconds=120,
+    )
+    register_index_provider(
+        "yfinance_index_us",
+        fetch_global_index_yfinance,
+        markets={"US"},
+        priority=10,
+        cooldown_seconds=120,
+    )
 
 
 def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
@@ -98,7 +117,7 @@ def fetch_cn_index(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFr
     index_symbol: "sh000300"（沪深300）/ "sh000001"（上证）/ "sh000016"（上证50）
     """
     register_default_market_providers()
-    df, provider = fetch_index_with_fallback(index_symbol, days)
+    df, provider = fetch_index_with_fallback(index_symbol, days, market="CN")
     _attach_provenance_attrs(
         df,
         provider=provider,
@@ -108,12 +127,43 @@ def fetch_cn_index(index_symbol: str = "sh000300", days: int = 365) -> pd.DataFr
     return df
 
 
+def fetch_market_index(market: str, index_symbol: str | None = None, days: int = 365) -> pd.DataFrame:
+    """Fetch the configured benchmark for one market with market-scoped fallback."""
+    from backend.data.market_profiles import get_market_profile
+
+    profile = get_market_profile(market)
+    symbol = index_symbol or profile.benchmark_symbol
+    register_default_market_providers()
+    df, provider = fetch_index_with_fallback(symbol, days, market=profile.market)
+    _attach_provenance_attrs(
+        df,
+        provider=provider,
+        adjustment=INDEX_PROVIDER_ADJUSTMENTS.get(provider),
+    )
+    return df
+
+
 def sync_index_to_db(db, index_symbol: str = "sh000300", days: int = 365) -> int:
     return _sync_index_to_db(
         db,
         index_symbol=index_symbol,
         days=days,
         fetch_cn_index_fn=fetch_cn_index,
+        market="CN",
+    )
+
+
+def sync_market_index_to_db(db, market: str, index_symbol: str | None = None, days: int = 365) -> int:
+    from backend.data.market_profiles import get_market_profile
+
+    profile = get_market_profile(market)
+    symbol = index_symbol or profile.benchmark_symbol
+    return _sync_index_to_db(
+        db,
+        index_symbol=symbol,
+        days=days,
+        fetch_cn_index_fn=lambda _symbol, days: fetch_market_index(profile.market, _symbol, days),
+        market=profile.market,
     )
 
 
@@ -130,50 +180,3 @@ def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
         backfill_threshold_days=BACKFILL_THRESHOLD_DAYS,
         refresh_window_days=REFRESH_WINDOW_DAYS,
     )
-
-
-__all__ = [
-    "BACKFILL_THRESHOLD_DAYS",
-    "BACKFILL_YEARS",
-    "DAILY_PROVIDER_ADJUSTMENTS",
-    "INDEX_PROVIDER_ADJUSTMENTS",
-    "REFRESH_WINDOW_DAYS",
-    "_attach_provenance_attrs",
-    "_cn_market_prefix",
-    "_efinance_available",
-    "_normalize_ohlcv",
-    "_retry",
-    "_to_sina_tx_symbol",
-    "_utcnow_naive",
-    "ak",
-    "backfill_if_needed",
-    "cn_tushare_ts_code",
-    "cn_yfinance_ticker",
-    "fetch_cn_daily",
-    "fetch_cn_daily_akshare_em",
-    "fetch_cn_daily_akshare_sina",
-    "fetch_cn_daily_akshare_tx",
-    "fetch_cn_daily_efinance",
-    "fetch_cn_daily_tickflow",
-    "fetch_cn_daily_tushare",
-    "fetch_cn_daily_tushare_qfq",
-    "fetch_cn_daily_yfinance",
-    "fetch_cn_index",
-    "fetch_cn_index_akshare",
-    "fetch_cn_index_eastmoney",
-    "fetch_cn_index_efinance",
-    "fetch_cn_index_yfinance",
-    "fetch_daily",
-    "fetch_daily_with_fallback",
-    "fetch_hk_daily",
-    "fetch_index_with_fallback",
-    "fetch_us_daily",
-    "hk_yfinance_ticker",
-    "load_price_df",
-    "register_daily_provider",
-    "register_default_market_providers",
-    "register_index_provider",
-    "settings",
-    "sync_index_to_db",
-    "yf",
-]

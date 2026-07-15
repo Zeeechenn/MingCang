@@ -219,11 +219,15 @@ def test_postmarket_news_sentiment_skips_tavily_when_local_titles_meet_threshold
     class Stock:
         symbol = "603986"
         name = "兆易创新"
+        market = "CN"
 
     monkeypatch.setattr(settings, "tavily_api_key", "test-key")
     monkeypatch.setattr(settings, "ai_provider", "disabled")
     monkeypatch.setattr(settings, "tavily_supplement_threshold", 3)
-    monkeypatch.setattr("backend.data.news.get_recent_news_items", lambda symbol, db, hours: [])
+    monkeypatch.setattr(
+        "backend.data.news.get_recent_news_items",
+        lambda symbol, db, hours, market=None: [],
+    )
 
     def fake_audited_titles(items, **kwargs):
         return ["本地新闻1", "本地新闻2", "本地新闻3"], []
@@ -239,7 +243,7 @@ def test_postmarket_news_sentiment_skips_tavily_when_local_titles_meet_threshold
 
     monkeypatch.setattr("backend.data.news.fetch_titles_tavily", fake_tavily)
 
-    def fake_analyze_news(titles, symbol):
+    def fake_analyze_news(titles, symbol, market=None):
         captured["titles"] = titles
         return {"sentiment": 0.0}
 

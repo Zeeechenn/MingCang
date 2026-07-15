@@ -60,6 +60,46 @@ from backend.llm import runtime_readiness
 router = APIRouter()
 
 
+@router.get("/research/{symbol}/financials")
+def get_symbol_financial_metrics(
+    symbol: str,
+    market: str = "CN",
+    limit: int = Query(default=8, ge=1, le=20),
+    db: Session = Depends(get_db),
+):
+    """Return market-scoped, PIT-auditable financial rows for the frontend."""
+    from backend.data.database import FinancialMetric
+    from backend.data.market_profiles import (
+        get_market_profile,
+        instrument_key,
+        normalize_market,
+        normalize_symbol,
+    )
+
+    normalized_market = normalize_market(market)
+    normalized_symbol = normalize_symbol(symbol, normalized_market)
+    key = instrument_key(normalized_market, normalized_symbol)
+    rows = (
+        db.query(FinancialMetric)
+        .filter(FinancialMetric.asset_key == key)
+        .order_by(FinancialMetric.report_date.desc())
+        .limit(limit)
+        .all()
+    )
+    fields = (
+        "report_date", "disclosure_date", "period_type", "revenue", "revenue_yoy",
+        "net_profit", "net_profit_yoy", "total_assets", "total_equity", "long_term_debt",
+        "current_ratio", "operating_cf", "gross_margin", "roe", "asset_turnover", "source",
+    )
+    return {
+        "asset_key": key,
+        "symbol": normalized_symbol,
+        "market": normalized_market,
+        "currency": get_market_profile(normalized_market).currency,
+        "rows": [{field: getattr(row, field) for field in fields} for row in rows],
+    }
+
+
 def _merge_template_list(explicit: list | None, generated: list) -> list | None:
     if explicit is None:
         return generated
@@ -137,24 +177,27 @@ def prepare_symbol_research(
 ):
     """Best-effort public first-run path: make one symbol researchable and return its dossier."""
     from backend.data.database import Stock
-    from backend.decision.market_policy import is_production_signal_market
+    from backend.data.market_profiles import instrument_key, normalize_market, normalize_symbol
+    from backend.decision.market_policy import signal_scope_for
     from backend.research.dossier import build_research_dossier
 
     if market not in ("CN", "HK", "US"):
         raise HTTPException(400, "market must be CN, HK, or US")
 
-    stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+    market = normalize_market(market)
+    symbol = normalize_symbol(symbol, market)
+    key = instrument_key(market, symbol)
+    stock = db.query(Stock).filter(Stock.asset_key == key).first()
     if stock is None:
         stock = Stock(
             symbol=symbol,
             name=name or symbol,
             market=market,
-            active=is_production_signal_market(market),
+            active=True,
         )
         db.add(stock)
     else:
-        if is_production_signal_market(stock.market or market):
-            stock.active = True
+        stock.active = True
         if name:
             stock.name = name
         stock.market = stock.market or market
@@ -168,19 +211,48 @@ def prepare_symbol_research(
     except Exception as exc:
         steps["prices"] = {"ok": False, "error": str(exc)}
 
-    if stock.market == "CN":
+    try:
+        from backend.data.fundamentals import sync_financial_metrics_for_market
+
+        rows = sync_financial_metrics_for_market(symbol, stock.market, db)
+        steps["financials"] = {"ok": True, "rows": rows}
+    except Exception as exc:
+        steps["financials"] = {"ok": False, "error": str(exc)}
+
+    try:
+        from backend.data.news import fetch_stock_news, save_news_to_db
+
+        news = fetch_stock_news(symbol, stock.name, stock.market)
+        rows = save_news_to_db(news, db, market=stock.market)
+        steps["news"] = {"ok": True, "rows": rows}
+    except Exception as exc:
+        steps["news"] = {"ok": False, "error": str(exc)}
+
+    try:
+        from backend.data.market import sync_market_index_to_db
+
+        rows = sync_market_index_to_db(db, stock.market)
+        steps["benchmark"] = {"ok": True, "rows": rows}
+    except Exception as exc:
+        steps["benchmark"] = {"ok": False, "error": str(exc)}
+
+    if stock.market in {"HK", "US"}:
         try:
-            from backend.data.fundamentals import sync_financial_metrics
-            rows = sync_financial_metrics(symbol, db)
-            steps["financials"] = {"ok": True, "rows": rows}
+            from backend.data.global_disclosures import sync_global_disclosures
+
+            rows = sync_global_disclosures(stock, db)
+            steps["filings"] = {"ok": True, "rows": rows}
         except Exception as exc:
-            steps["financials"] = {"ok": False, "error": str(exc)}
+            steps["filings"] = {"ok": False, "error": str(exc)}
 
     dossier = build_research_dossier(db, symbol)
     return {
         "status": "prepared",
         "symbol": symbol,
-        "signal_scope": "production" if is_production_signal_market(stock.market) else "observe_only",
+        "asset_key": stock.asset_key,
+        "market": stock.market,
+        "currency": stock.currency,
+        "signal_scope": signal_scope_for(stock.market, stock.symbol),
         "steps": steps,
         "runtime_readiness": runtime_readiness(),
         "missing": dossier.get("missing", []),

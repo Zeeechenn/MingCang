@@ -3,7 +3,7 @@
 // ============================================================
 import React from 'react';
 import { DebateReport } from './page-reports';
-import { Badge, Card, DataSourceNotice, MCStore, MKT, Metric, Modal, PageHead, PoolShell, RefreshButton, ScoreBar, SortSeg, Spark, applyPoolSort, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, toast, useSortCtl, useStockPoolFilter, useStockSuggest, useStore } from './shared';
+import { Badge, CCY, Card, DataSourceNotice, MCStore, MKT, Metric, Modal, PageHead, PoolShell, RefreshButton, ScoreBar, SortSeg, Spark, applyPoolSort, assetKey, currencyAmount, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, stockPath, toast, useSortCtl, useStockPoolFilter, useStockSuggest, useStore } from './shared';
 const { useState: usePState, useMemo: usePMemo } = React;
 
 const RELEASE_DISMISS_KEY = 'mc_release_dismissed_v1';
@@ -25,7 +25,7 @@ function ReleaseStrip() {
         <div style={{ minWidth: 240, flex: 1 }}>
           <div className="t-eyebrow">当前发布</div>
           <div style={{ marginTop: 3, fontSize: 13.5, fontWeight: 550 }}>
-            v{SYS.version} 上下文脱敏与系统状态修复，Atlas 休眠保持静默，量化生产仍保持关闭。
+            v{SYS.version} 正式面保持稳定；M67 港美股小池已接入独立规则灰度影子轨，量化生产、提醒与下单仍保持关闭。
           </div>
         </div>
         <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -72,14 +72,14 @@ function TodayCall({ watchlist }: any) {
             <div>
               <div className="t-eyebrow">今日裁决案卷</div>
               <div className="row" style={{ marginTop: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                <h1 className="t-hero" style={{ margin: 0, cursor: 'pointer' }} onClick={() => navigate(`/stock/${top.symbol}`)}>{top.name}</h1>
+                <h1 className="t-hero" style={{ margin: 0, cursor: 'pointer' }} onClick={() => navigate(stockPath(top.symbol, top.market))}>{top.name}</h1>
                 <span className="t-num t-faint" style={{ fontSize: 13 }}>{top.symbol}</span>
                 <Badge tone={recTone(sig.recommendation)}>{sig.recommendation}</Badge>
                 {top.long_term_label && <Badge tone={ltTone(top.long_term_label.label)}>长期 {top.long_term_label.label}</Badge>}
               </div>
               <div className="t-dim" style={{ marginTop: 6, fontSize: 13 }}>{top.industry} · 信号日期 {sig.date}</div>
             </div>
-            <button className="btn btn-sm" onClick={() => navigate(`/stock/${top.symbol}`)}>查看详情</button>
+            <button className="btn btn-sm" onClick={() => navigate(stockPath(top.symbol, top.market))}>查看详情</button>
           </div>
 
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', marginTop: 18, gap: 18, alignItems: 'end' }}>
@@ -158,16 +158,25 @@ function TodayCall({ watchlist }: any) {
 
 function PositionsOverview({ positions }: any) {
   const open = positions.filter((p) => p.status !== 'closed');
-  const mv = open.reduce((a, p) => a + p.latest_price * p.quantity, 0);
-  const cost = open.reduce((a, p) => a + p.avg_cost * p.quantity, 0);
-  const pnl = mv - cost;
+  const totals = open.reduce((acc, p) => {
+    const market = p.market || 'CN';
+    const row = acc[market] || { mv: 0, cost: 0, count: 0 };
+    row.mv += p.latest_price * p.quantity;
+    row.cost += p.avg_cost * p.quantity;
+    row.count += 1;
+    acc[market] = row;
+    return acc;
+  }, {});
   return (
     <Card eyebrow="Portfolio" title="持仓情况" className="pop pop-2" tour="positions-overview"
       right={<button className="btn btn-sm" onClick={() => navigate('/positions')}>管理持仓</button>}>
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        <Metric label="持仓数" value={open.length} />
-        <Metric label="总市值" value={fmt.money(mv)} />
-        <Metric label="总盈亏" value={fmt.signedPct(cost ? (pnl / cost) * 100 : 0)} tone={pnlClass(pnl)} />
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+        <Metric label="持仓数" value={open.length} sub="市值按币种分列" />
+        {Object.keys(totals).sort().map((market) => {
+          const total = totals[market];
+          const pnl = total.mv - total.cost;
+          return <Metric key={market} label={`${MKT[market]}市值`} value={currencyAmount(total.mv, market)} tone={pnlClass(pnl)} sub={`${CCY[market]} 盈亏 ${fmt.signedPct(total.cost ? pnl / total.cost * 100 : 0)}`} />;
+        })}
       </div>
       {open.length === 0 ? (
         <div className="empty" style={{ marginTop: 10 }}>
@@ -178,11 +187,11 @@ function PositionsOverview({ positions }: any) {
           {open.slice(0, 4).map((p) => {
             const ppnl = (p.latest_price - p.avg_cost) / p.avg_cost * 100;
             return (
-              <a key={p.id} className="glass-inset" style={{ padding: '10px 13px', textDecoration: 'none', color: 'inherit', cursor: 'pointer' }} onClick={() => navigate(`/stock/${p.symbol}`)}>
+              <a key={p.id} className="glass-inset" style={{ padding: '10px 13px', textDecoration: 'none', color: 'inherit', cursor: 'pointer' }} onClick={() => navigate(stockPath(p.symbol, p.market))}>
                 <div className="spread">
                   <div>
                     <div style={{ fontSize: 13.5, fontWeight: 600 }}>{p.name}</div>
-                    <div className="t-num t-faint" style={{ fontSize: 11.5 }}>{p.symbol}</div>
+                    <div className="t-num t-faint" style={{ fontSize: 11.5 }}>{p.symbol} · {CCY[p.market || 'CN']}</div>
                   </div>
                   <span className={`t-num ${pnlClass(ppnl)}`} style={{ fontSize: 13.5, fontWeight: 650 }}>{fmt.signedPct(ppnl)}</span>
                 </div>
@@ -214,20 +223,23 @@ function MarketHeaderWidget() {
 
 function SignalCardTile({ w }: any) {
   const s = w.latest_signal;
-  const chg = dailyChangePct(w.symbol);
+  const chg = dailyChangePct(w.symbol, w.market);
   return (
-    <a className="glass-inset" style={{ padding: 13, cursor: 'pointer', textDecoration: 'none', color: 'inherit', display: 'block' }} onClick={() => navigate(`/stock/${w.symbol}`)}>
+    <a className="glass-inset" style={{ padding: 13, cursor: 'pointer', textDecoration: 'none', color: 'inherit', display: 'block' }} onClick={() => navigate(stockPath(w.symbol, w.market))}>
       <div className="spread" style={{ alignItems: 'flex-start' }}>
         <div>
           <div style={{ fontSize: 13.5, fontWeight: 600 }}>{w.name}</div>
           <div className="t-num t-faint" style={{ fontSize: 11.5, marginTop: 1 }}>{w.symbol}</div>
         </div>
-        <Badge tone={recTone(s.recommendation)}>{s.recommendation}</Badge>
+        <div className="row" style={{ gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {w.gray && <Badge tone="badge-accent">影子</Badge>}
+          <Badge tone={recTone(s.recommendation)}>{s.recommendation}</Badge>
+        </div>
       </div>
       <div className="spread" style={{ marginTop: 14, alignItems: 'flex-end' }}>
         <span className={`t-num ${pnlClass(s.composite_score)}`} style={{ fontSize: 23, fontWeight: 700 }}>{fmt.signed(s.composite_score)}</span>
         <div style={{ textAlign: 'right' }}>
-          <Spark symbol={w.symbol} />
+          <Spark symbol={w.symbol} market={w.market} />
           {chg != null && <div className={`t-num ${pnlClass(chg)}`} style={{ fontSize: 11.5, fontWeight: 650 }}>{fmt.signedPct(chg)}</div>}
         </div>
       </div>
@@ -244,14 +256,14 @@ function SignalCardTile({ w }: any) {
 // 列表行:一行一条,用涨跌、技术/情感分、止损止盈、长期标签填满信息密度
 function SignalRowTile({ w }: any) {
   const s = w.latest_signal;
-  const chg = dailyChangePct(w.symbol);
+  const chg = dailyChangePct(w.symbol, w.market);
   return (
-    <a className="row" style={{ padding: '9px 14px', gap: 12, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(`/stock/${w.symbol}`)}>
+    <a className="row" style={{ padding: '9px 14px', gap: 12, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(stockPath(w.symbol, w.market))}>
       <div style={{ width: 130, flex: 'none', minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.name}</div>
         <div className="t-num t-faint" style={{ fontSize: 11 }}>{w.symbol}</div>
       </div>
-      <span style={{ width: 84, flex: 'none' }}><Badge tone={recTone(s.recommendation)}>{s.recommendation}</Badge></span>
+      <span className="row" style={{ width: 116, flex: 'none', gap: 4, flexWrap: 'wrap' }}>{w.gray && <Badge tone="badge-accent">影子</Badge>}<Badge tone={recTone(s.recommendation)}>{s.recommendation}</Badge></span>
       <span className={`t-num ${pnlClass(s.composite_score)}`} style={{ width: 52, flex: 'none', fontSize: 14.5, fontWeight: 700, textAlign: 'right' }}>{fmt.signed(s.composite_score)}</span>
       <span className={`t-num ${chg != null ? pnlClass(chg) : 't-faint'}`} style={{ width: 62, flex: 'none', fontSize: 12.5, fontWeight: 650, textAlign: 'right' }}>{chg != null ? fmt.signedPct(chg) : '–'}</span>
       <div style={{ flex: 1, minWidth: 60 }}><ScoreBar score={s.composite_score} height={4} /></div>
@@ -322,8 +334,8 @@ function SignalGrid({ watchlist }: any) {
       ) : (
         <PoolShell items={sorted} defaultCount={8} unit="只" cardMin={218}
           empty={<div className="empty">没有匹配的信号，试试清除筛选条件。</div>}
-          renderCard={(w) => <SignalCardTile key={w.symbol} w={w} />}
-          renderRow={(w) => <SignalRowTile key={w.symbol} w={w} />} />
+          renderCard={(w) => <SignalCardTile key={w.asset_key || assetKey(w.symbol, w.market)} w={w} />}
+          renderRow={(w) => <SignalRowTile key={w.asset_key || assetKey(w.symbol, w.market)} w={w} />} />
       )}
     </Card>
   );
@@ -345,7 +357,7 @@ function AddStockForm({ onAdd }: any) {
       {sugg.length > 0 && (
         <div className="glass" style={{ position: 'absolute', top: 40, right: 0, width: 250, zIndex: 30, borderRadius: 14, padding: 5, background: 'var(--glass-strong)' }}>
           {sugg.map((s) => (
-            <button key={s.symbol} className="navlink" style={{ display: 'flex', width: '100%', justifyContent: 'space-between' }}
+            <button key={s.asset_key || assetKey(s.symbol, s.market)} className="navlink" style={{ display: 'flex', width: '100%', justifyContent: 'space-between' }}
               onClick={() => { onAdd(s); setQ(''); setOpen(false); }}>
               <span>{s.name}</span>
               <span className="t-num t-faint">{s.symbol} · {s.market}</span>
@@ -364,7 +376,7 @@ function WatchlistManage({ watchlist }: any) {
   const filtered = f.filtered;
 
   function add(s) {
-    if (MCStore.get().watchlist.some((w) => w.symbol === s.symbol)) { toast('该标的已在自选池'); return; }
+    if (MCStore.get().watchlist.some((w) => (w.asset_key || assetKey(w.symbol, w.market)) === assetKey(s.symbol, s.market))) { toast('该标的已在自选池'); return; }
     window.MC_LIVE.addWatch(s.symbol, s.name, s.market)
       .then(() => toast(`已添加 ${s.name}，下次收盘后生成信号`))
       .catch((e) => {
@@ -373,12 +385,12 @@ function WatchlistManage({ watchlist }: any) {
         toast(`已加入演示自选:${s.name}`);
       });
   }
-  function remove(symbol) {
-    window.MC_LIVE.removeWatch(symbol)
+  function remove(symbol, market) {
+    window.MC_LIVE.removeWatch(symbol, market)
       .then(() => { setRemoving(null); toast(`已从自选池移除 ${symbol}`); })
       .catch((e) => {
         if (!e || !e.demo) { toast(`移除失败:${e?.message || '后端错误'}`); setRemoving(null); return; }
-        MCStore.set((st) => ({ watchlist: st.watchlist.filter((w) => w.symbol !== symbol) }));
+        MCStore.set((st) => ({ watchlist: st.watchlist.filter((w) => (w.asset_key || assetKey(w.symbol, w.market)) !== assetKey(symbol, market)) }));
         setRemoving(null);
         toast(`已从演示自选移除 ${symbol}`);
       });
@@ -405,28 +417,29 @@ function WatchlistManage({ watchlist }: any) {
         <PoolShell items={applyPoolSort(filtered, sort)} defaultCount={9} unit="只" cardMin={225}
           empty={<div className="empty">没有匹配的自选股，尝试清除筛选条件。</div>}
           renderCard={(w) => (
-            <div key={w.symbol} className="glass-inset spread" style={{ padding: '10px 13px' }}>
-              <a style={{ minWidth: 0, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(`/stock/${w.symbol}`)}>
+            <div key={w.asset_key || assetKey(w.symbol, w.market)} className="glass-inset spread" style={{ padding: '10px 13px' }}>
+              <a style={{ minWidth: 0, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(stockPath(w.symbol, w.market))}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.name}</div>
                 <div className="t-num t-faint" style={{ fontSize: 11.5 }}>{w.symbol} · {w.industry || MKT[w.market]}</div>
                 <div className="row" style={{ gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
                   {w.long_term_label && <Badge tone={ltTone(w.long_term_label.label)}>长期 {w.long_term_label.label}</Badge>}
+                  {w.gray && <Badge tone="badge-accent">灰度影子</Badge>}
                   {w.observe && !w.latest_signal && <Badge tone="badge-warn">观察</Badge>}
                 </div>
               </a>
-              {removing === w.symbol ? (
+              {removing === (w.asset_key || assetKey(w.symbol, w.market)) ? (
                 <div className="row" style={{ gap: 4 }}>
-                  <button className="btn btn-sm btn-danger" onClick={() => remove(w.symbol)}>确认</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => remove(w.symbol, w.market)}>确认</button>
                   <button className="btn btn-sm btn-quiet" onClick={() => setRemoving(null)}>取消</button>
                 </div>
               ) : (
-                <button className="btn btn-sm btn-quiet btn-danger" title="移除" onClick={() => setRemoving(w.symbol)} style={{ padding: '2px 9px' }}>×</button>
+                <button className="btn btn-sm btn-quiet btn-danger" title="移除" onClick={() => setRemoving(w.asset_key || assetKey(w.symbol, w.market))} style={{ padding: '2px 9px' }}>×</button>
               )}
             </div>
           )}
           renderRow={(w) => (
-            <div key={w.symbol} className="row" style={{ padding: '8px 14px', gap: 12 }}>
-              <a className="row" style={{ flex: 1, minWidth: 0, gap: 12, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(`/stock/${w.symbol}`)}>
+            <div key={w.asset_key || assetKey(w.symbol, w.market)} className="row" style={{ padding: '8px 14px', gap: 12 }}>
+              <a className="row" style={{ flex: 1, minWidth: 0, gap: 12, cursor: 'pointer', textDecoration: 'none', color: 'inherit' }} onClick={() => navigate(stockPath(w.symbol, w.market))}>
                 <div style={{ width: 130, flex: 'none', minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.name}</div>
                   <div className="t-num t-faint" style={{ fontSize: 11 }}>{w.symbol}</div>
@@ -439,16 +452,16 @@ function WatchlistManage({ watchlist }: any) {
                   {w.latest_signal ? fmt.signed(w.latest_signal.composite_score) : '–'}
                 </span>
                 <span style={{ flex: 1, textAlign: 'right' }}>
-                  {w.long_term_label ? <Badge tone={ltTone(w.long_term_label.label)}>长期 {w.long_term_label.label}</Badge> : <span className="t-faint" style={{ fontSize: 11 }}>{MKT[w.market]}{w.observe ? ' · 观察' : ''}</span>}
+                  {w.long_term_label ? <Badge tone={ltTone(w.long_term_label.label)}>长期 {w.long_term_label.label}</Badge> : <span className="t-faint" style={{ fontSize: 11 }}>{MKT[w.market]}{w.gray ? ' · 灰度影子' : (w.observe ? ' · 观察' : '')}</span>}
                 </span>
               </a>
-              {removing === w.symbol ? (
+              {removing === (w.asset_key || assetKey(w.symbol, w.market)) ? (
                 <span className="row" style={{ gap: 4, flex: 'none' }}>
-                  <button className="btn btn-sm btn-danger" onClick={() => remove(w.symbol)}>确认</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => remove(w.symbol, w.market)}>确认</button>
                   <button className="btn btn-sm btn-quiet" onClick={() => setRemoving(null)}>取消</button>
                 </span>
               ) : (
-                <button className="btn btn-sm btn-quiet btn-danger" title="移除" onClick={() => setRemoving(w.symbol)} style={{ padding: '2px 9px', flex: 'none' }}>×</button>
+                <button className="btn btn-sm btn-quiet btn-danger" title="移除" onClick={() => setRemoving(w.asset_key || assetKey(w.symbol, w.market))} style={{ padding: '2px 9px', flex: 'none' }}>×</button>
               )}
             </div>
           )} />

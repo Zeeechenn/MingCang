@@ -231,9 +231,16 @@ def test_prepare_symbol_research_returns_dossier_and_missing_items(test_db, monk
 
 def test_prepare_symbol_research_accepts_hk_without_cn_financial_sync(test_db, monkeypatch):
     from backend.api.routes.research import prepare_symbol_research
+    from backend.config import settings
     from backend.data.database import Stock
 
     monkeypatch.setattr("backend.data.market.backfill_if_needed", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(settings, "multimarket_gray_enabled", True)
+    monkeypatch.setattr(settings, "multimarket_gray_symbols", "HK:00700")
+    monkeypatch.setattr("backend.data.fundamentals.sync_financial_metrics_for_market", lambda *args, **kwargs: 0)
+    monkeypatch.setattr("backend.data.news.fetch_stock_news", lambda *args, **kwargs: [])
+    monkeypatch.setattr("backend.data.market.sync_market_index_to_db", lambda *args, **kwargs: 0)
+    monkeypatch.setattr("backend.data.global_disclosures.sync_global_disclosures", lambda *args, **kwargs: 0)
 
     def fail_cn_financials(*args, **kwargs):
         raise AssertionError("HK prepare should not call CN fundamentals sync")
@@ -248,22 +255,67 @@ def test_prepare_symbol_research_accepts_hk_without_cn_financial_sync(test_db, m
     )
 
     assert response["status"] == "prepared"
-    assert response["symbol"] == "700"
-    assert response["signal_scope"] == "observe_only"
+    assert response["symbol"] == "00700"
+    assert response["signal_scope"] == "gray"
     assert response["steps"]["prices"]["ok"] is True
-    assert "financials" not in response["steps"]
-    stock = test_db.query(Stock).filter(Stock.symbol == "700").one()
+    assert response["steps"]["financials"]["ok"] is True
+    stock = test_db.query(Stock).filter(Stock.symbol == "00700").one()
     assert stock.market == "HK"
-    assert stock.active is False
+    assert stock.active is True
 
 
-def test_single_symbol_long_term_run_rejects_hk_observe_only(test_db):
+def test_frontend_financial_metrics_are_market_scoped_and_pit_auditable(test_db):
+    from backend.api.routes.research import get_symbol_financial_metrics
+    from backend.data.database import FinancialMetric
+
+    test_db.add_all([
+        FinancialMetric(
+            symbol="700",
+            market="HK",
+            report_date="2026-03-31",
+            disclosure_date="2026-05-14",
+            revenue=1_800_000_000,
+            net_profit=510_000_000,
+            roe=8.2,
+            source="yfinance",
+        ),
+        FinancialMetric(
+            symbol="700",
+            market="HK",
+            report_date="2025-12-31",
+            disclosure_date="2026-03-19",
+            revenue=6_600_000_000,
+            source="yfinance",
+        ),
+        FinancialMetric(
+            symbol="AAPL",
+            market="US",
+            report_date="2026-03-31",
+            disclosure_date="2026-05-01",
+            revenue=95_000_000_000,
+            source="sec-companyfacts",
+        ),
+    ])
+    test_db.commit()
+
+    response = get_symbol_financial_metrics("700", market="HK", limit=8, db=test_db)
+
+    assert response["asset_key"] == "HK:00700"
+    assert response["currency"] == "HKD"
+    assert [row["report_date"] for row in response["rows"]] == ["2026-03-31", "2025-12-31"]
+    assert response["rows"][0]["disclosure_date"] == "2026-05-14"
+    assert response["rows"][0]["source"] == "yfinance"
+
+
+def test_single_symbol_long_term_run_rejects_hk_observe_only(test_db, monkeypatch):
     import pytest
     from fastapi import HTTPException
 
     from backend.api.routes.watchlist import run_long_term_label
+    from backend.config import settings
     from backend.data.database import Stock
 
+    monkeypatch.setattr(settings, "multimarket_gray_enabled", False)
     test_db.add(Stock(symbol="700", name="腾讯控股", market="HK", active=True))
     test_db.commit()
 
@@ -271,7 +323,7 @@ def test_single_symbol_long_term_run_rejects_hk_observe_only(test_db):
         run_long_term_label("700", db=test_db)
 
     assert exc.value.status_code == 400
-    assert "CN-only" in exc.value.detail
+    assert "gray allowlist" in exc.value.detail
 
 
 def test_watchlist_hides_hk_us_legacy_signals_and_long_term_labels(test_db):
@@ -300,8 +352,10 @@ def test_watchlist_hides_hk_us_legacy_signals_and_long_term_labels(test_db):
 
     rows = {item.symbol: item for item in get_watchlist(db=test_db)}
 
-    assert rows["700"].latest_signal is None
-    assert rows["700"].long_term_label is None
+    assert rows["00700"].latest_signal is None
+    assert rows["00700"].long_term_label is None
+
+
 def test_single_symbol_long_term_run_returns_quality_metadata(test_db, monkeypatch):
     from backend.agents.long_term.base import LongTermLabel
     from backend.api.routes.watchlist import run_long_term_label

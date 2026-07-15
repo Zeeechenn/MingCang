@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     database_url: str = _default_database_url()
     schedule_premarket: str = "08:30"
     schedule_postmarket: str = "16:00"
+    schedule_hk_premarket: str = "08:30"
+    schedule_hk_postmarket: str = "16:30"
+    schedule_us_premarket: str = "09:00"
+    schedule_us_postmarket: str = "16:20"
+    multimarket_gray_enabled: bool = False
+    multimarket_gray_symbols: str = ""
     m63_daily_enabled: bool = True
     schedule_m63_postmarket: str = "17:30"
     tushare_token: str = ""
@@ -96,6 +102,7 @@ class Settings(BaseSettings):
     ifind_mcp_base_url: str = "https://api-mcp.51ifind.com:8643/ds-mcp-servers"
     ifind_mcp_timeout_seconds: float = 12.0
     ifind_mcp_qps_limit: float = 1.0
+    sec_user_agent: str = "MingCang local research mingcang@localhost"
     log_level: str = "INFO"
 
     # CORS 允许来源（逗号分隔；默认仅 Vite dev server，保证 dev 行为不变）
@@ -336,6 +343,24 @@ class Settings(BaseSettings):
         """Parse the comma-separated cors_origins into a clean list (split + strip + 去空)."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
+    @property
+    def multimarket_gray_asset_keys(self) -> set[str]:
+        """Parse the explicit HK/US gray allowlist as canonical asset keys."""
+        from backend.data.market_profiles import instrument_key
+
+        keys: set[str] = set()
+        for item in self.multimarket_gray_symbols.split(","):
+            raw = item.strip()
+            if not raw:
+                continue
+            market, separator, symbol = raw.partition(":")
+            if not separator or market.upper() not in {"HK", "US"} or not symbol:
+                raise ValueError(
+                    "multimarket_gray_symbols must contain comma-separated HK:<symbol>/US:<symbol> keys"
+                )
+            keys.add(instrument_key(market, symbol))
+        return keys
+
     @model_validator(mode="after")
     def _validate_runtime_invariants(self) -> Self:
         for prefix in ("", "test1_"):
@@ -356,6 +381,7 @@ class Settings(BaseSettings):
             raise ValueError("entry_risk_budget_pct must be >= 0")
         if self.entry_account_size is not None and self.entry_account_size < 0:
             raise ValueError("entry_account_size must be >= 0")
+        _ = self.multimarket_gray_asset_keys
         if self.mingcang_agent_mode == "local":
             def _is_local_origin(origin: str) -> bool:
                 from urllib.parse import urlparse

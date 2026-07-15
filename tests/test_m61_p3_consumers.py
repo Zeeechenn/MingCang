@@ -137,6 +137,10 @@ def _init_panel_db(path):
         CREATE TABLE financial_metrics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol TEXT,
+            asset_key TEXT,
+            market TEXT DEFAULT 'CN',
+            currency TEXT,
+            source TEXT,
             report_date TEXT,
             disclosure_date TEXT,
             period_type TEXT,

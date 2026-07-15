@@ -27,8 +27,12 @@ def label_to_schema(lt) -> LongTermLabelOut | None:
     """Convert a LongTermLabel ORM row to the API schema, or None."""
     if lt is None:
         return None
+    from backend.data.market_profiles import instrument_key
+
     return LongTermLabelOut(
         symbol=lt.symbol,
+        market=lt.market,
+        asset_key=instrument_key(lt.market, lt.symbol),
         date=lt.date,
         label=lt.label,
         score=lt.score,
@@ -45,20 +49,30 @@ def label_to_schema(lt) -> LongTermLabelOut | None:
 def get_watchlist(db: Session = Depends(get_db)):
     """Return all active watchlist stocks with their latest signal and long-term label."""
     from backend.agents.long_term.storage import bulk_get_labels
-    from backend.decision.market_policy import is_production_signal_market
+    from backend.decision.market_policy import signal_scope_for
 
     stocks = db.query(Stock).filter(Stock.active).all()
-    production_symbols = [s.symbol for s in stocks if is_production_signal_market(s.market)]
+    production_symbols = [s.symbol for s in stocks if s.market == "CN"]
     labels = bulk_get_labels(production_symbols, db) if production_symbols else {}
     result = []
     for s in stocks:
-        production_market = is_production_signal_market(s.market)
-        sig = latest_signal(s.symbol, db) if production_market else None
-        lt = labels.get(s.symbol)
+        scope = signal_scope_for(s.market, s.symbol)
+        sig = latest_signal(s.symbol, db, market=s.market) if scope in {"production", "gray"} else None
+        if s.market == "CN":
+            lt = labels.get(s.symbol)
+        else:
+            from backend.agents.long_term.storage import get_active_label
+
+            lt = get_active_label(s.symbol, db, market=s.market)
         result.append(WatchlistItem(
             symbol=s.symbol,
             name=s.name,
             market=s.market,
+            asset_key=s.asset_key,
+            currency=s.currency,
+            timezone=s.timezone,
+            lot_size=s.lot_size,
+            signal_scope=scope,
             industry=s.industry,
             latest_signal=signal_to_schema(sig) if sig else None,
             long_term_label=label_to_schema(lt),
@@ -67,11 +81,11 @@ def get_watchlist(db: Session = Depends(get_db)):
 
 
 @router.get("/long-term/{symbol}", response_model=LongTermLabelOut)
-def get_long_term_label(symbol: str, db: Session = Depends(get_db)):
+def get_long_term_label(symbol: str, market: str | None = None, db: Session = Depends(get_db)):
     """Return the most recent unexpired long-term label for a symbol."""
     from backend.agents.long_term.storage import get_active_label
 
-    lt = get_active_label(symbol, db)
+    lt = get_active_label(symbol, db, market=market)
     if lt is None:
         raise HTTPException(404, "No active long-term label")
     return label_to_schema(lt)
@@ -82,18 +96,24 @@ def get_long_term_label(symbol: str, db: Session = Depends(get_db)):
     response_model=LongTermLabelOut,
     dependencies=[Depends(agent_write_guard("long_term.run"))],
 )
-def run_long_term_label(symbol: str, db: Session = Depends(get_db)):
+def run_long_term_label(symbol: str, market: str | None = None, db: Session = Depends(get_db)):
     """Run the long-term analyst team for one symbol and return the saved label."""
     from backend.agents.long_term.storage import save_label
     from backend.agents.long_term.team import LongTermTeam
-    from backend.decision.market_policy import is_production_signal_market
+    from backend.data.instruments import resolve_stock
+    from backend.decision.market_policy import is_signal_eligible_stock
 
-    stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+    stock = resolve_stock(db, symbol, market=market)
     if stock is None:
         raise HTTPException(404, f"stock {symbol} not found")
-    if not is_production_signal_market(stock.market):
-        raise HTTPException(400, "long-term constraint labels are CN-only; HK/US remain observe-only")
-    label = LongTermTeam().run(stock.symbol, stock.name, db)
+    if not is_signal_eligible_stock(stock):
+        raise HTTPException(400, "HK/US long-term labels require the explicit gray allowlist")
+    if stock.market == "CN":
+        label = LongTermTeam().run(stock.symbol, stock.name, db)
+    else:
+        from backend.agents.long_term.global_team import run_global_long_term
+
+        label = run_global_long_term(stock, db)
     save_label(label, db)
     return label_to_schema(label)
 
@@ -124,11 +144,16 @@ def add_stock(
     """Add or reactivate a stock in the watchlist and trigger backfill."""
     if market not in ("CN", "HK", "US"):
         raise HTTPException(400, "market must be CN, HK, or US")
-    existing = db.query(Stock).filter(Stock.symbol == symbol).first()
+    from backend.data.market_profiles import instrument_key, normalize_symbol
+
+    symbol = normalize_symbol(symbol, market)
+    key = instrument_key(market, symbol)
+    existing = db.query(Stock).filter(Stock.asset_key == key).first()
     if existing:
         existing.active = True
+        existing.name = name or existing.name
     else:
-        db.add(Stock(symbol=symbol, name=name, market=market))
+        db.add(Stock(symbol=symbol, name=name, market=market, active=True))
     db.commit()
     background_tasks.add_task(_backfill_task, symbol, market)
     return {"status": "ok", "backfill": "started"}
@@ -138,9 +163,11 @@ def add_stock(
     "/watchlist/{symbol}",
     dependencies=[Depends(agent_write_guard("watchlist.remove"))],
 )
-def remove_stock(symbol: str, db: Session = Depends(get_db)):
+def remove_stock(symbol: str, market: str | None = None, db: Session = Depends(get_db)):
     """Soft-delete a stock from the watchlist (sets active=False)."""
-    stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+    from backend.data.instruments import resolve_stock
+
+    stock = resolve_stock(db, symbol, market=market)
     if stock:
         stock.active = False
         db.commit()

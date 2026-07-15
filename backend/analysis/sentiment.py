@@ -12,6 +12,11 @@ _CACHE_MAX_SIZE = 256
 _cache: OrderedDict[str, dict] = OrderedDict()  # 进程内 LRU 缓存，避免相同新闻重复调用 API
 
 SYSTEM_PROMPT = "你是专业的A股新闻分析师。分析新闻标题列表，评估对股票的短期情感影响。sentiment范围-1.0到1.0，key_events最多3条。"
+_MARKET_SYSTEM_PROMPTS = {
+    "CN": SYSTEM_PROMPT,
+    "HK": "你是专业的港股新闻分析师。结合港股公告与中英文新闻，评估对股票的短期情感影响。sentiment范围-1.0到1.0，key_events最多3条。",
+    "US": "你是专业的美股新闻分析师。结合SEC披露与英文财经新闻，评估对股票的短期情感影响。sentiment范围-1.0到1.0，key_events最多3条。",
+}
 
 _SENTIMENT_TOOL = {
     "name": "record_sentiment",
@@ -66,9 +71,14 @@ def _titles_hash(titles: list[str]) -> str:
     ).hexdigest()
 
 
-def _cache_key(titles: list[str], symbol: str | None = None) -> tuple[str, str]:
+def _cache_key(
+    titles: list[str],
+    symbol: str | None = None,
+    market: str | None = None,
+) -> tuple[str, str]:
     titles_hash = _titles_hash(titles)
-    return f"{symbol or '*'}:{titles_hash}", titles_hash
+    market_prefix = f"{market.upper()}:" if market and market.upper() != "CN" else ""
+    return f"{market_prefix}{symbol or '*'}:{titles_hash}", titles_hash
 
 
 def _cache_get(key: str) -> dict | None:
@@ -158,7 +168,11 @@ def _persistent_cache_set(key: str, titles_hash: str, symbol: str | None, value:
         return
 
 
-def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
+def analyze_news(
+    titles: list[str],
+    symbol: str | None = None,
+    market: str | None = None,
+) -> dict:
     """
     输入新闻标题列表，返回情感分析结果。
     {sentiment: float, summary: str, impact: str, key_events: list}
@@ -169,7 +183,8 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
     if not has_runtime_llm_provider(settings):
         return apply_event_score(_DISABLED_FALLBACK, titles)
 
-    cache_key, titles_hash = _cache_key(titles, symbol)
+    normalized_market = str(market or "CN").upper()
+    cache_key, titles_hash = _cache_key(titles, symbol, normalized_market)
     cached = _cache_get(cache_key)
     if cached is not None:
         return apply_event_score(cached, titles)
@@ -178,13 +193,14 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
         _cache_set(cache_key, cached)
         return apply_event_score(cached, titles)
 
-    context = f"股票代码：{symbol}\n" if symbol else ""
+    context = f"市场：{normalized_market}\n股票代码：{symbol}\n" if symbol else f"市场：{normalized_market}\n"
     prompt = context + "新闻标题：\n" + "\n".join(f"- {t}" for t in titles[:15])
+    system_prompt = _MARKET_SYSTEM_PROMPTS.get(normalized_market, SYSTEM_PROMPT)
 
     data = get_provider().complete_structured(
         prompt=prompt,
         tool=_SENTIMENT_TOOL,
-        system=SYSTEM_PROMPT,
+        system=system_prompt,
         max_tokens=300,
         model_tier="fast",
     )
@@ -192,7 +208,7 @@ def analyze_news(titles: list[str], symbol: str | None = None) -> dict:
         import json as _json
 
         from backend.ops.llm_usage import log_llm_usage
-        log_llm_usage("sentiment", SYSTEM_PROMPT + prompt, _json.dumps(data))
+        log_llm_usage("sentiment", system_prompt + prompt, _json.dumps(data))
     except Exception:
         pass
 

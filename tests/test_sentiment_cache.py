@@ -32,3 +32,30 @@ def test_sentiment_cache_is_bounded():
 
     assert len(sentiment._cache) == sentiment._CACHE_MAX_SIZE
     assert "0" not in sentiment._cache
+
+
+def test_market_sentiment_uses_separate_prompt_and_cache(monkeypatch):
+    from backend.analysis import sentiment
+
+    sentiment._cache.clear()
+    seen = []
+    monkeypatch.setattr(sentiment, "has_runtime_llm_provider", lambda settings: True)
+    monkeypatch.setattr(sentiment, "_persistent_cache_get", lambda _key: None)
+    monkeypatch.setattr(sentiment, "_persistent_cache_set", lambda *args: None)
+    provider = type("Provider", (), {
+        "complete_structured": lambda self, **kwargs: seen.append(kwargs) or {
+            "sentiment": 0.1,
+            "summary": "neutral",
+            "impact": "short",
+            "key_events": [],
+        }
+    })()
+    monkeypatch.setattr(sentiment, "get_provider", lambda: provider)
+
+    sentiment.analyze_news(["earnings update"], symbol="AAPL", market="US")
+    sentiment.analyze_news(["earnings update"], symbol="AAPL", market="HK")
+
+    assert len(seen) == 2
+    assert "美股" in seen[0]["system"]
+    assert "港股" in seen[1]["system"]
+    assert sentiment._cache_key(["same"], "AAPL", "US")[0].startswith("US:")

@@ -18,6 +18,33 @@ A_SHARE_ROUND_TRIP_COST = (
 )
 
 
+def market_round_trip_cost(
+    market: str,
+    *,
+    notional: float = 10_000.0,
+    shares: float = 100.0,
+) -> float:
+    """Return the market-specific estimated round-trip rate for local replay."""
+    from backend.data.market_profiles import get_market_profile
+
+    estimate = get_market_profile(market).costs.estimate_round_trip(
+        notional=notional,
+        shares=shares,
+    )
+    return float(estimate["rate"])
+
+
+def net_return_for_market(
+    gross_return: float,
+    market: str,
+    *,
+    notional: float = 10_000.0,
+    shares: float = 100.0,
+) -> float:
+    """Apply the selected market's cost model to a gross replay return."""
+    return gross_return - market_round_trip_cost(market, notional=notional, shares=shares)
+
+
 def net_return(gross_return: float, *, round_trip_cost: float = A_SHARE_ROUND_TRIP_COST) -> float:
     """Convert a gross trade return to an approximate net return after A-share round-trip costs."""
     return gross_return - round_trip_cost

@@ -13,12 +13,14 @@ router = APIRouter()
 
 
 @router.get("/prices/{symbol}", response_model=list[PriceBar])
-def get_prices(symbol: str, days: int = 120, db: Session = Depends(get_db)):
+def get_prices(symbol: str, days: int = 120, market: str | None = None, db: Session = Depends(get_db)):
     """Return OHLCV price bars for a symbol over the past days."""
     cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).strftime("%Y-%m-%d")
+    query = db.query(Price).filter(Price.symbol == symbol, Price.date >= cutoff)
+    if market is not None:
+        query = query.filter(Price.market == market.upper())
     rows = (
-        db.query(Price)
-        .filter(Price.symbol == symbol, Price.date >= cutoff)
+        query
         .order_by(Price.date.asc())
         .all()
     )

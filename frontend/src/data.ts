@@ -308,12 +308,12 @@ export const MC_DATA: any = (function () {
       HK: ['akshare_hk', 'local_cache'],
       US: ['yfinance', 'local_cache'],
     },
-    policies: { CN: '盘中只读缓存，收盘后增量拉取', HK: 'observe-only，日线收盘拉取', US: 'observe-only，日线收盘拉取' },
+    policies: { CN: '盘中只读缓存，收盘后增量拉取', HK: '白名单收盘后生成影子信号，其他仅观察', US: '白名单收盘后生成影子信号，其他仅观察' },
     max_lag_days: { CN: 1, HK: 2, US: 2 },
     checks: { 价格新鲜度: true, 新闻审计覆盖: true, 反穿越检查: true, 财务数据完整性: true, 指数数据: true, 情绪缓存命中: false },
     warnings: [
       { code: 'SENTIMENT_CACHE_MISS', message: '002230 最近 2 条新闻未命中情绪缓存，下次盘后将调用 LLM 重算(预计 ¥0.04)。' },
-      { code: 'HK_PRICE_LAG', message: '00700 港股日线滞后 1 天，处于 2 天容忍范围内，observe-only 不影响 CN 官方信号。' },
+      { code: 'HK_PRICE_LAG', message: '00700 港股日线滞后 1 天，处于 2 天容忍范围内；灰度影子不影响 CN 官方信号。' },
     ],
     stocks: WATCHLIST.map((w) => ({
       symbol: w.symbol, name: w.name, market: w.market,
@@ -683,7 +683,7 @@ export const MC_DATA: any = (function () {
         ['Piotroski F', '—', '需 5 年财务', ''],
       ],
       rows: [],
-      cash_flow: '财务数据待回填。港股 / 美股为 observe-only，财务面仅作研究参考。',
+      cash_flow: '财务数据待回填。港股 / 美股处于灰度影子轨，财务面只作研究参考，不触发仓位、提醒或下单。',
       qfii: 'QFII 数据仅 A 股适用。',
     },
   };
@@ -734,13 +734,13 @@ export const MC_DATA: any = (function () {
 官方信号「可关注」(综合 +18)，长期标签「观望」。质量稳定但缺乏短线弹性，**只加入观察，不新增仓位**。`,
     _default: `## 个股分析
 
-该标的暂无完整研究档案。可在 AI 对话中运行「深度研究」或「长期研究团队」生成结构化分析;港股 / 美股为 observe-only，数据仅用于研究，不进入 A 股官方信号。`,
+该标的暂无完整研究档案。可在 AI 对话中运行「深度研究」或「长期研究团队」生成结构化分析;港股 / 美股按独立市场规则进入灰度影子轨，非白名单仅观察，均不触发仓位、提醒或下单。`,
   };
 
   const WORKFLOWS = [
     { id: 'premarket', label: '盘前', status: '就绪', tone: 'badge-accent', summary: '同步前检查、覆盖缺口、当日入口', side_effect: '默认只读预检' },
     { id: 'intraday', label: '盘中', status: '只读', tone: 'badge-dim', summary: '缓存行情、持仓风险、止损观察', side_effect: '不触网、不写信号' },
-    { id: 'postmarket', label: '盘后', status: '主流程', tone: 'badge-up', summary: '全市场信号、复盘、导出、记忆候选', side_effect: '写 signals / reviews' },
+    { id: 'postmarket', label: '盘后', status: '主流程', tone: 'badge-up', summary: '分市场信号、复盘、导出、记忆候选', side_effect: 'CN 正式 / HK-US 灰度影子' },
     { id: 'weekend', label: '周末', status: '慢变量', tone: 'badge-warn', summary: '长期标签、周度反思、研究题库', side_effect: '写 long-term / review' },
   ];
 
@@ -866,7 +866,7 @@ export const MC_DATA: any = (function () {
   };
 
   const SYSTEM = {
-    version: '0.6.3', release: [['v0.6.3', '可信度与结构治理'], ['M65', '裁决归档'], ['M66', '渐进迁移'], ['Quant', '生产关闭']],
+    version: '0.7.0', release: [['v0.7.0', '多市场灰度'], ['A/HK/US', '独立规则'], ['Shadow', '零仓位'], ['Quant', '港美关闭']],
     market_overview: { available: true, name: '沪深300', close: 4082.35, change_pct: 0.42, date: '2026-06-09',
       indices: [
         { name: '上证指数', close: 3421.56, change_pct: 0.38 },

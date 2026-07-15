@@ -1,7 +1,7 @@
 # Changelog
 
 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/) 规范。
-各里程碑按完成时间倒序排列。
+各版本按完成时间倒序排列。
 历史条目中的测试数量只记录当时验证输出；当前套件规模与最新通过状态以 `STATUS.md` 的 `make verify` 摘要为准。
 
 ---
@@ -9,6 +9,39 @@
 ## [Unreleased]
 
 _（下一版工作累积区）_
+
+---
+
+## [v0.7.0] A/HK/US multi-market integration & gray validation / A/HK/US 多市场接入与灰度验证（2026-07-16）
+
+### Added / 新增
+
+- **A/HK/US 多市场完整接入**：新增 market-scoped `asset_key` 身份与 schema、CN/HK/US 独立
+  market profile、港美股行情/财务/新闻/公告适配器、全球长期研究、分市场收盘调度、灰度 bootstrap、
+  价格重同步和同池等权回放工具。港股 `00700/09988` 与美股 `AAPL/MSFT/NVDA` 已进入小池影子灰度。
+
+### Changed / 变更
+
+- A 股 production 规则保持不变；HK 灰度使用 `0.65 technical / 0.35 sentiment`，US 使用
+  `0.75 / 0.25`，两者均不复用 CN 训练 quant（`quant=0`）。API、持仓、信号、前端筛选与长期标签
+  全部识别市场身份，灰度卡片明确显示“影子 · 不下单”。
+- 前端股票路由、缓存、列表 key、K 线、新闻、财务和归因全部按 `market + symbol` 隔离；持仓和盈亏
+  按 CNY/HKD/USD 分组展示，不再跨币种求和。个股页展示本市场权重、结算、手数、价格保护、时区和
+  gray/observe 边界，并通过新财务接口读取带披露日与来源的 PIT 记录。
+- 回放分别使用 CN/HK/US 的交易、结算、手数、价格约束、复权与成本规则；截至 2026-07-14，五股
+  等权策略成本后 `+127.97%`，同池等权持有 `+1232.93%`，最大单票贡献 `50.77%`，晋升裁决 **HOLD**。
+
+### Safety / 安全边界
+
+- 港美股灰度只写研究/模拟信号，仓位固定为 0，不发提醒、不接券商、不创建订单，也不改变 CN 正式链。
+  US 公告 403、实时单源、正式交易所日历与情绪模型退化均显式记录为晋升阻断项，未过门不得扩池。
+
+### Verification / 验证
+
+- `make verify` 全绿：backend pytest `1757 passed / 5 skipped`；ruff、release hygiene、mypy（321 个
+  source files，0 error）通过；前端 typecheck、27 项 Vitest、build、零 warning ESLint、15 个桌面 / 13 个
+  移动端 Playwright smoke 与 source-truth 检查全绿。另以真实浏览器确认港股 2/2、美股 3/3 筛选和
+  “影子 · 不下单”标识，console error/warning 为 0。
 
 ---
 

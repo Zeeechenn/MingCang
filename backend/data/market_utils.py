@@ -12,6 +12,8 @@ logger = logging.getLogger("backend.data.market")
 
 DAILY_PROVIDER_ADJUSTMENTS = {
     "tickflow_cn": "forward_additive",
+    "tickflow_hk": "forward",
+    "tickflow_us": "forward",
     "akshare_sina_cn": "qfq",
     "efinance_cn": "qfq",
     "eastmoney_cn": "qfq",
@@ -25,6 +27,8 @@ INDEX_PROVIDER_ADJUSTMENTS = {
     "eastmoney_index_cn": "index_unadjusted",
     "efinance_index_cn": "index_unadjusted",
     "yfinance_index_cn": "auto_adjust",
+    "yfinance_index_hk": "auto_adjust",
+    "yfinance_index_us": "auto_adjust",
 }
 
 

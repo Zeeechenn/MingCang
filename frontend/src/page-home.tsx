@@ -2,7 +2,7 @@
 // 主页 — 明仓终端 / 大对话框 / 结果驾驶台
 // ============================================================
 import React from 'react';
-import { Badge, DataSourceNotice, MCStore, MKT, Markdown, McIcon, Spark, fmt, navigate, toast, useStore } from './shared';
+import { Badge, CCY, DataSourceNotice, MCStore, MKT, Markdown, McIcon, Spark, fmt, navigate, scopedData, stockPath, toast, useStore } from './shared';
 const {
   useState: useHState,
   useRef: useHRef,
@@ -49,10 +49,11 @@ function symbolFromText(text, fallback = '300308') {
   return hit ? hit[0].toUpperCase() : fallback;
 }
 
-function stockOf(symbol, state) {
+function stockOf(symbol, state, market) {
   const D = window.MC_DATA;
-  return state.watchlist.find((w) => w.symbol === symbol)
-    || D.SEARCH_POOL.find((s) => s.symbol === symbol)
+  const matches = (row) => row.symbol === symbol && (!market || (row.market || 'CN') === market);
+  return state.watchlist.find(matches)
+    || D.SEARCH_POOL.find(matches)
     || state.watchlist.find((w) => w.symbol === '300308')
     || D.SEARCH_POOL[0];
 }
@@ -69,9 +70,9 @@ function detectIntent(text) {
   return 'help';
 }
 
-function newsFor(symbol) {
+function newsFor(symbol, market = 'CN') {
   const D = window.MC_DATA;
-  return (D.NEWS[symbol] || D.NEWS._default || []).slice(0, 3).map((n) => ({
+  return (scopedData(D.NEWS, symbol, market) || D.NEWS._default || []).slice(0, 3).map((n) => ({
     label: n.source,
     status: n.audit === 'warning' ? 'warning' : 'pass',
     note: n.title,
@@ -79,30 +80,39 @@ function newsFor(symbol) {
   }));
 }
 
-function defaultSignal(state, symbol) {
-  const stock = state.watchlist.find((w) => w.symbol === symbol) || state.watchlist.find((w) => w.latest_signal);
+function defaultSignal(state, symbol, market = 'CN') {
+  const stock = state.watchlist.find((w) => w.symbol === symbol && (w.market || 'CN') === market)
+    || state.watchlist.find((w) => w.latest_signal && (w.market || 'CN') === market);
   return stock?.latest_signal || state.watchlist.find((w) => w.latest_signal)?.latest_signal;
 }
 
 function buildRun(text, state) {
   const intent = detectIntent(text);
   const symbol = symbolFromText(text);
-  const stock = stockOf(symbol, state);
-  const signal = defaultSignal(state, stock.symbol);
-  const position = state.positions.find((p) => p.symbol === stock.symbol && p.status !== 'closed');
+  const inferredMarket = /^[A-Z]/.test(symbol) ? 'US' : (/^\d{5}$/.test(symbol) ? 'HK' : 'CN');
+  const stock = stockOf(symbol, state, inferredMarket);
+  const signal = defaultSignal(state, stock.symbol, stock.market || 'CN');
+  const position = state.positions.find((p) => p.symbol === stock.symbol && (p.market || 'CN') === (stock.market || 'CN') && p.status !== 'closed');
   const open = state.positions.filter((p) => p.status !== 'closed');
-  const marketValue = open.reduce((sum, p) => sum + p.latest_price * p.quantity, 0);
+  const marketValues = open.reduce((acc, p) => {
+    const market = p.market || 'CN';
+    acc[market] = (acc[market] || 0) + p.latest_price * p.quantity;
+    return acc;
+  }, {});
+  const portfolioValue = Object.entries(marketValues)
+    .map(([market, value]) => `${CCY[market] || market} ${fmt.money(value)}`)
+    .join(' / ') || '无持仓';
   const name = stock.name || stock.symbol;
-  const baseSources = newsFor(stock.symbol);
+  const baseSources = newsFor(stock.symbol, stock.market || 'CN');
   const baseMetrics = [
     ['综合分', fmt.signed(signal?.composite_score || 0), signal?.composite_score >= 0 ? 'up' : 'down', signal?.recommendation || '观察'],
     ['技术', fmt.signed(signal?.technical_score || 0), signal?.technical_score >= 0 ? 'up' : 'down', '趋势/量能/MACD'],
     ['情绪', fmt.signed(signal?.sentiment_score || 0, 2), signal?.sentiment_score >= 0 ? 'up' : 'down', '来源审计后参与'],
-    ['持仓', position ? `${position.quantity} 股` : '未持有', '', position ? `成本 ${fmt.price(position.avg_cost)}` : '仅观察'],
+    ['持仓', position ? `${position.quantity} 股` : '未持有', '', position ? `成本 ${CCY[position.market || 'CN'] || ''} ${fmt.price(position.avg_cost)}` : '仅观察'],
   ];
 
   if (intent === 'watchlist') {
-    const target = stockOf(symbol, state);
+    const target = stockOf(symbol, state, inferredMarket);
     return {
       intent,
       title: `加入自选 · ${target.name}`,
@@ -121,7 +131,7 @@ function buildRun(text, state) {
       ],
       sources: [{ label: '演示股票池', status: 'pass', note: '来自本地演示股票池', meta: target.symbol }],
       pending: { type: 'watchlist.add', label: `确认加入自选:${target.name}`, note: '写入终端示例状态，刷新后不会持久化', payload: target },
-      actions: [[`打开 ${target.name} 案卷`, `/stock/${target.symbol}`], ['打开今日裁决', '/pulse']],
+      actions: [[`打开 ${target.name} 案卷`, stockPath(target.symbol, target.market)], ['打开今日裁决', '/pulse']],
     };
   }
 
@@ -242,8 +252,9 @@ function buildRun(text, state) {
         ['研究总监', '保留长期标签，但短期仓位只允许小仓试错。'],
       ],
       sources: baseSources,
-      actions: [['打开研究副驾驶', '/chat'], [`打开 ${name} 案卷`, `/stock/${stock.symbol}`]],
+      actions: [['打开研究副驾驶', '/chat'], [`打开 ${name} 案卷`, stockPath(stock.symbol, stock.market)]],
       spark: stock.symbol,
+      sparkMarket: stock.market,
     };
   }
 
@@ -252,7 +263,7 @@ function buildRun(text, state) {
       intent,
       title: '今日持仓裁决',
       summary: '已合并信号、持仓纪律、来源健康和复盘记忆。',
-      answer: `## 今日持仓裁决\n\n**主结论:** 最强可执行标的是 **${name} ${stock.symbol}**，综合分 ${fmt.signed(signal?.composite_score || 0)}。\n\n- 当前打开持仓 ${open.length} 笔，演示市值约 ${fmt.money(marketValue)}。\n- ${name} 技术分 ${fmt.signed(signal?.technical_score || 0)}，情绪分 ${fmt.signed(signal?.sentiment_score || 0, 2)}。\n- 允许规则内小仓试错，禁止追高加仓。\n- 系统只生成研究记录和待确认动作，不自动下单。`,
+      answer: `## 今日持仓裁决\n\n**主结论:** 最强可执行标的是 **${name} ${stock.symbol}**，综合分 ${fmt.signed(signal?.composite_score || 0)}。\n\n- 当前打开持仓 ${open.length} 笔，分市场市值约 ${portfolioValue}。\n- ${name} 技术分 ${fmt.signed(signal?.technical_score || 0)}，情绪分 ${fmt.signed(signal?.sentiment_score || 0, 2)}。\n- 允许规则内小仓试错，禁止追高加仓。\n- 系统只生成研究记录和待确认动作，不自动下单。`,
       modules: ['今日裁决', '持仓纪律', '来源健康', '复盘案卷'],
       trace: ['读取信号', '合并持仓纪律', '审计来源', '生成裁决摘要'],
       metrics: baseMetrics,
@@ -261,13 +272,14 @@ function buildRun(text, state) {
         ['风险经理', '估值分位高，板块暴露需要合并计算。'],
       ],
       sources: baseSources,
-      actions: [['打开今日裁决', '/pulse'], [`打开 ${name} 案卷`, `/stock/${stock.symbol}`]],
+      actions: [['打开今日裁决', '/pulse'], [`打开 ${name} 案卷`, stockPath(stock.symbol, stock.market)]],
       spark: stock.symbol,
+      sparkMarket: stock.market,
     };
   }
 
   if (intent === 'stock') {
-    const held = position ? `当前持有 ${position.quantity} 股，成本 ${fmt.price(position.avg_cost)}，现价 ${fmt.price(position.latest_price)}。` : '当前没有打开持仓。';
+    const held = position ? `当前持有 ${position.quantity} 股，成本 ${CCY[position.market || 'CN'] || ''} ${fmt.price(position.avg_cost)}，现价 ${CCY[position.market || 'CN'] || ''} ${fmt.price(position.latest_price)}。` : '当前没有打开持仓。';
     return {
       intent,
       title: `${name} ${stock.symbol}`,
@@ -282,8 +294,9 @@ function buildRun(text, state) {
         ['下一步', '可以继续输入“发起长期研究团队，辩论 5 轮”。'],
       ],
       sources: baseSources,
-      actions: [[`打开 ${name} 案卷`, `/stock/${stock.symbol}`], ['发起研究副驾驶', '/chat']],
+      actions: [[`打开 ${name} 案卷`, stockPath(stock.symbol, stock.market)], ['发起研究副驾驶', '/chat']],
       spark: stock.symbol,
+      sparkMarket: stock.market,
     };
   }
 
@@ -346,7 +359,7 @@ function ResultDashboard({ run, onConfirm }: any) {
             <div className="t-eyebrow">摘要</div>
             <p>{run.summary}</p>
           </div>
-          {run.spark && <Spark symbol={run.spark} width={150} height={42} />}
+          {run.spark && <Spark symbol={run.spark} market={run.sparkMarket} width={150} height={42} />}
         </div>
 
         {run.metrics?.length > 0 && (

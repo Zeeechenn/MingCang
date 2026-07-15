@@ -13,10 +13,14 @@ from backend.data.database import Position, Price, Stock, get_db
 router = APIRouter()
 
 
-def _latest_price(db: Session, symbol: str) -> Price | None:
+def _latest_price(db: Session, asset_key: str | None, symbol: str) -> Price | None:
+    query = db.query(Price)
+    if asset_key:
+        query = query.filter(Price.asset_key == asset_key)
+    else:
+        query = query.filter(Price.symbol == symbol)
     return (
-        db.query(Price)
-        .filter(Price.symbol == symbol)
+        query
         .order_by(Price.date.desc())
         .first()
     )
@@ -24,8 +28,8 @@ def _latest_price(db: Session, symbol: str) -> Price | None:
 
 def position_to_schema(pos: Position, db: Session) -> PositionOut:
     """Serialize a position with latest mark-to-market fields."""
-    stock = db.query(Stock).filter(Stock.symbol == pos.symbol).first()
-    px = _latest_price(db, pos.symbol)
+    stock = db.query(Stock).filter(Stock.asset_key == pos.asset_key).first()
+    px = _latest_price(db, pos.asset_key, pos.symbol)
     latest = float(px.close) if px else None
     cost_value = round(float(pos.quantity or 0) * float(pos.avg_cost or 0), 2)
     market_value = round(float(pos.quantity or 0) * latest, 2) if latest is not None else None
@@ -36,6 +40,8 @@ def position_to_schema(pos: Position, db: Session) -> PositionOut:
         symbol=pos.symbol,
         name=pos.name or (stock.name if stock else pos.symbol),
         market=pos.market or (stock.market if stock else "CN"),
+        asset_key=pos.asset_key,
+        currency=pos.currency or (stock.currency if stock else None),
         quantity=pos.quantity,
         avg_cost=pos.avg_cost,
         opened_at=pos.opened_at,
@@ -73,10 +79,13 @@ def list_positions(status: str = "open", db: Session = Depends(get_db)):
 )
 def create_position(payload: PositionCreate, db: Session = Depends(get_db)):
     """Create a manual position and ensure the stock exists in the watch universe."""
-    symbol = payload.symbol.strip().upper()
-    stock = db.query(Stock).filter(Stock.symbol == symbol).first()
+    from backend.data.market_profiles import instrument_key, normalize_market, normalize_symbol
+
+    market = normalize_market(payload.market)
+    symbol = normalize_symbol(payload.symbol, market)
+    asset_key = instrument_key(market, symbol)
+    stock = db.query(Stock).filter(Stock.asset_key == asset_key).first()
     name = (payload.name or (stock.name if stock else symbol)).strip()
-    market = payload.market or (stock.market if stock else "CN")
     if stock is None:
         db.add(Stock(symbol=symbol, name=name, market=market, active=True))
     else:
@@ -126,7 +135,7 @@ def close_position(
         raise HTTPException(404, "position not found")
     if pos.status == "closed":
         raise HTTPException(409, "position already closed")
-    px = _latest_price(db, pos.symbol)
+    px = _latest_price(db, pos.asset_key, pos.symbol)
     final_price = close_price
     if final_price is None and payload and payload.close_price is not None:
         final_price = payload.close_price

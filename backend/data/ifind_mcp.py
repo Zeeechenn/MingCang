@@ -153,6 +153,17 @@ def parse_ifind_mcp_text(payload: Any) -> dict[str, Any]:
     }
 
 
+def extract_ifind_answer(payload: Any) -> str:
+    """Extract the Markdown answer nested inside an iFinD JSON-RPC response."""
+    parsed = payload if isinstance(payload, dict) and "raw_text" in payload else parse_ifind_mcp_text(payload)
+    data = parsed.get("json") if isinstance(parsed, dict) else None
+    if isinstance(data, dict):
+        nested = data.get("data")
+        if isinstance(nested, dict) and isinstance(nested.get("answer"), str):
+            return nested["answer"]
+    return str(parsed.get("raw_text") or "") if isinstance(parsed, dict) else ""
+
+
 def list_ifind_mcp_tools(mcp_id: str = STOCK_MCP_ID) -> dict[str, Any]:
     """List tools from an enabled iFinD MCP endpoint without writing local state."""
     started = time.perf_counter()
@@ -238,7 +249,7 @@ def call_ifind_mcp_tool(
 
 def extract_stock_daily_table(text: str) -> pd.DataFrame:
     """Return a normalized single-day stock table when iFinD provides complete fields."""
-    tables = parse_markdown_tables(text)
+    tables = parse_markdown_tables(extract_ifind_answer(text))
     if not tables:
         return pd.DataFrame()
     table = tables[0].copy()

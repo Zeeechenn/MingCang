@@ -20,6 +20,12 @@ const reviewContentLoaded = new Set();
 const D = () => window.MC_DATA;
 const store = () => window.MCStore;
 const poke = () => store().set({});
+const scopedKey = (symbol, market = 'CN') => `${market || 'CN'}:${String(symbol || '').toUpperCase()}`;
+
+function setScoped(map, symbol, market, value) {
+  map[scopedKey(symbol, market)] = value;
+  if (market === 'CN' || map[symbol] == null) map[symbol] = value;
+}
 
 export function isLive() { return live; }
 
@@ -65,7 +71,16 @@ function normSignal(s) {
 }
 
 function normWatchItem(w) {
-  return { ...w, industry: w.industry || '—', latest_signal: normSignal(w.latest_signal), long_term_label: w.long_term_label || null };
+  const signal_scope = w.signal_scope || (w.market === 'CN' ? 'production' : 'observe_only');
+  return {
+    ...w,
+    signal_scope,
+    observe: signal_scope === 'observe_only',
+    gray: signal_scope === 'gray',
+    industry: w.industry || '—',
+    latest_signal: normSignal(w.latest_signal),
+    long_term_label: w.long_term_label || null,
+  };
 }
 
 function normPosition(p) {
@@ -85,6 +100,41 @@ function normNews(rows) {
     sentiment: n.sentiment ?? n.sentiment_score ?? null,
     audit: n.audit || 'pass',
   }));
+}
+
+function normFinancials(payload) {
+  const rows = payload?.rows || [];
+  const latest = rows[0] || {};
+  const fmtPct = (value) => value == null ? '–' : `${Number(value).toFixed(1)}%`;
+  const fmtRatio = (value) => value == null ? '–' : Number(value).toFixed(2);
+  const inHundredMillion = (value) => value == null ? '–' : (Number(value) / 1e8).toFixed(1);
+  return {
+    quality: rows.length >= 4 ? 'pass' : 'warning',
+    periods: rows.length,
+    years: rows.length,
+    currency: payload?.currency,
+    metrics: [
+      ['营收同比', fmtPct(latest.revenue_yoy), latest.report_date || '最新披露期', (latest.revenue_yoy || 0) >= 0 ? 'up' : 'down'],
+      ['净利同比', fmtPct(latest.net_profit_yoy), latest.report_date || '最新披露期', (latest.net_profit_yoy || 0) >= 0 ? 'up' : 'down'],
+      ['ROE', fmtPct(latest.roe), '最新披露期', (latest.roe || 0) >= 0 ? 'up' : 'down'],
+      ['毛利率', fmtPct(latest.gross_margin), '最新披露期', (latest.gross_margin || 0) >= 0 ? 'up' : 'down'],
+      ['流动比率', fmtRatio(latest.current_ratio), '偿债能力', ''],
+      ['资产周转', fmtRatio(latest.asset_turnover), '经营效率', ''],
+    ],
+    rows: rows.slice(0, 6).map((row) => ({
+      year: row.report_date,
+      revenue: inHundredMillion(row.revenue),
+      profit: inHundredMillion(row.net_profit),
+      roe: row.roe == null ? '–' : Number(row.roe).toFixed(1),
+      margin: row.gross_margin == null ? '–' : Number(row.gross_margin).toFixed(1),
+    })),
+    cash_flow: latest.operating_cf == null
+      ? '最新披露期经营现金流缺失。'
+      : `最新披露期经营现金流 ${payload?.currency || ''} ${inHundredMillion(latest.operating_cf)} 亿。`,
+    provenance: rows.length
+      ? `${latest.source || 'unknown'} · 报告期 ${latest.report_date || '—'} · 披露日 ${latest.disclosure_date || '缺失'}`
+      : '当前市场标的暂无可展示的 PIT 财务记录。',
+  };
 }
 
 function normEvidence(runs) {
@@ -406,7 +456,7 @@ export async function startLive() {
   // 自选池 + 搜索池
   const wl = (watchlist || []).map(normWatchItem);
   Dd.WATCHLIST = wl;
-  Dd.SEARCH_POOL = wl.map((w) => ({ symbol: w.symbol, name: w.name, market: w.market }));
+  Dd.SEARCH_POOL = wl.map((w) => ({ ...w }));
   if (wl.length && wl[0].latest_signal?.date) Dd.SIG_DATE = wl[0].latest_signal.date;
 
   // 持仓
@@ -507,7 +557,7 @@ export async function startLive() {
 
   // 预取自选股 K 线(首页 Spark / 详情主图)
   const pricePrefetch = wl.slice(0, 30).map((w) =>
-    api.getPrices(w.symbol, 120).then((bars) => { Dd.PRICES[w.symbol] = normPrices(bars); }).catch(() => {})
+    api.getPrices(w.symbol, 120, w.market).then((bars) => { setScoped(Dd.PRICES, w.symbol, w.market, normPrices(bars)); }).catch(() => {})
   );
   const priceResults = await Promise.allSettled(pricePrefetch);
   liveSources.prices = priceResults.some((result) => result.status === 'rejected') ? 'stale' : 'live';
@@ -534,30 +584,38 @@ export async function startLive() {
 }
 
 // ---------- 个股懒取 ----------
-export async function ensureSymbol(symbol) {
-  if (!live || fetchedSymbols.has(symbol)) return;
-  fetchedSymbols.add(symbol);
+export async function ensureSymbol(symbol, requestedMarket) {
   const Dd = D();
+  const stock = Dd.WATCHLIST.find((item) => item.symbol === symbol && (!requestedMarket || item.market === requestedMarket))
+    || Dd.SEARCH_POOL.find((item) => item.symbol === symbol && (!requestedMarket || item.market === requestedMarket));
+  const market = requestedMarket || stock?.market || 'CN';
+  const fetchKey = scopedKey(symbol, market);
+  if (!live || fetchedSymbols.has(fetchKey)) return;
+  fetchedSymbols.add(fetchKey);
   const tasks = [
-    api.getPrices(symbol, 120).then((bars) => { Dd.PRICES[symbol] = normPrices(bars); }),
-    api.getNews(symbol, 72).then((rows) => { Dd.NEWS[symbol] = normNews(rows); }),
-    api.getSignalEvidence(symbol, 8).then((runs) => { Dd.EVIDENCE[symbol] = normEvidence(runs); }),
-    api.getSignalEval(symbol, 60).then((e) => { const v = normEval(e); if (v) Dd.EVAL[symbol] = v; }),
-    (atlasOn ? api.getCaseView(symbol) : api.getResearchDossier(symbol)).then((resp) => {
+    api.getPrices(symbol, 120, market).then((bars) => { setScoped(Dd.PRICES, symbol, market, normPrices(bars)); }),
+    api.getNews(symbol, 72, market).then((rows) => { setScoped(Dd.NEWS, symbol, market, normNews(rows)); }),
+    api.getSignalEval(symbol, 60, market).then((e) => { const v = normEval(e); if (v) setScoped(Dd.EVAL, symbol, market, v); }),
+    api.getFinancialMetrics(symbol, market).then((rows) => { setScoped(Dd.FINANCIALS, symbol, market, normFinancials(rows)); }),
+  ];
+  if (market === 'CN') {
+    tasks.push(
+      api.getSignalEvidence(symbol, 8, market).then((runs) => { setScoped(Dd.EVIDENCE, symbol, market, normEvidence(runs)); }),
+      (atlasOn ? api.getCaseView(symbol) : api.getResearchDossier(symbol)).then((resp) => {
       const d = atlasOn ? resp.dossier : resp;
       const v = normDossier(d);
       if (!v) return;
-      Dd.DOSSIER[symbol] = { ...(Dd.DOSSIER._default || {}), ...v.out };
-      if (v.evidence.length) Dd.EVIDENCE[symbol] = v.evidence;
+      setScoped(Dd.DOSSIER, symbol, market, { ...(Dd.DOSSIER._default || {}), ...v.out });
+      if (v.evidence.length) setScoped(Dd.EVIDENCE, symbol, market, v.evidence);
       if (v.research && (v.research.copilot || v.research.thesis)) {
         const cp = v.research.copilot || {};
-        Dd.COPILOT[symbol] = {
+        setScoped(Dd.COPILOT, symbol, market, {
           ...(Dd.COPILOT._default || {}),
           ...cp,
           thesis: v.research.thesis || cp.thesis || (Dd.COPILOT._default || {}).thesis,
           risks: v.research.risks?.length ? v.research.risks : (cp.risks || []),
           questions: v.research.open_questions?.length ? v.research.open_questions : (cp.questions || []),
-        };
+        });
       }
       // ATLAS:case_view 账本落到 CASE_LOOP / FORWARD_THESES(空账本时保留 _default 的诚实占位)
       if (atlasOn && resp.case_view) {
@@ -569,7 +627,7 @@ export async function ensureSymbol(symbol) {
         const rs = (d && d.research_state) || {};
         const base = Dd.CASE_LOOP._default || {};
         const caseInfo = d && d.case;
-        Dd.CASE_LOOP[symbol] = {
+        setScoped(Dd.CASE_LOOP, symbol, market, {
           ...base,
           thesis: rs.thesis || base.thesis,
           gate_status: caseInfo ? (caseInfo.quality_gate && caseInfo.quality_gate.gate_pass ? 'pass' : 'warning') : base.gate_status,
@@ -577,10 +635,11 @@ export async function ensureSymbol(symbol) {
           questions: (rs.open_questions && rs.open_questions.length) ? rs.open_questions
             : ((d.pending_questions && d.pending_questions.length) ? d.pending_questions : base.questions),
           next_review: (fts[0] && fts[0].next_review !== '—' && fts[0].next_review) || base.next_review,
-        };
+        });
       }
     }),
-  ];
+    );
+  }
   await Promise.allSettled(tasks);
   poke();
 }
@@ -598,7 +657,7 @@ async function refreshCore() {
     ]);
     const watch = (wl || []).map(normWatchItem);
     D().WATCHLIST = watch;
-    D().SEARCH_POOL = watch.map((w) => ({ symbol: w.symbol, name: w.name, market: w.market }));
+    D().SEARCH_POOL = watch.map((w) => ({ ...w }));
     store().set({
       watchlist: watch,
       positions: [...(posOpen || []), ...(posClosed || [])].map(normPosition),
@@ -617,8 +676,9 @@ export const MC_API = {
     return results
       .flatMap((result) => (result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []))
       .filter((item) => {
-        if (!item?.symbol || seen.has(item.symbol)) return false;
-        seen.add(item.symbol);
+        const key = scopedKey(item?.symbol, item?.market);
+        if (!item?.symbol || seen.has(key)) return false;
+        seen.add(key);
         return true;
       })
       .slice(0, 8);
@@ -628,9 +688,9 @@ export const MC_API = {
     await api.addStock(symbol, name, market);
     await refreshCore();
   },
-  async removeWatch(symbol) {
+  async removeWatch(symbol, market) {
     await ensureLive();
-    await api.removeStock(symbol);
+    await api.removeStock(symbol, market);
     await refreshCore();
   },
   async createPosition(payload) {

@@ -288,17 +288,73 @@ def fetch_stock_news_us(symbol: str | None = None, limit: int = 20) -> list[RawN
     return results
 
 
+def fetch_stock_news_global(symbol: str, name: str, market: str, limit: int = 20) -> list[RawNews]:
+    """Fetch HK/US company news from iFinD plus the ticker's Yahoo feed."""
+    from backend.data.market_profiles import normalize_market, normalize_symbol
+    from backend.data.market_utils import hk_yfinance_ticker
+
+    normalized_market = normalize_market(market)
+    if normalized_market not in {"HK", "US"}:
+        raise ValueError("global news adapter supports HK/US only")
+    normalized_symbol = normalize_symbol(symbol, normalized_market)
+    rows = fetch_news_ifind(normalized_symbol, name, days=7, max_results=limit)
+    try:
+        import yfinance as yf
+
+        ticker_symbol = hk_yfinance_ticker(normalized_symbol) if normalized_market == "HK" else normalized_symbol
+        for item in yf.Ticker(ticker_symbol).news or []:
+            content = item.get("content") if isinstance(item, dict) else None
+            content = content if isinstance(content, dict) else item
+            content = content if isinstance(content, dict) else {}
+            title = str(content.get("title") or "").strip()
+            canonical = content.get("canonicalUrl") or {}
+            click_through = content.get("clickThroughUrl") or {}
+            url = str(canonical.get("url") or click_through.get("url") or "").strip()
+            published = content.get("pubDate") or content.get("displayTime")
+            if not title:
+                continue
+            try:
+                published_at = datetime.fromisoformat(str(published).replace("Z", "+00:00")).astimezone(UTC).replace(tzinfo=None)
+            except (TypeError, ValueError):
+                published_at = datetime.now(UTC).replace(tzinfo=None)
+            rows.append(RawNews(
+                title=title,
+                url=url or _stable_news_url("yfinance", normalized_symbol, title),
+                published_at=published_at,
+                source="Yahoo Finance",
+                symbol=normalized_symbol,
+                content=str(content.get("summary") or "") or None,
+                provider="yfinance_news",
+            ))
+    except Exception as exc:
+        logger.warning("yfinance news failed for %s:%s: %s", normalized_market, normalized_symbol, exc)
+    deduped: dict[str, RawNews] = {}
+    for row in rows:
+        deduped.setdefault(row.url, row)
+    return list(deduped.values())[:limit]
+
+
+def fetch_stock_news(symbol: str, name: str, market: str, limit: int = 20) -> list[RawNews]:
+    """Market-aware news dispatch used by scheduled research refresh."""
+    if str(market).upper() == "CN":
+        return fetch_stock_news_cn(symbol)[:limit]
+    return fetch_stock_news_global(symbol, name, market, limit=limit)
+
+
 # ── DB 工具 ────────────────────────────────────────────────────────
 
-def save_news_to_db(news_list: list[RawNews], db) -> int:
+def save_news_to_db(news_list: list[RawNews], db, market: str = "CN") -> int:
     """
     批量写入新闻到 news 表，按 URL 去重（已存在的跳过）。
     返回本次新增条数。
     """
     from backend.data.database import NewsItem
+    from backend.data.market_profiles import instrument_key, normalize_market, normalize_symbol
 
     if not news_list:
         return 0
+
+    market = normalize_market(market)
 
     urls = [n.url for n in news_list]
     existing_urls = {
@@ -317,8 +373,11 @@ def save_news_to_db(news_list: list[RawNews], db) -> int:
         if title_hash in seen_title_hashes:
             continue
         seen_title_hashes.add(title_hash)
+        normalized_symbol = normalize_symbol(n.symbol, market) if n.symbol else n.symbol
         new_items.append(NewsItem(
-            symbol=n.symbol,
+            symbol=normalized_symbol,
+            asset_key=instrument_key(market, normalized_symbol) if normalized_symbol else None,
+            market=market,
             title=n.title,
             url=n.url,
             published_at=n.published_at,
@@ -334,7 +393,7 @@ def save_news_to_db(news_list: list[RawNews], db) -> int:
     return len(new_items)
 
 
-def get_recent_titles(symbol: str, db, hours: int = 24) -> list[str]:
+def get_recent_titles(symbol: str, db, hours: int = 24, market: str | None = None) -> list[str]:
     """
     读取该股最近 hours 小时内的新闻标题，供情感分析使用。
     最多返回 15 条（sentiment.py 上限）。
@@ -343,9 +402,14 @@ def get_recent_titles(symbol: str, db, hours: int = 24) -> list[str]:
 
     # M19.4：DB 存储的是 UTC naive，用 UTC now 计算 cutoff
     cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
+    query = db.query(NewsItem.title).filter(
+        NewsItem.symbol == symbol,
+        NewsItem.published_at >= cutoff,
+    )
+    if market is not None:
+        query = query.filter(NewsItem.market == market)
     rows = (
-        db.query(NewsItem.title)
-        .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
+        query
         .order_by(NewsItem.published_at.desc())
         .limit(15)
         .all()
@@ -353,7 +417,12 @@ def get_recent_titles(symbol: str, db, hours: int = 24) -> list[str]:
     return [r[0] for r in rows]
 
 
-def get_recent_news_items(symbol: str, db, hours: int = 24) -> list[RawNews]:
+def get_recent_news_items(
+    symbol: str,
+    db,
+    hours: int = 24,
+    market: str | None = None,
+) -> list[RawNews]:
     """
     读取该股最近 hours 小时内的新闻条目，保留 URL/source/time 供来源审计。
     最多返回 30 条。
@@ -361,9 +430,14 @@ def get_recent_news_items(symbol: str, db, hours: int = 24) -> list[RawNews]:
     from backend.data.database import NewsItem
 
     cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours)
+    query = db.query(NewsItem).filter(
+        NewsItem.symbol == symbol,
+        NewsItem.published_at >= cutoff,
+    )
+    if market is not None:
+        query = query.filter(NewsItem.market == market)
     rows = (
-        db.query(NewsItem)
-        .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
+        query
         .order_by(NewsItem.published_at.desc())
         .limit(30)
         .all()

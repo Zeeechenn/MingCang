@@ -499,6 +499,7 @@ def test_global_data_context_returns_read_only_envelope_for_hk_price(test_db):
     test_db.add(
         Price(
             symbol="700",
+            market="HK",
             date=date.today().isoformat(),
             open=300,
             high=310,

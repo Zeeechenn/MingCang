@@ -49,7 +49,12 @@ export function toast(msg, tone = 'accent') {
 function parseHash() {
   const h = (location.hash || '#/').replace(/^#/, '');
   const seg = h.split('/').filter(Boolean);
-  if (seg[0] === 'stock' && seg[1]) return { page: 'stock', symbol: decodeURIComponent(seg[1]) };
+  if (seg[0] === 'stock' && seg[1]) {
+    if (['CN', 'HK', 'US'].includes(seg[1]) && seg[2]) {
+      return { page: 'stock', market: seg[1], symbol: normalizeAssetSymbol(decodeURIComponent(seg[2]), seg[1]) };
+    }
+    return { page: 'stock', market: undefined, symbol: decodeURIComponent(seg[1]) };
+  }
   if (!seg[0]) return { page: 'home' };
   return { page: seg[0] };
 }
@@ -74,6 +79,32 @@ export const fmt = {
 };
 export const CCY = { CN: 'CNY', HK: 'HKD', US: 'USD' };
 export const MKT = { CN: 'A股', HK: '港股', US: '美股' };
+
+export function normalizeAssetSymbol(symbol, market = 'CN') {
+  const value = String(symbol || '').trim().toUpperCase();
+  if (market === 'HK' && /^\d+$/.test(value)) return value.padStart(5, '0');
+  if (market === 'CN' && /^\d+$/.test(value)) return value.padStart(6, '0');
+  return value;
+}
+
+export function assetKey(symbol, market = 'CN') {
+  const normalizedMarket = market || 'CN';
+  return `${normalizedMarket}:${normalizeAssetSymbol(symbol, normalizedMarket)}`;
+}
+
+export function stockPath(symbol, market = 'CN') {
+  const normalizedMarket = market || 'CN';
+  return `/stock/${normalizedMarket}/${encodeURIComponent(normalizeAssetSymbol(symbol, normalizedMarket))}`;
+}
+
+export function scopedData(map, symbol, market = 'CN') {
+  return map?.[assetKey(symbol, market)] ?? map?.[symbol] ?? map?._default;
+}
+
+export function currencyAmount(value, market = 'CN', signed = false) {
+  const amount = signed ? fmt.signedMoney(value) : fmt.money(value);
+  return `${CCY[market] || market} ${amount}`;
+}
 
 export function recTone(rec) {
   if (!rec) return 'badge-dim';
@@ -149,8 +180,8 @@ export function ScoreBar({ score, height = 6 }: any) {
   );
 }
 
-export function Spark({ symbol, width = 88, height = 30 }: any) {
-  const prices = (window.MC_DATA.PRICES[symbol] || []).slice(-30);
+export function Spark({ symbol, market = 'CN', width = 88, height = 30 }: any) {
+  const prices = (scopedData(window.MC_DATA.PRICES, symbol, market) || []).slice(-30);
   if (!prices.length) return <svg width={width} height={height}></svg>;
   const vals = prices.map((p) => p.close);
   const min = Math.min(...vals), max = Math.max(...vals);
@@ -164,11 +195,11 @@ export function Spark({ symbol, width = 88, height = 30 }: any) {
 }
 
 // ---------- 主价格图 ----------
-export function PriceChart({ symbol, signal }: any) {
+export function PriceChart({ symbol, market = 'CN', signal }: any) {
   const ref = useRef<any>(null);
   const [w, setW] = useState(800);
   const [hover, setHover] = useState<any>(null);
-  const prices = window.MC_DATA.PRICES[symbol] || [];
+  const prices = scopedData(window.MC_DATA.PRICES, symbol, market) || [];
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -491,8 +522,8 @@ export function RefreshButton({ label = '刷新', busyLabel = '同步中…', to
 }
 
 // ---------- 池排序:默认 / 按分数 / 按当日涨跌(点同一项切换升降序) ----------
-export function dailyChangePct(symbol) {
-  const px = window.MC_DATA.PRICES[symbol];
+export function dailyChangePct(symbol, market = 'CN') {
+  const px = scopedData(window.MC_DATA.PRICES, symbol, market);
   if (!px || px.length < 2) return null;
   const a = px[px.length - 1].close, b = px[px.length - 2].close;
   return ((a - b) / b) * 100;

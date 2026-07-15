@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import ValidationError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
@@ -128,6 +129,14 @@ def _runtime_config_payload() -> dict:
             "longterm_friday_time": settings.schedule_longterm_friday_time,
         },
         "kill_switch_active": bool(ks_state and ks_state.get("active")),
+        "multimarket_gray": {
+            "enabled": settings.multimarket_gray_enabled,
+            "asset_keys": sorted(settings.multimarket_gray_asset_keys),
+            "schedule": {
+                "HK": [settings.schedule_hk_premarket, settings.schedule_hk_postmarket],
+                "US": [settings.schedule_us_premarket, settings.schedule_us_postmarket],
+            },
+        },
     }
 
 
@@ -172,6 +181,9 @@ def system_status(
     settings: Settings = Depends(get_settings),
 ):
     """Return database and long-term label status summary."""
+    from backend.data.database import Stock
+    from backend.data.market_profiles import all_market_profiles_payload
+    from backend.decision.market_policy import production_signal_policy_payload
     from backend.llm import runtime_readiness
 
     latest_price_date = db.query(Price.date).order_by(Price.date.desc()).first()
@@ -184,6 +196,12 @@ def system_status(
         scheduler_state = None
 
     database_path = sqlite_path_from_url(settings.database_url)
+    market_rows = (
+        db.query(Stock.market, func.count(Stock.asset_key))
+        .filter(Stock.active)
+        .group_by(Stock.market)
+        .all()
+    )
     return {
         "version": APP_VERSION,
         "atlas_enabled": settings.atlas_enabled,
@@ -194,6 +212,9 @@ def system_status(
         "long_term_labels_count": db.query(LongTermLabel).count(),
         "latest_long_term_label_date": latest_label_date[0] if latest_label_date else None,
         "scheduler": scheduler_state,
+        "active_stocks_by_market": {market: int(count) for market, count in market_rows},
+        "market_profiles": all_market_profiles_payload(),
+        "signal_policy": production_signal_policy_payload(),
         "runtime_readiness": runtime_readiness(settings),
     }
 

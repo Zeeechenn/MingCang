@@ -33,12 +33,12 @@ def _recent_signal_returns(db, limit: int = 20) -> list[float]:
     for sig in reversed(recent_signals):
         sig_price = (
             db.query(Price.close)
-            .filter(Price.symbol == sig.symbol, Price.date == sig.date)
+            .filter(Price.asset_key == sig.asset_key, Price.date == sig.date)
             .first()
         )
         next_price = (
             db.query(Price.close)
-            .filter(Price.symbol == sig.symbol, Price.date > sig.date)
+            .filter(Price.asset_key == sig.asset_key, Price.date > sig.date)
             .order_by(Price.date.asc())
             .first()
         )
@@ -82,10 +82,10 @@ def _build_regime(db, stocks):
     sector_dfs = {}
     for s in stocks:
         prc = (db.query(Price.date, Price.close)
-               .filter(Price.symbol == s.symbol)
+               .filter(Price.asset_key == s.asset_key)
                .order_by(Price.date.desc()).limit(40).all())
         if len(prc) >= 25:
-            sector_dfs[s.symbol] = pd.DataFrame(
+            sector_dfs[s.asset_key or s.symbol] = pd.DataFrame(
                 [(r.date, r.close) for r in reversed(prc)],
                 columns=["date", "close"],
             ).set_index("date")
@@ -103,7 +103,7 @@ def _load_postmarket_context(
     from backend.config import settings
 
     regime = None
-    if settings.regime_filter_enabled:
+    if settings.regime_filter_enabled and any(stock.market == "CN" for stock in stocks):
         try:
             regime = build_regime(db, stocks)
             logger.info("regime: %s", regime.reason)
@@ -113,9 +113,16 @@ def _load_postmarket_context(
     long_term_labels = {}
     if settings.long_term_team_enabled:
         try:
-            from backend.agents.long_term.storage import bulk_get_labels
-            long_term_labels = bulk_get_labels([s.symbol for s in stocks], db)
-            logger.info("long_term labels loaded: %d/%d", len(long_term_labels), len(stocks))
+            from backend.agents.long_term.storage import bulk_get_labels, get_active_label
+            cn_symbols = [s.symbol for s in stocks if s.market == "CN"]
+            long_term_labels = bulk_get_labels(cn_symbols, db) if cn_symbols else {}
+            for stock in stocks:
+                if stock.market == "CN":
+                    continue
+                label = get_active_label(stock.symbol, db, market=stock.market)
+                if label is not None:
+                    long_term_labels[stock.asset_key] = label
+            logger.info("long_term labels loaded: %d/%d stocks", len(long_term_labels), len(stocks))
         except Exception as e:
             logger.warning("long_term labels 读取失败: %s", e)
 
@@ -132,7 +139,8 @@ def _postmarket_news_sentiment(stock, db) -> dict:
     )
     from backend.data.news_audit import audited_titles
 
-    news_items = get_recent_news_items(stock.symbol, db, hours=24)
+    market = getattr(stock, "market", "CN")
+    news_items = get_recent_news_items(stock.symbol, db, hours=24, market=market)
     titles, news_audits = audited_titles(news_items)
     db_title_count = len(titles)
     if settings.ifind_mcp_enabled and len(titles) < settings.tavily_supplement_threshold:
@@ -148,7 +156,7 @@ def _postmarket_news_sentiment(stock, db) -> dict:
             logger.info("Tavily补充 %s: +%d条 (DB=%d条)",
                         stock.symbol, len(tavily_titles), len(titles) - len(tavily_titles))
 
-    sentiment_result = analyze_news(titles, symbol=stock.symbol)
+    sentiment_result = analyze_news(titles, symbol=stock.symbol, market=market)
     sentiment_result["news_audit"] = [
         {
             "title": audit.title,
@@ -186,42 +194,78 @@ def _analyze_postmarket_stock(
     from backend.decision.aggregator import aggregate, aggregate_v2
     from backend.memory.stock_memory import build_memory_context, list_stock_memories
 
-    df = load_price_df(stock.symbol, db, days=200)
+    df = load_price_df(stock.symbol, db, days=200, market=stock.market)
     if as_of_date:
         df = df[df.index <= as_of_date]
+    expected_session = context.get("expected_session")
+    if context.get("require_fresh_close") and expected_session:
+        # Providers may already expose an in-progress current-session daily bar.
+        # Clip it before the exact-session gate so gray signals only see a
+        # clock-confirmed close and never reject a valid prior close merely
+        # because a later partial bar is present.
+        df = df[df.index <= expected_session["date"]]
     if len(df) < 60:
         logger.warning("not enough data for %s (%d rows), skipping", stock.symbol, len(df))
         return None
+
+    if context.get("require_fresh_close") and expected_session:
+        latest_date = str(df.index[-1])
+        if latest_date != expected_session["date"]:
+            logger.warning(
+                "fresh close gate rejected %s expected=%s actual=%s calendar=%s",
+                stock.asset_key,
+                expected_session["date"],
+                latest_date,
+                expected_session.get("calendar_source"),
+            )
+            return None
 
     tech = technical_score(df, market=stock.market, symbol=stock.symbol)
     close = tech["latest"]["close"]
     atr = tech["latest"]["atr14"] or 0.0
     date_str = df.index[-1]
-    quant_result = qlib_score(df, symbol=stock.symbol, db=db)
+    if stock.market == "CN":
+        quant_result = qlib_score(df, symbol=stock.symbol, db=db)
+    else:
+        # The production ranker is A-share trained.  Cross-market reuse would
+        # create false precision, so HK/US stay neutral until their own models
+        # pass market-scoped replay and promotion gates.
+        quant_result = {
+            "score": 0.0,
+            "model": f"{stock.market.lower()}_gray_neutral_quant_m67",
+            "reason": "market_model_not_promoted",
+        }
     sentiment_result = postmarket_news_sentiment(stock, db)
-    memory_context = build_memory_context(
-        db,
-        symbol=stock.symbol,
-        query=f"{stock.symbol} {stock.name}",
-        task_type="postmarket_signal",
-        record_usage=_should_record_memory_usage(context),
-    )
-    try:
-        research_pointers = list_stock_memories(
+    if stock.market == "CN":
+        memory_context = build_memory_context(
             db,
             symbol=stock.symbol,
-            memory_type="research_pointer",
-            limit=5,
+            query=f"{stock.symbol} {stock.name}",
+            task_type="postmarket_signal",
+            record_usage=_should_record_memory_usage(context),
         )
-    except Exception as exc:
-        logger.warning("research pointer context unavailable %s: %s", stock.symbol, exc)
+        try:
+            research_pointers = list_stock_memories(
+                db,
+                symbol=stock.symbol,
+                memory_type="research_pointer",
+                limit=5,
+            )
+        except Exception as exc:
+            logger.warning("research pointer context unavailable %s: %s", stock.symbol, exc)
+            research_pointers = []
+    else:
+        memory_context = {"text": "", "used_stock_memory_ids": [], "ai_memory_keys": []}
         research_pointers = []
     if research_pointers:
         sentiment_result["research_context"] = research_pointers
     reflection = memory_context.get("text", "")
-    lt_label = context["long_term_labels"].get(stock.symbol)
+    lt_label = (
+        context["long_term_labels"].get(getattr(stock, "asset_key", None))
+        or context["long_term_labels"].get(stock.symbol)
+    )
 
-    if use_multi_agent_decision():
+    if stock.market == "CN" and use_multi_agent_decision():
         result = aggregate_v2(
             quant_result=quant_result,
             technical_result=tech,
@@ -244,6 +288,15 @@ def _analyze_postmarket_stock(
             long_term_label=lt_label,
             memory_context=memory_context,
         )
+    from backend.decision.market_signal_policy import apply_market_signal_policy
+
+    result = apply_market_signal_policy(
+        result,
+        market=stock.market,
+        close=close,
+        atr=atr,
+    )
+    result["data_timestamp"] = str(date_str)
     result["news_audit"] = sentiment_result.get("news_audit", [])
     return {
         "date": date_str,
@@ -262,7 +315,9 @@ def _persist_postmarket_stock(stock, analysis: dict, db) -> None:
 
     date_str = analysis["date"]
     result = analysis["result"]
-    save_signal(stock.symbol, date_str, result, db)
+    save_signal(stock.symbol, date_str, result, db, market=stock.market)
+    if stock.market != "CN":
+        return
     try:
         save_decision(stock.symbol, date_str, result)
     except Exception as exc:
@@ -278,6 +333,10 @@ def _persist_postmarket_stock(stock, analysis: dict, db) -> None:
 
 
 def _maybe_send_postmarket_alert(stock, result: dict) -> bool:
+    from backend.decision.market_policy import signal_scope_for
+
+    if signal_scope_for(stock.market, stock.symbol) != "production":
+        return False
     from backend.decision.signal_policy import should_send_signal_alert
 
     if not should_send_signal_alert(result["recommendation"]):
@@ -302,7 +361,7 @@ def _open_position_weights(db) -> dict[str, float]:
     try:
         positions = (
             db.query(Position)
-            .outerjoin(Stock, Stock.symbol == Position.symbol)
+            .outerjoin(Stock, Stock.asset_key == Position.asset_key)
             .filter(Position.status == "open")
             .all()
         )
@@ -314,7 +373,7 @@ def _open_position_weights(db) -> dict[str, float]:
     for pos in positions:
         market = getattr(pos, "market", None)
         if not market:
-            stock = db.query(Stock).filter(Stock.symbol == pos.symbol).first()
+            stock = db.query(Stock).filter(Stock.asset_key == pos.asset_key).first()
             market = getattr(stock, "market", None)
         if not is_production_signal_market(market):
             continue
@@ -325,7 +384,7 @@ def _open_position_weights(db) -> dict[str, float]:
         try:
             latest = (
                 db.query(Price.close)
-                .filter(Price.symbol == pos.symbol)
+                .filter(Price.asset_key == pos.asset_key)
                 .order_by(Price.date.desc())
                 .first()
             )
@@ -358,9 +417,12 @@ def _apply_portfolio_decision(
         manage,
     )
 
+    production_items = [item for item in batch_items if getattr(item[0], "market", None) == "CN"]
+    if not production_items:
+        return 0
     current_weights = open_position_weights(db)
     candidates = []
-    for stock, analysis in batch_items:
+    for stock, analysis in production_items:
         result = analysis["result"]
         current = current_weights.get(stock.symbol, 0.0)
         risk_position_pct = float(result.get("risk_position_pct", result.get("position_pct")) or 0.0)
@@ -378,7 +440,7 @@ def _apply_portfolio_decision(
     decision = manage(candidates)
     batch_decision = decision_to_dict(decision)
     by_symbol = {a["symbol"]: a for a in batch_decision["allocations"]}
-    for stock, analysis in batch_items:
+    for stock, analysis in production_items:
         result = analysis["result"]
         allocation = by_symbol.get(stock.symbol)
         if allocation is None:
@@ -413,6 +475,7 @@ def load_universe_symbols(path: str | Path) -> list[str]:
 def run_postmarket_batch(
     db,
     universe_symbols: list[str] | None = None,
+    market: str | None = None,
     *,
     load_context: Callable[..., dict] = _load_postmarket_context,
     analyze_stock: Callable[..., dict | None] = _analyze_postmarket_stock,
@@ -423,15 +486,34 @@ def run_postmarket_batch(
 ) -> dict:
     """Run post-market analysis for active stocks or an explicit universe."""
     from backend.data.database import Stock
-    from backend.decision.market_policy import is_production_signal_eligible_stock
+    from backend.data.market_profiles import expected_completed_session, normalize_market
+    from backend.decision.market_policy import is_signal_eligible_stock, signal_scope_for
 
     if universe_symbols is None:
-        candidates = db.query(Stock).filter(Stock.active).all()
+        query = db.query(Stock).filter(Stock.active)
+        if market is not None:
+            market = normalize_market(market)
+            if hasattr(Stock, "market"):
+                query = query.filter(Stock.market == market)
+        candidates = query.all()
     else:
-        candidates = db.query(Stock).filter(Stock.symbol.in_(universe_symbols)).all()
-    stocks = [stock for stock in candidates if is_production_signal_eligible_stock(stock)]
+        query = db.query(Stock).filter(Stock.symbol.in_(universe_symbols))
+        if market is not None:
+            market = normalize_market(market)
+            query = query.filter(Stock.market == market)
+        candidates = query.all()
+    stocks = [stock for stock in candidates if is_signal_eligible_stock(stock)]
     context = load_context(db, stocks)
-    stats = {
+    if market in {"HK", "US"}:
+        context["require_fresh_close"] = True
+        context["expected_session"] = expected_completed_session(market)
+    scopes = {
+        getattr(stock, "asset_key", f"{stock.market}:{stock.symbol}"):
+        signal_scope_for(stock.market, stock.symbol)
+        for stock in stocks
+    }
+    stats: dict[str, Any] = {
+        "market": market or "ALL",
         "stocks": len(stocks),
         "input_stocks": len(candidates),
         "market_skipped": len(candidates) - len(stocks),
@@ -442,6 +524,9 @@ def run_postmarket_batch(
         "errors": 0,
         "alerts": 0,
         "portfolio_allocated": 0,
+        "production_stocks": sum(scope == "production" for scope in scopes.values()),
+        "gray_stocks": sum(scope == "gray" for scope in scopes.values()),
+        "fresh_close_required": market in {"HK", "US"},
     }
     batch_items: list[tuple[Any, dict]] = []
     for stock in stocks:
@@ -483,5 +568,6 @@ def run_postmarket_batch(
             stats["errors"] += 1
             logger.error("postmarket failed %s: %s", stock.symbol, e)
     logger.info("post-market done: %d stocks processed", stats["processed"])
-    run_kill_switch_checks(db)
+    if market in {None, "CN"} or any(stock.market == "CN" for stock in stocks):
+        run_kill_switch_checks(db)
     return stats

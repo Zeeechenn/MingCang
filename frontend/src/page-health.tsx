@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { refreshCoverage } from './services/live';
-import { Badge, Card, MKT, PageHead, RefreshButton, navigate, toast, useStore } from './shared';
+import { Badge, Card, MKT, PageHead, RefreshButton, assetKey, navigate, stockPath, toast, useStore } from './shared';
 
 function exportCoverageSnapshot(stocks: any[]) {
   const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -51,7 +51,7 @@ export function HealthPage() {
       <div className="grid pop" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
         {[
           ['CN 官方信号', 'A 股生产裁决', '盘后增量 + PIT 校验', 'badge-down'],
-          ['HK / US 研究', 'observe-only', '可读案卷，不进入官方信号', 'badge-dim'],
+          ['HK / US 研究', '白名单影子', '灰度池生成零仓位信号，非白名单仅观察', 'badge-accent'],
           ['反穿越', 'standing check', '证据时间戳早于信号时间', 'badge-accent'],
           ['远端调用', '默认关闭', '本地缓存优先，L3 才补充', 'badge-warn'],
         ].map(([label, value, sub, tone]) => (
@@ -71,7 +71,7 @@ export function HealthPage() {
             <div key={m} className="glass-inset" style={{ padding: 14 }}>
               <div className="spread">
                 <span style={{ fontSize: 14, fontWeight: 650 }}>{MKT[m]}</span>
-                <Badge tone={m === 'CN' ? 'badge-down' : 'badge-dim'}>{m === 'CN' ? '官方信号' : 'observe-only'}</Badge>
+                <Badge tone={m === 'CN' ? 'badge-down' : 'badge-accent'}>{m === 'CN' ? '官方信号' : '灰度 / 观察'}</Badge>
               </div>
               <div className="t-eyebrow" style={{ marginTop: 12 }}>回退链(日线)</div>
               <div className="row" style={{ flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
@@ -140,9 +140,9 @@ export function HealthPage() {
             <thead><tr><th>代码</th><th>名称</th><th>市场</th><th>最新价格日期</th><th>状态</th></tr></thead>
             <tbody>
               {C.stocks.map((s) => (
-                <tr key={s.symbol}>
+                <tr key={s.asset_key || assetKey(s.symbol, s.market)}>
                   <td className="t-num">{s.symbol}</td>
-                  <td><a className="link" onClick={() => navigate(`/stock/${s.symbol}`)}>{s.name}</a></td>
+                  <td><a className="link" onClick={() => navigate(stockPath(s.symbol, s.market))}>{s.name}</a></td>
                   <td>{MKT[s.market]}</td>
                   <td className="t-num">{s.latest_price_date}</td>
                   <td><Badge tone={s.status === 'ok' ? 'badge-down' : 'badge-warn'}>{s.status === 'ok' ? '通过' : '需复核'}</Badge></td>

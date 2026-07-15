@@ -9,6 +9,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,8 +19,12 @@ from backend.data.orm import Base, _utcnow
 class Signal(Base):
     """信号记录"""
     __tablename__ = "signals"
+    __table_args__ = (UniqueConstraint("asset_key", "date", name="uq_signal_asset_date"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String, index=True)
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    market: Mapped[str] = mapped_column(String, default="CN", index=True)
+    signal_scope: Mapped[str] = mapped_column(String, default="production", index=True)
     date: Mapped[str] = mapped_column(String, index=True)
     quant_score: Mapped[float | None] = mapped_column(Float, nullable=True)      # Qlib 量化得分
     technical_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # 技术分析得分
@@ -53,9 +58,11 @@ class LongTermLabel(Base):
     label ∈ {值得持有, 估值偏高, 观望, 规避}
     """
     __tablename__ = "long_term_labels"
-    __table_args__ = (UniqueConstraint("symbol", "date", name="uq_ltl_symbol_date"),)
+    __table_args__ = (UniqueConstraint("asset_key", "date", name="uq_ltl_asset_date"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String, index=True)
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    market: Mapped[str] = mapped_column(String, default="CN", index=True)
     date: Mapped[str] = mapped_column(String, index=True)               # 生成日 "2026-05-17"
     label: Mapped[str] = mapped_column(String)                          # 值得持有/估值偏高/观望/规避
     score: Mapped[float] = mapped_column(Float)                           # 团综合分 -100~+100
@@ -66,3 +73,17 @@ class LongTermLabel(Base):
     constraint_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
     quality_notes_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+def _fill_signal_identity(target) -> None:
+    from backend.data.market_profiles import instrument_key, normalize_market, normalize_symbol
+
+    market = normalize_market(getattr(target, "market", None))
+    target.market = market
+    target.symbol = normalize_symbol(target.symbol, market)
+    target.asset_key = instrument_key(market, target.symbol)
+
+
+for _signal_model in (Signal, LongTermLabel):
+    event.listen(_signal_model, "before_insert", lambda _m, _c, target: _fill_signal_identity(target))
+    event.listen(_signal_model, "before_update", lambda _m, _c, target: _fill_signal_identity(target))

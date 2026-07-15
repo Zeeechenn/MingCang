@@ -6,6 +6,206 @@ from typing import Any
 from sqlalchemy import text
 
 
+def _quote(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _table_columns(conn: Any, table: str) -> set[str]:
+    return {str(row[1]) for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()}
+
+
+def _add_columns(conn: Any, table: str, columns: dict[str, str]) -> None:
+    existing = _table_columns(conn, table)
+    if not existing:
+        return
+    for name, ddl_type in columns.items():
+        if name not in existing:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl_type}"))
+
+
+def _primary_key_columns(conn: Any, table: str) -> list[str]:
+    rows = conn.execute(text(f"PRAGMA table_info({_quote(table)})")).fetchall()
+    return [str(row[1]) for row in sorted(rows, key=lambda row: int(row[5] or 0)) if row[5]]
+
+
+def _unique_index_signatures(conn: Any, table: str) -> set[tuple[str, ...]]:
+    signatures: set[tuple[str, ...]] = set()
+    for row in conn.execute(text(f"PRAGMA index_list({_quote(table)})")).fetchall():
+        if not bool(row[2]):
+            continue
+        name = str(row[1])
+        columns = conn.execute(text(f"PRAGMA index_info({_quote(name)})")).fetchall()
+        signatures.add(tuple(str(column[2]) for column in columns))
+    return signatures
+
+
+def _column_definition(row: Any, create_sql: str, *, primary_key: str | None) -> str:
+    name = str(row[1])
+    column_type = str(row[2] or "").strip()
+    parts = [_quote(name)]
+    if column_type:
+        parts.append(column_type)
+    if name == primary_key:
+        parts.append("PRIMARY KEY")
+        if column_type.upper() == "INTEGER" and "autoincrement" in create_sql.lower():
+            parts.append("AUTOINCREMENT")
+    elif bool(row[3]):
+        parts.append("NOT NULL")
+    if row[4] is not None:
+        parts.append(f"DEFAULT {row[4]}")
+    return " ".join(parts)
+
+
+def _rebuild_table_with_primary_key(conn: Any, table: str, *, primary_key: str) -> None:
+    """Rebuild one SQLite table while preserving data, explicit indexes and triggers."""
+    create_sql = str(conn.execute(text(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=:table"
+    ), {"table": table}).scalar() or "")
+    rows = conn.execute(text(f"PRAGMA table_info({_quote(table)})")).fetchall()
+    if not rows:
+        return
+    indexes = [
+        str(row[0])
+        for row in conn.execute(text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type='index' AND tbl_name=:table AND sql IS NOT NULL"
+        ), {"table": table}).fetchall()
+        if row[0]
+    ]
+    triggers = [
+        str(row[0])
+        for row in conn.execute(text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type='trigger' AND tbl_name=:table AND sql IS NOT NULL"
+        ), {"table": table}).fetchall()
+        if row[0]
+    ]
+    temp = f"{table}__m67_asset_key"
+    conn.execute(text(f"DROP TABLE IF EXISTS {_quote(temp)}"))
+    definitions = [
+        _column_definition(row, create_sql, primary_key=primary_key)
+        for row in rows
+    ]
+    conn.execute(text(
+        f"CREATE TABLE {_quote(temp)} (" + ", ".join(definitions) + ")"
+    ))
+    columns = ", ".join(_quote(str(row[1])) for row in rows)
+    conn.execute(text(
+        f"INSERT INTO {_quote(temp)} ({columns}) SELECT {columns} FROM {_quote(table)}"
+    ))
+    conn.execute(text(f"DROP TABLE {_quote(table)}"))
+    conn.execute(text(f"ALTER TABLE {_quote(temp)} RENAME TO {_quote(table)}"))
+    for ddl in indexes:
+        conn.execute(text(ddl))
+    for ddl in triggers:
+        conn.execute(text(ddl))
+
+
+def _ensure_market_scoped_uniqueness(conn: Any) -> None:
+    """Replace legacy symbol-only keys with canonical market-scoped keys."""
+    if _table_columns(conn, "stocks") and _primary_key_columns(conn, "stocks") != ["asset_key"]:
+        _rebuild_table_with_primary_key(conn, "stocks", primary_key="asset_key")
+
+    contracts = {
+        "prices": (("symbol", "date"), ("asset_key", "date"), "uq_prices_asset_date"),
+        "market_snapshots": (("symbol", "date"), ("asset_key", "date"), "uq_ms_asset_date"),
+        "financial_metrics": (
+            ("symbol", "report_date"),
+            ("asset_key", "report_date"),
+            "uq_fm_asset_date",
+        ),
+        "long_term_labels": (("symbol", "date"), ("asset_key", "date"), "uq_ltl_asset_date"),
+    }
+    for table, (legacy, desired, index_name) in contracts.items():
+        if not _table_columns(conn, table):
+            continue
+        signatures = _unique_index_signatures(conn, table)
+        if legacy in signatures and desired not in signatures:
+            primary_key = _primary_key_columns(conn, table)
+            if len(primary_key) != 1:
+                raise RuntimeError(f"cannot migrate {table}: expected one primary key")
+            _rebuild_table_with_primary_key(conn, table, primary_key=primary_key[0])
+        if desired not in _unique_index_signatures(conn, table):
+            conn.execute(text(
+                f"CREATE UNIQUE INDEX IF NOT EXISTS {_quote(index_name)} "
+                f"ON {_quote(table)} ({', '.join(_quote(column) for column in desired)})"
+            ))
+
+    if _table_columns(conn, "signals"):
+        if ("asset_key", "date") not in _unique_index_signatures(conn, "signals"):
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_signal_asset_date "
+                "ON signals(asset_key, date)"
+            ))
+
+
+def _ensure_market_identity_schema(conn: Any) -> None:
+    """Add and backfill M67 market-scoped identity without breaking legacy symbol APIs."""
+    table_columns = {
+        "stocks": {
+            "asset_key": "TEXT",
+            "exchange": "TEXT",
+            "currency": "TEXT",
+            "timezone": "TEXT",
+            "lot_size": "INTEGER",
+        },
+        "positions": {"asset_key": "TEXT", "currency": "TEXT"},
+        "prices": {"asset_key": "TEXT", "market": "TEXT DEFAULT 'CN'", "currency": "TEXT"},
+        "news": {"asset_key": "TEXT", "market": "TEXT DEFAULT 'CN'"},
+        "index_prices": {"asset_key": "TEXT", "market": "TEXT DEFAULT 'CN'", "currency": "TEXT"},
+        "market_snapshots": {"asset_key": "TEXT", "market": "TEXT DEFAULT 'CN'", "currency": "TEXT"},
+        "financial_metrics": {
+            "asset_key": "TEXT",
+            "market": "TEXT DEFAULT 'CN'",
+            "currency": "TEXT",
+            "source": "TEXT",
+        },
+        "signals": {
+            "asset_key": "TEXT",
+            "market": "TEXT DEFAULT 'CN'",
+            "signal_scope": "TEXT DEFAULT 'production'",
+        },
+        "long_term_labels": {"asset_key": "TEXT", "market": "TEXT DEFAULT 'CN'"},
+        "announcements": {"asset_key": "TEXT", "market": "TEXT DEFAULT 'CN'", "currency": "TEXT"},
+    }
+    for table, columns in table_columns.items():
+        _add_columns(conn, table, columns)
+
+    for table in table_columns:
+        existing_columns = _table_columns(conn, table)
+        if not {"market", "symbol"} <= existing_columns:
+            continue
+        conn.execute(text(f"UPDATE {table} SET market='CN' WHERE market IS NULL OR market=''"))
+        if "asset_key" in existing_columns:
+            conn.execute(text(
+                f"UPDATE {table} SET asset_key=UPPER(market) || ':' || UPPER(symbol) "
+                "WHERE symbol IS NOT NULL AND symbol != '' AND (asset_key IS NULL OR asset_key='')"
+            ))
+        if "currency" in existing_columns:
+            conn.execute(text(
+                f"UPDATE {table} SET currency=CASE UPPER(market) "
+                "WHEN 'HK' THEN 'HKD' WHEN 'US' THEN 'USD' ELSE 'CNY' END "
+                "WHERE currency IS NULL OR currency=''"
+            ))
+
+    if _table_columns(conn, "stocks"):
+        conn.execute(text("UPDATE stocks SET asset_key=UPPER(COALESCE(market,'CN')) || ':' || UPPER(symbol) WHERE asset_key IS NULL OR asset_key=''"))
+        conn.execute(text("UPDATE stocks SET currency=CASE UPPER(COALESCE(market,'CN')) WHEN 'HK' THEN 'HKD' WHEN 'US' THEN 'USD' ELSE 'CNY' END WHERE currency IS NULL OR currency=''"))
+        conn.execute(text("UPDATE stocks SET timezone=CASE UPPER(COALESCE(market,'CN')) WHEN 'HK' THEN 'Asia/Hong_Kong' WHEN 'US' THEN 'America/New_York' ELSE 'Asia/Shanghai' END WHERE timezone IS NULL OR timezone=''"))
+        conn.execute(text("UPDATE stocks SET exchange=CASE UPPER(COALESCE(market,'CN')) WHEN 'HK' THEN 'HKEX' WHEN 'US' THEN 'NYSE/Nasdaq' ELSE 'SSE/SZSE/BSE' END WHERE exchange IS NULL OR exchange=''"))
+        conn.execute(text("UPDATE stocks SET lot_size=100 WHERE UPPER(COALESCE(market,'CN'))='CN' AND lot_size IS NULL"))
+        conn.execute(text("UPDATE stocks SET lot_size=1 WHERE UPPER(COALESCE(market,'CN'))='US' AND lot_size IS NULL"))
+
+    for table in table_columns:
+        existing_columns = _table_columns(conn, table)
+        if "asset_key" in existing_columns:
+            conn.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_asset_key ON {table}(asset_key)"))
+        if "market" in existing_columns:
+            conn.execute(text(f"CREATE INDEX IF NOT EXISTS idx_{table}_market ON {table}(market)"))
+
+    _ensure_market_scoped_uniqueness(conn)
+
+
 def _ensure_memory_recall_schema(runtime_engine: Any) -> None:
     """Create the unified memory recall index and FTS5 table."""
     with runtime_engine.begin() as conn:
@@ -91,6 +291,7 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
     _ensure_memory_recall_schema(runtime_engine)
 
     with runtime_engine.begin() as conn:
+        _ensure_market_identity_schema(conn)
         price_cols = [r[1] for r in conn.execute(text("PRAGMA table_info(prices)")).fetchall()]
         for col, ddl in {
             "source": "ALTER TABLE prices ADD COLUMN source TEXT",

@@ -36,12 +36,19 @@ def _json_list(raw: str | None) -> list:
 
 def save_label(label: LongTermLabel, db) -> None:
     """幂等：同 (symbol, date) 已存在则更新，否则插入"""
+    from backend.data.market_profiles import instrument_key, normalize_market, normalize_symbol
+
+    market = normalize_market(label.market)
+    symbol = normalize_symbol(label.symbol, market)
+    asset_key = instrument_key(market, symbol)
     existing = (db.query(LongTermLabelORM)
-                  .filter(LongTermLabelORM.symbol == label.symbol,
+                  .filter(LongTermLabelORM.asset_key == asset_key,
                           LongTermLabelORM.date == label.date)
                   .first())
     payload = dict(
-        symbol=label.symbol,
+        symbol=symbol,
+        asset_key=asset_key,
+        market=market,
         date=label.date,
         label=label.label,
         score=label.score,
@@ -73,7 +80,9 @@ def _write_mirror(db) -> None:
                   .all())
         out = {}
         for r in rows:
-            out[r.symbol] = {
+            payload = {
+                "symbol": r.symbol,
+                "market": getattr(r, "market", "CN") or "CN",
                 "label": r.label,
                 "score": r.score,
                 "date": r.date,
@@ -85,24 +94,33 @@ def _write_mirror(db) -> None:
                 "quality_notes": json.loads(r.quality_notes_json) if getattr(r, "quality_notes_json", None) else [],
                 "prompt_version": "m61_p3" if "prompt_version=m61_p3" in (getattr(r, "quality_notes_json", "") or "") else "legacy",
             }
+            out[r.asset_key or f"{r.market}:{r.symbol}"] = payload
+            if (getattr(r, "market", "CN") or "CN") == "CN":
+                out.setdefault(r.symbol, payload)
         mirror_path.parent.mkdir(parents=True, exist_ok=True)
         mirror_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
         logger.warning("镜像写入失败: %s", e)
 
 
-def get_active_label(symbol: str, db) -> LongTermLabel | None:
+def get_active_label(symbol: str, db, market: str | None = None) -> LongTermLabel | None:
     """取 TTL 未过期的最新一条（按 date 倒序），过期返回 None"""
+    from backend.data.market_profiles import instrument_key, normalize_market
+
     today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
-    row = (db.query(LongTermLabelORM)
-             .filter(LongTermLabelORM.symbol == symbol,
-                     LongTermLabelORM.expires_at >= today)
+    query = db.query(LongTermLabelORM).filter(LongTermLabelORM.expires_at >= today)
+    if market is not None:
+        query = query.filter(LongTermLabelORM.asset_key == instrument_key(normalize_market(market), symbol))
+    else:
+        query = query.filter(LongTermLabelORM.symbol == symbol)
+    row = (query
              .order_by(LongTermLabelORM.date.desc())
              .first())
     if row is None:
         return None
     return LongTermLabel(
         symbol=row.symbol,
+        market=getattr(row, "market", "CN") or "CN",
         date=row.date,
         label=row.label,
         score=row.score,
@@ -131,6 +149,7 @@ def bulk_get_labels(symbols: list[str], db) -> dict[str, LongTermLabel]:
     return {
         sym: LongTermLabel(
             symbol=r.symbol,
+            market=getattr(r, "market", "CN") or "CN",
             date=r.date,
             label=cast(VoteLabel, r.label),
             score=r.score,

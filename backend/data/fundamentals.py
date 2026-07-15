@@ -323,6 +323,16 @@ def sync_financial_metrics(symbol: str, db, years: int = 5) -> int:
     return inserted
 
 
+def sync_financial_metrics_for_market(symbol: str, market: str, db, years: int = 5) -> int:
+    """Dispatch financial normalization without reusing A-share providers for HK/US."""
+    normalized_market = str(market or "CN").upper()
+    if normalized_market == "CN":
+        return sync_financial_metrics(symbol, db, years=years)
+    from backend.data.global_fundamentals import sync_global_financial_metrics
+
+    return sync_global_financial_metrics(symbol, normalized_market, db)
+
+
 # ── Piotroski F-Score（9 因子） ───────────────────────────────────────
 
 PIOTROSKI_FACTORS = [

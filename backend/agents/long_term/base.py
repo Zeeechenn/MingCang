@@ -38,6 +38,7 @@ class LongTermLabel:
     constraint_eligible: bool = False
     quality_notes: list[str] = field(default_factory=list)
     prompt_version: str = "legacy"
+    market: str = "CN"
 
     def to_dict(self) -> dict:
         """Serialize label to dictionary."""
@@ -53,4 +54,5 @@ class LongTermLabel:
             "constraint_eligible": self.constraint_eligible,
             "quality_notes": self.quality_notes,
             "prompt_version": self.prompt_version,
+            "market": self.market,
         }

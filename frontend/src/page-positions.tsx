@@ -2,7 +2,7 @@
 // 持仓页 — 记录 / 平仓 / 已实现盈亏(不接券商,不自动交易)
 // ============================================================
 import React from 'react';
-import { Badge, CCY, Card, MKT, PageHead, RefreshButton, fmt, navigate, pnlClass, toast, useStockSuggest, useStore } from './shared';
+import { Badge, CCY, Card, MKT, PageHead, RefreshButton, assetKey, currencyAmount, fmt, navigate, pnlClass, stockPath, toast, useStockSuggest, useStore } from './shared';
 const { useState: usePoState, useMemo: usePoMemo } = React;
 
 function PositionForm() {
@@ -14,6 +14,11 @@ function PositionForm() {
   const sugg = useStockSuggest(q, market);
   const [picked, setPicked] = usePoState(false);
   const [pending, setPending] = usePoState<any>(null);
+  const marketHint = market === 'CN'
+    ? 'CNY · 买入通常按 100 股整手 · T+1'
+    : market === 'HK'
+      ? 'HKD · 每股整手数量不同，支持碎股记录 · 可当日卖出'
+      : 'USD · 1 股起，支持小数持仓记录 · 可当日卖出';
 
   function pickStock(s) {
     setQ(s.symbol); setName(s.name); setMarket(s.market); setPicked(true);
@@ -49,7 +54,7 @@ function PositionForm() {
           {!picked && sugg.length > 0 && (
             <div className="glass" style={{ position: 'absolute', top: 40, left: 0, width: '100%', minWidth: 230, zIndex: 30, borderRadius: 14, padding: 5, background: 'var(--glass-strong)' }}>
               {sugg.map((s) => (
-                <button key={s.symbol} type="button" className="navlink" style={{ display: 'flex', width: '100%', justifyContent: 'space-between' }} onClick={() => pickStock(s)}>
+                <button key={s.asset_key || assetKey(s.symbol, s.market)} type="button" className="navlink" style={{ display: 'flex', width: '100%', justifyContent: 'space-between' }} onClick={() => pickStock(s)}>
                   <span>{s.name}</span><span className="t-num t-faint">{s.symbol}</span>
                 </button>
               ))}
@@ -64,11 +69,12 @@ function PositionForm() {
         <input className="field" value={cost} onChange={(e) => setCost(e.target.value.replace(/[^\d.]/g, ''))} placeholder="成本价" inputMode="decimal" />
         <button className="btn btn-primary" disabled={!q || !qty || !cost} type="submit">添加</button>
       </div>
+      <div className="t-faint" style={{ fontSize: 11.5, marginTop: 7 }}>{marketHint}；这里只记录账本，不校验券商成交能力。</div>
       {pending && (
         <div className="glass-inset" style={{ padding: '12px 14px', marginTop: 10 }} role="status">
           <div style={{ fontSize: 13.5, fontWeight: 650 }}>{pending.name} · {pending.symbol}</div>
           <div className="t-dim" style={{ fontSize: 12.5, marginTop: 4 }}>
-            {MKT[pending.market]} · {fmt.money(pending.quantity)} 股 · 成本 {fmt.price(pending.avg_cost)}。确认后仅写入明仓持仓账本，不会真实下单。
+            {MKT[pending.market]} · {fmt.money(pending.quantity)} 股 · 成本 {CCY[pending.market]} {fmt.price(pending.avg_cost)}。确认后仅写入明仓持仓账本，不会真实下单。
           </div>
           <div className="row" style={{ gap: 6, marginTop: 10 }}>
             <button className="btn btn-sm btn-primary" type="button" onClick={confirm}>确认写入持仓</button>
@@ -120,7 +126,11 @@ export function PositionsPage() {
     acc[m] = cur;
     return acc;
   }, {}), [positions]);
-  const realized = closed.reduce((a, p) => a + (p.realized_pnl || 0), 0);
+  const realizedByMarket = usePoMemo(() => closed.reduce((acc, p) => {
+    const market = p.market || 'CN';
+    acc[market] = (acc[market] || 0) + (p.realized_pnl || 0);
+    return acc;
+  }, {}), [closed]);
 
   return (
     <div className="grid" style={{ gap: 14 }}>
@@ -137,18 +147,20 @@ export function PositionsPage() {
                 <span className="t-eyebrow">{MKT[m]} · {CCY[m]}</span>
                 <Badge tone="badge-dim">{t.count} 笔</Badge>
               </div>
-              <div className="t-num" style={{ fontSize: 21, fontWeight: 700, marginTop: 6 }}>{fmt.money(t.mv)}</div>
+              <div className="t-num" style={{ fontSize: 21, fontWeight: 700, marginTop: 6 }}>{currencyAmount(t.mv, m)}</div>
               <div className={`t-num ${pnlClass(pnl)}`} style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>
-                {fmt.signedMoney(pnl)} / {fmt.signedPct(t.cost ? pnl / t.cost * 100 : 0)}
+                {currencyAmount(pnl, m, true)} / {fmt.signedPct(t.cost ? pnl / t.cost * 100 : 0)}
               </div>
             </div>
           );
         })}
-        <div className="glass" style={{ padding: '14px 18px' }}>
-          <span className="t-eyebrow">已实现盈亏</span>
-          <div className={`t-num ${pnlClass(realized)}`} style={{ fontSize: 21, fontWeight: 700, marginTop: 6 }}>{fmt.signedMoney(realized)}</div>
-          <div className="t-faint" style={{ fontSize: 12, marginTop: 2 }}>{closed.length} 笔平仓记录</div>
-        </div>
+        {Object.keys(realizedByMarket).sort().map((m) => (
+          <div key={`realized-${m}`} className="glass" style={{ padding: '14px 18px' }}>
+            <span className="t-eyebrow">{MKT[m]}已实现盈亏</span>
+            <div className={`t-num ${pnlClass(realizedByMarket[m])}`} style={{ fontSize: 21, fontWeight: 700, marginTop: 6 }}>{currencyAmount(realizedByMarket[m], m, true)}</div>
+            <div className="t-faint" style={{ fontSize: 12, marginTop: 2 }}>不同币种不合并</div>
+          </div>
+        ))}
       </div>
 
       <div className="grid pop pop-1" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
@@ -187,16 +199,16 @@ export function PositionsPage() {
                   return (
                     <tr key={p.id}>
                       <td>
-                        <a className="link" style={{ fontWeight: 600 }} onClick={() => navigate(`/stock/${p.symbol}`)}>{p.name}</a>
-                        <div className="t-num t-faint" style={{ fontSize: 11.5 }}>{p.symbol} · {MKT[p.market]} · {CCY[p.market]}</div>
+                        <a className="link" style={{ fontWeight: 600 }} onClick={() => navigate(stockPath(p.symbol, p.market))}>{p.name}</a>
+                        <div className="t-num t-faint" style={{ fontSize: 11.5 }}>{p.symbol} · {MKT[p.market]} · {p.currency || CCY[p.market]}</div>
                       </td>
                       <td className="t-num">{fmt.money(p.quantity)}</td>
-                      <td className="t-num">{fmt.price(p.avg_cost)}</td>
-                      <td className="t-num">{fmt.price(p.latest_price)}</td>
+                      <td className="t-num">{p.currency || CCY[p.market]} {fmt.price(p.avg_cost)}</td>
+                      <td className="t-num">{p.currency || CCY[p.market]} {fmt.price(p.latest_price)}</td>
                       <td className="t-num" style={{ fontSize: 12.5 }}>
                         <span className="down">{fmt.price(p.stop_loss)}</span><span className="t-faint"> / </span><span className="up">{fmt.price(p.take_profit)}</span>
                       </td>
-                      <td><span className={`t-num ${pnlClass(pnl)}`} style={{ fontWeight: 650 }}>{fmt.signedMoney(pnl)}<span style={{ opacity: 0.75 }}> / {fmt.signedPct(pct)}</span></span></td>
+                      <td><span className={`t-num ${pnlClass(pnl)}`} style={{ fontWeight: 650 }}>{currencyAmount(pnl, p.market, true)}<span style={{ opacity: 0.75 }}> / {fmt.signedPct(pct)}</span></span></td>
                       <td style={{ textAlign: 'right' }}><CloseButton item={p} /></td>
                     </tr>
                   );
@@ -208,7 +220,7 @@ export function PositionsPage() {
       </Card>
 
       <Card eyebrow="Closed Positions" title="平仓记录" className="pop pop-3" pad={false}
-        right={<span className={`t-num ${pnlClass(realized)}`} style={{ fontSize: 13, fontWeight: 650 }}>已实现 {fmt.signedMoney(realized)}</span>}>
+        right={<Badge tone="badge-dim">已实现盈亏按币种分列</Badge>}>
         {closed.length === 0 ? (
           <div className="card-body"><div className="empty">暂无平仓记录。</div></div>
         ) : (
@@ -220,12 +232,12 @@ export function PositionsPage() {
                   <tr key={p.id}>
                     <td>
                       <span style={{ fontWeight: 600 }}>{p.name}</span>
-                      <div className="t-num t-faint" style={{ fontSize: 11.5 }}>{p.symbol}</div>
+                      <div className="t-num t-faint" style={{ fontSize: 11.5 }}>{p.symbol} · {MKT[p.market || 'CN']} · {p.currency || CCY[p.market || 'CN']}</div>
                     </td>
                     <td className="t-num t-faint" style={{ fontSize: 12 }}>{p.opened_at} → {p.closed_at}</td>
                     <td className="t-num">{fmt.money(p.quantity)}</td>
-                    <td className="t-num">{fmt.price(p.avg_cost)} → {fmt.price(p.close_price)}</td>
-                    <td><span className={`t-num ${pnlClass(p.realized_pnl)}`} style={{ fontWeight: 650 }}>{fmt.signedMoney(p.realized_pnl)} / {fmt.signedPct(p.realized_pnl_pct)}</span></td>
+                    <td className="t-num">{p.currency || CCY[p.market || 'CN']} {fmt.price(p.avg_cost)} → {fmt.price(p.close_price)}</td>
+                    <td><span className={`t-num ${pnlClass(p.realized_pnl)}`} style={{ fontWeight: 650 }}>{currencyAmount(p.realized_pnl, p.market || 'CN', true)} / {fmt.signedPct(p.realized_pnl_pct)}</span></td>
                     <td style={{ textAlign: 'right' }}>
                       {confirmDel === p.id ? (
                         <span className="row" style={{ gap: 6, justifyContent: 'flex-end' }}>

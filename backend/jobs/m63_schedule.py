@@ -26,7 +26,7 @@ def register_m63_postmarket(scheduler, settings, job=job_m63_postmarket) -> None
     """Register M63 separately from the signal-writing postmarket batch."""
     if not settings.m63_daily_enabled:
         return
-    from backend.scheduler import _parse_hhmm
+    from backend.jobs.schedule_registry import _parse_hhmm
 
     hour, minute = _parse_hhmm(settings.schedule_m63_postmarket, "schedule_m63_postmarket")
     scheduler.add_job(

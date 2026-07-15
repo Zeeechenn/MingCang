@@ -13,6 +13,7 @@ from backend.data.providers import get_provider_health, provider_fallback_chains
 from backend.decision.market_policy import (
     is_production_signal_market,
     production_signal_policy_payload,
+    signal_scope_for,
 )
 
 CAPABILITY_COVERAGE_COUNTERS = {
@@ -23,6 +24,12 @@ CAPABILITY_COVERAGE_COUNTERS = {
 }
 
 
+def _market_profiles_payload() -> dict:
+    from backend.data.market_profiles import all_market_profiles_payload
+
+    return all_market_profiles_payload()
+
+
 def build_data_coverage_report(db) -> dict:
     """Build a compact coverage report for active stocks."""
     register_default_market_providers()
@@ -31,31 +38,64 @@ def build_data_coverage_report(db) -> dict:
     rows: list[dict] = []
 
     for stock in stocks:
+        from backend.data.instruments import symbol_candidates
+
         price = (
             db.query(func.count(Price.id), func.min(Price.date), func.max(Price.date))
-            .filter(Price.symbol == stock.symbol)
+            .filter(Price.asset_key == stock.asset_key)
             .first()
         )
+        if not int(price[0] or 0):
+            price = (
+                db.query(func.count(Price.id), func.min(Price.date), func.max(Price.date))
+                .filter(Price.symbol.in_(symbol_candidates(stock.symbol)))
+                .first()
+            )
         latest_fin = (
             db.query(FinancialMetric.report_date)
-            .filter(FinancialMetric.symbol == stock.symbol)
+            .filter(FinancialMetric.asset_key == stock.asset_key)
             .order_by(FinancialMetric.report_date.desc())
             .first()
         )
+        if latest_fin is None:
+            latest_fin = (
+                db.query(FinancialMetric.report_date)
+                .filter(FinancialMetric.symbol.in_(symbol_candidates(stock.symbol)))
+                .order_by(FinancialMetric.report_date.desc())
+                .first()
+            )
         news_count = (
             db.query(func.count(NewsItem.id))
-            .filter(NewsItem.symbol == stock.symbol, NewsItem.published_at >= cutoff)
+            .filter(NewsItem.asset_key == stock.asset_key, NewsItem.published_at >= cutoff)
             .scalar()
             or 0
         )
+        if not news_count:
+            news_count = (
+                db.query(func.count(NewsItem.id))
+                .filter(
+                    NewsItem.symbol.in_(symbol_candidates(stock.symbol)),
+                    NewsItem.published_at >= cutoff,
+                )
+                .scalar()
+                or 0
+            )
         filings_count = (
             db.query(func.count(Announcement.id))
-            .filter(Announcement.symbol == stock.symbol)
+            .filter(Announcement.asset_key == stock.asset_key)
             .scalar()
             or 0
         )
+        if not filings_count:
+            filings_count = (
+                db.query(func.count(Announcement.id))
+                .filter(Announcement.symbol.in_(symbol_candidates(stock.symbol)))
+                .scalar()
+                or 0
+            )
         rows.append({
             "symbol": stock.symbol,
+            "asset_key": stock.asset_key,
             "name": stock.name,
             "market": stock.market,
             "industry": stock.industry,
@@ -65,6 +105,9 @@ def build_data_coverage_report(db) -> dict:
             "latest_financial_report": latest_fin[0] if latest_fin else None,
             "news_24h_count": int(news_count),
             "filings_count": int(filings_count),
+            "signal_scope": signal_scope_for(stock.market, stock.symbol),
+            "currency": stock.currency,
+            "timezone": stock.timezone,
         })
 
     def _covered(key: str) -> int:
@@ -82,10 +125,16 @@ def build_data_coverage_report(db) -> dict:
             "financial_covered": sum(1 for row in market_rows if row.get("latest_financial_report")),
             "news_24h_covered": sum(1 for row in market_rows if row["news_24h_count"] > 0),
             "filings_covered": sum(1 for row in market_rows if row["filings_count"] > 0),
-            "signal_scope": "production" if is_production_signal_market(market) else "observe_only",
+            "signal_scopes": sorted({row["signal_scope"] for row in market_rows}),
+            "signal_scope": (
+                next(iter({row["signal_scope"] for row in market_rows}), "observe_only")
+                if len({row["signal_scope"] for row in market_rows}) <= 1
+                else "mixed"
+            ),
         }
     production_rows = [row for row in rows if is_production_signal_market(row.get("market"))]
-    observe_only_rows = [row for row in rows if not is_production_signal_market(row.get("market"))]
+    gray_rows = [row for row in rows if row.get("signal_scope") == "gray"]
+    observe_only_rows = [row for row in rows if row.get("signal_scope") == "observe_only"]
 
     def _coverage(rows_: list[dict]) -> dict:
         return {
@@ -110,6 +159,7 @@ def build_data_coverage_report(db) -> dict:
             "news_24h_covered": sum(1 for row in rows if row["news_24h_count"] > 0),
             "filings_covered": sum(1 for row in rows if row["filings_count"] > 0),
             "production_coverage": _coverage(production_rows),
+            "gray_coverage": _coverage(gray_rows),
             "observe_only_coverage": _coverage(observe_only_rows),
             "cache_policy": cache_policy,
             "freshness_contract": cache_policy.get("freshness_contracts", {}),
@@ -123,6 +173,7 @@ def build_data_coverage_report(db) -> dict:
             },
             "market_capability_catalog": capability_catalog,
             "production_signal_policy": production_signal_policy_payload(),
+            "market_profiles": _market_profiles_payload(),
         },
         "provider_health": get_provider_health(),
         "stocks": rows,

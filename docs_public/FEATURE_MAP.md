@@ -21,7 +21,7 @@
 | 健康检查 | 检查 DB、agent mode、watchlist、positions、memory 摘要是否可读。 | `mingcang doctor`, `backend.agent.cli health` | 常用/只读 | 不写入；不需要 key。 |
 | 项目上下文 | 一次性读取项目概况，包括自选、持仓、记忆、配置摘要。 | `mingcang project`, `project-context` | 常用/只读 | 不写入。 |
 | 单股上下文 | 读取单只股票的信号、新闻、研究、记忆上下文。 | `mingcang stock <symbol>`, `stock-context` | 常用/只读 | 不写入；不改信号。 |
-| 全局数据上下文 | 按 market/symbol/intent 读取 A/HK/US global data envelope。 | `global-data` CLI, `/api/system/global-data` | 只读 | HK/US observe-only；不进 CN 官方信号。 |
+| 全局数据上下文 | 按 market/symbol/intent 读取 A/HK/US global data envelope。 | `global-data` CLI, `/api/system/global-data` | 只读 | HK/US 白名单可进入零仓位影子信号，非白名单 observe-only；不改 CN 官方信号。 |
 
 ## 2. 前端页面
 

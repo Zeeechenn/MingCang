@@ -9,11 +9,13 @@ from backend.api.schemas import SignalOut
 from backend.data.database import Signal
 
 
-def latest_signal(symbol: str, db: Session) -> Signal | None:
+def latest_signal(symbol: str, db: Session, market: str | None = None) -> Signal | None:
     """Return the most recent Signal row for symbol, or None."""
+    query = db.query(Signal).filter(Signal.symbol == symbol)
+    if market is not None:
+        query = query.filter(Signal.market == market)
     return (
-        db.query(Signal)
-        .filter(Signal.symbol == symbol)
+        query
         .order_by(Signal.date.desc())
         .first()
     )
@@ -37,6 +39,9 @@ def signal_to_schema(sig: Signal) -> SignalOut:
     return SignalOut(
         id=sig.id,
         symbol=sig.symbol,
+        market=getattr(sig, "market", "CN") or "CN",
+        asset_key=getattr(sig, "asset_key", None),
+        signal_scope=getattr(sig, "signal_scope", "production") or "production",
         date=sig.date,
         composite_score=sig.composite_score,
         recommendation=rec,
@@ -49,4 +54,5 @@ def signal_to_schema(sig: Signal) -> SignalOut:
         sentiment_score=sig.sentiment_score,
         llm_arbitration=arb,
         rule_version=getattr(sig, "rule_version", None),
+        data_timestamp=getattr(sig, "data_timestamp", None),
     )

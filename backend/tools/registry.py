@@ -9,6 +9,30 @@ CATEGORIES = ("stable", "maintenance", "evidence", "attic")
 
 _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
     {
+        "module": "backend.tools.m67_gray_bootstrap",
+        "category": "maintenance",
+        "purpose": "Create the explicit M67 HK/US pilot universe and run market-scoped refresh jobs.",
+        "read_write_boundary": "Writes only allowlisted pilot stock/data rows; never sends alerts, orders, or opens production signal markets.",
+        "recommended_entrypoint": "python3 -m backend.tools.m67_gray_bootstrap",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.m67_gray_price_resync",
+        "category": "maintenance",
+        "purpose": "Replace only M67 pilot price histories after an adjustment-basis change and report continuity checks.",
+        "read_write_boundary": "Requires --apply; deletes and rewrites prices only for the five explicit gray asset keys.",
+        "recommended_entrypoint": "python3 -m backend.tools.m67_gray_price_resync --apply",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.m67_multimarket_replay",
+        "category": "evidence",
+        "purpose": "Run the M67 close-confirmed next-open replay with market-specific rules and same-pool baseline.",
+        "read_write_boundary": "Read-only against local market data; prints JSON and never writes signals or orders.",
+        "recommended_entrypoint": "python3 -m backend.tools.m67_multimarket_replay HK:00700 US:AAPL --as-of YYYY-MM-DD",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.coverage_snapshot",
         "category": "stable",
         "purpose": "Print the current data coverage snapshot as JSON.",

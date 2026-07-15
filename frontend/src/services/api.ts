@@ -302,29 +302,32 @@ export const addStock = (symbol, name, market) =>
     method: 'POST',
   })
 
-export const removeStock = (symbol) =>
-  request(`/watchlist/${symbol}`, { method: 'DELETE' })
+export const removeStock = (symbol, market) =>
+  request(`/watchlist/${symbol}${market ? `?market=${market}` : ''}`, { method: 'DELETE' })
 
-export const getLatestSignal = (symbol) =>
-  request(`/signals/${symbol}/latest`)
+export const getLatestSignal = (symbol, market) =>
+  request(`/signals/${symbol}/latest${market ? `?market=${market}` : ''}`)
 
-export const getSignals = (symbol, limit = 10) =>
-  request(`/signals/${symbol}?limit=${limit}`)
+export const getSignals = (symbol, limit = 10, market) =>
+  request(`/signals/${symbol}?limit=${limit}${market ? `&market=${market}` : ''}`)
 
-export const getPrices = (symbol, days = 120) =>
-  request(`/prices/${symbol}?days=${days}`)
+export const getPrices = (symbol, days = 120, market) =>
+  request(`/prices/${symbol}?days=${days}${market ? `&market=${market}` : ''}`)
 
-export const getNews = (symbol, hours = 48) =>
-  request(`/news/${symbol}?hours=${hours}`)
+export const getNews = (symbol, hours = 48, market) =>
+  request(`/news/${symbol}?hours=${hours}${market ? `&market=${market}` : ''}`)
 
-export const getSignalEval = (symbol, days = 60) =>
-  request(`/signals/eval/${symbol}?days=${days}`)
+export const getSignalEval = (symbol, days = 60, market) =>
+  request(`/signals/eval/${symbol}?days=${days}${market ? `&market=${market}` : ''}`)
 
-export const getSignalEvidence = (symbol, limit = 5) =>
-  request(`/signals/${symbol}/evidence?limit=${limit}`)
+export const getSignalEvidence = (symbol, limit = 5, market) =>
+  request(`/signals/${symbol}/evidence?limit=${limit}${market ? `&market=${market}` : ''}`)
 
-export const getLongTermLabel = (symbol) =>
-  request(`/long-term/${symbol}`)
+export const getFinancialMetrics = (symbol, market) =>
+  request(`/research/${symbol}/financials${market ? `?market=${market}` : ''}`)
+
+export const getLongTermLabel = (symbol, market) =>
+  request(`/long-term/${symbol}${market ? `?market=${market}` : ''}`)
 
 export const getResearchState = (symbol) =>
   request(`/research/${symbol}`)

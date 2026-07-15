@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 
 from backend.config import settings
-from backend.jobs.m63_schedule import job_m63_postmarket, register_m63_postmarket
+from backend.jobs.m63_schedule import job_m63_postmarket
 
 logger = logging.getLogger(__name__)
 
@@ -132,13 +131,29 @@ def _run_kill_switch_checks(db) -> None:
 
 
 @tracked_job("premarket")
-def job_premarket() -> None:
+def job_premarket() -> dict | None:
     """盘前任务：同步行情 + 个股新闻 + 沪深300指数"""
     if _kill_switch_guard("premarket"):
-        return
+        return None
     from backend.jobs.premarket import run_premarket
 
-    return run_premarket()
+    return run_premarket("CN")
+
+
+@tracked_job("premarket_hk")
+def job_premarket_hk() -> dict:
+    """港股灰度盘前刷新；仅显式白名单。"""
+    from backend.jobs.premarket import run_premarket
+
+    return run_premarket("HK")
+
+
+@tracked_job("premarket_us")
+def job_premarket_us() -> dict:
+    """美股灰度盘前刷新；仅显式白名单。"""
+    from backend.jobs.premarket import run_premarket
+
+    return run_premarket("US")
 
 
 def _build_regime(db, stocks):
@@ -211,11 +226,16 @@ def load_universe_symbols(path: str | Path) -> list[str]:
     return _postmarket_jobs().load_universe_symbols(path)
 
 
-def run_postmarket_batch(db, universe_symbols: list[str] | None = None) -> dict:
+def run_postmarket_batch(
+    db,
+    universe_symbols: list[str] | None = None,
+    market: str | None = None,
+) -> dict:
     """Run post-market analysis for active stocks or an explicit universe."""
     return _postmarket_jobs().run_postmarket_batch(
         db,
         universe_symbols,
+        market,
         load_context=_load_postmarket_context,
         analyze_stock=_analyze_postmarket_stock,
         apply_portfolio_decision=_apply_portfolio_decision,
@@ -234,9 +254,31 @@ def job_postmarket() -> dict:
 
     db = SessionLocal()
     try:
-        return run_postmarket_batch(db)
+        return run_postmarket_batch(db, market="CN")
     finally:
         db.close()
+
+
+def _run_gray_postmarket(market: str) -> dict:
+    from backend.data.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return run_postmarket_batch(db, market=market)
+    finally:
+        db.close()
+
+
+@tracked_job("postmarket_hk")
+def job_postmarket_hk() -> dict:
+    """港股收盘确认后的影子信号任务。"""
+    return _run_gray_postmarket("HK")
+
+
+@tracked_job("postmarket_us")
+def job_postmarket_us() -> dict:
+    """美股收盘确认后的影子信号任务。"""
+    return _run_gray_postmarket("US")
 
 
 @tracked_job("stoploss_check")
@@ -289,75 +331,31 @@ def job_daily_memory_expire() -> None:
     return run_daily_memory_expire()
 
 
-def _parse_hhmm(value: str, name: str) -> tuple[int, int]:
-    """Parse a HH:MM schedule string, raising a clear error on bad format."""
-    try:
-        h, m = value.split(":")
-        return int(h), int(m)
-    except (ValueError, AttributeError) as exc:
-        raise ValueError(
-            f"Invalid schedule config {name}={value!r} — expected HH:MM format"
-        ) from exc
-
-
 def start() -> None:
     """Register all cron jobs and start the background scheduler."""
-    pre_h, pre_m = _parse_hhmm(settings.schedule_premarket, "schedule_premarket")
-    post_h, post_m = _parse_hhmm(settings.schedule_postmarket, "schedule_postmarket")
-    long_mon_h, long_mon_m = _parse_hhmm(settings.schedule_longterm_monday_time, "schedule_longterm_monday_time")
-    long_fri_h, long_fri_m = _parse_hhmm(settings.schedule_longterm_friday_time, "schedule_longterm_friday_time")
-    reflect_h, reflect_m = _parse_hhmm(settings.schedule_longterm_time, "schedule_longterm_time")
+    from backend.jobs.schedule_registry import register_scheduler_jobs
 
-    scheduler.add_job(job_premarket, CronTrigger(
-        hour=int(pre_h), minute=int(pre_m), day_of_week="mon-fri",
-    ), id="premarket", replace_existing=True)
-
-    scheduler.add_job(job_postmarket, CronTrigger(
-        hour=int(post_h), minute=int(post_m), day_of_week="mon-fri",
-    ), id="postmarket", replace_existing=True)
-
-    register_m63_postmarket(scheduler, settings, job_m63_postmarket)
-    # 每周六 09:00 重训 LightGBM Alpha 模型
-    scheduler.add_job(job_train_model, CronTrigger(
-        hour=9, minute=0, day_of_week="sat",
-    ), id="train_model", replace_existing=True)
-
-    # 盘中止损预警 14:30（工作日）
-    scheduler.add_job(job_stoploss_check, CronTrigger(
-        hour=14, minute=30, day_of_week="mon-fri",
-    ), id="stoploss_check", replace_existing=True)
-
-    # 每日 00:30 备份 ai_memory（M9.横向）
-    scheduler.add_job(job_daily_memory_backup, CronTrigger(
-        hour=0, minute=30,
-    ), id="daily_memory_backup", replace_existing=True)
-
-    # 每日 01:00 清理过期 ai_memory（M9.3）
-    scheduler.add_job(job_daily_memory_expire, CronTrigger(
-        hour=1, minute=0,
-    ), id="daily_memory_expire", replace_existing=True)
-
-    # 长期分析师团：周一早盘前 + 周五收盘后复盘
-    if settings.long_term_team_enabled:
-        scheduler.add_job(job_weekly_longterm, CronTrigger(
-            hour=int(long_mon_h), minute=int(long_mon_m), day_of_week=settings.schedule_longterm_monday_dow,
-        ), id="weekly_longterm_monday", replace_existing=True)
-        scheduler.add_job(job_weekly_longterm, CronTrigger(
-            hour=int(long_fri_h), minute=int(long_fri_m), day_of_week=settings.schedule_longterm_friday_dow,
-        ), id="weekly_longterm_friday", replace_existing=True)
-        logger.info("long_term team scheduled: %s %s, %s %s",
-                    settings.schedule_longterm_monday_dow,
-                    settings.schedule_longterm_monday_time,
-                    settings.schedule_longterm_friday_dow,
-                    settings.schedule_longterm_friday_time)
-
-    scheduler.add_job(job_weekly_long_term_reflect, CronTrigger(
-        hour=int(reflect_h), minute=int(reflect_m), day_of_week=settings.schedule_longterm_dow,
-    ), id="weekly_long_term_reflect", replace_existing=True)
+    register_scheduler_jobs(scheduler, settings, {
+        "premarket": job_premarket, "postmarket": job_postmarket,
+        "premarket_hk": job_premarket_hk, "postmarket_hk": job_postmarket_hk,
+        "premarket_us": job_premarket_us, "postmarket_us": job_postmarket_us,
+        "m63_postmarket": job_m63_postmarket, "train_model": job_train_model,
+        "stoploss_check": job_stoploss_check, "daily_memory_backup": job_daily_memory_backup,
+        "daily_memory_expire": job_daily_memory_expire, "weekly_longterm": job_weekly_longterm,
+        "weekly_long_term_reflect": job_weekly_long_term_reflect,
+    })
 
     scheduler.start()
-    logger.info("scheduler started (premarket=%s, postmarket=%s)",
-                settings.schedule_premarket, settings.schedule_postmarket)
+    logger.info(
+        "scheduler started (CN=%s/%s, HK=%s/%s, US=%s/%s, gray=%s)",
+        settings.schedule_premarket,
+        settings.schedule_postmarket,
+        settings.schedule_hk_premarket,
+        settings.schedule_hk_postmarket,
+        settings.schedule_us_premarket,
+        settings.schedule_us_postmarket,
+        settings.multimarket_gray_enabled,
+    )
 
 
 def stop() -> None:

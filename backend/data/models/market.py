@@ -9,6 +9,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,9 +19,14 @@ from backend.data.orm import Base, _utcnow
 class Stock(Base):
     """自选股列表"""
     __tablename__ = "stocks"
-    symbol: Mapped[str] = mapped_column(String, primary_key=True)   # e.g. "600519" or "AAPL"
+    asset_key: Mapped[str] = mapped_column(String, primary_key=True)  # e.g. "CN:600519" or "US:AAPL"
+    symbol: Mapped[str] = mapped_column(String, index=True)   # e.g. "600519" or "AAPL"
     name: Mapped[str] = mapped_column(String)
-    market: Mapped[str] = mapped_column(String)                      # "CN", "HK", or "US"
+    market: Mapped[str] = mapped_column(String, default="CN")       # "CN", "HK", or "US"
+    exchange: Mapped[str | None] = mapped_column(String, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
+    timezone: Mapped[str | None] = mapped_column(String, nullable=True)
+    lot_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     industry: Mapped[str | None] = mapped_column(String, nullable=True)     # 申万一级行业（由 sync_industry 回填）
     added_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
@@ -31,8 +37,10 @@ class Position(Base):
     __tablename__ = "positions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String, index=True)
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     market: Mapped[str] = mapped_column(String, default="CN")
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
     quantity: Mapped[float] = mapped_column(Float)
     avg_cost: Mapped[float] = mapped_column(Float)
     opened_at: Mapped[str] = mapped_column(String, index=True)
@@ -51,9 +59,12 @@ class Position(Base):
 class Price(Base):
     """日线行情"""
     __tablename__ = "prices"
-    __table_args__ = (UniqueConstraint("symbol", "date", name="uq_price_symbol_date"),)
+    __table_args__ = (UniqueConstraint("asset_key", "date", name="uq_price_asset_date"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String, index=True)
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    market: Mapped[str] = mapped_column(String, default="CN", index=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[str] = mapped_column(String, index=True)           # "2024-01-15"
     open: Mapped[float] = mapped_column(Float)
     high: Mapped[float] = mapped_column(Float)
@@ -71,6 +82,8 @@ class NewsItem(Base):
     __tablename__ = "news"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str | None] = mapped_column(String, index=True, nullable=True)  # None = 宏观新闻
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    market: Mapped[str] = mapped_column(String, default="CN", index=True)
     title: Mapped[str] = mapped_column(String)
     url: Mapped[str] = mapped_column(String, unique=True)
     published_at: Mapped[datetime] = mapped_column(DateTime)
@@ -87,6 +100,9 @@ class IndexPrice(Base):
     __tablename__ = "index_prices"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String, index=True)    # e.g. "sh000300"（沪深300）
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    market: Mapped[str] = mapped_column(String, default="CN", index=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[str] = mapped_column(String, index=True)      # "2024-01-15"
     close: Mapped[float] = mapped_column(Float)
     change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -102,9 +118,12 @@ class MarketSnapshot(Base):
     作为 M6.1 数据底座，字段可由 Tushare/AkShare/yfinance 等来源逐步填充。
     """
     __tablename__ = "market_snapshots"
-    __table_args__ = (UniqueConstraint("symbol", "date", name="uq_ms_symbol_date"),)
+    __table_args__ = (UniqueConstraint("asset_key", "date", name="uq_ms_asset_date"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String, index=True)
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    market: Mapped[str] = mapped_column(String, default="CN", index=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
     date: Mapped[str] = mapped_column(String, index=True)
     market_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
     float_market_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -122,9 +141,13 @@ class FinancialMetric(Base):
     来源：akshare stock_lrb_em / stock_zcfz_em / stock_xjll_em
     """
     __tablename__ = "financial_metrics"
-    __table_args__ = (UniqueConstraint("symbol", "report_date", name="uq_fm_symbol_date"),)
+    __table_args__ = (UniqueConstraint("asset_key", "report_date", name="uq_fm_asset_date"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String, index=True)
+    asset_key: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    market: Mapped[str] = mapped_column(String, default="CN", index=True)
+    currency: Mapped[str | None] = mapped_column(String, nullable=True)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
     report_date: Mapped[str] = mapped_column(String, index=True)        # "2024-09-30"
     disclosure_date: Mapped[str | None] = mapped_column(String, index=True, nullable=True)  # 实际披露日，缺失时回退 report_date
     period_type: Mapped[str | None] = mapped_column(String, nullable=True)     # "Q1"/"Q2"/"Q3"/"Annual"
@@ -143,3 +166,32 @@ class FinancialMetric(Base):
     asset_turnover: Mapped[float | None] = mapped_column(Float, nullable=True)   # 计算: 收入 / 总资产
     raw_json: Mapped[str | None] = mapped_column(Text, nullable=True)          # 完整原始字段备份
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+def _fill_market_identity(target) -> None:
+    from backend.data.market_profiles import (
+        get_market_profile,
+        instrument_key,
+        normalize_market,
+        normalize_symbol,
+    )
+
+    market = normalize_market(getattr(target, "market", None))
+    symbol = getattr(target, "symbol", None)
+    target.market = market
+    if symbol:
+        target.symbol = normalize_symbol(symbol, market)
+        target.asset_key = instrument_key(market, target.symbol)
+    profile = get_market_profile(market)
+    if hasattr(target, "currency") and not getattr(target, "currency", None):
+        target.currency = profile.currency
+    if isinstance(target, Stock):
+        target.exchange = target.exchange or profile.exchange
+        target.timezone = target.timezone or profile.timezone
+        if target.lot_size is None:
+            target.lot_size = profile.default_lot_size
+
+
+for _market_model in (Stock, Position, Price, NewsItem, IndexPrice, MarketSnapshot, FinancialMetric):
+    event.listen(_market_model, "before_insert", lambda _m, _c, target: _fill_market_identity(target))
+    event.listen(_market_model, "before_update", lambda _m, _c, target: _fill_market_identity(target))
