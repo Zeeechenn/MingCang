@@ -5,10 +5,12 @@ modules, so they cannot trigger provider registration, network clients, or DB
 initialization while checking import boundaries.
 """
 import ast
+import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
+FRONTEND_ROOT = PROJECT_ROOT / "frontend" / "src"
 CORE_DOMAIN_DIRS = (
     "analysis",
     "api",
@@ -22,6 +24,19 @@ CORE_DOMAIN_DIRS = (
     "ops",
     "portfolio",
     "research",
+)
+WORKFLOW_TOOL_MIGRATION_ALLOWLIST = {
+    "backend.tools.m54_daily_accrual",
+    "backend.tools.m58_exit_shadow",
+    "backend.tools.m59_discretion",
+    "backend.tools.m59_panel",
+    "backend.tools.m60_second_entry",
+    "backend.tools.m60_watchtower",
+    "backend.tools.m61_backfill",
+    "backend.tools.m63_trade_journal",
+}
+LEGACY_FRONTEND_IMPORT = re.compile(
+    r"(?:from\s+|import\s*\(\s*)['\"](?:\.\.?/)+(?:api|live)['\"]"
 )
 
 
@@ -127,6 +142,44 @@ def test_core_domains_do_not_import_tool_implementations():
                 for module in imported:
                     if module == "backend.tools" or module.startswith("backend.tools."):
                         offenders.append(f"{path.relative_to(PROJECT_ROOT)} imports {module}")
+
+    assert offenders == []
+
+
+def test_workflow_tool_migration_allowlist_can_only_shrink():
+    """Prevent Phase 1b debt from expanding while capabilities migrate."""
+    imported: set[str] = set()
+    for path in (BACKEND_ROOT / "workflows").rglob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(
+                    alias.name
+                    for alias in node.names
+                    if alias.name.startswith("backend.tools.")
+                )
+            elif isinstance(node, ast.ImportFrom) and node.module == "backend.tools":
+                imported.update(f"backend.tools.{alias.name}" for alias in node.names)
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("backend.tools.")
+            ):
+                imported.add(node.module)
+
+    assert imported <= WORKFLOW_TOOL_MIGRATION_ALLOWLIST
+
+
+def test_frontend_production_code_uses_service_boundaries():
+    """Keep root API/live files as compatibility exports, not new imports."""
+    offenders: list[str] = []
+    for path in FRONTEND_ROOT.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if "__tests__" in path.parts or path.name in {"api.ts", "live.ts"}:
+            continue
+        if LEGACY_FRONTEND_IMPORT.search(path.read_text()):
+            offenders.append(str(path.relative_to(PROJECT_ROOT)))
 
     assert offenders == []
 

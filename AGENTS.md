@@ -125,6 +125,43 @@ If no copilot record exists, say that the stock currently has no copilot shadow
 opinion. Do not invent a shadow conclusion from the main signal, and do not let
 the copilot modify official signals, stop loss, take profit, or real positions.
 
+## Repository Structure And Incremental Migration
+
+`PROJECT.md` is the canonical repository map. New internal imports must use the
+canonical paths recorded there, even while older public commands and import
+paths remain available for compatibility.
+
+- Keep production logic in its owning domain (`data`, `analysis`, `backtest`,
+  `evidence`, `research`, `memory`, `decision`, `portfolio`, or `workflows`).
+- Treat `backend.tools` as a downstream CLI, maintenance, evaluation, or
+  compatibility layer. Do not add new core or workflow dependencies on tool
+  implementations. Existing workflow exceptions are migration debt and may
+  only shrink.
+- Keep API routes and scheduler jobs dependent on stable domain or
+  `backend.workflows` facades. Do not call tool-private helpers from those
+  surfaces.
+- In frontend production code, import API and live-runtime capabilities from
+  `frontend/src/services/`. Root `src/api.ts` and `src/live.ts` are compatibility
+  exports, not new-code entry points.
+- Migrate incrementally when touching an affected capability: move the smallest
+  coherent implementation, update its internal consumers and related tests,
+  then retain the old entry as a compatibility adapter. Do not perform unrelated
+  mass moves or mix behavior changes into a structural batch.
+- Move tests with the capability being migrated. Keep explicit compatibility
+  tests for legacy public imports or commands; do not reduce coverage merely to
+  make a move pass.
+- Preserve legacy public CLI/import paths for at least one release cycle. Remove
+  one only after internal consumers are zero, `PROJECT.md` and the tool registry
+  are updated, the removal is documented in `CHANGELOG.md`, and the release
+  explicitly approves the compatibility break.
+- For each migration batch, update `PROJECT.md`, `STATUS.md`, `docs/ROADMAP.md`,
+  and `CHANGELOG.md` only where their owned truth changes. Run focused tests,
+  architecture-boundary tests, and `make verify` before committing.
+
+The operator commands in `Daily Routing` intentionally keep their compatible
+`backend.tools.*` CLI paths. That does not authorize production modules to use
+those paths as implementation dependencies.
+
 ## Agent Runtime Checklist
 
 For local agent work, start with the smallest command that matches the task:
