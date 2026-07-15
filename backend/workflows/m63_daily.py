@@ -45,6 +45,7 @@ POSTMARKET_STEP_MODULES = {
     "backend.tools.m60_second_entry",
     "backend.tools.m54_daily_accrual",
     "backend.tools.m68_news_shadow",
+    "backend.tools.m68_test2_compare",
     "backend.tools.m58_exit_shadow",
     "backend.tools.m59_panel",
     "backend.tools.m59_discretion",
@@ -436,6 +437,20 @@ def _run_accrual(as_of: str, *, no_llm: bool) -> dict[str, Any]:
     return run_daily_accrual(date=as_of)
 
 
+def _news_shadow_focus_order(
+    *,
+    test2_symbols: set[str],
+    holding_symbols: set[str],
+    all_focus: set[str],
+) -> tuple[list[str], int]:
+    ordered = [
+        *sorted(test2_symbols),
+        *sorted(holding_symbols - test2_symbols),
+        *sorted(all_focus - test2_symbols - holding_symbols),
+    ]
+    return ordered, len(test2_symbols | holding_symbols)
+
+
 def _run_news_shadow(
     as_of: str,
     *,
@@ -465,12 +480,21 @@ def _run_news_shadow(
     db = Session()
     try:
         with _connect(resolved) as con:
-            focus_symbols = sorted(_holding_symbols(con) | _universe_symbols(con))
+            test2_symbols = _universe_symbols(con, DEFAULT_UNIVERSE_PATH)
+            holding_symbols = _holding_symbols(con)
+            all_focus = _universe_symbols(con) | holding_symbols
+            # test2 C-arm must remain a same-pool comparison.  Prioritize every
+            # test2 symbol, then every real holding, before other watch pools.
+            focus_symbols, comparison_floor = _news_shadow_focus_order(
+                test2_symbols=test2_symbols,
+                holding_symbols=holding_symbols,
+                all_focus=all_focus,
+            )
         return run_production_mirror(
             as_of=as_of,
             db=db,
             symbols=focus_symbols or None,
-            limit=settings.news_shadow_stock_limit,
+            limit=max(settings.news_shadow_stock_limit, comparison_floor),
             tier=settings.news_shadow_model_tier,
             lookback_days=settings.news_shadow_lookback_days,
             collection_outcomes=collection_outcomes,
@@ -478,6 +502,19 @@ def _run_news_shadow(
     finally:
         db.close()
         engine.dispose()
+
+
+def _run_news_shadow_test2_compare(
+    db_path: str | Path | None,
+    as_of: str,
+) -> dict[str, Any]:
+    """Derive the independent test2-v2 A/B/C snapshot after M68 persists."""
+    resolved = Path(db_path) if db_path is not None else default_sqlite_path()
+    module = __import__(
+        "backend.tools.m68_test2_compare",
+        fromlist=["build_and_write_comparison"],
+    )
+    return module.build_and_write_comparison(db_path=resolved, as_of=as_of)
 
 
 def _run_exit_shadow() -> dict[str, Any]:
@@ -1043,6 +1080,15 @@ def build_postmarket_report(
             ),
         )
     )
+    steps.append(
+        _step_result(
+            "m68_test2_compare",
+            overrides.get(
+                "m68_test2_compare",
+                lambda: _run_news_shadow_test2_compare(db_path, day),
+            ),
+        )
+    )
     steps.append(_step_result("m58_exit_shadow", overrides.get("m58_exit_shadow", _run_exit_shadow)))
     steps.append(_step_result("m59_panel", overrides.get("m59_panel", lambda: _run_panel(day))))
     steps.append(_step_result("m63_trade_journal", overrides.get("m63_trade_journal", lambda: _run_trade_journal(db_path, day))))
@@ -1090,6 +1136,14 @@ def build_postmarket_report(
     failures = [f"⚠️ {step['name']} 失败:{step['error']}" for step in steps if not step["ok"]]
     accrual: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m54_daily_accrual" and step["ok"]), {})
     news_shadow: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m68_news_shadow" and step["ok"]), {})
+    news_shadow_test2: dict[str, Any] = next(
+        (
+            step["result"]
+            for step in steps
+            if step["name"] == "m68_test2_compare" and step["ok"]
+        ),
+        {},
+    )
     exit_shadow: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m58_exit_shadow" and step["ok"]), {})
     pending = router.get("pending", []) if isinstance(router, dict) else []
     sections = [
@@ -1133,6 +1187,22 @@ def build_postmarket_report(
                     for item in (news_shadow.get("attention") or [])[:5]
                 ],
                 f"token增量:{news_shadow.get('tokens_spent', '未知')}",
+            ],
+        ),
+        (
+            "test2 v2 金字塔对比",
+            [
+                news_shadow_test2.get("reason", "已运行")
+                if news_shadow_test2.get("skipped")
+                else (
+                    f"共同窗口:{(news_shadow_test2.get('meta') or {}).get('window')} / "
+                    f"C-B:{(news_shadow_test2.get('comparison') or {}).get('c_minus_b_weighted_total_pct', '-') }pp"
+                ),
+                (
+                    f"有效方向行:{(news_shadow_test2.get('coverage') or {}).get('valid_direction_rows', '-')} / "
+                    f"shadow日:{(news_shadow_test2.get('coverage') or {}).get('shadow_dates', '-')}"
+                ),
+                "事件风险与涨跌方向分账;对比臂不改原A/B状态,不授权生产晋级。",
             ],
         ),
         (

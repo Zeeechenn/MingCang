@@ -64,6 +64,7 @@ WIRING_MAP: dict[str, WiringEntry] = {
     "backend.tools.m54_news_v2_oos": {"bucket": "manual_only", "reason": "新闻层OOS实验,人工触发"},
     "backend.tools.m54_daily_accrual": {"bucket": "daily_postmarket", "reason": "盘后accrual前向累计"},
     "backend.tools.m68_news_shadow": {"bucket": "daily_postmarket", "reason": "盘后新闻金字塔生产镜像,只写shadow记录"},
+    "backend.tools.m68_test2_compare": {"bucket": "daily_postmarket", "reason": "M68后派生test2 v2独立C臂对比,不改原A/B状态"},
     "backend.tools.backfill_coverage": {"bucket": "manual_only", "reason": "覆盖率维护回填,人工触发"},
     "backend.tools.m26_expand_universe": {"bucket": "manual_only", "reason": "训练池扩展维护,人工确认触发"},
     "backend.tools.m27_build_test3_universe": {"bucket": "manual_only", "reason": "test3 universe构建维护,人工触发"},

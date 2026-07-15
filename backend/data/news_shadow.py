@@ -14,7 +14,7 @@ import math
 import time
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from datetime import time as dt_time
 from typing import Any, cast
 
@@ -85,9 +85,10 @@ def _active_cn_symbols(db: Session) -> list[str]:
 
 
 def _latest_official_signal(db: Session, symbol: str, as_of: str) -> Signal | None:
+    next_day = (date.fromisoformat(as_of) + timedelta(days=1)).isoformat()
     return (
         db.query(Signal)
-        .filter(Signal.symbol == symbol, Signal.date <= as_of)
+        .filter(Signal.symbol == symbol, Signal.date < next_day)
         .order_by(Signal.date.desc(), Signal.id.desc())
         .first()
     )
@@ -233,7 +234,7 @@ def _counterfactual(
             "note": "no official signal was available as-of",
         }
     weights = active_signal_weights(date.fromisoformat(as_of))
-    if official.date != as_of:
+    if official.date[:10] != as_of:
         return {
             "composite": None,
             "recommendation": None,

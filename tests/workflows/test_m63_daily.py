@@ -251,6 +251,17 @@ def test_postmarket_runs_bounded_news_shadow_after_accrual(tmp_path):
     assert "不预测方向" in report["text"]
 
 
+def test_news_shadow_focus_keeps_full_test2_pool_before_holdings_and_extras():
+    ordered, floor = m63_daily._news_shadow_focus_order(
+        test2_symbols={"T2", "T1"},
+        holding_symbols={"T1", "H1"},
+        all_focus={"T1", "T2", "H1", "B1"},
+    )
+
+    assert ordered == ["T1", "T2", "H1", "B1"]
+    assert floor == 3
+
+
 def test_postmarket_final_text_uses_sanitize_language_guard(tmp_path):
     db_path = _db(tmp_path)
     result = m63_daily.build_postmarket_report(

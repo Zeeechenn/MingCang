@@ -48,7 +48,7 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 | Runtime config | `backend/config.py` | env vars, paths, scheduling, profile knobs |
 | Database/runtime schema | `backend/data/database.py`, `backend/data/schema_runtime.py`, `backend/data/seed.py` | ORM/session/init compatibility, runtime patches, memory seeds |
 | Market data | `backend/data/market*.py`, `backend/data/providers.py`, `backend/data/flow_floor.py`, `backend/data/tavily_news.py` | A/HK/US read-only facades, provider fallback, flow/news acquisition, M41 envelopes, M42 write guard |
-| News pyramid mirror | `backend/data/news_shadow.py`, `backend/data/models/news_shadow.py`, `backend/api/routes/news_shadow.py`, `backend/tools/m68_news_shadow.py`, `frontend/src/services/news-shadow.ts`, `frontend/src/page-news-shadow.tsx` | M68 production-shaped observe-only dual run, event-risk review queue, counterfactual API/UI and evidence-bound feedback; never writes official signals |
+| News pyramid mirror | `backend/data/news_shadow.py`, `backend/data/models/news_shadow.py`, `backend/api/routes/news_shadow.py`, `backend/tools/m68_news_shadow.py`, `backend/tools/m68_test2_compare.py`, `frontend/src/services/news-shadow.ts`, `frontend/src/page-news-shadow.tsx` | M68 production-shaped observe-only dual run, event-risk review queue, independent test2-v2 C comparison, counterfactual API/UI and evidence-bound feedback; never writes official signals or original A/B state |
 | Decision layer | `backend/decision/` | aggregation, harness, signal policy, decision memory |
 | Research and memory | `backend/research/`, `backend/memory/`, `backend/agents/` | dossier/deep research, layered memory, multi-agent pipelines |
 | Portfolio and risk | `backend/portfolio/`, `backend/ops/kill_switch.py` | sizing, trailing stops, kill switch |
@@ -76,6 +76,7 @@ be used by CLI commands or external callers.
 | M63 report rendering | `backend.workflows.render` | `backend.tools.m63_render` |
 | frontend API/live | `frontend/src/services/api.ts`, `frontend/src/services/live.ts` | `frontend/src/api.ts`, `frontend/src/live.ts` |
 | M68 news mirror | `backend.data.news_shadow` | `backend.tools.m68_news_shadow` (CLI) |
+| test2-compatible replay | `backend.backtest.test2_replay`, `backend.backtest.test2_models` | `backend.tools.m68_test2_compare` (derived A/B/C evaluator) |
 
 ## 研究模块地图
 

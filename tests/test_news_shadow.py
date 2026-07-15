@@ -117,6 +117,31 @@ def test_production_mirror_is_idempotent_and_never_mutates_official_signal(test_
     assert (after.id, after.sentiment_score, after.composite_score, after.recommendation) == official_snapshot
 
 
+def test_same_day_timestamped_official_signal_is_used_for_counterfactual(test_db, monkeypatch):
+    from backend.data.database import NewsShadowRun, Signal
+    from backend.data.news_shadow import run_production_mirror
+
+    _seed_shadow_inputs(test_db)
+    official = test_db.query(Signal).one()
+    official.date = "2026-06-30T16:30+08:00"
+    test_db.commit()
+    monkeypatch.setattr(
+        "backend.data.news_shadow.score_news_v2",
+        MagicMock(return_value=_mock_signal()),
+    )
+    monkeypatch.setattr(
+        "backend.data.news_shadow.get_today_spend",
+        lambda *_, **__: (0, False),
+    )
+
+    run_production_mirror(as_of="2026-06-30", db=test_db, symbols=["603986"])
+
+    row = test_db.query(NewsShadowRun).one()
+    assert row.legacy_signal_date == "2026-06-30T16:30+08:00"
+    assert row.counterfactual_composite == 38
+    assert "same-day" in row.counterfactual_note
+
+
 def test_no_evidence_status_distinguishes_not_run_success_and_failure(test_db):
     from backend.data.database import Stock
     from backend.data.news_shadow import run_production_mirror

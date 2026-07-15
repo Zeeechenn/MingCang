@@ -34,7 +34,7 @@ explicitly on HOLD.
 | M29 | mechanism (hypothesis registry / readiness / evidence ledger) folded into M58 as infrastructure; no standalone line |
 | remote agent mode | opt-in only; read-only by default |
 | repository structure | M66 first batch landed: stable core has no static `backend.tools` dependency; legacy CLI/import paths remain compatible |
-| M68 news pyramid | **production-shaped mirror is trial-ready, not production direction authority**: M63 runs a bounded (default 20) holdings/test2/biaodi1 shadow step, writes only `news_shadow_*`, and exposes event-review priority plus legacy/pyramid counterfactuals. Official `signals`, weights, stops, positions and test2 are unchanged |
+| M68 news pyramid | **continuous mirror + independent test2-v2 C arm are wired, not production direction authority**: M63 prioritizes all 25 test2 names plus every real holding, then derives common-window A/B/`C_pyramid_shadow`, equal-weight baseline, concentration and separately-accounted direction/event-risk outcomes. Original test2 A/B state, official `signals`, weights, stops and positions remain untouched. First real C day is pending the next complete close-confirmed test2 session; no historical pyramid backfill is allowed |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
 to keep runtime LLM token use bounded. Multi-agent research remains available

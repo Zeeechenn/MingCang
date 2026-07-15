@@ -1,4 +1,4 @@
-import { request } from './api';
+import { request } from './http';
 
 export const getNewsShadowSummary = (asOf = '') =>
   request(`/news-shadow/summary${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`);

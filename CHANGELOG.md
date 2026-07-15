@@ -18,6 +18,10 @@
   链路错误与中文降级说明，反馈可绑定具体 evidence id。
 - **三桶复核**：默认优先审查全部动作分歧、全部高重要性未触发与重启稳定的
   对照抽样；反馈类型固定到漏抓/时效/重复/关联/分类/方向/重要性/触发/融合/解释层。
+- **test2 v2 独立金字塔对比**：新增可追踪的 test2 机械回放核心与
+  `m68_test2_compare`；从首条真实 M68 row 开始派生共同窗口 A/B/C、同池等权、
+  最大单票贡献和 h1/h3/h5 方向/事件风险分账指标。原 `test2_ab_state.json`
+  不读不写，无完整收盘或无真实 shadow row 时显式跳过。
 
 ### Changed / 变更
 
@@ -26,20 +30,23 @@
   完整 20 日量比，并将进程缓存按 namespace/tier 隔离，避免 M54/M68 或模型层级串数据。
 - M63 盘后报告增加事件关注镜像，展示等级、主因、置信、thesis recheck、触发/降级
   flags；该等级只表示复核优先级，不表示涨跌预测。
+- M68 同日正式信号查询现正确接受 ISO 时间戳，不再因 `YYYY-MM-DDTHH:mm`
+  被误判为隔日旧信号，并增加了时间戳回归。
 
 ### Safety / 安全边界
 
 - M68 落实的判断是：A 股情绪/事件证据先用于解释波动幅度与事件风险；尚不支持
   “单靠情绪稳定预测方向”。事件镜像可先试用，方向替换仍必须另过 M54 统计门与
-  owner 显式确认。本批不改正式权重、止盈止损、仓位、scheduler 时序或 test2。
+  owner 显式确认。本批不改正式权重、止盈止损、仓位或 scheduler 时序；
+  test2 只新增独立派生 C 对比，原 A/B 历史和状态不变。
 
 ### Verification / 验证
 
-- M68/M54/M63 聚焦后端回归 `51 passed`；schema golden 幂等重生成并通过。
-  完整初始化临时库下的全量后端 `1730 passed / 12 skipped`，ruff、发布卫生和 mypy
-  （315 个 source files）全绿。前端 TypeScript、26 项 Vitest、production build、零 warning
-  ESLint 通过；Playwright smoke 覆盖 14 个桌面路由与 11 个移动路由（含 M68），
-  console/page error 均为 0。
+- M68/M63/test2-C 聚焦回归 `45 passed`；schema golden 幂等重生成并通过。
+  完整初始化临时库下的全量后端 `1766 passed / 12 skipped`，ruff、发布卫生和 mypy
+  （328 个 source files）全绿。前端 TypeScript、29 项 Vitest、production build、零 warning
+  ESLint 通过；Playwright smoke 覆盖 16 个桌面路由 + 2 个 source-truth 状态与
+  14 个移动路由（含 M68），console/page error 均为 0。
 
 ---
 

@@ -177,6 +177,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.m68_test2_compare",
+        "category": "stable",
+        "purpose": "Derive a close-confirmed common-window A/B/C replay for the independent test2-v2 pyramid shadow arm.",
+        "read_write_boundary": "Reads SQLite in immutable read-only mode plus the local test2 universe; writes only derived JSON/Markdown under paper_trading/m68_out and never reads or writes test2_ab_state.json, official signals, positions, or production policy.",
+        "recommended_entrypoint": "python3 -m backend.tools.m68_test2_compare --as-of <YYYY-MM-DD>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m63_trade_journal",
         "category": "stable",
         "purpose": "D8 trade-level review journal: idempotently snapshots new open positions and completes closed-position outcomes for weekly attribution.",
