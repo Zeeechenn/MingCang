@@ -8,12 +8,21 @@
 
 ## [Unreleased]
 
+_（下一版工作累积区）_
+
+---
+
+## [v0.6.3] Research trust closure & repository structure governance / 研究可信度收口与仓库结构治理（2026-07-15）
+
 ### Added / 新增
 
 - **M65 研究可信度 Phase 0-2**：ResearchReportGate 增加稳定、机器可读的检查明细；前端 Evidence
   Card 严格区分发布时间与抓取时间，并显式展示 `as_of`、新鲜度、来源层级、可用性、风险标记和
   缺失原因。M57 增加真实 deep-research trace 捕获、过滤 miner 和 Phase 2 评估工具，所有候选继续
   默认 `pending`，自动 `trusted` 保持为 0。
+- **M66 AI 开发治理规则**：`AGENTS.md` 固化 canonical-first、tools 仅作 CLI/维护/评估/兼容层、
+  最小能力随改随迁、旧入口至少保留一个发布周期等规则；架构测试增加 workflow tools 允许清单
+  只减不增和前端生产代码必须使用 `src/services/` 的棘轮守卫。
 
 ### Changed / 变更
 
@@ -36,10 +45,11 @@
 
 ### Verification / 验证
 
-- `make verify` 全绿：backend pytest `1726 passed / 5 skipped`；ruff、release hygiene、mypy（310 个
+- `make verify` 全绿：backend pytest `1728 passed / 5 skipped`；ruff、release hygiene、mypy（310 个
   source files，0 error）通过；前端 typecheck、24 项 Vitest、build、零 warning ESLint 通过。
 - Playwright smoke 覆盖 13 个桌面路由、10 个移动端路由及 live/degraded 数据真相，console/page
   error 均为 0；另以 Playwright CLI 实看主页与日报页，服务迁移后正常连接本地后端。
+- Python lock 校验通过；`pip-audit` 报告无已知依赖漏洞。
 
 ---
 

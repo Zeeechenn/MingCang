@@ -866,7 +866,7 @@ export const MC_DATA: any = (function () {
   };
 
   const SYSTEM = {
-    version: '0.6.2', release: [['v0.6.2', '前端可信闭环'], ['Live Track', '安全收口'], ['模型晋升', '人工确认'], ['Quant', '生产关闭']],
+    version: '0.6.3', release: [['v0.6.3', '可信度与结构治理'], ['M65', '裁决归档'], ['M66', '渐进迁移'], ['Quant', '生产关闭']],
     market_overview: { available: true, name: '沪深300', close: 4082.35, change_pct: 0.42, date: '2026-06-09',
       indices: [
         { name: '上证指数', close: 3421.56, change_pct: 0.38 },
