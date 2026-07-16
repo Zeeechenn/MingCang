@@ -5,12 +5,32 @@ it as the preferred CN daily provider using forward_additive adjusted prices.
 """
 from __future__ import annotations
 
+import os
+import threading
 import time
 
 import pandas as pd
 import requests
 
 from backend.config import settings
+
+# 全局请求限速：tickflow 免费档对密集请求 429 敏感（批量刷价第 ~11 支起触发），
+# 支间强制最小间隔从源头压平请求速率。0 可关闭。
+_MIN_REQUEST_INTERVAL = float(os.getenv("TICKFLOW_MIN_REQUEST_INTERVAL", "0.5"))
+_throttle_lock = threading.Lock()
+_last_request_at = 0.0
+
+
+def _throttle() -> None:
+    """Block until at least _MIN_REQUEST_INTERVAL has passed since the last request."""
+    global _last_request_at
+    if _MIN_REQUEST_INTERVAL <= 0:
+        return
+    with _throttle_lock:
+        wait = _last_request_at + _MIN_REQUEST_INTERVAL - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _last_request_at = time.monotonic()
 
 
 def tickflow_symbol(symbol: str, market: str) -> str:
@@ -83,6 +103,7 @@ def fetch_tickflow_daily(
         "count": max(1, min(int(days), 10000)),
         "adjust": adjust,
     }
+    _throttle()
     resp = requests.get(
         f"{resolved_base_url}/v1/klines",
         headers=headers,

@@ -97,10 +97,14 @@ def register_default_market_providers() -> None:
     )
 
 
-def fetch_daily(symbol: str, market: str, days: int = 365) -> pd.DataFrame:
+def fetch_daily(symbol: str, market: str, days: int = 365,
+                expected_latest: str | None = None) -> pd.DataFrame:
     """Dispatch to the appropriate market data fetcher based on market."""
     register_default_market_providers()
-    df, provider = fetch_daily_with_fallback(symbol, market, days)
+    if expected_latest is None:
+        df, provider = fetch_daily_with_fallback(symbol, market, days)
+    else:
+        df, provider = fetch_daily_with_fallback(symbol, market, days, expected_latest=expected_latest)
     _attach_provenance_attrs(
         df,
         provider=provider,
@@ -168,13 +172,15 @@ def sync_market_index_to_db(db, market: str, index_symbol: str | None = None, da
 
 
 def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
-                       refresh_today: bool = False) -> int:
+                       refresh_today: bool = False,
+                       expected_latest: str | None = None) -> int:
     return _backfill_if_needed(
         symbol,
         market,
         db,
         years=years,
         refresh_today=refresh_today,
+        expected_latest=expected_latest,
         fetch_daily_fn=fetch_daily,
         backfill_years=BACKFILL_YEARS,
         backfill_threshold_days=BACKFILL_THRESHOLD_DAYS,

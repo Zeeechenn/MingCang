@@ -1,11 +1,14 @@
 """Market/news data provider registry with fallback and short cooldowns."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from time import time
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 DailyFetcher = Callable[[str, int], pd.DataFrame]
 IndexFetcher = Callable[[str, int], pd.DataFrame]
@@ -200,9 +203,32 @@ def provider_fallback_chains(market: str = "CN") -> dict:
     }
 
 
-def fetch_daily_with_fallback(symbol: str, market: str, days: int) -> tuple[pd.DataFrame, str]:
-    """Fetch daily bars from the first provider covering market that succeeds."""
+def _latest_bar_date(df: pd.DataFrame) -> str | None:
+    """Return the newest bar date in a fetched frame as an ISO YYYY-MM-DD string."""
+    if df is None or df.empty:
+        return None
+    latest = df.index.max()
+    if hasattr(latest, "date"):
+        return latest.date().isoformat()
+    return str(latest)[:10]
+
+
+def fetch_daily_with_fallback(
+    symbol: str,
+    market: str,
+    days: int,
+    *,
+    expected_latest: str | None = None,
+) -> tuple[pd.DataFrame, str]:
+    """Fetch daily bars from the first provider covering market that succeeds.
+
+    expected_latest（ISO 日期）给定时启用新鲜度门：provider 返回非空但最新 bar
+    早于该日期的结果视为「陈旧」，继续尝试下一家（不罚 cooldown——源没坏、只是
+    滞后）；只有拿到 >= expected_latest 的 bar 才立即采用。全链走完都陈旧则
+    fail-open：返回其中最新的一份并打显式 WARNING，绝不静默。
+    """
     errors: list[str] = []
+    stale_best: tuple[pd.DataFrame, str, str] | None = None  # (df, provider, latest_date)
     for provider in _DAILY_PROVIDERS:
         if "ALL" not in provider.markets and market not in provider.markets:
             continue
@@ -217,12 +243,28 @@ def fetch_daily_with_fallback(symbol: str, market: str, days: int) -> tuple[pd.D
             df = provider.fetch(symbol, days)
             if df is not None and not df.empty:
                 _record_provider_success(provider.name)
-                return df, provider.name
+                if expected_latest is None:
+                    return df, provider.name
+                latest = _latest_bar_date(df)
+                if latest is not None and latest >= expected_latest:
+                    return df, provider.name
+                errors.append(f"{provider.name}: stale(latest={latest})")
+                if stale_best is None or (latest or "") > stale_best[2]:
+                    stale_best = (df, provider.name, latest or "")
+                continue
             errors.append(f"{provider.name}: empty")
             _record_provider_failure(provider.name, "empty", provider.cooldown_seconds)
         except Exception as e:
             errors.append(f"{provider.name}: {e}")
             _record_provider_failure(provider.name, str(e), provider.cooldown_seconds)
+    if stale_best is not None:
+        df, name, latest = stale_best
+        logger.warning(
+            "daily freshness gate: %s 全部可用源均无 %s bar，fail-open 返回最新可得 "
+            "(provider=%s latest=%s)。下游不得把该数据当作当日 bar 使用。",
+            symbol, expected_latest, name, latest,
+        )
+        return df, name
     detail = "; ".join(errors) or f"no provider for market={market}"
     raise RuntimeError(f"daily data unavailable for {symbol}: {detail}")
 

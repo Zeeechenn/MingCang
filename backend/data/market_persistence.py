@@ -93,6 +93,7 @@ def backfill_if_needed(
     db,
     years: int | None = None,
     refresh_today: bool = False,
+    expected_latest: str | None = None,
     *,
     fetch_daily_fn: Callable[..., pd.DataFrame],
     backfill_years: int = BACKFILL_YEARS,
@@ -134,7 +135,10 @@ def backfill_if_needed(
     else:
         fetch_days = (years or backfill_years) * 365 + 10
 
-    df = fetch_daily_fn(symbol, market, days=fetch_days)
+    if expected_latest is not None:
+        df = fetch_daily_fn(symbol, market, days=fetch_days, expected_latest=expected_latest)
+    else:
+        df = fetch_daily_fn(symbol, market, days=fetch_days)
     source = df.attrs.get("source")
     fetched_at = df.attrs.get("fetched_at")
     adjustment = df.attrs.get("adjustment")
