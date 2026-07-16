@@ -17,7 +17,14 @@ from pathlib import Path
 
 import pytest
 
-from paper_trading.test2_ab_data import FINAL_VERSION_CUTOFF, load_signals
+# paper_trading/ 是 gitignored 的本地测试材料，CI checkout 里不存在——照
+# test_atlas_test4_stage2b_shadow.py 的惯例整模块跳过。
+test2_ab_data = pytest.importorskip(
+    "paper_trading.test2_ab_data",
+    reason="paper_trading/test2 replay helpers are local-only and not checked into CI",
+)
+FINAL_VERSION_CUTOFF = test2_ab_data.FINAL_VERSION_CUTOFF
+load_signals = test2_ab_data.load_signals
 
 SIGNALS_SCHEMA = """
 CREATE TABLE signals (
