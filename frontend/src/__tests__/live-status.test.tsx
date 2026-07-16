@@ -20,4 +20,17 @@ describe('live source truth', () => {
     expect(screen.getByText('部分实时')).toBeInTheDocument();
     expect(screen.getByTitle(/coverage.*2026-06-09/)).toBeInTheDocument();
   });
+
+  it('surfaces runtime identity reasons when the backend is reachable but incompatible', () => {
+    render(
+      <LiveStatusBadgeView
+        mode="degraded"
+        sources={{ identity: 'stale' }}
+        issues={['前后端版本不一致']}
+      />,
+    );
+
+    expect(screen.getByText('部分实时')).toBeInTheDocument();
+    expect(screen.getByTitle(/版本不一致/)).toBeInTheDocument();
+  });
 });

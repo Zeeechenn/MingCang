@@ -1292,7 +1292,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    result = run_mode(args)
+    from backend.scheduler import run_tracked_job
+
+    result = run_tracked_job(
+        f"m63_{args.mode}",
+        lambda: run_mode(args),
+        trigger_source="manual_cli",
+        as_of=args.date,
+        input_coverage={
+            "workflow": "m63_daily",
+            "mode": args.mode,
+            "llm_enabled": not args.no_llm,
+            "database": "configured" if args.db is None else "custom",
+        },
+    )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     else:

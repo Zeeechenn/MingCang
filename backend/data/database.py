@@ -25,6 +25,7 @@ from backend.data.models import (  # noqa: F401  re-exported for backward compat
     GateBObservation,
     HolderSnapshot,
     IndexPrice,
+    JobRun,
     LhbRecord,
     LlmUsageLog,
     LongTermLabel,

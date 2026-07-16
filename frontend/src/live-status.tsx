@@ -21,10 +21,12 @@ export function LiveStatusBadgeView({
   mode,
   sources = {},
   snapshotAsOf,
+  issues = [],
 }: {
   mode: LiveMode;
   sources?: LiveSources;
   snapshotAsOf?: string;
+  issues?: string[];
 }) {
   const nonLive = Object.entries(sources)
     .filter(([, value]) => value !== 'live')
@@ -34,7 +36,9 @@ export function LiveStatusBadgeView({
     : mode === 'offline'
       ? '后端连接中断，保留最后一次页面数据'
       : mode === 'degraded'
-        ? `部分数据域回退：${nonLive.join('、') || '未知'}；示例快照 ${snapshotAsOf || '日期未知'}`
+        ? issues.length
+          ? `运行身份或数据域降级：${issues.join('；')}；${nonLive.join('、') || '未知'}`
+          : `部分数据域回退：${nonLive.join('、') || '未知'}；示例快照 ${snapshotAsOf || '日期未知'}`
         : `后端未连接，当前展示示例快照 ${snapshotAsOf || '日期未知'}`;
 
   return (

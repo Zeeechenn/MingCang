@@ -16,6 +16,9 @@ from backend.data.models.decision import (
 from backend.data.models.degradation import (
     DegradationEvent,
 )
+from backend.data.models.job import (
+    JobRun,
+)
 from backend.data.models.m61 import (
     Announcement,
     CorporateEvent,
@@ -95,6 +98,7 @@ __all__ = [
     "ReviewRun",
     "PendingAIAction",
     "DegradationEvent",
+    "JobRun",
     "DecisionMemoryLayered",
     "StockMemoryItem",
     "MemoryAtom",

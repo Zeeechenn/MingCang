@@ -84,6 +84,7 @@ function LiveBadge() {
       mode={state.live || 'demo'}
       sources={state.liveSources || {}}
       snapshotAsOf={state.snapshotAsOf}
+      issues={state.runtimeIssues || []}
     />
   );
 }

@@ -1,7 +1,6 @@
 """定时任务：scheduler 生命周期、job state、tracked job 与兼容入口。"""
 import logging
 from copy import deepcopy
-from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -47,41 +46,27 @@ def get_scheduler_state() -> dict:
     }
 
 
-def run_tracked_job(job_name: str, fn):
-    """Run a job and record start/end/error metadata."""
-    state = _state_for(job_name)
-    started = datetime.now(UTC)
-    state.update({
-        "running": True,
-        "last_status": "running",
-        "last_started_at": started.isoformat(),
-        "last_finished_at": None,
-        "last_duration_seconds": None,
-        "last_error": None,
-    })
-    try:
-        result = fn()
-        finished = datetime.now(UTC)
-        state.update({
-            "running": False,
-            "last_status": "success",
-            "last_finished_at": finished.isoformat(),
-            "last_duration_seconds": round((finished - started).total_seconds(), 3),
-            "last_result": result,
-            "success_count": state.get("success_count", 0) + 1,
-        })
-        return result
-    except Exception as exc:
-        finished = datetime.now(UTC)
-        state.update({
-            "running": False,
-            "last_status": "error",
-            "last_finished_at": finished.isoformat(),
-            "last_duration_seconds": round((finished - started).total_seconds(), 3),
-            "last_error": str(exc),
-            "error_count": state.get("error_count", 0) + 1,
-        })
-        raise
+def run_tracked_job(
+    job_name: str,
+    fn,
+    *,
+    trigger_source: str = "scheduler",
+    as_of: str | None = None,
+    input_coverage: dict[str, Any] | None = None,
+    artifact_path: str | Path | None = None,
+):
+    """Run a job and record in-memory plus persistent start/end/error metadata."""
+    from backend.ops.job_runner import execute_tracked_job
+
+    return execute_tracked_job(
+        _state_for(job_name),
+        job_name,
+        fn,
+        trigger_source=trigger_source,
+        as_of=as_of,
+        input_coverage=input_coverage,
+        artifact_path=artifact_path,
+    )
 
 
 def tracked_job(job_name: str):

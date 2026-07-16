@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     qlib_train_require_monotonic: bool = True
 
     database_url: str = _default_database_url()
+    database_role: str = "auto"  # auto / primary / demo / custom / external
+    scheduler_mode: Literal["manual", "external"] = "manual"
+    job_ledger_enabled: bool = True
     schedule_premarket: str = "08:30"
     schedule_postmarket: str = "16:00"
     schedule_hk_premarket: str = "08:30"

@@ -1987,6 +1987,201 @@
       }
     ]
   },
+  "job_runs": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "run_id",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "job_name",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "trigger_source",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "as_of",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "status",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "started_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "finished_at",
+        "notnull": 0,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "duration_seconds",
+        "notnull": 0,
+        "pk": 0,
+        "type": "FLOAT"
+      },
+      {
+        "default": null,
+        "name": "input_coverage_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "degradation_reasons_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "output_summary_json",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "artifact_path",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "error",
+        "notnull": 0,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": null,
+        "name": "runtime_version",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "build_commit",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "db_role",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "created_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      },
+      {
+        "default": null,
+        "name": "updated_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "as_of"
+        ],
+        "name": "ix_job_runs_as_of",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "db_role"
+        ],
+        "name": "ix_job_runs_db_role",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "job_name"
+        ],
+        "name": "ix_job_runs_job_name",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "run_id"
+        ],
+        "name": "ix_job_runs_run_id",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "started_at"
+        ],
+        "name": "ix_job_runs_started_at",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "status"
+        ],
+        "name": "ix_job_runs_status",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "trigger_source"
+        ],
+        "name": "ix_job_runs_trigger_source",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "run_id"
+        ],
+        "name": "sqlite_autoindex_job_runs_1",
+        "unique": 1
+      }
+    ]
+  },
   "lhb_records": {
     "columns": [
       {

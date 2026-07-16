@@ -16,6 +16,7 @@ from backend.api.schemas import DataCoverageOut
 from backend.config import Settings, sqlite_path_from_url
 from backend.data.database import (
     FinancialMetric,
+    JobRun,
     LongTermLabel,
     Price,
     SessionLocal,
@@ -27,7 +28,7 @@ from backend.data.external_sources import (
     probe_external_sources,
     summarize_probe_results,
 )
-from backend.version import APP_VERSION
+from backend.runtime_identity import build_runtime_identity
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -202,12 +203,14 @@ def system_status(
         .group_by(Stock.market)
         .all()
     )
+    db_latest_date = latest_price_date[0] if latest_price_date else None
+    identity = build_runtime_identity(settings, db_latest_date=db_latest_date)
     return {
-        "version": APP_VERSION,
+        **identity,
         "atlas_enabled": settings.atlas_enabled,
         "ai_provider": settings.ai_provider,
         "database_exists": bool(database_path and database_path.exists()),
-        "latest_price_date": latest_price_date[0] if latest_price_date else None,
+        "latest_price_date": db_latest_date,
         "financial_metrics_count": db.query(FinancialMetric).count(),
         "long_term_labels_count": db.query(LongTermLabel).count(),
         "latest_long_term_label_date": latest_label_date[0] if latest_label_date else None,
@@ -216,6 +219,27 @@ def system_status(
         "market_profiles": all_market_profiles_payload(),
         "signal_policy": production_signal_policy_payload(),
         "runtime_readiness": runtime_readiness(settings),
+    }
+
+
+@router.get("/system/job-runs")
+def system_job_runs(
+    limit: int = 20,
+    job_name: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Return recent persisted scheduler/manual workflow runs."""
+    from backend.ops.job_ledger import serialize_job_run
+
+    bounded_limit = max(1, min(limit, 100))
+    query = db.query(JobRun)
+    if job_name:
+        query = query.filter(JobRun.job_name == job_name)
+    rows = query.order_by(JobRun.started_at.desc(), JobRun.id.desc()).limit(bounded_limit).all()
+    return {
+        "items": [serialize_job_run(row) for row in rows],
+        "limit": bounded_limit,
+        "job_name": job_name,
     }
 
 

@@ -31,6 +31,14 @@ def test_db():
     db.close()
 
 
+@pytest.fixture(autouse=True)
+def isolate_persistent_job_ledger(monkeypatch):
+    """Unit tests must not write scheduler metadata into the developer's live DB."""
+    from backend.config import settings
+
+    monkeypatch.setattr(settings, "job_ledger_enabled", False)
+
+
 @pytest.fixture
 def sample_stocks(test_db):
     """3 只测试股，含行业"""

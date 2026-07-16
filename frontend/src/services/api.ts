@@ -163,6 +163,9 @@ export const getSystemStatus = () => request('/system/status')
 
 export const getSystemHealth = () => request('/system/health')
 
+export const getJobRuns = (limit = 20, jobName = '') =>
+  request(`/system/job-runs?limit=${limit}${jobName ? `&job_name=${encodeURIComponent(jobName)}` : ''}`)
+
 export const getLLMUsage = (days = 7) => request(`/system/llm-usage?days=${days}`)
 
 export const getMemoryEvolutionCandidates = (status = 'pending', limit = 50, offset = 0) =>

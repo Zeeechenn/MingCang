@@ -8,10 +8,12 @@
 // ============================================================
 import * as api from './api';
 import { deriveLiveMode } from '../live-status';
+import { assessBackendRuntime } from '../runtime-identity';
 
 const HEALTH_POLL_MS = Number(import.meta.env.VITE_HEALTH_POLL_MS) || 30000;
 
 let live = false;
+let runtimeTrusted = false;
 let atlasOn = false; // 后端 atlas_enabled 开启时为 true(论题/记忆候选/case-view 账本可用)
 let healthTimer: ReturnType<typeof setInterval> | null = null;
 const fetchedSymbols = new Set();
@@ -27,7 +29,7 @@ function setScoped(map, symbol, market, value) {
   if (market === 'CN' || map[symbol] == null) map[symbol] = value;
 }
 
-export function isLive() { return live; }
+export function isLive() { return live && runtimeTrusted; }
 
 function stopHealthMonitor() {
   if (healthTimer) clearInterval(healthTimer);
@@ -39,11 +41,25 @@ function startHealthMonitor() {
   healthTimer = setInterval(async () => {
     if (!live) return;
     try {
-      await api.getSystemHealth();
-      const sources = store().get().liveSources || {};
-      store().set({ live: deriveLiveMode(sources) });
+      const [, status] = await Promise.all([
+        api.getSystemHealth(),
+        api.getSystemStatus(),
+      ]);
+      const identity = assessBackendRuntime(status);
+      runtimeTrusted = identity.compatible;
+      const sources = {
+        ...(store().get().liveSources || {}),
+        identity: identity.compatible ? 'live' : 'stale',
+      };
+      store().set({
+        live: deriveLiveMode(sources),
+        liveSources: sources,
+        runtimeIssues: identity.issues,
+        runtimeIdentity: identity,
+      });
     } catch {
       live = false;
+      runtimeTrusted = false;
       atlasOn = false;
       stopHealthMonitor();
       store().set({ live: 'offline' });
@@ -411,6 +427,7 @@ export async function startLive() {
     watchlist = await api.getWatchlist();
   } catch {
     live = false;
+    runtimeTrusted = false;
     atlasOn = false;
     stopHealthMonitor();
     store().set({
@@ -450,6 +467,9 @@ export async function startLive() {
     coverage: fulfilled(10) ? 'live' : 'demo',
     sessions: fulfilled(11) ? 'live' : 'demo',
   };
+  const runtimeIdentity = assessBackendRuntime(sysStatus);
+  runtimeTrusted = runtimeIdentity.compatible;
+  liveSources.identity = runtimeIdentity.compatible ? 'live' : 'stale';
 
   const Dd = D();
 
@@ -492,14 +512,19 @@ export async function startLive() {
     Dd.SYSTEM = {
       ...Dd.SYSTEM,
       version: st.version || Dd.SYSTEM.version,
+      runtime_identity: runtimeIdentity,
       market_overview: st.market_overview || Dd.SYSTEM.market_overview,
       health: {
-        db: hl.db ?? true,
+        db: hl.db_ok ?? hl.db ?? false,
         agent_mode: st.ai_provider || hl.agent_mode || rt.llm_provider || '—',
         watchlist: wl.length,
         positions: (posOpen || []).length,
         memory: memOverview ? (memOverview.total_active ?? 0) : Dd.SYSTEM.health.memory,
-        scheduler: rt.scheduler_enabled ? '已启用' : '未启用(手动模式)',
+        scheduler: st.scheduler_mode === 'embedded'
+          ? '已启用(内嵌)'
+          : st.scheduler_mode === 'external'
+            ? '外部 worker'
+            : '未启用(手动模式)',
       },
       model: Dd.SYSTEM.model,
     };
@@ -566,6 +591,8 @@ export async function startLive() {
   store().set((s) => ({
     live: liveMode,
     liveSources,
+    runtimeIssues: runtimeIdentity.issues,
+    runtimeIdentity,
     snapshotAsOf: Dd.DEMO_META.snapshot_as_of,
     coverageUpdatedAt: Dd.COVERAGE.generated_at || null,
     watchlist: wl,
@@ -579,7 +606,9 @@ export async function startLive() {
   if (window.toast) {
     window.toast(liveMode === 'live'
       ? '已连接本地后端，核心数据域均为实时数据'
-      : `已连接本地后端，部分数据回退到 ${Dd.DEMO_META.snapshot_as_of} 示例快照`);
+      : runtimeIdentity.issues.length
+        ? `后端已连接但运行身份降级：${runtimeIdentity.issues.join('；')}`
+        : `已连接本地后端，部分数据回退到 ${Dd.DEMO_META.snapshot_as_of} 示例快照`);
   }
 }
 
@@ -646,7 +675,7 @@ export async function ensureSymbol(symbol, requestedMarket) {
 
 // ---------- 写操作门面(live 调后端;demo 抛错由调用方落回演示行为) ----------
 async function ensureLive() {
-  if (!live) { const e: any = new Error('demo'); e.demo = true; throw e; }
+  if (!isLive()) { const e: any = new Error('demo'); e.demo = true; throw e; }
 }
 
 async function refreshCore() {

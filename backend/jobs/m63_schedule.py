@@ -19,7 +19,16 @@ def job_m63_postmarket() -> dict:
         result["output_path"] = str(path)
         return result
 
-    return run_tracked_job("m63_postmarket", run)
+    return run_tracked_job(
+        "m63_postmarket",
+        run,
+        trigger_source="scheduler",
+        input_coverage={
+            "workflow": "m63_daily",
+            "mode": "postmarket",
+            "scope": "test2_union_positions_focus",
+        },
+    )
 
 
 def register_m63_postmarket(scheduler, settings, job=job_m63_postmarket) -> None:
