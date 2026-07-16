@@ -22,6 +22,9 @@
   `m68_test2_compare`；从首条真实 M68 row 开始派生共同窗口 A/B/C、同池等权、
   最大单票贡献和 h1/h3/h5 方向/事件风险分账指标。原 `test2_ab_state.json`
   不读不写，无完整收盘或无真实 shadow row 时显式跳过。
+- **test2 盘后自动跟随**：本地默认 25 支 `test2_signal_runner` 完成 25/25 当日定盘
+  信号后，自动复用 M63 的 `M54 accrual → M68 shadow → A/B/C compare` 公共入口；
+  陈旧 bar、部分失败、子池与 no-LLM 批次显式跳过，并保留 `--no-shadow` 回滚开关。
 
 ### Changed / 变更
 
@@ -42,8 +45,8 @@
 
 ### Verification / 验证
 
-- M68/M63/test2-C 聚焦回归 `45 passed`；schema golden 幂等重生成并通过。
-  完整初始化临时库下的全量后端 `1766 passed / 12 skipped`，ruff、发布卫生和 mypy
+- M68/M63/test2-C 本轮聚焦回归 `35 passed`，test2 本地跟随门控自检通过；
+  全量后端 `1777 passed / 5 skipped`，ruff、发布卫生和 mypy
   （328 个 source files）全绿。前端 TypeScript、29 项 Vitest、production build、零 warning
   ESLint 通过；Playwright smoke 覆盖 16 个桌面路由 + 2 个 source-truth 状态与
   14 个移动路由（含 M68），console/page error 均为 0。

@@ -517,6 +517,63 @@ def _run_news_shadow_test2_compare(
     return module.build_and_write_comparison(db_path=resolved, as_of=as_of)
 
 
+def run_m68_test2_followup(
+    *,
+    db_path: str | Path | None = None,
+    as_of: str | None = None,
+    no_llm: bool = False,
+    step_overrides: dict[str, Callable[[], Any]] | None = None,
+) -> dict[str, Any]:
+    """Run the shared post-test2 M54 -> M68 -> A/B/C shadow sequence.
+
+    Each step remains failure-isolated so an evidence-lane problem never
+    changes the official test2 signal batch or its original A/B state.
+    """
+    day = _now_date(as_of)
+    overrides = step_overrides or {}
+    steps: list[dict[str, Any]] = []
+
+    accrual_step = _step_result(
+        "m54_daily_accrual",
+        overrides.get("m54_daily_accrual", lambda: _run_accrual(day, no_llm=no_llm)),
+    )
+    steps.append(accrual_step)
+    accrual_result = (
+        accrual_step["result"]
+        if accrual_step["ok"] and isinstance(accrual_step.get("result"), dict)
+        else {}
+    )
+    steps.append(
+        _step_result(
+            "m68_news_shadow",
+            overrides.get(
+                "m68_news_shadow",
+                lambda: _run_news_shadow(
+                    day,
+                    no_llm=no_llm,
+                    db_path=db_path,
+                    collection_outcomes=accrual_result.get("collection_outcomes"),
+                ),
+            ),
+        )
+    )
+    steps.append(
+        _step_result(
+            "m68_test2_compare",
+            overrides.get(
+                "m68_test2_compare",
+                lambda: _run_news_shadow_test2_compare(db_path, day),
+            ),
+        )
+    )
+    return {
+        "ok": all(step["ok"] for step in steps),
+        "mode": "test2_shadow_followup",
+        "date": day,
+        "steps": steps,
+    }
+
+
 def _run_exit_shadow() -> dict[str, Any]:
     from backend.tools.m58_exit_shadow import build_shadow_report
     from paper_trading.test2_ab_data import DEFAULT_UNIVERSE
@@ -1057,37 +1114,13 @@ def build_postmarket_report(
     steps.append(_step_result("m61_backfill_drip", overrides.get("m61_backfill_drip", lambda: _run_backfill_drip(day))))
     steps.append(_step_result("m60_watchtower", overrides.get("m60_watchtower", lambda: __import__("backend.tools.m60_watchtower", fromlist=["build_watchtower_report"]).build_watchtower_report(db_path=db_path, as_of=day))))
     steps.append(_step_result("m60_second_entry", overrides.get("m60_second_entry", lambda: _run_second_entry_ledger(db_path, day))))
-    steps.append(_step_result("m54_daily_accrual", overrides.get("m54_daily_accrual", lambda: _run_accrual(day, no_llm=no_llm))))
-    accrual_result: dict[str, Any] = next(
-        (
-            step["result"]
-            for step in steps
-            if step["name"] == "m54_daily_accrual" and step["ok"] and isinstance(step["result"], dict)
-        ),
-        {},
-    )
-    steps.append(
-        _step_result(
-            "m68_news_shadow",
-            overrides.get(
-                "m68_news_shadow",
-                lambda: _run_news_shadow(
-                    day,
-                    no_llm=no_llm,
-                    db_path=db_path,
-                    collection_outcomes=accrual_result.get("collection_outcomes"),
-                ),
-            ),
-        )
-    )
-    steps.append(
-        _step_result(
-            "m68_test2_compare",
-            overrides.get(
-                "m68_test2_compare",
-                lambda: _run_news_shadow_test2_compare(db_path, day),
-            ),
-        )
+    steps.extend(
+        run_m68_test2_followup(
+            db_path=db_path,
+            as_of=day,
+            no_llm=no_llm,
+            step_overrides=overrides,
+        )["steps"]
     )
     steps.append(_step_result("m58_exit_shadow", overrides.get("m58_exit_shadow", _run_exit_shadow)))
     steps.append(_step_result("m59_panel", overrides.get("m59_panel", lambda: _run_panel(day))))

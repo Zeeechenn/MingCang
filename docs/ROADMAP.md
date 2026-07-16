@@ -75,6 +75,7 @@
 
 - [x] 方向性指标与风险识别指标分账：新增独立 `C_pyramid_shadow`，在首个真实 C 日之后重算共同窗口 A/B/C、同池等权基线与最大单票贡献；方向线看 h1/h3/h5 IC/命中，事件线看后续绝对涨跌幅。
 - [x] M63 盘后在 M68 落库后自动派生 C 臂 JSON/Markdown；无完整收盘或无真实 M68 row 时 fail-closed，不回填、不用旧日数据冒充当日。
+- [x] 本地默认 25 支 `test2_signal_runner` 在 25/25 成功且全部 `data_date` 等于运行日后，复用同一 `M54 accrual → M68 shadow → A/B/C compare` 跟随入口；陈旧/部分失败/子池/`--no-llm` 显式跳过，`--no-shadow` 可紧急停用。
 - [ ] 方向线晋级沿用 M54：IC ≥0.04、ICIR ≥0.40、分桶单调、≥20 非重叠 IC 日、跨 regime、无 PIT/fallback/provenance blocker。
 - [ ] 即使方向门通过，也只按固定样本 25%→50%→100% 灰度；每阶段保留 legacy 双跑和 owner 显式确认。
 

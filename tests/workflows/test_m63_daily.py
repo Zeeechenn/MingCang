@@ -262,6 +262,57 @@ def test_news_shadow_focus_keeps_full_test2_pool_before_holdings_and_extras():
     assert floor == 3
 
 
+def test_m68_test2_followup_reuses_shared_order_and_collection_outcomes(monkeypatch):
+    calls: list[tuple[str, object]] = []
+
+    monkeypatch.setattr(
+        m63_daily,
+        "_run_accrual",
+        lambda as_of, *, no_llm: {
+            "collection_outcomes": {"603986": "success"},
+        },
+    )
+
+    def fake_shadow(as_of, *, no_llm, db_path, collection_outcomes):
+        calls.append(("shadow", collection_outcomes))
+        return {"n_symbols": 25}
+
+    monkeypatch.setattr(m63_daily, "_run_news_shadow", fake_shadow)
+    monkeypatch.setattr(
+        m63_daily,
+        "_run_news_shadow_test2_compare",
+        lambda db_path, as_of: calls.append(("compare", as_of)) or {"skipped": True},
+    )
+
+    result = m63_daily.run_m68_test2_followup(as_of="2026-07-16")
+
+    assert result["ok"] is True
+    assert [step["name"] for step in result["steps"]] == [
+        "m54_daily_accrual",
+        "m68_news_shadow",
+        "m68_test2_compare",
+    ]
+    assert calls == [
+        ("shadow", {"603986": "success"}),
+        ("compare", "2026-07-16"),
+    ]
+
+
+def test_m68_test2_followup_isolates_failure_and_continues():
+    result = m63_daily.run_m68_test2_followup(
+        as_of="2026-07-16",
+        step_overrides={
+            "m54_daily_accrual": lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+            "m68_news_shadow": lambda: {"n_symbols": 25},
+            "m68_test2_compare": lambda: {"skipped": True, "reason": "no close"},
+        },
+    )
+
+    assert result["ok"] is False
+    assert [step["ok"] for step in result["steps"]] == [False, True, True]
+    assert result["steps"][0]["error"] == "RuntimeError: boom"
+
+
 def test_postmarket_final_text_uses_sanitize_language_guard(tmp_path):
     db_path = _db(tmp_path)
     result = m63_daily.build_postmarket_report(

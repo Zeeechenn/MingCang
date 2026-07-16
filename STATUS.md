@@ -34,7 +34,7 @@ explicitly on HOLD.
 | M29 | mechanism (hypothesis registry / readiness / evidence ledger) folded into M58 as infrastructure; no standalone line |
 | remote agent mode | opt-in only; read-only by default |
 | repository structure | M66 first batch landed: stable core has no static `backend.tools` dependency; legacy CLI/import paths remain compatible |
-| M68 news pyramid | **continuous mirror + independent test2-v2 C arm are wired, not production direction authority**: M63 prioritizes all 25 test2 names plus every real holding, then derives common-window A/B/`C_pyramid_shadow`, equal-weight baseline, concentration and separately-accounted direction/event-risk outcomes. Original test2 A/B state, official `signals`, weights, stops and positions remain untouched. First real C day is pending the next complete close-confirmed test2 session; no historical pyramid backfill is allowed |
+| M68 news pyramid | **continuous mirror + independent test2-v2 C arm are wired, not production direction authority**: M63 and the local default-25 `test2_signal_runner` share one post-test2 follow-up (`M54 accrual → M68 shadow → A/B/C compare`). The test2 hook runs only after a 25/25 successful batch whose `data_date` is the current run date; stale/partial/custom/no-LLM batches fail closed. Original test2 A/B state, official `signals`, weights, stops and positions remain untouched. First real C day is pending the next complete close-confirmed test2 session; no historical pyramid backfill is allowed |
 
 Daily/batch post-market signals do not enable multi-agent research by default,
 to keep runtime LLM token use bounded. Multi-agent research remains available
@@ -70,7 +70,9 @@ single source of truth for sequencing. Live lines as of 2026-07-15:
 - **M68** has completed its first trial slice: real DB evidence/price-volume inputs,
   explicit no-news/fetch/scoring states, a bounded M63 mirror step, three-bucket
   review queue, read-only API, `/news-shadow` trial UI and evidence-bound operator
-  feedback. Its operating judgment is deliberately asymmetric: emotion/news is
+  feedback. The local test2 daily runner now invokes the same shared M68 follow-up
+  after a complete close-confirmed 25-name signal batch. Its operating judgment is
+  deliberately asymmetric: emotion/news is
   first used to surface event and volatility review risk; direction remains a
   shadow counterfactual until the existing M54 IC/ICIR/monotonicity/regime gates pass.
   Persistent extraction-cache replay, frozen-evidence reruns and a measured
