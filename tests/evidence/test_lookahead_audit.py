@@ -88,6 +88,30 @@ def test_m46_5_audit_blocks_future_signal_inputs(test_db):
     assert "review_case_references_future_signal" in report["blockers"]
 
 
+def test_m46_5_audit_accepts_batch_timestamp_signal_date_shape(test_db):
+    """Signal.date = 批次时间戳(YYYY-MM-DDTHH:MM+08:00) 是 2026-05-27 起
+    test2/live 的承重设计（同日多批靠时间戳区分），不应被永久告警。"""
+    from backend.data.database import Price, Signal
+    from backend.tools.m46_5_lookahead_one_time_audit import build_audit
+
+    test_db.add(Price(symbol="600519", date="2026-06-01", open=10, high=11, low=9, close=10, volume=1000))
+    test_db.add(Signal(
+        symbol="600519",
+        date="2026-06-01T22:11+08:00",
+        data_timestamp="2026-06-01",
+        sentiment_score=20,
+        composite_score=25,
+        recommendation="可关注",
+        confidence="中",
+    ))
+    test_db.commit()
+
+    report = build_audit(test_db)
+
+    assert "signal_date_shape_invalid" not in report["warnings"]
+    assert "signal_date_shape_invalid" not in report["blockers"]
+
+
 def test_m46_5_audit_warns_on_unproven_lineage_and_display_risks(test_db):
     from backend.data.database import NewsItem, Price, Signal
     from backend.tools.m46_5_lookahead_one_time_audit import build_audit
@@ -95,7 +119,7 @@ def test_m46_5_audit_warns_on_unproven_lineage_and_display_risks(test_db):
     test_db.add(Price(symbol="600519", date="2026-06-01", open=10, high=11, low=9, close=10, volume=1000))
     test_db.add(Signal(
         symbol="600519",
-        date="2026-06-01T22:11+08:00",
+        date="2026-06-01 22:11",  # 既非纯日期也非合法批次时间戳（缺 T 分隔符与时区偏移）
         data_timestamp="2026-06-01",
         sentiment_score=20,
         composite_score=25,
@@ -114,7 +138,7 @@ def test_m46_5_audit_warns_on_unproven_lineage_and_display_risks(test_db):
     report = build_audit(test_db)
 
     assert report["status"] == "warning"
-    assert "signal_date_not_plain_yyyy_mm_dd" in report["warnings"]
+    assert "signal_date_shape_invalid" in report["warnings"]
     assert "same_symbol_news_after_signal_day_requires_lineage_review" in report["warnings"]
     assert "price_rows_missing_provenance" in report["warnings"]
 

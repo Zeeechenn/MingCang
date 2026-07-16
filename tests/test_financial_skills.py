@@ -121,6 +121,33 @@ def test_daily_review_builds_report_with_vetter_metadata(test_db, tmp_path, samp
     assert review.vetter.status in {"pass", "warn"}
 
 
+def test_daily_review_matches_timestamp_batch_signal(test_db, tmp_path, sample_stocks):
+    """Signal.date 可能是批次时间戳(YYYY-MM-DDTHH:MM+08:00)，as_of=日前缀也应能命中。"""
+    from backend.data.database import Price, Signal
+    from backend.skills.daily_review import build_daily_review
+
+    test_db.add_all([
+        Price(symbol="300308", date="2026-05-17", open=100, high=103, low=99, close=100, volume=1000),
+        Price(symbol="300308", date="2026-05-18", open=101, high=110, low=100, close=108, volume=2500),
+    ])
+    test_db.add(Signal(
+        symbol="300308",
+        date="2026-05-18T16:25+08:00",
+        composite_score=35.0,
+        recommendation="可小仓试错",
+        confidence="中",
+        stop_loss=97.0,
+        take_profit=130.0,
+    ))
+    test_db.commit()
+
+    review = build_daily_review(test_db, as_of="2026-05-18", output_dir=tmp_path)
+
+    assert review.signal_count == 1
+    text = review.path.read_text(encoding="utf-8")
+    assert "300308" in text
+
+
 def test_financial_skill_api_entries_return_daily_review_and_watch_events(
     test_db,
     tmp_path,

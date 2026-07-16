@@ -91,6 +91,12 @@ def build_live_subset(
         )
 
     with closing(_connect_read_only(db_path)) as con:
+        # Signal.date may be a plain date or a batch timestamp
+        # (YYYY-MM-DDTHH:MM+08:00); substr(date,1,10) is the shared "signal day"
+        # prefix. The extra data_timestamp = trade_date equality is not just a
+        # format detail: it is the fail-closed freshness filter (same rule as
+        # live_subset.py) that drops any bar-stale signal whose underlying
+        # data_timestamp is not trade_date, even if its signal day looks fresh.
         rows = con.execute(
             """
             SELECT signal.symbol, signal.composite_score
@@ -98,12 +104,12 @@ def build_live_subset(
             JOIN (
                 SELECT symbol, MAX(id) AS id
                 FROM signals
-                WHERE date = ?
+                WHERE substr(date, 1, 10) = ? AND data_timestamp = ?
                 GROUP BY symbol
             ) AS latest
               ON latest.id = signal.id AND latest.symbol = signal.symbol
             """,
-            (trade_date,),
+            (trade_date, trade_date),
         ).fetchall()
         fresh_symbols = {
             str(row[0])

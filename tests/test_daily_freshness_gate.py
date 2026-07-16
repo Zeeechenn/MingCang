@@ -89,3 +89,40 @@ def test_all_failed_still_raises():
     register_daily_provider("broken", {"CN"}, _boom, priority=0)
     with pytest.raises(RuntimeError, match="daily data unavailable"):
         fetch_daily_with_fallback("600000", "CN", 30, expected_latest="2026-07-16")
+
+
+def test_fresh_success_attaches_freshness_attrs():
+    register_daily_provider("fresh", {"CN"}, lambda s, d: _frame("2026-07-16"), priority=0)
+    df, provider = fetch_daily_with_fallback("600000", "CN", 30, expected_latest="2026-07-16")
+    assert provider == "fresh"
+    assert df.attrs["freshness"] == {
+        "stale": False,
+        "expected": "2026-07-16",
+        "latest": "2026-07-16",
+        "provider": "fresh",
+    }
+
+
+def test_stale_fail_open_attaches_freshness_attrs():
+    register_daily_provider("stale", {"CN"}, lambda s, d: _frame("2026-07-15"), priority=0)
+    df, provider = fetch_daily_with_fallback("600000", "CN", 30, expected_latest="2026-07-16")
+    assert provider == "stale"
+    assert df.attrs["freshness"] == {
+        "stale": True,
+        "expected": "2026-07-16",
+        "latest": "2026-07-15",
+        "provider": "stale",
+    }
+
+
+def test_strict_mode_raises_when_all_stale():
+    register_daily_provider("stale", {"CN"}, lambda s, d: _frame("2026-07-15"), priority=0)
+    with pytest.raises(RuntimeError, match="strict"):
+        fetch_daily_with_fallback("600000", "CN", 30, expected_latest="2026-07-16", strict=True)
+
+
+def test_strict_mode_does_not_raise_when_fresh_found():
+    register_daily_provider("stale", {"CN"}, lambda s, d: _frame("2026-07-15"), priority=0)
+    register_daily_provider("fresh", {"CN"}, lambda s, d: _frame("2026-07-16"), priority=10)
+    df, provider = fetch_daily_with_fallback("600000", "CN", 30, expected_latest="2026-07-16", strict=True)
+    assert provider == "fresh"

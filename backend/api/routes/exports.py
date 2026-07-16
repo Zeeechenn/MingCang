@@ -18,6 +18,7 @@ from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.data.database import Position, Price, ReviewRun, Signal, Stock, get_db
@@ -215,9 +216,11 @@ def _data_trust_html(db: Session) -> str:
 
 
 def _postmarket_review_html(db: Session, day: str) -> str:
+    # Signal.date 可能是纯日期，也可能是批次时间戳(YYYY-MM-DDTHH:MM+08:00)，
+    # 取日前缀比较才能同时命中两种格式。
     signals = (
         db.query(Signal)
-        .filter(Signal.date == day)
+        .filter(func.substr(Signal.date, 1, 10) == day)
         .order_by(Signal.composite_score.desc())
         .all()
     )

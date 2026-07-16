@@ -21,9 +21,25 @@ def run_premarket(market: str = "CN") -> dict:
         stocks = candidates if market == "CN" else [row for row in candidates if is_signal_eligible_stock(row)]
         price_rows, news_rows, financial_rows, filing_rows, errors = 0, 0, 0, 0, 0
 
+        expected_latest = None
+        if market == "CN":
+            try:
+                from backend.data.freshness import expected_trade_date
+
+                expected_latest, _basis = expected_trade_date(db)
+                expected_latest = expected_latest or None
+            except Exception as e:
+                logger.error("expected_trade_date failed: %s", e)
+                expected_latest = None
+
         for stock in stocks:
             try:
-                price_rows += backfill_if_needed(stock.symbol, stock.market, db, refresh_today=True)
+                if stock.market == "CN" and expected_latest:
+                    price_rows += backfill_if_needed(
+                        stock.symbol, stock.market, db, refresh_today=True, expected_latest=expected_latest
+                    )
+                else:
+                    price_rows += backfill_if_needed(stock.symbol, stock.market, db, refresh_today=True)
             except Exception as e:
                 errors += 1
                 logger.error("backfill failed %s %s: %s", stock.market, stock.symbol, e)

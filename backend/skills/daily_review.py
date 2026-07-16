@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from sqlalchemy import func
+
 from backend.config import BASE_DIR
 from backend.data.database import DecisionRun, NewsItem, Signal, Stock
 from backend.skills.vetter import VetterReview, vet_skill_output
@@ -138,9 +140,11 @@ def build_daily_review(
 ) -> DailyReview:
     """Build and optionally persist a deterministic daily review report."""
     day = as_of or datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
+    # Signal.date 可能是纯日期，也可能是批次时间戳(YYYY-MM-DDTHH:MM+08:00)，
+    # 取日前缀比较才能同时命中两种格式。
     signals = (
         db.query(Signal)
-        .filter(Signal.date == day)
+        .filter(func.substr(Signal.date, 1, 10) == day)
         .order_by(Signal.composite_score.desc())
         .all()
     )

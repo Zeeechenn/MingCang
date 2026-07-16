@@ -305,11 +305,13 @@ def system_health(db: Session = Depends(get_db)):
         )
         returns = []
         for sig in recent_signals:
+            # Signal.date 可能是纯日期或批次时间戳，取日前缀再和纯日期的 Price.date 比较
+            day = str(sig.date)[:10]
             sig_p = db.query(Price.close).filter(
-                Price.symbol == sig.symbol, Price.date == sig.date
+                Price.symbol == sig.symbol, Price.date == day
             ).first()
             next_p = db.query(Price.close).filter(
-                Price.symbol == sig.symbol, Price.date > sig.date
+                Price.symbol == sig.symbol, Price.date > day
             ).order_by(Price.date.asc()).first()
             if sig_p and next_p and sig_p[0]:
                 returns.append((next_p[0] - sig_p[0]) / sig_p[0])

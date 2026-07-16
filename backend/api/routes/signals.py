@@ -81,14 +81,17 @@ def eval_signals(
     evaluated = 0
 
     for sig in signals:
+        # Signal.date 可能是纯日期，也可能是批次时间戳(YYYY-MM-DDTHH:MM+08:00)；
+        # Price.date 永远是纯日期，所以要取信号日前缀再比较，否则时间戳信号永远匹配不到日线。
+        day = str(sig.date)[:10]
         sig_price = (
             db.query(Price.close)
-            .filter(Price.asset_key == sig.asset_key, Price.date == sig.date)
+            .filter(Price.asset_key == sig.asset_key, Price.date == day)
             .first()
         )
         next_price = (
             db.query(Price.close)
-            .filter(Price.asset_key == sig.asset_key, Price.date > sig.date)
+            .filter(Price.asset_key == sig.asset_key, Price.date > day)
             .order_by(Price.date.asc())
             .first()
         )

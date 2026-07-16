@@ -29,7 +29,9 @@ from backend.data.database import (
 )
 
 DATE_PREFIX_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
-PLAIN_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Signal.date 的两种合法形态：纯日期（老的生产日任务）与批次时间戳
+# YYYY-MM-DDTHH:MM+08:00（2026-05-27 起的 test2/live 承重设计，同日多批靠时间戳区分）。
+SIGNAL_DATE_SHAPE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}\+\d{2}:\d{2})?$")
 
 
 def _date_part(value: Any) -> str | None:
@@ -39,12 +41,12 @@ def _date_part(value: Any) -> str | None:
     return match.group(1) if match else None
 
 
-def _plain_date_count(db, model, field_name: str) -> int:
+def _shape_mismatch_count(db, model, field_name: str, shape_re: re.Pattern[str]) -> int:
     field = getattr(model, field_name)
     return sum(
         1
         for (value,) in db.query(field).all()
-        if value is None or not PLAIN_DATE_RE.match(str(value))
+        if value is None or not shape_re.match(str(value))
     )
 
 
@@ -89,7 +91,7 @@ def _signal_data_timestamp_after_signal_day(db) -> dict[str, Any]:
 
 
 def _signal_date_shape(db) -> dict[str, Any]:
-    count = _plain_date_count(db, Signal, "date")
+    count = _shape_mismatch_count(db, Signal, "date", SIGNAL_DATE_SHAPE_RE)
     rows = (
         db.query(Signal)
         .order_by(Signal.id.desc())
@@ -99,13 +101,18 @@ def _signal_date_shape(db) -> dict[str, Any]:
     examples = [
         {"id": row.id, "symbol": row.symbol, "date": row.date, "data_timestamp": row.data_timestamp}
         for row in rows
-        if row.date is None or not PLAIN_DATE_RE.match(str(row.date))
+        if row.date is None or not SIGNAL_DATE_SHAPE_RE.match(str(row.date))
     ][:5]
     return _check(
-        name="signal_date_not_plain_yyyy_mm_dd",
+        name="signal_date_shape_invalid",
         status="warning" if count else "pass",
         count=count,
-        description="Signal.date should stay as YYYY-MM-DD so PIT string comparisons and UI dates are unambiguous.",
+        description=(
+            "Signal.date must be either a plain YYYY-MM-DD date (legacy production-day "
+            "jobs) or a batch timestamp YYYY-MM-DDTHH:MM+08:00 (test2/live batches since "
+            "2026-05-27, needed to disambiguate same-day multi-batch signals). Anything "
+            "else breaks PIT string comparisons and downstream date parsing."
+        ),
         examples=examples,
     )
 

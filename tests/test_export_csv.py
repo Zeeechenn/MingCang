@@ -195,6 +195,32 @@ def test_export_postmarket_review_html_includes_evidence_cards_and_positions(tes
     assert "立讯精密" in text
 
 
+def test_export_postmarket_review_html_matches_timestamp_batch_signal(test_db):
+    """Signal.date 可能是批次时间戳(YYYY-MM-DDTHH:MM+08:00)，as_of=日前缀 也应能命中。"""
+    from backend.data.database import Signal, Stock
+
+    test_db.add(Stock(symbol="300308", name="中际旭创", market="CN", active=True))
+    test_db.add(Signal(
+        symbol="300308",
+        date="2026-05-21T16:25+08:00",
+        composite_score=36,
+        recommendation="可小仓试错",
+        confidence="中",
+        rule_version="multi_agent_v2:new_framework",
+    ))
+    test_db.commit()
+
+    client = _client_for_db(test_db)
+    try:
+        resp = client.get("/api/export/postmarket-review.html?as_of=2026-05-21")
+    finally:
+        _clear_client_override()
+
+    assert resp.status_code == 200
+    assert "300308" in resp.text
+    assert "信号证据卡" in resp.text
+
+
 def test_export_postmarket_review_word_compatible_response(test_db):
     client = _client_for_db(test_db)
     try:

@@ -219,13 +219,20 @@ def fetch_daily_with_fallback(
     days: int,
     *,
     expected_latest: str | None = None,
+    strict: bool = False,
 ) -> tuple[pd.DataFrame, str]:
     """Fetch daily bars from the first provider covering market that succeeds.
 
     expected_latest（ISO 日期）给定时启用新鲜度门：provider 返回非空但最新 bar
     早于该日期的结果视为「陈旧」，继续尝试下一家（不罚 cooldown——源没坏、只是
-    滞后）；只有拿到 >= expected_latest 的 bar 才立即采用。全链走完都陈旧则
-    fail-open：返回其中最新的一份并打显式 WARNING，绝不静默。
+    滞后，这是有意为之：陈旧仍计入 provider success）。只有拿到 >= expected_latest
+    的 bar 才立即采用。全链走完都陈旧时：strict=False（默认）fail-open，返回其中
+    最新的一份并打显式 WARNING，绝不静默；strict=True 则 fail-closed，抛
+    RuntimeError，供信号/实盘等不容忍陈旧数据的路径使用。
+
+    expected_latest 给定时，无论走新鲜还是 fail-open 分支，都会在返回的 df 上
+    附加 df.attrs["freshness"] = {"stale", "expected", "latest", "provider"}，
+    让下游可以编程判断新鲜度而不必只靠日志。
     """
     errors: list[str] = []
     stale_best: tuple[pd.DataFrame, str, str] | None = None  # (df, provider, latest_date)
@@ -247,6 +254,12 @@ def fetch_daily_with_fallback(
                     return df, provider.name
                 latest = _latest_bar_date(df)
                 if latest is not None and latest >= expected_latest:
+                    df.attrs["freshness"] = {
+                        "stale": False,
+                        "expected": expected_latest,
+                        "latest": latest,
+                        "provider": provider.name,
+                    }
                     return df, provider.name
                 errors.append(f"{provider.name}: stale(latest={latest})")
                 if stale_best is None or (latest or "") > stale_best[2]:
@@ -259,11 +272,22 @@ def fetch_daily_with_fallback(
             _record_provider_failure(provider.name, str(e), provider.cooldown_seconds)
     if stale_best is not None:
         df, name, latest = stale_best
+        if strict:
+            raise RuntimeError(
+                f"daily freshness gate (strict): {symbol} 全部可用源均无 {expected_latest} bar "
+                f"(best provider={name} latest={latest})"
+            )
         logger.warning(
             "daily freshness gate: %s 全部可用源均无 %s bar，fail-open 返回最新可得 "
             "(provider=%s latest=%s)。下游不得把该数据当作当日 bar 使用。",
             symbol, expected_latest, name, latest,
         )
+        df.attrs["freshness"] = {
+            "stale": True,
+            "expected": expected_latest,
+            "latest": latest,
+            "provider": name,
+        }
         return df, name
     detail = "; ".join(errors) or f"no provider for market={market}"
     raise RuntimeError(f"daily data unavailable for {symbol}: {detail}")

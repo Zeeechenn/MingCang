@@ -15,19 +15,54 @@ import requests
 from backend.config import settings
 
 # 全局请求限速：tickflow 免费档对密集请求 429 敏感（批量刷价第 ~11 支起触发），
-# 支间强制最小间隔从源头压平请求速率。0 可关闭。
-_MIN_REQUEST_INTERVAL = float(os.getenv("TICKFLOW_MIN_REQUEST_INTERVAL", "0.5"))
+# 支间强制最小间隔从源头压平请求速率。0 可关闭。基线可用 TICKFLOW_MIN_REQUEST_INTERVAL
+# 环境变量覆盖（兜底兼容旧用法），否则读 backend.config.settings.tickflow_min_request_interval。
 _throttle_lock = threading.Lock()
 _last_request_at = 0.0
+_consecutive_429 = 0  # 连续 429 计数，成功（含非429错误）即清零
+
+
+def _min_request_interval_base() -> float:
+    """支间最小请求间隔基线：env var 优先，其次 settings。"""
+    env_val = os.getenv("TICKFLOW_MIN_REQUEST_INTERVAL")
+    if env_val is not None:
+        return float(env_val)
+    return float(settings.tickflow_min_request_interval)
+
+
+def _effective_request_interval() -> float:
+    """429 自适应退避：有效间隔 = base * 2**min(连续429次数,3)，上限 4.0 秒。
+
+    这是缓解而非根治——2026-07-16 晚实测首轮 45 支仅 10 支新鲜，补救轮仍触发
+    429，同时段 eastmoney 代理也故障；退避只能压低 tickflow 自身触发 429 的
+    频率，压不住上游代理本身的不可用。
+    """
+    base = _min_request_interval_base()
+    if base <= 0:
+        return 0.0
+    with _throttle_lock:
+        n = _consecutive_429
+    return min(base * (2 ** min(n, 3)), 4.0)
+
+
+def _note_response_status(status_code: int | None) -> None:
+    """收到 429 计数+1；其余状态（含成功）清零，驱动自适应退避。"""
+    global _consecutive_429
+    with _throttle_lock:
+        if status_code == 429:
+            _consecutive_429 += 1
+        else:
+            _consecutive_429 = 0
 
 
 def _throttle() -> None:
-    """Block until at least _MIN_REQUEST_INTERVAL has passed since the last request."""
+    """Block until at least the effective (base + 429 backoff) interval has passed."""
     global _last_request_at
-    if _MIN_REQUEST_INTERVAL <= 0:
+    interval = _effective_request_interval()
+    if interval <= 0:
         return
     with _throttle_lock:
-        wait = _last_request_at + _MIN_REQUEST_INTERVAL - time.monotonic()
+        wait = _last_request_at + interval - time.monotonic()
         if wait > 0:
             time.sleep(wait)
         _last_request_at = time.monotonic()
@@ -110,6 +145,7 @@ def fetch_tickflow_daily(
         params=params,
         timeout=timeout_seconds or settings.tickflow_timeout_seconds,
     )
+    _note_response_status(resp.status_code)
     resp.raise_for_status()
     return _normalize_tickflow_klines(resp.json())
 

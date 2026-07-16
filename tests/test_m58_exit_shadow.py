@@ -91,8 +91,8 @@ def test_source_never_opens_raw_write_capable_sqlite_connection():
 def _seed_db(db_path: Path, *, signals: list[tuple], prices: list[tuple]) -> None:
     con = sqlite3.connect(db_path)
     con.execute(
-        "CREATE TABLE signals (symbol TEXT, date TEXT, quant_score REAL, "
-        "technical_score REAL, sentiment_score REAL, stop_loss REAL, take_profit REAL)"
+        "CREATE TABLE signals (id INTEGER PRIMARY KEY AUTOINCREMENT, symbol TEXT, date TEXT, "
+        "quant_score REAL, technical_score REAL, sentiment_score REAL, stop_loss REAL, take_profit REAL)"
     )
     con.execute(
         "CREATE TABLE prices (symbol TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL)"
