@@ -8,11 +8,12 @@ MingCang is an agent-ready, local-first A/HK/US equity research workspace. It
 supports research, backtests, local validation, memory/context inspection, and
 code maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.7.0`; the latest
-documented release is `v0.7.0` — A/HK/US market-scoped identity, independent
-market rules, provider/research/scheduler integration, frontend adaptation, and
-five-name HK/US shadow validation (see `CHANGELOG.md`). Full-market promotion is
-explicitly on HOLD.
+Current release surface: package/API/frontend versions are `0.7.1`; the latest
+documented release is `v0.7.1` — freshness fail-closed signal generation
+(`expected_trade_date` gate, stale symbols excluded before persist),
+timestamp-aware signal readers, persistent job-run ledger + runtime identity
+handshake, and the M68 news-pyramid production mirror (see `CHANGELOG.md`).
+Full-market promotion remains explicitly on HOLD (v0.7.0).
 
 ## Current State
 
@@ -110,14 +111,13 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last recorded full-suite run (2026-07-16, v0.7.0 release gate): backend
-pytest 1757 passed / 5 skipped; ruff, release hygiene and mypy (321 source
-files, 0 errors) green; frontend typecheck, 27 tests, build, zero-warning
-ESLint, and 15 desktop / 13 mobile Playwright smoke routes plus live-source
-truth checks all green with no console or page errors. A focused live-browser
-check also verified HK 2/2 and US 3/3 market filters and visible shadow/no-order
-badges. Release tags are published only after the matching GitHub CI jobs also
-pass on the exact release commit.
+Last recorded full-suite run (2026-07-16, v0.7.1 release gate): backend
+pytest 1827 passed / 5 skipped; ruff, release hygiene (732 files scanned) and
+mypy (333 source files, 0 errors) green; frontend typecheck, 32 Vitest checks
+across 14 files, production build, zero-warning ESLint, and Playwright smoke
+(desktop + mobile routes plus both live-source truth states, 32 checks) all
+green with no console or page errors. Release tags are published only after
+the matching GitHub CI jobs also pass on the exact release commit.
 
 Current M68 worktree verification (2026-07-15): an initialized isolated DB
 produced backend `1730 passed / 12 skipped`; ruff, release hygiene and mypy

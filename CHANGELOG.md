@@ -6,10 +6,22 @@
 
 ---
 
-## [Unreleased]
+## [v0.7.1] Freshness fail-closed & job run ledger / 新鲜度 fail-closed 与任务运行台账（2026-07-16）
 
 ### Added / 新增
 
+- **交易日新鲜度基准 `expected_trade_date`**：新增 `backend/data/freshness.py`，
+  用全库锚点（prices/index_prices 最新交易日）+ 收盘后候选日 + 单支探针三段式
+  计算"本轮应期望的最新交易日"，替代"池内 max 共识"——数据源集体故障导致
+  全池统一陈旧时不再误判全新鲜；周中节假日探针自然回落上一交易日，零误报、
+  不依赖节假日日历。盘前正式链路（premarket）对 CN 市场接入该门。
+- **任务运行台账 + 运行时身份握手**：`job_runs` 表持久化调度/手动 workflow 运行
+  （trigger_source / as_of / input_coverage，best-effort 落库不阻塞任务本体，
+  `JOB_LEDGER_ENABLED` 开关），新增 `/system/job-runs` 只读查询端点；
+  `backend/runtime_identity.py` + 前端 runtime-identity 前后端身份握手，
+  `/system/status` 返回 version/db_role/scheduler_mode 等身份，前端 live 模式
+  增加兼容性门（身份不兼容时降级显示，不再冒充实时）。新增
+  `SCHEDULER_MODE=manual/external` 与 `DATABASE_ROLE` 配置。
 - **M68 新闻金字塔生产镜像**：新增独立 `news_shadow_runs` / `news_shadow_feedback`
   契约、有界手动 CLI 与 M63 盘后 step；同日并排保存正式 legacy、pyramid、
   机械只替换情绪腿的反事实与 `would_change_action`，不写正式 `signals`。
@@ -28,6 +40,22 @@
 
 ### Changed / 变更
 
+- **信号生成 fail-closed**：`fetch_daily_with_fallback` 新增 `strict` 参数
+  （全链陈旧抛错），`expected_latest` 给定时在返回 DataFrame 上附加
+  `df.attrs["freshness"]` 结构化状态（stale/expected/latest/provider），
+  下游可编程判断而非只靠日志；本地 test2/实盘 runner 同步改为默认在分析与
+  落库之前剔除收口失败的陈旧支（`--allow-stale` 显式放行），A/B 回放自
+  2026-07-16 起每支每日只消费最终版本批次（此前历史冻结不追溯）。
+- **下游读法时间戳感知**：`Signal.date` 自 2026-05-27 起可为批次时间戳
+  （`YYYY-MM-DDTHH:MM+08:00`，配合 `uq_signal_asset_date` 支持同日多批），
+  dashboard 最新批次、信号评估与 kill switch 收益、实盘漏斗（并加
+  `data_timestamp` 等值＝fail-closed 新鲜度过滤）、盘后导出、每日复盘全部
+  改按信号日前缀匹配日线；lookahead 审计的 date 形状检查接受纯日期与合法
+  批次时间戳两种形态（改名 `signal_date_shape_invalid`）。
+- **tickflow 限速配置化**：`TICKFLOW_MIN_REQUEST_INTERVAL` 进 Settings 与
+  `.env.example`，新增 429 自适应退避（指数倍增封顶 4s；缓解非根治）。
+- track-analyst 方法论增补三件：capex/营收历史标尺、中间商时间差逻辑、
+  周期转成长"平台角色缩圈"判据。
 - M54 日常采集增加 per-symbol `success | failed | not_run` 结果，M68 因而能区分
   已核验无新闻、本轮未采集与抓取失败。金字塔 L1 触发接入真实单日涨跌与
   完整 20 日量比，并将进程缓存按 namespace/tier 隔离，避免 M54/M68 或模型层级串数据。
@@ -38,6 +66,10 @@
 
 ### Safety / 安全边界
 
+- 新鲜度批不改写任何历史信号、不做 schema 迁移（批次时间戳 `Signal.date`
+  是承重设计，唯一索引依赖，纯日期化会撞键并改写已收口的 v1 战绩）；A/B
+  回放修复前后逐字节一致（07-16 信号次日才成交），对进行中的 test2 v2 与
+  实盘 track 零扰动，`FINAL_VERSION_CUTOFF` 仅前向生效。
 - M68 落实的判断是：A 股情绪/事件证据先用于解释波动幅度与事件风险；尚不支持
   “单靠情绪稳定预测方向”。事件镜像可先试用，方向替换仍必须另过 M54 统计门与
   owner 显式确认。本批不改正式权重、止盈止损、仓位或 scheduler 时序；
@@ -45,11 +77,15 @@
 
 ### Verification / 验证
 
-- M68/M63/test2-C 本轮聚焦回归 `35 passed`，test2 本地跟随门控自检通过；
-  全量后端 `1777 passed / 5 skipped`，ruff、发布卫生和 mypy
-  （328 个 source files）全绿。前端 TypeScript、29 项 Vitest、production build、零 warning
-  ESLint 通过；Playwright smoke 覆盖 16 个桌面路由 + 2 个 source-truth 状态与
-  14 个移动路由（含 M68），console/page error 均为 0。
+- 发布门 `make verify` 全绿：后端 `1827 passed / 5 skipped`（新鲜度批
+  +41 项新测试），ruff、发布卫生（732 文件 / 80 允许行）与 mypy（333 个
+  source files, 0 errors）通过；前端 TypeScript、14 文件 32 项 Vitest、
+  production build、零 warning ESLint 通过；Playwright smoke 32 项检查
+  （桌面 + 移动路由 + live source-truth 双态）console/page error 均为 0。
+- 新鲜度批附加证据：A/B 回放修复前后 `--end 2026-07-16` 输出与 state 文件
+  md5 完全一致；`expected_trade_date` 实库冒烟（当日锚点/次日盘后候选/
+  次日盘前回落）符合预期。M68/M63/test2-C 此前聚焦回归 `35 passed`，
+  test2 本地跟随门控自检通过。
 
 ---
 
