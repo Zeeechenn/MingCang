@@ -42,7 +42,7 @@ def test_scheduler_persists_success_and_error_job_runs(tmp_path, monkeypatch):
         lambda: {
             "ok": True,
             "date": "2026-07-15",
-            "output_path": "/private/tmp/postmarket_2026-07-15.md",
+            "output_path": "m63_out/postmarket_2026-07-15.md",
         },
         trigger_source="manual_cli",
         input_coverage={"stocks": "25/25"},
