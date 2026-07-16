@@ -144,6 +144,8 @@ const routes = [
     let body = {};
     if (url.pathname.endsWith('/watchlist') || url.pathname.endsWith('/positions') || url.pathname.endsWith('/reviews') || url.pathname.endsWith('/ai/sessions')) body = [];
     else if (url.pathname.endsWith('/memory/list')) body = { rows: [] };
+    // runtime identity 门：live 模式要求 /system/status 返回兼容的运行身份
+    else if (url.pathname.endsWith('/system/status')) body = { version: require('./package.json').version, build_commit: 'unknown', db_role: 'primary', db_latest_date: '2026-07-16', scheduler_mode: 'manual', database_exists: true };
     else if (url.pathname.endsWith('/system/data-coverage')) body = { checks: {}, warnings: [], stocks: [], provider_fallback_chains: { chains_by_market: {} } };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
