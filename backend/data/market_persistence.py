@@ -13,6 +13,71 @@ BACKFILL_THRESHOLD_DAYS = 1   # 最新数据距今超过此天数才触发回填
 REFRESH_WINDOW_DAYS = 5  # refresh_today=True 时覆盖回写的最近窗口
 
 
+def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
+                                  fetched: pd.DataFrame, source: str | None) -> None:
+    """Warn (and record) when stored history sits on a stale adjustment basis.
+
+    Detect-and-report only: we deliberately do NOT rewrite history here.  These
+    rows back a real-money ledger, so re-basing them is an explicit operator
+    decision (see ``backend.tools.rebase_price_history``), not a side effect of
+    a routine backfill.
+    """
+    from backend.data.database import Price
+    from backend.data.price_quality import detect_adjustment_basis_drift
+
+    try:
+        fetched_closes = {
+            str(day): float(row["close"])
+            for day, row in fetched.iterrows()
+            if row.get("close") is not None and not pd.isna(row["close"])
+        }
+        if not fetched_closes:
+            return
+        stored_rows = (
+            db.query(Price.date, Price.close)
+            .filter(
+                Price.asset_key == asset_key,
+                Price.date.in_(list(fetched_closes)),
+            )
+            .all()
+        )
+        stored_closes = {r.date: float(r.close) for r in stored_rows if r.close}
+        drift = detect_adjustment_basis_drift(fetched_closes, stored_closes)
+        if not drift.detected:
+            return
+
+        logger.warning(
+            "M69 复权基准漂移：%s（provider=%s）——%s。"
+            "库内历史与新 bar 基准不一致，跨接缝的盈亏/止损位/ATR 均不可直接比较；"
+            "未自动改写历史，如确认需重基请跑 backend.tools.rebase_price_history。",
+            symbol, source or "unknown", drift.describe(),
+        )
+        _record_basis_drift_event(db, symbol=symbol, source=source, drift=drift)
+    except Exception as exc:  # pragma: no cover - detection must never break ingestion
+        logger.warning("M69 复权基准漂移检查失败 %s: %s", symbol, exc)
+
+
+def _record_basis_drift_event(db, *, symbol: str, source: str | None, drift) -> None:
+    import json
+
+    try:
+        from backend.data.models.degradation import DegradationEvent
+
+        payload = drift.to_payload()
+        payload["symbol"] = symbol
+        db.add(DegradationEvent(
+            component="market_persistence",
+            category="adjustment_basis_drift",
+            provider=source or "unknown",
+            error=f"{symbol}: {drift.describe()}"[:500],
+            context_json=json.dumps(payload, ensure_ascii=False),
+        ))
+        db.commit()
+    except Exception as exc:  # pragma: no cover
+        logger.warning("M69 漂移事件落库失败 %s: %s", symbol, exc)
+        db.rollback()
+
+
 def load_price_df(symbol: str, db, days: int = 200, market: str | None = None) -> pd.DataFrame:
     """
     从 Price 表读取历史行情，返回 OHLCV DataFrame（index=date str，升序）。
@@ -147,6 +212,22 @@ def backfill_if_needed(
         return 0
 
     df_factors = add_all_factors(df)
+
+    # M69: before we filter down to "rows we don't have yet", compare the
+    # overlap between what the provider just returned and what we already hold.
+    # Same provider + same date must reproduce the same close; when it does not,
+    # the provider has re-based the series (typically an ex-dividend) and our
+    # stored history is now on a different basis than the bars we are about to
+    # append.  Left undetected this silently breaks P&L, stop/target levels and
+    # ATR across the seam — 600900 on 2026-07-15 carried a 0.79 offset that the
+    # 3x ratio guard below could never see.
+    _check_adjustment_basis_drift(
+        db,
+        symbol=symbol,
+        asset_key=asset_key,
+        fetched=df,
+        source=source,
+    )
 
     if refresh_today and latest_date_str:
         window_start = (date.today() - timedelta(days=refresh_window_days)).isoformat()

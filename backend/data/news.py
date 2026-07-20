@@ -43,6 +43,20 @@ def _retry(max_attempts: int = 3, delay: float = 1.0):
 
 
 ANSPIRE_SEARCH_URL = "https://plugin.anspire.cn/api/ntsearch/search"
+_anspire_disabled_warned = False
+
+
+def _warn_anspire_disabled_once() -> None:
+    """Anspire 默认停用；每进程只提示一次，避免逐股刷屏（对照 2026-07-20 的 82 条 401）。"""
+    global _anspire_disabled_warned
+    if not _anspire_disabled_warned:
+        _anspire_disabled_warned = True
+        logger.info(
+            "Anspire 新闻源已停用（settings.anspire_enabled=False），本进程跳过全部 Anspire 抓取；"
+            "接口保留，置 ANSPIRE_ENABLED=true 可恢复。"
+        )
+
+
 _ANSPIRE_WEAK_HINTS = (
     "股吧", "雪球", "论坛", "问答", "知道", "贴吧", "抖音", "快手", "视频",
     "财富号", "研报精选", "财务摘要", "公司公告_新浪", "行情", "F10", "资料", "企查查",
@@ -472,6 +486,10 @@ def fetch_stock_news_anspire(
     行情页/F10/资料页/财富号/研报聚合等搜索噪音会被丢弃。
     """
     from backend.config import settings
+
+    if not settings.anspire_enabled:
+        _warn_anspire_disabled_once()
+        return []
 
     if not settings.anspire_api_key:
         return []

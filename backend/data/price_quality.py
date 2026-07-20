@@ -147,6 +147,173 @@ def check_adjustment_basis_jump(
     return incoming_close < down_med / threshold
 
 
+# M69: tolerance for the stored-vs-fetched overlap comparison below.  Same
+# provider + same date should reproduce the same close bit-for-bit modulo float
+# rounding, so anything above 0.2% is a basis change, not noise.  A typical
+# A-share cash dividend re-bases the series by 1-5% (600900 on 2026-07-15:
+# 0.79 on ~28.5 = 2.8%), which sits far under the 3x ratio guard above and is
+# why that guard never fired on it.
+BASIS_DRIFT_REL_TOLERANCE: float = 0.002
+# Below this many overlapping rows the comparison is not conclusive.
+BASIS_DRIFT_MIN_COMPARED: int = 3
+# Spread of the per-row signed deltas (or ratios), relative to their median,
+# under which we call the drift uniform — i.e. a whole-series re-basing rather
+# than a handful of individually corrected bars.
+BASIS_DRIFT_UNIFORMITY: float = 0.05
+
+
+@dataclass(frozen=True)
+class AdjustmentBasisDrift:
+    """Result of comparing stored closes against a freshly fetched series.
+
+    ``detected`` means: for dates present in BOTH the DB and the newly fetched
+    frame, the provider now reports different closes than what we stored.  The
+    stored history is therefore on a stale adjustment basis and must not be
+    compared against newly written bars (P&L, stop/target levels and ATR all
+    silently break across the seam).
+    """
+
+    detected: bool
+    compared_rows: int
+    divergent_rows: int
+    kind: Literal["none", "additive", "multiplicative", "mixed"]
+    median_delta: float
+    median_ratio: float
+    max_abs_delta: float
+    earliest_divergent_date: str | None
+    latest_divergent_date: str | None
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "detected": self.detected,
+            "compared_rows": self.compared_rows,
+            "divergent_rows": self.divergent_rows,
+            "kind": self.kind,
+            "median_delta": round(self.median_delta, 6),
+            "median_ratio": round(self.median_ratio, 6),
+            "max_abs_delta": round(self.max_abs_delta, 6),
+            "earliest_divergent_date": self.earliest_divergent_date,
+            "latest_divergent_date": self.latest_divergent_date,
+        }
+
+    def describe(self) -> str:
+        if not self.detected:
+            return "no adjustment-basis drift"
+        if self.kind == "additive":
+            shape = f"uniform additive offset ≈ {self.median_delta:+.4f} (cash dividend re-basing)"
+        elif self.kind == "multiplicative":
+            shape = f"uniform ratio ≈ {self.median_ratio:.6f} (split/scale re-basing)"
+        else:
+            shape = "non-uniform (individual bars corrected, not a whole-series re-basing)"
+        return (
+            f"{self.divergent_rows}/{self.compared_rows} overlapping rows disagree, {shape}; "
+            f"affected stored range {self.earliest_divergent_date}..{self.latest_divergent_date}"
+        )
+
+
+def _spread_ratio(values: Sequence[float]) -> float:
+    """Max deviation from the median, relative to |median|. 0 = perfectly uniform."""
+    if not values:
+        return float("inf")
+    med = median(values)
+    if abs(med) < 1e-12:
+        return float("inf")
+    return max(abs(v - med) for v in values) / abs(med)
+
+
+def detect_adjustment_basis_drift(
+    fetched_closes: Mapping[str, float],
+    stored_closes: Mapping[str, float],
+    *,
+    rel_tolerance: float = BASIS_DRIFT_REL_TOLERANCE,
+    min_compared: int = BASIS_DRIFT_MIN_COMPARED,
+) -> AdjustmentBasisDrift:
+    """Compare same-date closes from a fresh fetch against what the DB holds.
+
+    This is complementary to :func:`check_adjustment_basis_jump`, which is a
+    row-local ratio guard tuned for 3x hfq-scale splices.  That guard is blind
+    to small re-basings: a cash dividend shifts the whole pre-ex history by a
+    couple of percent, every individual step stays smooth, and nothing trips.
+    The seam only becomes visible when you notice the provider now reports a
+    *different* value for a date you already stored — which is exactly what
+    this function checks.
+
+    Only dates present in both mappings are considered, so a normal incremental
+    backfill (all-new dates, no overlap) yields ``detected=False`` with
+    ``compared_rows=0``.
+
+    Args:
+        fetched_closes: date (ISO ``YYYY-MM-DD``) → close, straight from the provider.
+        stored_closes: date → close, as currently persisted.
+        rel_tolerance: per-row relative difference above which a row counts as divergent.
+        min_compared: minimum overlapping rows required to reach a verdict.
+
+    Returns:
+        An :class:`AdjustmentBasisDrift`.  ``detected`` is True only when the
+        overlap is large enough AND at least one row disagrees beyond tolerance.
+    """
+    common = sorted(set(fetched_closes) & set(stored_closes))
+    deltas: list[float] = []
+    ratios: list[float] = []
+    divergent_dates: list[str] = []
+
+    for day in common:
+        stored = float(stored_closes[day])
+        fresh = float(fetched_closes[day])
+        if stored <= 0:
+            continue
+        if abs(fresh - stored) / stored > rel_tolerance:
+            divergent_dates.append(day)
+            deltas.append(fresh - stored)
+            ratios.append(fresh / stored)
+
+    compared = len(common)
+    if compared < min_compared or not divergent_dates:
+        return AdjustmentBasisDrift(
+            detected=False,
+            compared_rows=compared,
+            divergent_rows=len(divergent_dates),
+            kind="none",
+            median_delta=0.0,
+            median_ratio=1.0,
+            max_abs_delta=0.0,
+            earliest_divergent_date=None,
+            latest_divergent_date=None,
+        )
+
+    # With a single divergent row "uniform" is vacuously true, which would let
+    # one individually corrected bar be described as a whole-series re-basing.
+    # Require at least two rows before claiming a shape.
+    if len(deltas) < 2:
+        additive_uniform = multiplicative_uniform = False
+    else:
+        additive_uniform = _spread_ratio(deltas) <= BASIS_DRIFT_UNIFORMITY
+        multiplicative_uniform = _spread_ratio(ratios) <= BASIS_DRIFT_UNIFORMITY
+    if additive_uniform and not multiplicative_uniform:
+        kind: Literal["additive", "multiplicative", "mixed"] = "additive"
+    elif multiplicative_uniform and not additive_uniform:
+        kind = "multiplicative"
+    elif additive_uniform and multiplicative_uniform:
+        # Over a short window a small offset also looks like a near-constant
+        # ratio; the offset is the more actionable description for A-share
+        # cash dividends, so prefer it.
+        kind = "additive"
+    else:
+        kind = "mixed"
+
+    return AdjustmentBasisDrift(
+        detected=True,
+        compared_rows=compared,
+        divergent_rows=len(divergent_dates),
+        kind=kind,
+        median_delta=median(deltas),
+        median_ratio=median(ratios),
+        max_abs_delta=max(abs(d) for d in deltas),
+        earliest_divergent_date=divergent_dates[0],
+        latest_divergent_date=divergent_dates[-1],
+    )
+
+
 def not_applicable_price_quality_gate() -> PriceQualityGate:
     return PriceQualityGate(
         status="not_applicable",

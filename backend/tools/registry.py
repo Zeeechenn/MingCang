@@ -25,6 +25,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.rebase_price_history",
+        "category": "maintenance",
+        "purpose": "M69: audit stored price history for provider adjustment-basis drift (dividend/split re-basing) and optionally re-base it.",
+        "read_write_boundary": "Read-only by default; --apply deletes and rewrites prices for the explicitly named symbols only. Never touches ledgers.",
+        "recommended_entrypoint": "python3 -m backend.tools.rebase_price_history --symbols 600900",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m67_multimarket_replay",
         "category": "evidence",
         "purpose": "Run the M67 close-confirmed next-open replay with market-specific rules and same-pool baseline.",

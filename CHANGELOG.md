@@ -6,6 +6,38 @@
 
 ---
 
+## [Unreleased]
+
+### Added / 新增
+
+- **M69 复权基准漂移防线**：新增 `backend/data/price_quality.py::detect_adjustment_basis_drift`，
+  抓价时把 provider 新返回的收盘价与库内**同日期**行做重叠比对（同源同日本应逐位相同），
+  检出 provider 对序列重基（现金分红=additive / 拆股=multiplicative），并在
+  `backfill_if_needed` 中打显式 WARNING + 写 `degradation_events`
+  （category=`adjustment_basis_drift`）。新增审计/修复工具
+  `python3 -m backend.tools.rebase_price_history`（默认只读审计，`--apply` 才重写）。
+  与既有 M42/M58 防线互补——那道按 3× 比例阈值抓量级劈叉，对 600900 除息 0.79/28.5≈2.8%
+  的重基天然不敏感（新增单测显式钉住这一点）。
+  **默认只探测不改库**：这些行支撑真钱台账，重基是 operator 显式决定且须与台账重述同批完成。
+
+### Changed / 变更
+
+- **Anspire 新闻源默认停用**：新增 `settings.anspire_enabled`（默认 `False`）。线上 key 失效后
+  每股一次 401、单批 82 条且零产出（2026-07-20），现在总开关关闭时
+  `fetch_stock_news_anspire` 直接空返、不发请求，每进程只记一条 INFO 而非逐股 WARNING。
+  **接口与适配器全部保留**（`AnspireAdapter` 仍在 registry 中），置 `ANSPIRE_ENABLED=true`
+  + 有效 key 即恢复；`deep_research` 的 provider 选择同步改为在停用时直接落到 tavily。
+
+### Fixed / 修复
+
+- 首轮 M69 审计（60 日窗口）检出并量化三处历史基准漂移：600900 长江电力 additive −0.79
+  （库内 04-22..07-14）、600547 山东黄金 additive −0.18（04-22..07-03）、601899 紫金矿业
+  ratio 1.0026（04-22..06-22）；300558 / 600886 干净。相关台账已按统一基准重述
+  （长电真实总回报 +9.77% 而非 +6.58%，止盈实为已越线；山金 07-17「假止损触警」经证实
+  系基准错配假象，不计入 L2 样本）。**未改库**。
+
+---
+
 ## [v0.7.1] Freshness fail-closed & job run ledger / 新鲜度 fail-closed 与任务运行台账（2026-07-16）
 
 ### Added / 新增

@@ -220,7 +220,11 @@ def _evaluate_evidence(
     if usable_count < min_usable:
         from backend.config import settings as _settings
         provider: str | None = None
-        if "anspire" not in exhausted_providers and _settings.anspire_api_key:
+        if (
+            "anspire" not in exhausted_providers
+            and _settings.anspire_enabled
+            and _settings.anspire_api_key
+        ):
             provider = "anspire"
         elif "tavily_web" not in exhausted_providers and _settings.tavily_api_key:
             return EvidenceEvaluation(

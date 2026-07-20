@@ -16,6 +16,9 @@ def test_fetch_stock_news_anspire_returns_filtered_event_items(monkeypatch):
     from backend.config import settings
     from backend.data.news import fetch_stock_news_anspire
 
+    # Anspire 自 2026-07-20 起默认停用（见 test_anspire_disabled_by_default.py）；
+    # 本文件验的是"启用后"的抓取与过滤逻辑，故显式打开总开关。
+    monkeypatch.setattr(settings, "anspire_enabled", True)
     monkeypatch.setattr(settings, "anspire_api_key", "test-key")
 
     def fake_get(url, params, headers, timeout):
@@ -85,6 +88,9 @@ def test_fetch_stock_news_anspire_limits_added_items(monkeypatch):
     from backend.config import settings
     from backend.data.news import fetch_stock_news_anspire
 
+    # Anspire 自 2026-07-20 起默认停用（见 test_anspire_disabled_by_default.py）；
+    # 本文件验的是"启用后"的抓取与过滤逻辑，故显式打开总开关。
+    monkeypatch.setattr(settings, "anspire_enabled", True)
     monkeypatch.setattr(settings, "anspire_api_key", "test-key")
 
     def fake_get(url, params, headers, timeout):

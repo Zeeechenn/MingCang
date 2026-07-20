@@ -269,6 +269,9 @@ class Settings(BaseSettings):
     tavily_supplement_threshold: int = 3  # DB 新闻不足时先用 iFinD MCP，仍不足再用 Tavily
 
     # Anspire Search API（保留给显式 deep research / 手动严格新闻抓取）
+    # 2026-07-20 起默认停用：线上 key 失效导致每股一次 401，日志被刷屏且无产出。
+    # 接口与适配器全部保留，置 True（或 ANSPIRE_ENABLED=true）即恢复调用。
+    anspire_enabled: bool = False         # 总开关；False 时 fetch_stock_news_anspire 直接空返、不发请求
     anspire_api_key: str = ""             # 填入你的 Anspire API Key
     anspire_news_days: int = 2            # 短线新闻搜索窗口
     anspire_news_max_results: int = 5     # 每股最多读取的搜索结果
