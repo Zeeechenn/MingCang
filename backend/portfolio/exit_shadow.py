@@ -49,11 +49,11 @@ from backend.backtest.exit_sweep_m58 import (
     current_trailing_state,
     run_test2_comparison,
 )
-from backend.config import default_sqlite_path
+from backend.config import default_sqlite_path, scratch_output_dir
 
-OUTPUT_JSON = Path("/private/tmp/m58_exit_shadow_report.json")
-OUTPUT_MD = Path("/private/tmp/m58_exit_shadow_report.md")
-HISTORY_PATH = Path("/private/tmp/m58_exit_shadow_history.jsonl")
+OUTPUT_JSON = scratch_output_dir() / "m58_exit_shadow_report.json"
+OUTPUT_MD = scratch_output_dir() / "m58_exit_shadow_report.md"
+HISTORY_PATH = scratch_output_dir() / "m58_exit_shadow_history.jsonl"
 
 # Hardcoded, non-negotiable per the owner's option-B decision (2026-07-03):
 # production stays x2.5/none; the shadow arm remains the pre-registered

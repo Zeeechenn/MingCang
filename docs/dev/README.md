@@ -5,9 +5,9 @@ maintainer contracts that are still referenced by runtime code, tests, evidence
 manuals, or live operations and are not yet fully encoded in code/tests.
 
 Closed plans, experiment narratives, generated research reports, and review
-outputs belong in the external One Loop governance archive:
-
-`/Users/zeeechenn/Documents/项目s/mingcang-one-loop-governance/2026-08-19/archive/`
+outputs belong in the external One Loop governance archive, which lives on the
+owner's machine outside this repository. Per `docs/ROADMAP.md` §1 its absolute
+path is deliberately not recorded here; ask the owner for the location.
 
 Current allowlist:
 

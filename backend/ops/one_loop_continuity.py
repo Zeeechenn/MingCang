@@ -54,6 +54,7 @@ class SignalBatch:
     run_id: str | None = None
     run_id_count: int = 0
     run_id_missing: int = 0
+    authoritative: bool | None = None
 
     @property
     def run_bound(self) -> bool:
@@ -74,6 +75,7 @@ class SignalBatch:
             "run_id": self.run_id,
             "run_bound": self.run_bound,
             "run_id_missing": self.run_id_missing,
+            "authoritative": self.authoritative,
         }
 
 
@@ -315,9 +317,35 @@ def _signal_batches_for_day(conn: sqlite3.Connection, day: str) -> tuple[list[Si
             run_id=str(row["run_id"]) if row["run_id"] else None,
             run_id_count=int(row["run_id_count"] or 0),
             run_id_missing=int(row["run_id_missing"] or 0),
+            authoritative=_batch_authoritative(
+                conn,
+                str(row["run_id"]) if row["run_id"] and int(row["run_id_count"] or 0) == 1 else None,
+            ),
         )
         for row in rows
     ], []
+
+
+def _batch_authoritative(conn: sqlite3.Connection, run_id: str | None) -> bool | None:
+    """Whether the run that produced a batch declared itself the day's official one.
+
+    The signal runner already marks any non-default universe (live-track sweeps,
+    subset deep-evaluation reruns) as non-authoritative; those are research
+    reruns, not the day's official signal batch. Unknown stays None so an
+    unreadable run is never silently dropped.
+    """
+    if not run_id or not _table_exists(conn, "job_runs"):
+        return None
+    row = conn.execute(
+        "SELECT * FROM job_runs WHERE run_id = ? LIMIT 1",
+        (run_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    envelope = _stored_run_envelope(row)
+    if envelope is None:
+        return None
+    return _is_authoritative(envelope)
 
 
 def _envelope_covers_batch(envelope: dict[str, Any], batch: SignalBatch) -> bool:
@@ -539,17 +567,21 @@ def _audit_day(conn: sqlite3.Connection, day: str, repo_root: Path) -> dict[str,
         panel_envelope = None
         panel_row = None
 
+    # Exclusions explain why a selection failed. Once one authoritative run has
+    # been selected they are expected residue — a superseded pre-close run, a
+    # retried attempt — and must not withhold a day that is otherwise complete.
     for reason, count in sorted(panel_excluded.items()):
-        # A run that finished before the close is excluded by design. Once a
-        # close-confirmed run exists for the day it is expected residue, not a
-        # reason to withhold the day.
-        if reason == "panel_run_not_close_confirmed" and panel_envelope is not None:
-            notes.append(f"excluded_run:{reason}:{count}")
-            continue
-        blockers.append(f"excluded_run:{reason}:{count}")
+        target = notes if panel_envelope is not None else blockers
+        target.append(f"excluded_run:{reason}:{count}")
 
-    batches, signal_blockers = _signal_batches_for_day(conn, day)
+    all_batches, signal_blockers = _signal_batches_for_day(conn, day)
     blockers.extend(signal_blockers)
+    # A research rerun over a non-default universe is not the day's official
+    # signal batch and must not make the official one look ambiguous.
+    batches = [batch for batch in all_batches if batch.authoritative is not False]
+    research_batches = len(all_batches) - len(batches)
+    if research_batches:
+        notes.append(f"non_authoritative_signal_batches:{research_batches}")
     run_bound_batches = [batch for batch in batches if batch.run_bound]
     selected_batch: SignalBatch | None = None
     if len(batches) == 1:
@@ -577,9 +609,10 @@ def _audit_day(conn: sqlite3.Connection, day: str, repo_root: Path) -> dict[str,
             day=day,
             batch=selected_batch,
         )
-    for reason, count in sorted(signal_excluded.items()):
-        blockers.append(f"excluded_signal_run:{reason}:{count}")
     signal_envelope = signal_runs[0]["envelope"] if len(signal_runs) == 1 else None
+    for reason, count in sorted(signal_excluded.items()):
+        target = notes if signal_envelope is not None else blockers
+        target.append(f"excluded_signal_run:{reason}:{count}")
     if len(signal_runs) == 1:
         checks["batch_envelope_match"] = "matched"
         checks["signal_run"] = "complete"
@@ -629,7 +662,7 @@ def _audit_day(conn: sqlite3.Connection, day: str, repo_root: Path) -> dict[str,
         "batch_id": selected_batch.batch_id if selected_batch else None,
         "panel_envelope_batch_id": panel_envelope.get("batch_id") if panel_envelope else None,
         "signal_envelope_batch_id": signal_envelope.get("batch_id") if signal_envelope else None,
-        "signal_batches": [batch.as_dict() for batch in batches],
+        "signal_batches": [batch.as_dict() for batch in all_batches],
         "artifacts": artifacts,
         "panel_work_metrics": panel_work_metrics,
         "degradations": degradations,

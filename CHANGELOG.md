@@ -78,6 +78,23 @@
 
 ### Fixed / 修复
 
+- **当日官方信号批次口径（owner 2026-08-19 裁决：test2 默认 25 支池为官方）**：日常跑测试
+  一天会调用 signal runner 2–3 次（test2 25 支 → 实盘广筛 → 子集深评），而 `signals.date` 是
+  精确到分钟的运行时间戳，因此每次调用都是独立批次 → 同日多批次 → `ambiguous_signal_batches`，
+  **照原跑法每一天都不会计入 20 日门**。runner 早已按 `authoritative_universe`
+  （仅默认池为 True）在运行信封里标注，缺的是审计器没用这个标记：现在按 run_id 反查产出该批次
+  的运行，显式非 authoritative 的批次不参与当日批次身份判定（仍完整出现在证据里，记为 notes）。
+  只有研究性重跑而没有官方批次时仍 `missing_signal_batch` fail-closed。
+  同时把排除项的语义收敛为诊断而非判罚：**已成功选出权威运行时**，被取代/重试/非官方的排除项
+  记 notes 不再连坐扣掉这一天；没选出时它们照旧作为 blocker 解释失败原因。
+
+- **提交后暴露的 9 处发布卫生违规**：`backend/backtest/exit_sweep_m58.py`、
+  `backend/portfolio/exit_shadow.py`、`backend/tools/memory_backtest.py` 把 `/private/tmp/...`
+  硬编码为默认产物路径，`docs/dev/README.md` 直接写了 owner 本机绝对路径
+  （违反 ROADMAP §1「本地绝对路径不写入版本库」）。这些文件此前一直未提交，
+  release-hygiene 扫的是 tracked 文件所以完全看不见。现改为 `backend.config.scratch_output_dir()`
+  （默认平台临时目录，`MINGCANG_SCRATCH_DIR` 可覆盖），文档改为说明性描述不写路径。
+
 - **盘后面板的收盘确认门（阶段 6 第二道断口）**：面板产物链本身是好的——在生产库副本上
   实跑 `m63_daily --mode postmarket` 能落台账行、写出八卡产物并标记 committed。真正的问题
   是**顺序**：盘中 12:00 跑的一次盘后，在库内最新价仍是前一交易日的情况下，照样产出

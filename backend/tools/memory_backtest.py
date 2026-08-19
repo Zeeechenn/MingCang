@@ -35,12 +35,12 @@ from backend.backtest.test2_replay import (
     replay,
     result_summary,
 )
-from backend.config import default_sqlite_path
+from backend.config import default_sqlite_path, scratch_output_dir
 from backend.decision.signal_policy import is_entry_signal
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_UNIVERSE = REPO_ROOT / "paper_trading" / "test2_universe.json"
-DEFAULT_OUTPUT = Path("/private/tmp/mingcang-memory-backtest.json")
+DEFAULT_OUTPUT = scratch_output_dir() / "mingcang-memory-backtest.json"
 BENCHMARK = "sh000300"
 MIN_PRICE_COVERAGE = 0.80
 MAX_MEMORY_SAMPLES = 200

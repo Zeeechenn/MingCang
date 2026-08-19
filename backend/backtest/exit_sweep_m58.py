@@ -27,12 +27,12 @@ from backend.analysis.factors import add_all_factors
 from backend.backtest.backtrader_eval import compute_tech_scores
 from backend.backtest.compare_paths import _max_drawdown
 from backend.backtest.grid_backtest import regime_from_pool_equal_weight, resolve_effective_end
-from backend.config import default_sqlite_path
+from backend.config import default_sqlite_path, scratch_output_dir
 
-OUTPUT_JSON = Path("/private/tmp/m58_exit_sweep_report.json")
-OUTPUT_MD = Path("/private/tmp/m58_exit_sweep_report.md")
-HOLDOUT_ADJUDICATION_JSON = Path("/private/tmp/m58_holdout_adjudication.json")
-HOLDOUT_ADJUDICATION_MD = Path("/private/tmp/m58_holdout_adjudication.md")
+OUTPUT_JSON = scratch_output_dir() / "m58_exit_sweep_report.json"
+OUTPUT_MD = scratch_output_dir() / "m58_exit_sweep_report.md"
+HOLDOUT_ADJUDICATION_JSON = scratch_output_dir() / "m58_holdout_adjudication.json"
+HOLDOUT_ADJUDICATION_MD = scratch_output_dir() / "m58_holdout_adjudication.md"
 START_DATE = "2021-05-21"
 TEST2_START = "2026-05-12"
 TEST2_END = "2026-07-02"

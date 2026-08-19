@@ -784,3 +784,76 @@ def test_continuity_counts_a_day_whose_pre_close_run_was_superseded(tmp_path: Pa
     assert first_day["notes"] == ["excluded_run:panel_run_not_close_confirmed:1"]
     assert first_day["status"] == "complete"
     assert result["status"] == "complete"
+
+
+def test_continuity_ignores_non_authoritative_research_reruns(tmp_path: Path) -> None:
+    """The live-track sweep and subset deep-eval are reruns, not the day's batch.
+
+    The signal runner marks any non-default universe non-authoritative, so the
+    daily test-running routine (test2 25-name pool, then a live-track sweep over
+    its own universe) must still leave exactly one official batch.
+    """
+    days = _days(20)
+    db_path, repo_root, conn = _seed_days(tmp_path, days)
+    conn.execute(
+        "UPDATE signals SET run_id = ? WHERE data_timestamp = ?",
+        (f"signal-{days[0]}", days[0]),
+    )
+    _seed_signals(conn, days[0], batch_id=f"{days[0]}T15:32+08:00", run_id="live-track-run")
+    sweep = _envelope(
+        days[0],
+        f"{days[0]}T15:32+08:00",
+        "sweep",
+        entrypoint="test2_signal_runner",
+        run_id="live-track-run",
+        authoritative=False,
+    )
+    _seed_job(conn, days[0], sweep, "sweep", job_name="test2_signal_runner")
+    conn.commit()
+    conn.close()
+
+    result = audit_one_loop_continuity(
+        db_path=db_path,
+        implementation_since=days[0],
+        repo_root=repo_root,
+    )
+
+    first_day = result["days"][0]
+    assert first_day["checks"]["signal_batch_identity"] == "unique"
+    assert first_day["blockers"] == []
+    assert "non_authoritative_signal_batches:1" in first_day["notes"]
+    # the rerun stays visible in the evidence, it is only excluded from identity
+    assert [batch["authoritative"] for batch in first_day["signal_batches"]] == [False, True]
+    assert result["status"] == "complete"
+
+
+def test_continuity_fails_closed_when_only_a_research_rerun_exists(tmp_path: Path) -> None:
+    """Dropping reruns must not invent an official batch that never ran."""
+    days = _days(20)
+    db_path, repo_root, conn = _seed_days(tmp_path, days)
+    conn.execute(
+        "UPDATE signals SET run_id = ? WHERE data_timestamp = ?",
+        ("live-track-run", days[0]),
+    )
+    sweep = _envelope(
+        days[0],
+        f"{days[0]}T22:00:00+08:00",
+        "sweep",
+        entrypoint="test2_signal_runner",
+        run_id="live-track-run",
+        authoritative=False,
+    )
+    conn.execute("DELETE FROM job_runs WHERE job_name='test2_signal_runner' AND as_of=?", (days[0],))
+    _seed_job(conn, days[0], sweep, "sweep", job_name="test2_signal_runner")
+    conn.commit()
+    conn.close()
+
+    result = audit_one_loop_continuity(
+        db_path=db_path,
+        implementation_since=days[0],
+        repo_root=repo_root,
+    )
+
+    first_day = result["days"][0]
+    assert "missing_signal_batch" in first_day["blockers"]
+    assert result["status"] == "incomplete"

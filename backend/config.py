@@ -457,3 +457,16 @@ def active_signal_weights(as_of: date | None = None) -> SignalWeights:
         profile="new_framework",
         use_multi_agent=settings.multi_agent_enabled,
     )
+
+
+def scratch_output_dir() -> Path:
+    """Directory for tool scratch reports.
+
+    Defaults to the platform temp directory so no developer-specific absolute
+    path ships in the repository; override with ``MINGCANG_SCRATCH_DIR``.
+    """
+    import os
+    import tempfile
+
+    override = os.environ.get("MINGCANG_SCRATCH_DIR")
+    return Path(override) if override else Path(tempfile.gettempdir())
