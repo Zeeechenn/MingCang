@@ -196,7 +196,32 @@ def test_agent_cli_tools_lists_registry_with_boundaries(tmp_path):
     payload = json.loads(result.stdout)
     assert set(payload["categories"]) == {"stable", "maintenance", "evidence", "attic"}
 
+    assert payload["category"] == "stable"
     tools = {item["module"]: item for item in payload["tools"]}
+    assert tools
+    assert {item["category"] for item in tools.values()} == {"stable"}
+
+    for module in (
+        "backend.tools.coverage_snapshot",
+    ):
+        assert module in tools
+        assert tools[module]["purpose"]
+        assert tools[module]["read_write_boundary"]
+        assert tools[module]["recommended_entrypoint"]
+        assert tools[module]["lifecycle"] in {"proposed", "experimental", "shadow", "stable", "dormant", "rejected", "archived"}
+        assert tools[module]["owner_domain"]
+        assert isinstance(tools[module]["consumers"], list)
+        assert tools[module]["canonical_entrypoint"].startswith("backend.")
+        assert tools[module]["io_contract"]
+        assert tools[module]["safety"]
+        assert tools[module]["evidence"]
+        assert tools[module]["success_metric"]
+        assert "expiry" in tools[module]
+        assert tools[module]["rollback"]
+        assert "replacement" in tools[module]
+
+    assert tools["backend.tools.coverage_snapshot"]["category"] == "stable"
+    explicit_modules = set(tools)
     expected_modules = {
         f"backend.tools.{path.stem}"
         for path in (repo / "backend" / "tools").glob("*.py")
@@ -207,31 +232,20 @@ def test_agent_cli_tools_lists_registry_with_boundaries(tmp_path):
         for path in (repo / "backend" / "tools" / "attic").glob("*.py")
         if path.name != "__init__.py"
     )
-    assert set(tools) == expected_modules
+    for category in ("maintenance", "evidence", "attic"):
+        filtered = _run_cli(repo, db_url, "tools", "--category", category)
+        assert filtered.returncode == 0, filtered.stderr
+        filtered_payload = json.loads(filtered.stdout)
+        assert filtered_payload["category"] == category
+        assert filtered_payload["tools"]
+        assert {item["category"] for item in filtered_payload["tools"]} == {category}
+        explicit_modules.update(item["module"] for item in filtered_payload["tools"])
 
-    for module in (
-        "backend.tools.coverage_snapshot",
-        "backend.tools.m45_import_track_theses",
-        "backend.tools.atlas_test4_stage2b_shadow",
-        "backend.tools.attic.backfill_and_run",
-    ):
-        assert module in tools
-        assert tools[module]["purpose"]
-        assert tools[module]["read_write_boundary"]
-        assert tools[module]["recommended_entrypoint"]
+    assert explicit_modules == expected_modules
 
-    assert tools["backend.tools.coverage_snapshot"]["category"] == "stable"
-    assert tools["backend.tools.m45_import_track_theses"]["category"] == "maintenance"
-    assert tools["backend.tools.atlas_test4_stage2b_shadow"]["category"] == "evidence"
-    assert tools["backend.tools.attic.backfill_and_run"]["category"] == "attic"
-    assert tools["backend.tools.attic.backfill_and_run"]["still_runnable"] is False
-
-    filtered = _run_cli(repo, db_url, "tools", "--category", "evidence")
-    assert filtered.returncode == 0, filtered.stderr
-    filtered_payload = json.loads(filtered.stdout)
-    assert filtered_payload["category"] == "evidence"
-    assert filtered_payload["tools"]
-    assert {item["category"] for item in filtered_payload["tools"]} == {"evidence"}
+    attic = _run_cli(repo, db_url, "tools", "--category", "attic")
+    attic_tools = {item["module"]: item for item in json.loads(attic.stdout)["tools"]}
+    assert attic_tools["backend.tools.attic.backfill_and_run"]["still_runnable"] is False
 
 
 def test_agent_cli_read_context_commands_do_not_record_stock_memory_usage(tmp_path):
@@ -265,9 +279,11 @@ def test_agent_cli_read_context_commands_do_not_record_stock_memory_usage(tmp_pa
         assert result.returncode == 0, result.stderr
         payload = json.loads(result.stdout)
         if args[0] == "project-context":
-            assert "300308 只读上下文不应刷新使用痕迹" in payload["memory_context"]["text"]
+            assert payload["memory_context"]["text"] == ""
+            assert payload["memory_policy"]["mode"] == "shadow_only"
         elif args[0] == "stock-context":
-            assert "300308 只读上下文不应刷新使用痕迹" in payload["memory_context"]["text"]
+            assert payload["memory_context"]["text"] == ""
+            assert payload["memory_policy"]["mode"] == "shadow_only"
         else:
             assert "300308 只读上下文不应刷新使用痕迹" in payload["text"]
 

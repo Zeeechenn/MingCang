@@ -5170,6 +5170,40 @@
       }
     ]
   },
+  "schema_migrations": {
+    "columns": [
+      {
+        "default": null,
+        "name": "version",
+        "notnull": 0,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notnull": 1,
+        "pk": 0,
+        "type": "TEXT"
+      },
+      {
+        "default": "CURRENT_TIMESTAMP",
+        "name": "applied_at",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "name"
+        ],
+        "name": "sqlite_autoindex_schema_migrations_1",
+        "unique": 1
+      }
+    ]
+  },
   "sentiment_cache": {
     "columns": [
       {
@@ -5377,6 +5411,13 @@
       },
       {
         "default": null,
+        "name": "run_id",
+        "notnull": 0,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
         "name": "created_at",
         "notnull": 1,
         "pk": 0,
@@ -5417,6 +5458,13 @@
           "market"
         ],
         "name": "ix_signals_market",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "run_id"
+        ],
+        "name": "ix_signals_run_id",
         "unique": 0
       },
       {

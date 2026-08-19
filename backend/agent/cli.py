@@ -221,7 +221,10 @@ def _command_tools(args: argparse.Namespace) -> dict:
     _read_guard(args)
     from backend.tools.registry import missing_retained_tools, tools_registry_payload
 
-    payload = tools_registry_payload(args.category)
+    # One Loop keeps the default surface intentionally narrow.  Maintenance,
+    # evidence and attic entries remain available through an explicit category
+    # request, while the no-flag command only advertises stable capabilities.
+    payload = tools_registry_payload(args.category or "stable")
     payload["coverage"] = {
         "missing_retained_tools": sorted(missing_retained_tools()),
     }

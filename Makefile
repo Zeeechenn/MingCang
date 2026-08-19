@@ -17,7 +17,7 @@ COVERAGE_FILE ?= /tmp/mingcang-coverage
 COVERAGE_XML ?= coverage.xml
 PIP_AUDIT_CACHE_DIR ?= /tmp/mingcang-pip-audit-cache
 
-.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-smoke lint hygiene security dependency-audit fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
+.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-smoke lint hygiene doc-check security dependency-audit release-check fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
 
 help:
 	@echo "MingCang Makefile commands:"
@@ -33,8 +33,10 @@ help:
 	@echo "  frontend-smoke 跑 demo / live / 部分实时浏览器冒烟"
 	@echo "  lint         ruff 检查（不修复）"
 	@echo "  hygiene      发布卫生守卫（旧名词/个人路径/凭据模式）"
+	@echo "  doc-check    文档权威/nav/README 中英一致性检查"
 	@echo "  security     ruff 安全规则快照（当前不作为硬门槛）"
 	@echo "  dependency-audit Python 依赖漏洞审计"
+	@echo "  release-check 校验后端/前端/包版本一致性（可传 TAG=vX.Y.Z）"
 	@echo "  fmt          ruff format + ruff fix"
 	@echo "  typecheck    mypy 类型检查"
 	@echo "  check        lint + typecheck + test 一键全跑（PR 前用）"
@@ -91,11 +93,17 @@ lint:
 hygiene:
 	$(PYTHON) scripts/check_release_hygiene.py
 
+doc-check:
+	$(PYTHON) scripts/check_doc_authority.py
+
 security:
 	$(RUFF) check backend --select S --ignore S101,S311 --exit-zero --statistics --cache-dir $(RUFF_CACHE_DIR)
 
 dependency-audit:
 	$(PIP_AUDIT) --cache-dir $(PIP_AUDIT_CACHE_DIR) --progress-spinner off --desc off --skip-editable
+
+release-check:
+	$(PYTHON) scripts/check_release_consistency.py $(if $(TAG),--tag $(TAG),)
 
 fmt:
 	$(RUFF) format backend tests
@@ -104,9 +112,9 @@ fmt:
 typecheck:
 	$(MYPY) backend --cache-dir $(MYPY_CACHE_DIR)
 
-check: lint hygiene typecheck test
+check: lint hygiene doc-check typecheck test
 
-verify: lint hygiene typecheck test frontend-test build frontend-lint frontend-smoke
+verify: lint hygiene doc-check typecheck test frontend-test build frontend-lint frontend-smoke
 
 demo:
 	@echo "=== MingCang Demo Mode ==="

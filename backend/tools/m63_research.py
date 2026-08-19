@@ -20,12 +20,12 @@ from pathlib import Path
 from typing import Any
 
 from backend.config import default_sqlite_path
+from backend.data import category_backfill as m61_backfill
 from backend.research.watchlist import (
     WATCHLIST_DIR,
     load_watchlists,
     validate_watchlist_entry,
 )
-from backend.tools import m61_backfill
 from backend.workflows.m63_daily import DEFAULT_QUEUE_PATH, load_queue, save_queue
 from backend.workflows.render import enforce_language_guard, render_report, strip_raw_json
 
@@ -115,7 +115,7 @@ def resolve_target(
             "source": "--symbols",
         }
 
-    entries, _errors = load_watchlists(watchlist_dir)
+    entries, _errors = load_watchlists(watchlist_dir, authoritative_thesis=False)
     target_norm = clean_target.lower()
     for entry in entries:
         theme_key = str(entry.get("theme_key") or "")

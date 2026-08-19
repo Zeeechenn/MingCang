@@ -1,5 +1,6 @@
 """Weekend and maintenance scheduler job implementations."""
 import logging
+from typing import Any
 
 from backend.config import settings
 
@@ -107,24 +108,42 @@ def run_daily_memory_backup() -> None:
         db.close()
 
 
-def run_daily_memory_expire() -> None:
-    """Daily cleanup of expired memory rows and stock-memory outcomes."""
+def run_daily_memory_expire() -> dict:
+    """Daily cleanup, outcome accrual, reversible compaction, and recall sync."""
     from backend.data.database import SessionLocal
     from backend.memory.ai_memory import expire_stale_memories
     from backend.memory.audit_log import cleanup_audit_log
+    from backend.memory.maintenance import archive_resolved_judgments, memory_health_snapshot
+    from backend.memory.recall import sync_recall_index
     from backend.memory.stock_memory import update_judgment_outcomes
     db = SessionLocal()
+    result: dict[str, Any] = {
+        "expired": 0,
+        "outcomes": 0,
+        "archived": 0,
+        "audit_removed": 0,
+    }
     try:
         removed = expire_stale_memories(db)
+        result["expired"] = removed
         if removed:
             logger.info("memory expire: removed %d stale rows", removed)
         outcomes = update_judgment_outcomes(db)
+        result["outcomes"] = outcomes
         if outcomes:
             logger.info("stock memory outcomes: wrote %d rows", outcomes)
+        archived = archive_resolved_judgments(db)
+        result["archived"] = archived
+        if archived:
+            logger.info("stock memory maintenance: archived %d resolved judgments", archived)
+        sync_recall_index(db)
         audit_removed = cleanup_audit_log(db)
+        result["audit_removed"] = audit_removed
         if audit_removed:
             logger.info("audit log cleanup: removed %d old rows", audit_removed)
+        result["health"] = memory_health_snapshot(db)
     except Exception as e:
         logger.error("memory expire failed: %s", e)
     finally:
         db.close()
+    return result

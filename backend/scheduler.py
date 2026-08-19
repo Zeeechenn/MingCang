@@ -309,7 +309,7 @@ def job_daily_memory_backup() -> None:
 
 
 @tracked_job("daily_memory_expire")
-def job_daily_memory_expire() -> None:
+def job_daily_memory_expire() -> dict:
     """Daily cleanup of expired memory rows and stock-memory outcomes."""
     from backend.jobs.weekend import run_daily_memory_expire
 

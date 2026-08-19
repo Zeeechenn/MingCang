@@ -21,7 +21,7 @@ from typing import Any
 from backend.config import default_sqlite_path
 from backend.data.context_builder import build_stock_context_pack, render_context_text
 from backend.data.database import SessionLocal
-from backend.tools import m59_discretion
+from backend.decision import discretion as m59_discretion
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUT_DIR = REPO_ROOT / "paper_trading" / "m61_out"
@@ -104,8 +104,8 @@ def _pit_context(case: dict[str, Any], db) -> tuple[dict[str, Any], str]:
         sections=CONTEXT_SECTIONS,
         db=db,
     )
-    # 与生产 _build_context 的 2400 字符裁剪对齐;governor 记忆块因 build_agent_context
-    # 无 as-of 过滤能力被排除在历史回放外(防记忆泄漏),生产实跑会多一块记忆上下文。
+    # 与生产 _build_context 的 2400 字符裁剪对齐。记忆决策上下文默认影子关闭，
+    # 因此生产与历史回放都不追加 governor 记忆块；若未来晋升，需另做 PIT 适配后再评估。
     return pack, render_context_text(pack, max_chars=2400)
 
 

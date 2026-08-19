@@ -1,167 +1,106 @@
 // ============================================================
-// 日常 — M63 日常报告 / M59 裁量参考
+// 日常 — Stage5 single daily_panel.v1 shell
 // ============================================================
 import React from 'react';
-import { getLatestM59Discretion, getLatestM63Report, getM63Queue } from './services/api';
-import { Badge, Markdown, McIcon, PageHead, navigate } from './shared';
+import { DailyPanelCards, DailyPanelHeader } from './features/daily/DailyPanel';
+import { getLatestM63Report } from './services/api';
+import { getDailyPanelLatest, type DailyPanel } from './services/daily';
+import { Badge, Markdown, PageHead, navigate } from './shared';
 
-const { useEffect: useDailyEffect, useState: useDailyState } = React;
+const { useEffect: useDailyEffect, useMemo: useDailyMemo, useState: useDailyState } = React;
 
-const DAILY_TABS = [
-  ['premarket', '盘前'],
-  ['intraday', '盘中'],
-  ['postmarket', '盘后'],
-  ['weekly', '周末'],
+const TABS = [
+  ['all', '全部'],
+  ['stable', 'Stable'],
+  ['shadow', 'Shadow'],
+  ['blocked', 'Missing / Blocked'],
 ];
+const TAB_IDS = new Set(TABS.map(([id]) => id));
 
-function EmptyState({ text }: any) {
-  return (
-    <div className="glass" style={{ padding: 18, color: 'var(--ink-3)', fontSize: 13 }}>
-      {text}
-    </div>
-  );
+function initialDailyTab() {
+  const hash = window.location.hash || '';
+  const query = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : window.location.search.slice(1);
+  const requested = new URLSearchParams(query).get('tab') || 'all';
+  return TAB_IDS.has(requested) ? requested : 'all';
 }
 
-function QueuePanel({ queue, loading }: any) {
-  const pending = queue?.pending || [];
-  return (
-    <aside className="glass pop" style={{ padding: 16, alignSelf: 'start' }}>
-      <div className="card-head" style={{ padding: 0, border: 0 }}>
-        <div>
-          <div className="t-eyebrow">Research Queue</div>
-          <h2 className="t-title" style={{ margin: '2px 0 0', fontSize: 16 }}>待研究队列</h2>
-        </div>
-        <Badge tone="badge-dim">{pending.length}</Badge>
-      </div>
-      <div className="grid" style={{ gap: 10, marginTop: 14 }}>
-        {loading && <div className="t-faint" style={{ fontSize: 12 }}>加载中...</div>}
-        {!loading && pending.length === 0 && <div className="t-faint" style={{ fontSize: 12 }}>暂无待处理条目</div>}
-        {pending.map((item) => (
-          <div key={item.id || `${item.target}-${item.trigger_rule}`} className="glass-inset" style={{ padding: '12px 13px' }}>
-            <div className="spread" style={{ gap: 8, alignItems: 'center' }}>
-              <strong className="t-num" style={{ fontSize: 14 }}>{item.target || '未标注'}</strong>
-              <Badge tone="badge-accent">{item.trigger_rule || 'trigger'}</Badge>
-            </div>
-            {item.reason && <div className="t-dim" style={{ fontSize: 12.5, lineHeight: 1.55, marginTop: 8 }}>{item.reason}</div>}
-          </div>
-        ))}
-      </div>
-    </aside>
-  );
+function EmptyState({ text }: { text: string }) {
+  return <div className="glass" style={{ padding: 18, color: 'var(--ink-3)', fontSize: 13 }}>{text}</div>;
 }
 
-function DiscretionCards({ items }: any) {
-  if (!items?.length) return null;
+function LegacyReportFallback({ active }: { active: boolean }) {
+  const [report, setReport] = useDailyState<any>(null);
+  useDailyEffect(() => {
+    if (!active) return;
+    let alive = true;
+    getLatestM63Report('postmarket')
+      .then((data) => { if (alive) setReport(data); })
+      .catch(() => { if (alive) setReport(null); });
+    return () => { alive = false; };
+  }, [active]);
+  if (!active) return null;
   return (
-    <section className="grid pop" style={{ gap: 10 }}>
-      <div className="spread" style={{ alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+    <section className="glass pop" style={{ padding: 18, minWidth: 0 }}>
+      <div className="spread" style={{ alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <div>
-          <div className="t-eyebrow">M59 Observe Only</div>
-          <h2 className="t-title" style={{ margin: '2px 0 0' }}>🧭 裁量参考区</h2>
+          <div className="t-eyebrow">Legacy fallback</div>
+          <h2 className="t-title" style={{ margin: '2px 0 0' }}>M63 盘后报告</h2>
         </div>
-        <Badge tone="badge-dim">{items[0]?.as_of || 'latest'}</Badge>
+        <Badge tone={report ? 'badge-warn' : 'badge-dim'}>{report?.as_of || 'missing'}</Badge>
       </div>
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
-        {items.map((item) => {
-          const card = item.card || {};
-          const title = `${item.symbol || '未知'} · ${item.slot || 'card'}`;
-          return (
-            <article key={`${item.symbol}-${item.slot}-${item.created_at}`} className="glass" style={{ padding: 15 }}>
-              <div className="spread" style={{ alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div className="t-eyebrow">{item.provider || 'provider'}</div>
-                  <h3 className="t-title" style={{ margin: '3px 0 0', fontSize: 15.5 }}>{title}</h3>
-                </div>
-                <span className="badge badge-warn" style={{ maxWidth: 210, whiteSpace: 'normal', lineHeight: 1.35 }}>
-                  仅供研究参考,不构成投资建议
-                </span>
-              </div>
-              <div className="grid" style={{ gap: 8, marginTop: 13 }}>
-                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  {card.stance && <Badge tone="badge-accent">{card.stance}</Badge>}
-                  {card.confidence && <Badge tone="badge-dim">{card.confidence}</Badge>}
-                </div>
-                {card.timing_note && <div className="t-dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>{card.timing_note}</div>}
-                {card.rationale && <div style={{ fontSize: 13, lineHeight: 1.6 }}>{card.rationale}</div>}
-                {card.reevaluation_trigger && (
-                  <div className="glass-inset" style={{ padding: '9px 10px', fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-                    {card.reevaluation_trigger}
-                  </div>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </div>
+      {report ? <Markdown text={report.text || ''} /> : <EmptyState text="daily_panel 和 legacy report 均不可用。" />}
     </section>
   );
 }
 
 export function DailyPage() {
-  const [tab, setTab] = useDailyState('premarket');
-  const [report, setReport] = useDailyState<any>(null);
-  const [queue, setQueue] = useDailyState<any>({ pending: [], done: [] });
-  const [cards, setCards] = useDailyState<any[]>([]);
-  const [loading, setLoading] = useDailyState(false);
-  const [queueLoading, setQueueLoading] = useDailyState(false);
+  const [tab, setTab] = useDailyState(initialDailyTab);
+  const [panel, setPanel] = useDailyState<DailyPanel | null>(null);
+  const [loading, setLoading] = useDailyState(true);
   const [error, setError] = useDailyState('');
 
   useDailyEffect(() => {
     let alive = true;
     setLoading(true);
     setError('');
-    getLatestM63Report(tab)
+    getDailyPanelLatest('postmarket')
       .then((data) => {
         if (!alive) return;
-        setReport(data);
+        setPanel(data);
       })
       .catch((err) => {
         if (!alive) return;
-        setReport(null);
-        setError(err?.status === 404 ? '暂无该时段报告' : '报告加载失败');
+        setPanel(null);
+        setError(err?.message || 'daily_panel 加载失败');
       })
       .finally(() => {
         if (alive) setLoading(false);
       });
     return () => { alive = false; };
-  }, [tab]);
-
-  useDailyEffect(() => {
-    let alive = true;
-    setQueueLoading(true);
-    getM63Queue()
-      .then((data) => { if (alive) setQueue(data || { pending: [], done: [] }); })
-      .catch(() => { if (alive) setQueue({ pending: [], done: [] }); })
-      .finally(() => { if (alive) setQueueLoading(false); });
-    return () => { alive = false; };
   }, []);
 
-  useDailyEffect(() => {
-    let alive = true;
-    if (tab !== 'postmarket') {
-      setCards([]);
-      return () => { alive = false; };
-    }
-    getLatestM59Discretion()
-      .then((data) => { if (alive) setCards(Array.isArray(data) ? data : []); })
-      .catch(() => { if (alive) setCards([]); });
-    return () => { alive = false; };
-  }, [tab]);
+  const visibleCards = useDailyMemo(() => {
+    const cards = panel?.cards || [];
+    if (tab === 'all') return cards;
+    if (tab === 'blocked') return cards.filter((card) => ['missing', 'blocked', 'degraded'].includes(card.status));
+    return cards.filter((card) => card.lifecycle === tab);
+  }, [panel, tab]);
 
   return (
-    <div className="grid" style={{ gap: 14 }}>
+    <div className="grid" style={{ gap: 14, minWidth: 0 }}>
       <PageHead
         eyebrow="Daily Workflow"
         title="日常"
-        desc="Web 日常页只读展示盘前、盘中、盘后、周末四类报告；新的研究目标和观点通过研究副驾驶提交，并沿用待确认写入边界。"
+        desc="一个入口看清当天发生了什么、为什么、还缺什么确认；每张卡都暴露 lifecycle、status、RunEnvelope 和 evidence refs。"
+        right={<button type="button" className="btn btn-sm" onClick={() => navigate('/reports')}>复盘案卷</button>}
       />
 
       <section className="glass pop" style={{ padding: 14 }} aria-label="研究与观点入口">
         <div className="spread" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
-            <div className="t-eyebrow">On-demand workflow</div>
+            <div className="t-eyebrow">Human confirmation</div>
             <div className="t-dim" style={{ fontSize: 12.5, marginTop: 3 }}>
-              研究与观点不是本页的假执行按钮；进入真实副驾驶后，写入动作仍需确认。
+              研究目标和观点仍通过研究副驾驶确认；本页只读展示，不触发写库或交易动作。
             </div>
           </div>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -171,39 +110,35 @@ export function DailyPage() {
         </div>
       </section>
 
-      <div className="row pop" style={{ gap: 6, flexWrap: 'wrap' }}>
-        {DAILY_TABS.map(([id, label]) => (
+      <div className="row pop" role="tablist" aria-label="daily lifecycle tabs" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {TABS.map(([id, label]) => (
           <button
             key={id}
             type="button"
+            role="tab"
+            aria-selected={tab === id}
             className={`navlink ${tab === id ? 'on' : ''}`}
             style={{ border: '1px solid var(--hairline-soft)' }}
             onClick={() => setTab(id)}
           >
-            <McIcon name={id === 'weekly' ? 'schedule' : 'reports'} size={15} />
             <span>{label}</span>
           </button>
         ))}
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 12 }}>
-        <div className="grid" style={{ gap: 12, minWidth: 0 }}>
-          <section className="glass pop" style={{ padding: 18, minWidth: 0 }}>
-            <div className="spread" style={{ alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <div>
-                <div className="t-eyebrow">M63 Report</div>
-                <h2 className="t-title" style={{ margin: '2px 0 0' }}>{report?.mode || tab}</h2>
-              </div>
-              {report?.as_of && <Badge tone="badge-dim">{report.as_of}</Badge>}
-            </div>
-            {loading && <EmptyState text="加载中..." />}
-            {!loading && error && <EmptyState text={error} />}
-            {!loading && !error && <Markdown text={report?.text || ''} />}
-          </section>
-          {tab === 'postmarket' && <DiscretionCards items={cards} />}
-        </div>
-        <QueuePanel queue={queue} loading={queueLoading} />
-      </div>
+      {loading && <EmptyState text="加载 daily_panel.v1..." />}
+      {!loading && panel && (
+        <>
+          <DailyPanelHeader panel={panel} />
+          <DailyPanelCards cards={visibleCards} />
+        </>
+      )}
+      {!loading && !panel && (
+        <>
+          <EmptyState text={error || 'daily_panel 暂不可用，展示 legacy fallback。'} />
+          <LegacyReportFallback active />
+        </>
+      )}
     </div>
   );
 }

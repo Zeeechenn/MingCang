@@ -15,6 +15,7 @@ from fastapi import APIRouter
 
 from backend.api.routes import (
     ai,
+    daily,
     dashboard,
     exports,
     m63,
@@ -52,6 +53,7 @@ router.include_router(research.router)
 router.include_router(reviews.router)
 router.include_router(skills.router)
 router.include_router(ai.router)
+router.include_router(daily.router)
 router.include_router(memory.router)
 router.include_router(exports.router)
 router.include_router(m63.router)

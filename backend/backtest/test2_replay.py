@@ -8,7 +8,7 @@ contract so evaluation tools do not copy or mutate the private A/B state.
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from backend.backtest.test2_models import (
     COMMISSION_ROUND_TRIP_PCT,
@@ -113,8 +113,17 @@ def replay(
     frameworks: dict[str, Framework],
     max_positions: int = DEFAULT_MAX_POSITIONS,
     sectors: dict[str, str] | None = None,
+    entry_filter: Callable[[Signal, Framework], bool] | None = None,
+    process_all_price_dates: bool = False,
 ) -> dict[str, FrameworkResult]:
-    """Replay close signals with next-fillable-open execution and test2 limits."""
+    """Replay close signals with next-fillable-open execution and test2 limits.
+
+    ``entry_filter`` is an optional research-only overlay.  It can veto a new
+    entry without removing the signal from exit/reversal processing.  The
+    default remains equivalent to the production-shaped replay.  Research
+    callers can set ``process_all_price_dates`` so stops are evaluated on every
+    available session, including dates without a fresh signal batch.
+    """
     sectors = sectors or {}
     filtered = [signal for signal in signals if signal.symbol in universe]
     signals_by_date = _by_date(filtered)
@@ -130,8 +139,11 @@ def replay(
         key: FrameworkResult(framework=framework)
         for key, framework in frameworks.items()
     }
-    for signal_date in sorted(signals_by_date):
-        day_signals = signals_by_date[signal_date]
+    event_dates = set(signals_by_date)
+    if process_all_price_dates:
+        event_dates.update(price_date for _, price_date in prices)
+    for signal_date in sorted(event_dates):
+        day_signals = signals_by_date.get(signal_date, [])
         price_date = signal_date[:10]
         for result in results.values():
             still_open: list[Holding] = []
@@ -161,6 +173,7 @@ def replay(
                 for signal in day_signals
                 if signal.symbol not in held
                 and composite_for(signal, result.framework) > result.framework.entry_threshold
+                and (entry_filter is None or entry_filter(signal, result.framework))
             ]
             candidates.sort(
                 key=lambda item: composite_for(item, result.framework),

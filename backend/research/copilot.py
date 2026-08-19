@@ -3,7 +3,7 @@ LLM research copilot shadow decision card."""
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from backend.config import settings
 from backend.data.context_builder import build_stock_context_pack, render_context_text
@@ -168,11 +168,24 @@ def _latest_decision(symbol: str, as_of: str, db) -> DecisionRun | None:
     )
 
 
-def _latest_news(symbol: str, db, *, limit: int = 8) -> list[dict]:
-    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=14)
+def _signal_as_of(sig: Signal) -> datetime:
+    """Anchor research inputs to the signal's data day, not wall-clock time."""
+    raw = str(sig.data_timestamp or sig.date or "")[:10]
+    try:
+        return datetime.combine(date.fromisoformat(raw), time.max)
+    except ValueError:
+        return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _latest_news(symbol: str, db, *, as_of: datetime, limit: int = 8) -> list[dict]:
+    cutoff = as_of - timedelta(days=14)
     rows = (
         db.query(NewsItem)
-        .filter(NewsItem.symbol == symbol, NewsItem.published_at >= cutoff)
+        .filter(
+            NewsItem.symbol == symbol,
+            NewsItem.published_at >= cutoff,
+            NewsItem.published_at <= as_of,
+        )
         .order_by(NewsItem.published_at.desc())
         .limit(limit)
         .all()
@@ -238,10 +251,21 @@ def _compact_m61_context_pack(pack: dict, *, item_limit: int = 2, field_chars: i
     return compact
 
 
-def _build_m61_copilot_context_text(symbol: str, db, *, max_chars: int = 1600) -> str:
+def _build_m61_copilot_context_text(
+    symbol: str,
+    db,
+    *,
+    as_of: datetime | None = None,
+    max_chars: int = 1600,
+) -> str:
     """Render extra M61 prompt context without changing copilot output schema."""
     try:
-        pack = build_stock_context_pack(symbol, sections=_COPILOT_CONTEXT_SECTIONS, db=db)
+        pack = build_stock_context_pack(
+            symbol,
+            as_of=as_of,
+            sections=_COPILOT_CONTEXT_SECTIONS,
+            db=db,
+        )
         pack = _compact_m61_context_pack(pack)
         return render_context_text(pack, max_chars)
     except Exception as exc:
@@ -382,11 +406,12 @@ def generate_symbol_copilot(symbol: str, db) -> dict:
         raise CopilotUnavailable("LLM provider unavailable for research copilot")
 
     sig = _latest_signal(symbol, db)
+    as_of_dt = _signal_as_of(sig)
     decision = _latest_decision(symbol, sig.date, db)
     official = _official_context(sig, decision)
-    news = _latest_news(symbol, db)
+    news = _latest_news(symbol, db, as_of=as_of_dt)
     long_term = _latest_long_term(symbol, db)
-    context_text = _build_m61_copilot_context_text(symbol, db)
+    context_text = _build_m61_copilot_context_text(symbol, db, as_of=as_of_dt)
 
     _copilot_prompt = _build_prompt(official, news, long_term, context_text)
     data = get_provider().complete_structured(

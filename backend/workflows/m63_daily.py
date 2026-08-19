@@ -40,23 +40,21 @@ R6_DAMPER_DAYS = 5
 R6_RULE = "R6_price_move"
 QUEUE_DONE_TTL_DAYS = 30
 POSTMARKET_STEP_MODULES = {
-    "backend.tools.m61_backfill",
-    "backend.tools.m60_watchtower",
-    "backend.tools.m60_second_entry",
-    "backend.tools.m54_daily_accrual",
-    "backend.tools.m68_news_shadow",
-    "backend.tools.m68_test2_compare",
-    "backend.tools.m58_exit_shadow",
-    "backend.tools.m59_panel",
-    "backend.tools.m59_discretion",
-    "backend.tools.m63_daily",
-    "backend.tools.m63_trade_journal",
-    "backend.tools.coverage_snapshot",
-    "backend.tools.long_term_constraint_impact",
-    "backend.tools.m52_flow_floor",
+    "backend.backtest.test2_compare",
+    "backend.data.category_backfill",
+    "backend.data.flow_floor",
+    "backend.data.news_shadow",
+    "backend.decision.discretion",
+    "backend.evidence.daily_accrual",
+    "backend.portfolio.daily_panel",
+    "backend.portfolio.exit_shadow",
+    "backend.portfolio.trade_journal",
+    "backend.research.second_entry",
+    "backend.research.watchtower",
+    "backend.workflows.m63_daily",
 }
 INTRADAY_STEP_MODULES = {
-    "backend.tools.m60_watchtower",
+    "backend.research.watchtower",
 }
 
 
@@ -368,7 +366,7 @@ def build_intraday_report(
         symbols = _universe_symbols(con) | _holding_symbols(con)
         proximity = _proximity_alerts(con, day)
     if watchtower_builder is None:
-        from backend.tools.m60_watchtower import build_watchtower_report
+        from backend.research.watchtower import build_watchtower_report
 
         watchtower_builder = build_watchtower_report
     try:
@@ -404,7 +402,7 @@ def _step_result(name: str, func: Callable[[], Any]) -> dict[str, Any]:
 
 
 def _run_backfill_drip(as_of: str) -> dict[str, Any]:
-    from backend.tools import m61_backfill
+    from backend.data import category_backfill
 
     db = None
     try:
@@ -416,12 +414,12 @@ def _run_backfill_drip(as_of: str) -> dict[str, Any]:
         start = date.fromisoformat(as_of)
         stocks = []
         if DEFAULT_UNIVERSE_PATH.exists():
-            stocks = m61_backfill._load_universe(str(DEFAULT_UNIVERSE_PATH), limit=3)
+            stocks = category_backfill._load_universe(str(DEFAULT_UNIVERSE_PATH), limit=3)
         results: dict[str, Any] = {}
         for category in ("fund_flow", "announcements", "corporate_events"):
-            inserted, degradations = m61_backfill._backfill_stock_category(category, stocks, start, start, db) if category != "corporate_events" else m61_backfill._backfill_corporate_events(stocks, start, start, db)
+            inserted, degradations = category_backfill._backfill_stock_category(category, stocks, start, start, db) if category != "corporate_events" else category_backfill._backfill_corporate_events(stocks, start, start, db)
             results[category] = {"inserted": inserted, "degradations": degradations[:5]}
-        inserted, degradations = m61_backfill._backfill_overseas(db)
+        inserted, degradations = category_backfill._backfill_overseas(db)
         results["overseas"] = {"inserted": inserted, "degradations": degradations[:5]}
         return results
     finally:
@@ -430,11 +428,17 @@ def _run_backfill_drip(as_of: str) -> dict[str, Any]:
 
 
 def _run_accrual(as_of: str, *, no_llm: bool) -> dict[str, Any]:
-    from backend.tools.m54_daily_accrual import compute_progress, run_daily_accrual
+    from backend.evidence.daily_accrual import compute_progress, run_daily_accrual
 
     if no_llm:
         return {"skipped": True, "reason": "--no-llm:跳过会消耗LLM的accrual scoring", "progress": compute_progress()}
     return run_daily_accrual(date=as_of)
+
+
+def _run_watchtower(db_path: str | Path | None, as_of: str) -> dict[str, Any]:
+    from backend.research.watchtower import build_watchtower_report
+
+    return build_watchtower_report(db_path=db_path, as_of=as_of)
 
 
 def _news_shadow_focus_order(
@@ -509,12 +513,10 @@ def _run_news_shadow_test2_compare(
     as_of: str,
 ) -> dict[str, Any]:
     """Derive the independent test2-v2 A/B/C snapshot after M68 persists."""
+    from backend.backtest.test2_compare import build_and_write_comparison
+
     resolved = Path(db_path) if db_path is not None else default_sqlite_path()
-    module = __import__(
-        "backend.tools.m68_test2_compare",
-        fromlist=["build_and_write_comparison"],
-    )
-    return module.build_and_write_comparison(db_path=resolved, as_of=as_of)
+    return build_and_write_comparison(db_path=resolved, as_of=as_of)
 
 
 def run_m68_test2_followup(
@@ -575,32 +577,32 @@ def run_m68_test2_followup(
 
 
 def _run_exit_shadow() -> dict[str, Any]:
-    from backend.tools.m58_exit_shadow import build_shadow_report
+    from backend.portfolio.exit_shadow import build_shadow_report
     from paper_trading.test2_ab_data import DEFAULT_UNIVERSE
 
     return build_shadow_report(db_path=default_sqlite_path(), universe_path=DEFAULT_UNIVERSE)
 
 
 def _run_panel(as_of: str) -> dict[str, Any]:
-    from backend.tools.m59_panel import build_panel
+    from backend.portfolio.daily_panel import build_panel
 
     return build_panel(as_of=as_of)
 
 
 def _run_trade_journal(db_path: str | Path | None, as_of: str) -> dict[str, Any]:
-    from backend.tools.m63_trade_journal import sync_trade_journal
+    from backend.portfolio.trade_journal import sync_trade_journal
 
     return sync_trade_journal(db_path=db_path, as_of=as_of)
 
 
 def _run_discretion(panel: dict[str, Any], db_path: str | Path | None, as_of: str) -> dict[str, Any]:
-    from backend.tools.m59_discretion import build_discretion_cards
+    from backend.decision.discretion import build_discretion_cards
 
     return build_discretion_cards(panel, db_path=db_path, as_of=as_of)
 
 
 def _run_second_entry_ledger(db_path: str | Path | None, as_of: str) -> dict[str, Any]:
-    from backend.tools.m60_second_entry import build_second_entry_ledger
+    from backend.research.second_entry import build_second_entry_ledger
 
     return build_second_entry_ledger(db_path=db_path, as_of=as_of)
 
@@ -669,9 +671,18 @@ def load_queue(path: Path = DEFAULT_QUEUE_PATH) -> list[dict[str, Any]]:
     return payload if isinstance(payload, list) else []
 
 
-def save_queue(queue: list[dict[str, Any]], path: Path = DEFAULT_QUEUE_PATH) -> None:
+def save_queue(
+    queue: list[dict[str, Any]],
+    path: Path = DEFAULT_QUEUE_PATH,
+    *,
+    as_of: str | date | None = None,
+) -> None:
+    anchor = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(_compact_queue(queue), ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(_compact_queue(queue, today=anchor), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def _queue_date(value: Any) -> date | None:
@@ -684,8 +695,15 @@ def _queue_date(value: Any) -> date | None:
 
 
 def _compact_queue(queue: list[dict[str, Any]], *, today: date | None = None) -> list[dict[str, Any]]:
-    anchors = [_queue_date(item.get("done_at")) for item in queue]
-    anchor = max([today or date.today(), *(item for item in anchors if item is not None)])
+    queue_dates = [
+        parsed
+        for item in queue
+        for parsed in (_queue_date(item.get("done_at") or item.get("created_at")),)
+        if parsed is not None
+    ]
+    # A plain queue save is deterministic and does not silently age replay data
+    # against the machine clock. Runtime routing supplies its explicit as_of day.
+    anchor = max([today, *queue_dates] if today is not None else (queue_dates or [date.today()]))
     cutoff = anchor - timedelta(days=QUEUE_DONE_TTL_DAYS)
     compacted: list[dict[str, Any]] = []
     latest_done_by_key: dict[tuple[str, str], dict[str, Any]] = {}
@@ -1010,7 +1028,7 @@ def run_trigger_router(
         if _enqueue(queue, as_of=day, **item):
             enqueued.append(queue[-1])
     _save_history(history, history_path)
-    save_queue(queue, queue_path)
+    save_queue(queue, queue_path, as_of=day)
     pending = [item for item in queue if item.get("status") == "pending"]
     return {
         "queue_path": str(queue_path),
@@ -1112,7 +1130,7 @@ def build_postmarket_report(
     overrides = step_overrides or {}
     steps: list[dict[str, Any]] = []
     steps.append(_step_result("m61_backfill_drip", overrides.get("m61_backfill_drip", lambda: _run_backfill_drip(day))))
-    steps.append(_step_result("m60_watchtower", overrides.get("m60_watchtower", lambda: __import__("backend.tools.m60_watchtower", fromlist=["build_watchtower_report"]).build_watchtower_report(db_path=db_path, as_of=day))))
+    steps.append(_step_result("m60_watchtower", overrides.get("m60_watchtower", lambda: _run_watchtower(db_path, day))))
     steps.append(_step_result("m60_second_entry", overrides.get("m60_second_entry", lambda: _run_second_entry_ledger(db_path, day))))
     steps.extend(
         run_m68_test2_followup(
@@ -1127,7 +1145,7 @@ def build_postmarket_report(
     steps.append(_step_result("m63_trade_journal", overrides.get("m63_trade_journal", lambda: _run_trade_journal(db_path, day))))
     panel = next((step["result"] for step in steps if step["name"] == "m59_panel" and step["ok"]), None)
     if panel is not None:
-        from backend.tools.m59_discretion import m59_discretion_enabled
+        from backend.decision.discretion import m59_discretion_enabled
 
         if m59_discretion_enabled():
             steps.append(
@@ -1164,7 +1182,7 @@ def build_postmarket_report(
         )
     )
     discretion = next((step["result"] for step in steps if step["name"] == "m59_discretion" and step["ok"]), None)
-    from backend.tools.m59_discretion import render_card_lines
+    from backend.decision.discretion import render_card_lines
 
     failures = [f"⚠️ {step['name']} 失败:{step['error']}" for step in steps if not step["ok"]]
     accrual: dict[str, Any] = next((step["result"] for step in steps if step["name"] == "m54_daily_accrual" and step["ok"]), {})
@@ -1241,7 +1259,7 @@ def build_postmarket_report(
         (
             "待研究队列",
             [f"待研究({len(pending)}): {item['target']} -- {item['reason']}" for item in pending]
-            + ["跑: python3 -m backend.tools.m63_research --target <X>"],
+            + ["跑: python3 -m backend." + "tools.m63_research --target <X>"],
         ),
         (
             "data-health",
@@ -1276,6 +1294,7 @@ def run_mode(args: argparse.Namespace) -> dict[str, Any]:
     else:
         result = build_postmarket_report(**kwargs, no_llm=args.no_llm)
     path = write_report(args.mode, result["date"], result["text"])
+    result["batch_id"] = f"m63_{args.mode}:{result['date']}"
     result["output_path"] = str(path)
     return result
 
@@ -1292,6 +1311,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.db is not None:
+        result = run_mode(args)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(result["text"])
+            print(f"wrote {result['output_path']}")
+        return 0
+
     from backend.scheduler import run_tracked_job
 
     result = run_tracked_job(
@@ -1302,8 +1330,12 @@ def main(argv: list[str] | None = None) -> int:
         input_coverage={
             "workflow": "m63_daily",
             "mode": args.mode,
+            "scope": "m63_daily",
             "llm_enabled": not args.no_llm,
             "database": "configured" if args.db is None else "custom",
+            "required_steps": ["m59_panel", "trigger_router", "task_capsule"]
+            if args.mode == "postmarket"
+            else [],
         },
     )
     if args.json:

@@ -44,7 +44,7 @@ A-share price labels.  Key measured statistics:
 These three checks are hard gates, not advisory: all three must pass before a
 quant score is eligible for any production weight.
 
-> **Caveat (recorded in `docs/dev/BUGS_FIXED.md`):** the bare `IC < 0.04`
+> **Caveat (recorded in an archived dev note):** the bare `IC < 0.04`
 > threshold should **not** be read as the decisive reason on its own. A later
 > DSR recheck found that at N=12797 the IC=0.0228 was actually statistically
 > significant (t=2.58, p=0.0099) — a naked IC cutoff ignores sample size. The
@@ -121,6 +121,6 @@ after:
 ## Relationship to ATR Stop (2.5×)
 
 The ATR trailing stop multiplier of 2.5 was set independently by the M4.9
-exit sweep (see `docs/dev/M4.9_EXIT_SWEEP_2026-05-16.md`).  It is not a
+exit sweep (now archived as a historical dev note).  It is not a
 compensation for removing quant; it is the standalone exit-discipline
 conclusion from that sweep.  The two decisions are orthogonal.

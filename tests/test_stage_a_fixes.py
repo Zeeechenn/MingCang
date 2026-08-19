@@ -199,7 +199,7 @@ def test_default_aggregate_does_not_downgrade_entry_when_long_term_missing(monke
     assert not any("长期标签缺失" in note for note in result["risk_notes"])
 
 
-def test_default_aggregate_surfaces_memory_constraints(monkeypatch):
+def test_default_aggregate_ignores_memory_constraints_in_shadow_mode(monkeypatch):
     from backend.decision import aggregator
 
     monkeypatch.setattr(aggregator.settings, "paper_trading_profile", "new_framework")
@@ -207,6 +207,7 @@ def test_default_aggregate_surfaces_memory_constraints(monkeypatch):
     monkeypatch.setattr(aggregator.settings, "weight_technical", 0.6)
     monkeypatch.setattr(aggregator.settings, "weight_sentiment", 0.4)
     monkeypatch.setattr(aggregator.settings, "long_term_team_enabled", False)
+    monkeypatch.setattr(aggregator.settings, "memory_decision_context_enabled", False)
 
     result = aggregator.aggregate(
         quant_score=0,
@@ -218,8 +219,33 @@ def test_default_aggregate_surfaces_memory_constraints(monkeypatch):
     )
 
     assert result["recommendation"] == "可小仓试错"
+    assert not any(c["type"] == "risk" for c in result["research_constraints"])
+    assert not any(c["type"] == "memory_risk" for c in result["research_conflicts"])
+    assert result["memory_decision_context_applied"] is False
+
+
+def test_promoted_memory_context_can_surface_constraints(monkeypatch):
+    from backend.decision import aggregator
+
+    monkeypatch.setattr(aggregator.settings, "paper_trading_profile", "new_framework")
+    monkeypatch.setattr(aggregator.settings, "weight_quant", 0.0)
+    monkeypatch.setattr(aggregator.settings, "weight_technical", 0.6)
+    monkeypatch.setattr(aggregator.settings, "weight_sentiment", 0.4)
+    monkeypatch.setattr(aggregator.settings, "long_term_team_enabled", False)
+    monkeypatch.setattr(aggregator.settings, "memory_decision_context_enabled", True)
+
+    result = aggregator.aggregate(
+        quant_score=0,
+        technical_result={"score": 80, "limit": {}},
+        sentiment_score=0.8,
+        close=10,
+        atr=1,
+        memory_context={"text": "【300308 股票长期记忆】\n- [risk|重要5|watching] 海外订单兑现风险"},
+    )
+
     assert any(c["type"] == "risk" for c in result["research_constraints"])
     assert any(c["type"] == "memory_risk" for c in result["research_conflicts"])
+    assert result["memory_decision_context_applied"] is True
 
 
 def test_position_sizer_preserves_caps_for_small_candidate_sets():

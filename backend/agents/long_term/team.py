@@ -25,7 +25,7 @@ from backend.agents.long_term.base import LabelQuality, LongTermLabel, LongTermR
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
-PROMPT_VERSION = "m61_p3"
+PROMPT_VERSION = "m61_p3_memory_shadow_v2"
 
 
 def _aggregate_score(reports: dict[str, LongTermReport]) -> float:

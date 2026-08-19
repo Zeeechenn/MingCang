@@ -90,9 +90,12 @@ def test_build_memory_context_prioritizes_user_rules_stock_items_and_research(te
     assert "l0_context" in ctx
 
 
-def test_chat_answer_sanitizes_research_memory_context_for_ui(test_db, sample_stocks):
+def test_chat_answer_sanitizes_research_memory_context_for_ui(test_db, sample_stocks, monkeypatch):
     from backend.api.routes.ai import _context_answer
+    from backend.config import settings
     from backend.memory.research_memory import remember_deep_research
+
+    monkeypatch.setattr(settings, "memory_decision_context_enabled", True)
 
     remember_deep_research(
         test_db,
@@ -198,6 +201,7 @@ def test_research_face_includes_l0_when_research_recall_enabled(test_db, monkeyp
 
     monkeypatch.setattr(settings, "atlas_enabled", False)
     monkeypatch.setattr(settings, "research_l0_recall_enabled", True)
+    monkeypatch.setattr(settings, "memory_decision_context_enabled", True)
     atom = create_memory_atom(
         test_db,
         scope_type="stock",
@@ -225,6 +229,7 @@ def test_research_face_excludes_l0_when_research_recall_disabled(test_db, monkey
 
     monkeypatch.setattr(settings, "atlas_enabled", False)
     monkeypatch.setattr(settings, "research_l0_recall_enabled", False)
+    monkeypatch.setattr(settings, "memory_decision_context_enabled", True)
     atom = create_memory_atom(
         test_db,
         scope_type="stock",
@@ -558,7 +563,8 @@ def test_stock_memory_patch_importance_does_not_refresh_updated_at(test_db):
     assert patched["updated_at"] == old
 
 
-def test_chat_answer_uses_cross_session_stock_memory(test_db, sample_stocks):
+def test_chat_answer_keeps_cross_session_stock_memory_shadow_only(test_db, sample_stocks):
+    from backend.agent.context import mingcang_memory_context
     from backend.api.routes.ai import _context_answer
     from backend.memory.stock_memory import create_stock_memory
 
@@ -573,8 +579,12 @@ def test_chat_answer_uses_cross_session_stock_memory(test_db, sample_stocks):
 
     response = _context_answer("帮我看一下 300308", test_db, session_id=None)
 
-    assert "订单兑现不足时降低新闻权重" in response.answer
-    assert "stock_memory" in response.used_resources
+    explicit = mingcang_memory_context(test_db, symbol="300308")
+
+    assert "订单兑现不足时降低新闻权重" not in response.answer
+    assert "stock_memory" not in response.used_resources
+    assert "订单兑现不足时降低新闻权重" in explicit["text"]
+    assert explicit["memory_mode"] == "explicit_retrieval"
 
 
 def test_deep_research_memory_writes_stock_research_pointer(test_db):
@@ -591,7 +601,7 @@ def test_deep_research_memory_writes_stock_research_pointer(test_db):
 
     rows = list_stock_memories(test_db, symbol="300308", memory_type="research_pointer")
     assert len(rows) == 1
-    assert rows[0]["summary"] == "300308 研究索引：报告摘要，不包含原始长文正文"
+    assert rows[0]["summary"] == "300308 研究索引《AI算力产业链》：报告摘要，不包含原始长文正文"
     assert rows[0]["source_ref"] == "/tmp/report.md#research:300308"
     # M15.3: 不再批量生成 thesis/risk/event candidate 噪声；真正的结构化字段需 LLM 输出
     assert list_stock_memories(test_db, symbol="300308", memory_type="thesis") == []
@@ -885,7 +895,7 @@ def test_update_judgment_outcomes_writes_outcome_and_lesson(test_db):
     assert written == 2
     assert "1d-1.00%" in outcomes[0]["summary"]
     assert "10d-10.00%" in outcomes[0]["summary"]
-    assert "技术确认与新闻兑现" in lessons[0]["summary"]
+    assert "显著失效样本" in lessons[0]["summary"]
 
 
 def test_create_stock_memory_upserts_on_source_ref(test_db):

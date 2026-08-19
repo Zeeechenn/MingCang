@@ -29,19 +29,21 @@ def test_m63_wiring_covers_registry_without_orphans_or_ghosts():
 
 
 def test_daily_postmarket_wiring_is_connected_to_postmarket_steps():
+    registry = {entry["module"]: entry for entry in list_tool_entries()}
     daily_postmarket = {
-        module
+        registry[module]["canonical_entrypoint"]
         for module, entry in WIRING_MAP.items()
         if entry["bucket"] == "daily_postmarket"
     }
 
     assert daily_postmarket <= POSTMARKET_STEP_MODULES
-    assert "backend.tools.m60_second_entry" in POSTMARKET_STEP_MODULES
+    assert "backend.research.second_entry" in POSTMARKET_STEP_MODULES
 
 
 def test_daily_intraday_wiring_is_connected_to_intraday_steps():
+    registry = {entry["module"]: entry for entry in list_tool_entries()}
     daily_intraday = {
-        module
+        registry[module]["canonical_entrypoint"]
         for module, entry in WIRING_MAP.items()
         if entry["bucket"] == "daily_intraday"
     }

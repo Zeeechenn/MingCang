@@ -138,7 +138,11 @@ def apply_research_constraints(
                     final_pos = 0.0
             notes.append(f"长期团'观望'限制短线强度: {finding}")
 
-    mem_constraints = memory_constraints(memory_context)
+    mem_constraints = (
+        memory_constraints(memory_context)
+        if settings.memory_decision_context_enabled
+        else []
+    )
     if mem_constraints:
         constraints.extend(mem_constraints)
         risk_rows = [c for c in mem_constraints if c["type"] in {"risk", "lesson"}]

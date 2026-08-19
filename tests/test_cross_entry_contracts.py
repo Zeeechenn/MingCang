@@ -15,6 +15,7 @@ PROJECT_CONTEXT_KEYS = {
     "docs",
     "memory",
     "memory_context",
+    "memory_policy",
     "positions",
     "watchlist",
     "symbol_context",
@@ -27,6 +28,7 @@ MEMORY_SNAPSHOT_KEYS = {
     "layered_memory",
     "recent_audit",
     "files",
+    "health",
 }
 STOCK_CONTEXT_KEYS = {
     "symbol",
@@ -37,6 +39,7 @@ STOCK_CONTEXT_KEYS = {
     "copilot",
     "layered_memory",
     "memory_context",
+    "memory_policy",
     # tracked/hint: 2026-07-03 UX 批次新增——未追踪股票不再返回全 null 假象
     "tracked",
     "hint",
@@ -71,6 +74,9 @@ WEB_HEALTH_KEYS = {
     "runtime_readiness",
     "feature_flags",
     "llm_budget_alert",   # M25.3: daily LLM cost alert status
+    "workflow_observability",
+    "daily_bundle_observability",
+    "signal_batch_observability",
 }
 
 
@@ -175,3 +181,4 @@ def test_web_system_contracts_keep_monitoring_fields(test_db, sample_stocks):
     }
     assert {"provider", "usable", "reason", "local_cli", "search"} <= set(health["runtime_readiness"])
     assert health["feature_flags"]["long_term_constraints_enabled"] in {True, False}
+    assert health["feature_flags"]["memory_decision_context_enabled"] is False

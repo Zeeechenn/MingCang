@@ -6,8 +6,176 @@ from pathlib import Path
 from typing import Any
 
 CATEGORIES = ("stable", "maintenance", "evidence", "attic")
-
+LIFECYCLES = ("proposed", "experimental", "shadow", "stable", "dormant", "rejected", "archived")
+CATEGORY_LIFECYCLE = {
+    "stable": "stable",
+    "maintenance": "experimental",
+    "evidence": "shadow",
+    "attic": "archived",
+}
+CANONICAL_ENTRYPOINTS = {
+    "backend.tools.m26_quant_baseline": "backend.backtest.quant_baseline",
+    "backend.tools.m46_5_lookahead_one_time_audit": "backend.evidence.lookahead_audit",
+    "backend.tools.m52_flow_floor": "backend.data.flow_floor",
+    "backend.tools.m54_daily_accrual": "backend.evidence.daily_accrual",
+    "backend.tools.m54_news_v2_oos": "backend.evidence.news_v2_oos",
+    "backend.tools.m58_entry_arena": "backend.backtest.entry_arena",
+    "backend.tools.m58_exit_shadow": "backend.portfolio.exit_shadow",
+    "backend.tools.m58_exit_sweep": "backend.backtest.exit_sweep_m58",
+    "backend.tools.m58_grid_backtest": "backend.backtest.grid_backtest",
+    "backend.tools.m59_discretion": "backend.decision.discretion",
+    "backend.tools.m59_entry_card": "backend.decision.entry_card",
+    "backend.tools.m59_panel": "backend.portfolio.daily_panel",
+    "backend.tools.m59_readiness": "backend.decision.readiness",
+    "backend.tools.m60_second_entry": "backend.research.second_entry",
+    "backend.tools.m60_thesis_conditions": "backend.research.thesis_conditions",
+    "backend.tools.m60_watchtower": "backend.research.watchtower",
+    "backend.tools.m61_backfill": "backend.data.category_backfill",
+    "backend.tools.m63_daily": "backend.workflows.m63_daily",
+    "backend.tools.m63_render": "backend.workflows.render",
+    "backend.tools.m63_trade_journal": "backend.portfolio.trade_journal",
+    "backend.tools.m68_news_shadow": "backend.data.news_shadow",
+    "backend.tools.m68_test2_compare": "backend.backtest.test2_compare",
+}
+ENTRYPOINT_CONSUMERS = {
+    "backend.tools.m26_quant_baseline": (
+        "backend.analysis.qlib_engine",
+        "backend.decision.readiness",
+        "manual_cli",
+    ),
+    "backend.tools.m46_5_lookahead_one_time_audit": (
+        "backend.evidence.daily_accrual",
+        "backend.evidence.lookahead",
+        "manual_cli",
+    ),
+    "backend.tools.m52_flow_floor": (
+        "backend.data.context_builder",
+        "backend.data.news_fusion",
+        "backend.data.seed",
+        "backend.portfolio.daily_panel",
+        "backend.workflows.m63_daily",
+        "backend.tools.m61_quant_features",
+        "manual_cli",
+    ),
+    "backend.tools.m54_daily_accrual": ("backend.workflows.m63_daily", "manual_cli"),
+    "backend.tools.m54_news_v2_oos": ("backend.evidence.daily_accrual", "manual_cli"),
+    "backend.tools.m58_entry_arena": ("backend.decision.readiness", "manual_cli"),
+    "backend.tools.m58_exit_shadow": (
+        "backend.decision.aggregator",
+        "backend.workflows.m63_daily",
+        "manual_cli",
+    ),
+    "backend.tools.m58_exit_sweep": (
+        "backend.decision.readiness",
+        "backend.portfolio.exit_shadow",
+        "manual_cli",
+    ),
+    "backend.tools.m58_grid_backtest": (
+        "backend.backtest.exit_sweep_m58",
+        "backend.decision.readiness",
+        "backend.portfolio.daily_panel",
+        "manual_cli",
+    ),
+    "backend.tools.m59_discretion": ("backend.workflows.m63_daily", "manual_cli"),
+    "backend.tools.m59_entry_card": (
+        "backend.portfolio.daily_panel",
+        "backend.portfolio.trade_journal",
+        "backend.decision.readiness",
+        "manual_cli",
+    ),
+    "backend.tools.m59_panel": (
+        "backend.decision.aggregator",
+        "backend.decision.discretion",
+        "backend.evidence.daily_panel",
+        "backend.workflows.m63_daily",
+        "manual_cli",
+    ),
+    "backend.tools.m59_readiness": (
+        "backend.backtest.entry_arena",
+        "backend.portfolio.daily_panel",
+        "backend.portfolio.trade_journal",
+        "manual_cli",
+    ),
+    "backend.tools.m60_second_entry": ("backend.workflows.m63_daily", "manual_cli"),
+    "backend.tools.m60_thesis_conditions": (
+        "backend.backtest.entry_arena",
+        "backend.research.watchtower",
+        "manual_cli",
+    ),
+    "backend.tools.m60_watchtower": (
+        "backend.workflows.m63_daily",
+        "backend.workflows.m63_daily.intraday",
+        "manual_cli",
+    ),
+    "backend.tools.m61_backfill": (
+        "backend.data.context_builder",
+        "backend.data.seed",
+        "backend.portfolio.daily_panel",
+        "backend.workflows.m63_daily",
+        "backend.tools.m63_research",
+        "manual_cli",
+    ),
+    "backend.tools.m63_daily": (
+        "backend.api.routes.m63",
+        "backend.evidence.daily_panel",
+        "backend.jobs.m63_schedule",
+        "manual_cli",
+        "scheduler",
+    ),
+    "backend.tools.m63_render": (
+        "backend.decision.discretion",
+        "backend.decision.entry_card",
+        "backend.evidence.daily_panel",
+        "backend.jobs.m63_schedule",
+        "backend.workflows.m63_daily",
+        "backend.portfolio.daily_panel",
+        "manual_cli",
+    ),
+    "backend.tools.m63_trade_journal": (
+        "backend.decision.aggregator",
+        "backend.workflows.m63_daily",
+        "manual_cli",
+    ),
+    "backend.tools.m68_news_shadow": (
+        "backend.api.routes.news_shadow",
+        "backend.data.context_builder",
+        "backend.data.seed",
+        "backend.portfolio.daily_panel",
+        "backend.workflows.m63_daily",
+        "manual_cli",
+    ),
+    "backend.tools.m68_test2_compare": (
+        "backend.decision.readiness",
+        "backend.workflows.m63_daily",
+        "manual_cli",
+    ),
+}
+OWNER_DOMAINS = {
+    "backend.backtest": "backtest",
+    "backend.data": "data",
+    "backend.decision": "decision",
+    "backend.evidence": "evidence",
+    "backend.portfolio": "portfolio",
+    "backend.research": "research",
+    "backend.workflows": "workflows",
+}
 _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
+    {
+        "module": "backend.tools.memory_backtest",
+        "category": "evidence",
+        "purpose": "Run a point-in-time A/B replay of outcome-backed stock memory against the unchanged test2 entry/exit contract.",
+        "read_write_boundary": "Reads an immutable SQLite snapshot and a local universe; writes only caller-selected research JSON (default /private/tmp). Never mutates memory, signals, weights, stops, positions, orders, or holdout state.",
+        "recommended_entrypoint": "python3 -m backend.tools.memory_backtest --db <snapshot.db> --end <YYYY-MM-DD>",
+        "still_runnable": True,
+    },
+    {
+        "module": "backend.tools.memory_health",
+        "category": "maintenance",
+        "purpose": "Audit memory outcome coverage and optionally backfill outcomes, archive resolved raw judgments, and rebuild recall index.",
+        "read_write_boundary": "Immutable read-only by default against the explicit --db target; --apply writes outcome/lesson memory, reversibly archives resolved or mature no-trading-date judgments, and refreshes the derived recall index. Never changes signals, weights, positions, stops, or orders.",
+        "recommended_entrypoint": "python3 -m backend.tools.memory_health --db <mingcang.db>",
+        "still_runnable": True,
+    },
     {
         "module": "backend.tools.m67_gray_bootstrap",
         "category": "maintenance",
@@ -677,11 +845,43 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
 )
 
 
+def _owner_domain(canonical_entrypoint: str, category: str) -> str:
+    for prefix, owner in OWNER_DOMAINS.items():
+        if canonical_entrypoint.startswith(prefix):
+            return owner
+    if category == "attic":
+        return "attic"
+    return category
+
+
+def _enrich_entry(item: dict[str, Any]) -> dict[str, Any]:
+    entry = dict(item)
+    module = str(entry["module"])
+    category = str(entry["category"])
+    lifecycle = str(entry.get("lifecycle") or CATEGORY_LIFECYCLE[category])
+    if lifecycle not in LIFECYCLES:
+        raise ValueError(f"{module} has invalid lifecycle: {lifecycle}")
+    canonical_entrypoint = str(entry.get("canonical_entrypoint") or CANONICAL_ENTRYPOINTS.get(module) or module)
+    consumers = list(entry.get("consumers") or ENTRYPOINT_CONSUMERS.get(module) or ("manual_cli",))
+    entry.setdefault("lifecycle", lifecycle)
+    entry.setdefault("owner_domain", _owner_domain(canonical_entrypoint, category))
+    entry.setdefault("consumers", consumers)
+    entry.setdefault("canonical_entrypoint", canonical_entrypoint)
+    entry.setdefault("io_contract", entry.get("read_write_boundary", "No I/O contract recorded."))
+    entry.setdefault("safety", "Do not mutate signals, positions, weights, stops, orders, scheduler policy, API contracts, or schema outside the recorded boundary.")
+    entry.setdefault("evidence", "Static registry contract plus focused CLI/module tests.")
+    entry.setdefault("success_metric", "Entrypoint completes without violating its recorded read/write boundary.")
+    entry.setdefault("expiry", None if lifecycle == "stable" else "review before promotion or default wiring")
+    entry.setdefault("rollback", f"Revert consumers to compatibility module {module}.")
+    entry.setdefault("replacement", None if canonical_entrypoint == module else canonical_entrypoint)
+    return entry
+
+
 def list_tool_entries(category: str | None = None) -> list[dict[str, Any]]:
     """Return static tool registry entries, optionally filtered by category."""
     if category is not None and category not in CATEGORIES:
         raise ValueError(f"unknown tool category: {category}")
-    entries = [dict(item) for item in _TOOL_REGISTRY]
+    entries = [_enrich_entry(item) for item in _TOOL_REGISTRY]
     if category is None:
         return entries
     return [item for item in entries if item["category"] == category]
@@ -698,6 +898,7 @@ def build_tool_registry_payload(category: str | None = None) -> dict[str, Any]:
         "schema_version": "m49_tools_registry.v1",
         "category": category or "all",
         "categories": list(CATEGORIES),
+        "lifecycles": list(LIFECYCLES),
         "counts": counts,
         "counts_by_category": counts,
         "total": len(entries),

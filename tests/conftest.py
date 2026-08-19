@@ -39,6 +39,14 @@ def isolate_persistent_job_ledger(monkeypatch):
     monkeypatch.setattr(settings, "job_ledger_enabled", False)
 
 
+@pytest.fixture(autouse=True)
+def isolate_persistent_llm_usage(monkeypatch):
+    """Unit tests must not write token-usage rows into the developer's live DB."""
+    import backend.ops.llm_usage as llm_usage
+
+    monkeypatch.setattr(llm_usage, "log_llm_usage", lambda *args, **kwargs: None)
+
+
 @pytest.fixture
 def sample_stocks(test_db):
     """3 只测试股，含行业"""

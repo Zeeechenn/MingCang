@@ -53,6 +53,17 @@ def test_release_hygiene_detects_blocked_terms_and_allows_marked_lines(tmp_path)
     ]
 
 
+def test_release_hygiene_skips_tracked_path_deleted_from_worktree(tmp_path):
+    present = tmp_path / "present.md"
+    present.write_text("clean", encoding="utf-8")
+    deleted = tmp_path / "deleted.md"
+
+    result = scan_paths([deleted, present], root=tmp_path)
+
+    assert result.findings == []
+    assert result.scanned_files == 1
+
+
 def _settings_field_names() -> set[str]:
     tree = ast.parse((ROOT / "backend/config.py").read_text(encoding="utf-8"))
     for node in tree.body:

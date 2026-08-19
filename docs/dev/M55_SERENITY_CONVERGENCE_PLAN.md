@@ -1,7 +1,7 @@
 # M55 Serenity 收敛进 ATLAS 研究脊柱 + s-skill 优点归口
 
 状态：planned 2026-07-02 / observe-only / non-promoting
-关联：`docs/ROADMAP.md` M55 段、M50（`docs/dev/m50_research_report_gate_spec.md`）、M51（`docs/dev/M51_EXTERNAL_BORROWING_PLAN.md`）
+关联：`docs/ROADMAP.md` M55 段、M50（`docs/dev/m50_research_report_gate_spec.md`）、已归档的 M51 external-borrowing 计划。
 
 本文档是 M55 Phase 0 spec 交付物：给出 serenity 收敛与三份外部 skill（ZadAnthony / muxuuu / fadewalk）优点归口的完整判断依据，供 Phase 1-3 落地时直接执行。本文档本身不改动代码。
 

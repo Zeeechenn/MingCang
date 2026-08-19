@@ -4,6 +4,9 @@ import json
 import sqlite3
 from datetime import date, timedelta
 
+import pytest
+
+from backend.config import settings
 from backend.tools.m60_thesis_conditions import (
     compile_condition,
     compile_forward_thesis_conditions,
@@ -14,6 +17,11 @@ from backend.tools.m60_watchtower import (
     compute_sector_resonance,
     render_markdown,
 )
+
+
+@pytest.fixture(autouse=True)
+def _disable_forward_thesis_overlay_for_fixture_watchlists(monkeypatch):
+    monkeypatch.setattr(settings, "forward_thesis_enabled", False)
 
 
 def _init_watchtower_db(path):

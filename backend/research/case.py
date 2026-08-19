@@ -8,6 +8,23 @@ from typing import Any
 _DATA_STALE_DAYS = 14
 _SIGNAL_STALE_DAYS = 7
 
+_STAGE4_RESEARCH_GOVERNANCE = {
+    "owner_domain": "backend.research",
+    "unique_consumer": "ResearchCase/report_gate",
+    "input_contract": "assembled dossier dict plus optional gate/serenity summaries",
+    "output_contract": "stage4_research_structure.v1",
+    "failure_mode": "missing thesis/scenario/falsification inputs are surfaced as gaps",
+    "degradation": "read-only structure remains available with status=missing/needs_evidence",
+    "baseline": "existing ResearchCase quality_gate + structural_validity_card",
+    "success_metric": "100% of generated cases expose thesis, anti_thesis, scenarios, checklist and falsification slots",
+    "minimum_sample": "first 20 ResearchCase/report-gate outputs before any promotion discussion",
+    "expiry_or_exit": "expires when Stage4 report gate fields are superseded by a durable research ontology",
+    "rollback": "ignore stage4_research_structure; existing ResearchCase fields are unchanged",
+    "replacement": "durable research ontology after leader review",
+    "lifecycle": "shadow",
+    "signal_impact": "none",
+}
+
 
 def _age_days(date_str: str | None, today: datetime | None = None) -> int | None:
     if not date_str:
@@ -152,6 +169,170 @@ def _build_structural_validity_card(dossier: dict) -> dict:
     }
 
 
+def _non_empty_text(value: Any) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    return None
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, list | tuple):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _first_text(*values: Any) -> str | None:
+    for value in values:
+        if text := _non_empty_text(value):
+            return text
+        items = _string_list(value)
+        if items:
+            return items[0]
+    return None
+
+
+def _scenario(
+    scenario_id: str,
+    *,
+    summary: str | None,
+    evidence_refs: list[str] | None = None,
+    status: str | None = None,
+) -> dict:
+    resolved_status = status or ("present" if summary else "missing")
+    return {
+        "scenario": scenario_id,
+        "status": resolved_status,
+        "summary": summary or "待补充：需要显式情景假设与证据引用",
+        "evidence_refs": evidence_refs or [],
+        "signal_impact": "none",
+        "scoring_policy": "not_scored",
+    }
+
+
+def _extract_forward_thesis(dossier: dict) -> dict:
+    forward = dossier.get("forward_thesis") or {}
+    research_state = dossier.get("research_state") or {}
+    label = dossier.get("long_term_label") or {}
+    return {
+        "statement": _first_text(
+            forward.get("thesis"),
+            forward.get("statement"),
+            research_state.get("thesis"),
+            label.get("key_findings"),
+        ),
+        "anti_points": _string_list(forward.get("anti_thesis"))
+        or _string_list(forward.get("risks"))
+        or _string_list(research_state.get("risks")),
+        "base": _first_text(forward.get("base_case"), forward.get("base_scenario")),
+        "bull": _first_text(forward.get("bull_case"), forward.get("bull_scenario")),
+        "bear": _first_text(forward.get("bear_case"), forward.get("bear_scenario")),
+        "falsification": (
+            _string_list(forward.get("falsification_conditions"))
+            or _string_list(forward.get("invalidation_conditions"))
+            or _string_list(research_state.get("open_questions"))
+        ),
+        "management": forward.get("management_checklist") or forward.get("management") or {},
+        "moat": forward.get("moat_checklist") or forward.get("moat") or {},
+    }
+
+
+def build_stage4_research_structure(
+    dossier: dict,
+    *,
+    report_gate: dict | None = None,
+    serenity_layer: dict | None = None,
+) -> dict:
+    """Build Stage4 research structure as a pure, no-score, no-signal overlay.
+
+    This does not query data, call LLMs, write memory, or mutate official signal
+    fields.  Subjective management/moat items are surfaced as checklist evidence
+    gaps only; they are deliberately not folded into numeric scoring.
+    """
+
+    forward = _extract_forward_thesis(dossier)
+    serenity = serenity_layer or dossier.get("serenity_layer") or {}
+    gate = report_gate or dossier.get("report_gate") or {}
+    evidence_refs = [
+        str(card.get("source_ref"))
+        for card in build_dossier_evidence_cards(dossier)
+        if card.get("source_ref")
+    ][:8]
+
+    anti_points = forward["anti_points"] or _string_list(serenity.get("bear_case"))
+    falsification = forward["falsification"] or _string_list(serenity.get("falsification_questions"))
+    gate_blockers = gate.get("reasons") if isinstance(gate, dict) else []
+    if not falsification:
+        falsification = _string_list(gate_blockers)
+
+    checklist_inputs = {
+        "management_quality": forward["management"],
+        "moat_durability": forward["moat"],
+        "customer_or_supply_chain_concentration": dossier.get("supply_chain") or {},
+        "accounting_or_governance_red_flags": dossier.get("governance_red_flags") or [],
+    }
+    checklist = []
+    for item_id, raw in checklist_inputs.items():
+        present = bool(raw)
+        checklist.append({
+            "item": item_id,
+            "status": "present" if present else "needs_evidence",
+            "evidence": raw if present else None,
+            "scoring_policy": "not_scored",
+            "signal_impact": "none",
+        })
+
+    scenarios = [
+        _scenario("base", summary=forward["base"] or forward["statement"], evidence_refs=evidence_refs),
+        _scenario("bull", summary=forward["bull"], evidence_refs=evidence_refs),
+        _scenario(
+            "bear",
+            summary=forward["bear"] or (anti_points[0] if anti_points else None),
+            evidence_refs=evidence_refs,
+        ),
+    ]
+    gaps: list[str] = []
+    if not forward["statement"]:
+        gaps.append("missing_thesis")
+    if not anti_points:
+        gaps.append("missing_anti_thesis")
+    for scenario in scenarios:
+        if scenario["status"] == "missing":
+            gaps.append(f"missing_{scenario['scenario']}_scenario")
+    if not falsification:
+        gaps.append("missing_falsification_conditions")
+
+    return {
+        "schema_version": "stage4_research_structure.v1",
+        "symbol": dossier.get("symbol", ""),
+        "status": "ready" if not gaps else "needs_evidence",
+        "signal_impact": "none",
+        "thesis": {
+            "status": "present" if forward["statement"] else "missing",
+            "statement": forward["statement"] or "",
+            "evidence_refs": evidence_refs,
+            "signal_impact": "none",
+        },
+        "anti_thesis": {
+            "status": "present" if anti_points else "missing",
+            "points": anti_points,
+            "signal_impact": "none",
+        },
+        "scenarios": scenarios,
+        "management_moat_checklist": checklist,
+        "falsification_conditions": [
+            {"condition": condition, "status": "active", "signal_impact": "none"}
+            for condition in falsification
+        ],
+        "gaps": sorted(set(gaps)),
+        "governance": dict(_STAGE4_RESEARCH_GOVERNANCE),
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
 def build_case(dossier: dict, as_of: str | None = None) -> dict:
     """
     Build a ResearchCase envelope from an already-assembled dossier dict.
@@ -161,12 +342,14 @@ def build_case(dossier: dict, as_of: str | None = None) -> dict:
     """
     quality_gate = _build_quality_gate(dossier, as_of=as_of)
     validity_card = _build_structural_validity_card(dossier)
+    stage4_structure = build_stage4_research_structure(dossier)
     symbol = dossier.get("symbol", "")
     return {
         "symbol": symbol,
         "as_of": as_of,
         "quality_gate": quality_gate,
         "validity_card": validity_card,
+        "stage4_research_structure": stage4_structure,
         "ready": quality_gate["gate_pass"] and validity_card["card_pass"],
         "generated_at": datetime.utcnow().isoformat(),
     }

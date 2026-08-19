@@ -40,6 +40,7 @@ def build_live_subset(
     trade_date: str,
     output_path: Path,
     threshold: float = 25.0,
+    signal_run_date: str | None = None,
 ) -> dict[str, Any]:
     """Build ``score > threshold OR held`` subset from read-only inputs."""
 
@@ -97,6 +98,11 @@ def build_live_subset(
         # format detail: it is the fail-closed freshness filter (same rule as
         # live_subset.py) that drops any bar-stale signal whose underlying
         # data_timestamp is not trade_date, even if its signal day looks fresh.
+        #
+        # signal_run_date defaults to trade_date (the normal same-evening ③
+        # round). A catch-up round produced on a later calendar day must state
+        # that day explicitly; the data_timestamp == trade_date equality below
+        # is unchanged, so a stale bar can still never enter the subset.
         rows = con.execute(
             """
             SELECT signal.symbol, signal.composite_score
@@ -109,7 +115,7 @@ def build_live_subset(
             ) AS latest
               ON latest.id = signal.id AND latest.symbol = signal.symbol
             """,
-            (trade_date, trade_date),
+            (signal_run_date or trade_date, trade_date),
         ).fetchall()
         fresh_symbols = {
             str(row[0])
@@ -178,6 +184,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state", required=True, type=Path, help="Private authoritative state JSON")
     parser.add_argument("--output", required=True, type=Path, help="Explicit subset JSON path")
     parser.add_argument("--threshold", type=float, default=25.0)
+    parser.add_argument(
+        "--signal-run-date",
+        default=None,
+        help=(
+            "Calendar day the signals were produced (YYYY-MM-DD); defaults to "
+            "--trade-date. Only needed for a catch-up round run after the "
+            "trade date; bar freshness is still pinned to --trade-date."
+        ),
+    )
     return parser
 
 
@@ -192,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
             trade_date=args.trade_date,
             output_path=args.output,
             threshold=args.threshold,
+            signal_run_date=args.signal_run_date,
         )
     except SafetyViolation as exc:
         print(f"[blocked] {exc}", file=sys.stderr)

@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     database_role: str = "auto"  # auto / primary / demo / custom / external
     scheduler_mode: Literal["manual", "external"] = "manual"
     job_ledger_enabled: bool = True
+    # Fail closed when an official signal would be written outside a tracked run.
+    # Off until the daily loop is proven to run through tracked entrypoints only.
+    require_signal_run_context: bool = False
     schedule_premarket: str = "08:30"
     schedule_postmarket: str = "16:00"
     schedule_hk_premarket: str = "08:30"
@@ -177,6 +180,10 @@ class Settings(BaseSettings):
     multi_agent_enabled: bool = False
     risk_manager_enabled: bool = True         # 风险经理对最终建议有否决权
     layered_memory_enabled: bool = True       # FinMem 风格分层记忆
+    # M57 影子模式：结果记忆继续写入、维护和回测，但未经重新晋升前不得进入
+    # AI prompt、官方建议、仓位或风险约束。只能通过显式环境配置 + 重启开启，
+    # 不暴露为 Admin 运行时可编辑项。
+    memory_decision_context_enabled: bool = False
 
     # M4.1 多轮辩论（bull→bear反驳→bull回应→裁定）
     # 在 multi_agent_enabled=True 时生效，仅分歧 >= min_divergence 时触发
@@ -325,12 +332,10 @@ class Settings(BaseSettings):
     # 调度器开关（false = 手动触发，不自动跑定时任务）
     scheduler_enabled: bool = False
 
-    # M57 Phase 0: research-facing L0 layered-memory recall. ATLAS is archived
-    # and atlas_enabled stays False forever, but research entry points (stock
-    # context, project context, chat/long-term-team research answers) should
-    # still get L0 recall by default. Scoring/signal/scheduler paths
-    # (postmarket signal generation, aggregator) do NOT read this flag — they
-    # keep following atlas_enabled and stay L0-off, unchanged.
+    # M57 L0 recall sub-switch. Explicit memory inspection may use it, while
+    # production/research decision prompts additionally require
+    # memory_decision_context_enabled. The latter defaults fail-closed after
+    # the corrected PIT replay failed the promotion gate.
     research_l0_recall_enabled: bool = True
 
     # M60 Watchtower Phase 1: postmarket detection thresholds. Zero-LLM,

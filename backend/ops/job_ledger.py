@@ -13,9 +13,14 @@ from sqlalchemy import Table
 
 from backend.config import settings
 from backend.data.models.job import JobRun
+from backend.ops.run_envelope import build_run_envelope
 from backend.runtime_identity import build_runtime_identity
 
 logger = logging.getLogger(__name__)
+
+
+class JobRunFinalizationError(RuntimeError):
+    """Raised when a mandatory tracked-run finalizer cannot preserve truth."""
 
 
 @dataclass(frozen=True)
@@ -73,6 +78,54 @@ def _result_summary(result: Any) -> dict[str, Any]:
     return summary
 
 
+def _input_payload(
+    *,
+    run_id: str,
+    job_name: str,
+    trigger_source: str,
+    as_of: str | None,
+    input_coverage: dict[str, Any] | None,
+    started_at: datetime,
+) -> dict[str, Any]:
+    payload = dict(input_coverage or {})
+    payload["run_envelope"] = build_run_envelope(
+        run_id=run_id,
+        job_name=job_name,
+        trigger_source=trigger_source,
+        as_of=as_of,
+        started_at=started_at,
+        row_status="running",
+        input_coverage=payload,
+    )
+    return payload
+
+
+def _output_payload(
+    *,
+    handle: JobRunHandle,
+    row: JobRun,
+    result: Any,
+    artifact_path: str | Path | None,
+    finished_at: datetime,
+) -> dict[str, Any]:
+    summary = _result_summary(result)
+    reasons = _degradation_reasons(result)
+    summary["run_envelope"] = build_run_envelope(
+        run_id=handle.run_id,
+        job_name=row.job_name,
+        trigger_source=row.trigger_source,
+        as_of=row.as_of,
+        started_at=row.started_at,
+        completed_at=finished_at,
+        row_status=terminal_status(result),
+        input_coverage=_read_json(row.input_coverage_json),
+        result=result,
+        degradations=reasons,
+        artifact_path=artifact_path,
+    )
+    return summary
+
+
 def _degradation_reasons(result: Any) -> list[str]:
     if not isinstance(result, dict):
         return []
@@ -93,6 +146,16 @@ def _degradation_reasons(result: Any) -> list[str]:
     return list(dict.fromkeys(reasons))
 
 
+def _read_json(value: str | None) -> dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _artifact_path(result: Any, explicit: str | Path | None) -> str | None:
     candidate = explicit
     if candidate is None and isinstance(result, dict):
@@ -106,11 +169,72 @@ def _artifact_path(result: Any, explicit: str | Path | None) -> str | None:
         return path.name
 
 
+def _raw_artifact_path(result: Any, explicit: str | Path | None) -> str | Path | None:
+    if explicit is not None:
+        return explicit
+    if isinstance(result, dict):
+        return result.get("output_path") or result.get("artifact_path")
+    return None
+
+
+def _should_write_m63_daily_panel_artifact(row: JobRun, result: Any) -> bool:
+    if row.job_name != "m63_postmarket" or row.trigger_source not in {"scheduler", "manual_cli"}:
+        return False
+    if row.status != "success":
+        return False
+    if not isinstance(result, dict):
+        return False
+    coverage = _read_json(row.input_coverage_json)
+    if coverage.get("workflow") != "m63_daily" or coverage.get("mode") != "postmarket":
+        return False
+    if coverage.get("database") == "custom" or coverage.get("authoritative") is False:
+        return False
+    output = _read_json(row.output_summary_json)
+    envelope = output.get("run_envelope") if isinstance(output, dict) else None
+    return isinstance(envelope, dict) and envelope.get("status") == "complete"
+
+
+def _attach_m63_daily_panel_artifact(db, row: JobRun, result: Any, artifact_path: str | Path | None) -> dict[str, Any] | None:
+    if not _should_write_m63_daily_panel_artifact(row, result):
+        return None
+    markdown_artifact = _raw_artifact_path(result, artifact_path)
+    if markdown_artifact is None:
+        raise JobRunFinalizationError("m63 daily panel artifact finalization failed: missing_markdown_artifact")
+    try:
+        from backend.evidence.daily_panel import build_and_write_daily_panel_artifact_for_job_run
+
+        return build_and_write_daily_panel_artifact_for_job_run(
+            db,
+            row,
+            markdown_artifact_path=markdown_artifact,
+        )
+    except Exception as exc:  # noqa: BLE001 - must fail closed for authoritative scheduler runs.
+        raise JobRunFinalizationError(
+            f"m63 daily panel artifact finalization failed: {exc}"
+        ) from exc
+
+
+def _mark_m63_daily_panel_artifact_committed(finalization: dict[str, Any] | None) -> None:
+    if not finalization:
+        return
+    try:
+        from backend.evidence.daily_panel import mark_daily_panel_artifact_committed
+
+        mark_daily_panel_artifact_committed(
+            finalization["artifact_path"],
+            run_id=str((finalization.get("run_envelope") or {}).get("run_id") or ""),
+        )
+    except Exception as exc:  # noqa: BLE001 - post-DB artifact truth must fail closed.
+        raise JobRunFinalizationError(
+            f"m63 daily panel artifact commit mark failed: {exc}"
+        ) from exc
+
+
 def terminal_status(result: Any) -> str:
     if isinstance(result, dict):
         if result.get("skipped"):
             return "skipped"
-        if result.get("ok") is False or _degradation_reasons(result):
+        if result.get("ok") is False:
             return "degraded"
     return "success"
 
@@ -131,14 +255,22 @@ def start_job_run(
     try:
         _ensure_table(db)
         identity = build_runtime_identity(settings)
+        started = _utcnow()
         db.add(JobRun(
             run_id=run_id,
             job_name=job_name,
             trigger_source=trigger_source,
             as_of=as_of,
             status="running",
-            started_at=_utcnow(),
-            input_coverage_json=_json(input_coverage or {}),
+            started_at=started,
+            input_coverage_json=_json(_input_payload(
+                run_id=run_id,
+                job_name=job_name,
+                trigger_source=trigger_source,
+                as_of=as_of,
+                input_coverage=input_coverage,
+                started_at=started,
+            )),
             degradation_reasons_json=_json([]),
             runtime_version=identity["version"],
             build_commit=identity["build_commit"],
@@ -179,14 +311,44 @@ def finish_job_run(
             row.status = "error"
             row.error = str(error)[:2000]
             row.degradation_reasons_json = _json([str(error)[:500]])
+            row.output_summary_json = _json({
+                "run_envelope": build_run_envelope(
+                    run_id=handle.run_id,
+                    job_name=row.job_name,
+                    trigger_source=row.trigger_source,
+                    as_of=row.as_of,
+                    started_at=row.started_at,
+                    completed_at=finished,
+                    row_status="error",
+                    input_coverage=_read_json(row.input_coverage_json),
+                    result={},
+                    degradations=[str(error)[:500]],
+                    artifact_path=artifact_path,
+                    error=str(error),
+                )
+            })
         else:
             row.status = terminal_status(result)
-            row.output_summary_json = _json(_result_summary(result))
             row.degradation_reasons_json = _json(_degradation_reasons(result))
             if row.as_of is None and isinstance(result, dict):
                 row.as_of = str(result.get("as_of") or result.get("date") or "") or None
             row.artifact_path = _artifact_path(result, artifact_path)
+            row.output_summary_json = _json(_output_payload(
+                handle=handle,
+                row=row,
+                result=result,
+                artifact_path=row.artifact_path,
+                finished_at=finished,
+            ))
+            finalization = _attach_m63_daily_panel_artifact(db, row, result, artifact_path)
+        if error is not None:
+            finalization = None
         db.commit()
+        _mark_m63_daily_panel_artifact_committed(finalization)
+    except JobRunFinalizationError:
+        db.rollback()
+        logger.exception("job ledger finalization failed for %s", handle.run_id)
+        raise
     except Exception:
         db.rollback()
         logger.exception("job ledger finish failed for %s", handle.run_id)
@@ -215,6 +377,11 @@ def serialize_job_run(row: JobRun) -> dict[str, Any]:
         "input_coverage": parsed(row.input_coverage_json, {}),
         "degradation_reasons": parsed(row.degradation_reasons_json, []),
         "output_summary": parsed(row.output_summary_json, {}),
+        "run_envelope": (
+            parsed(row.output_summary_json, {}).get("run_envelope")
+            or parsed(row.input_coverage_json, {}).get("run_envelope")
+            or {}
+        ),
         "artifact_path": row.artifact_path,
         "error": row.error,
         "runtime_version": row.runtime_version,

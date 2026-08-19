@@ -2,6 +2,10 @@
 import subprocess
 import sys
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 def test_exit_logic_run_wraps_owned_session_with_pit(monkeypatch):
     from backend.backtest import exit_logic_experiment as exp

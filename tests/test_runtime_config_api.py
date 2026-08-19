@@ -10,6 +10,8 @@ def test_runtime_config_returns_current_settings(monkeypatch):
     assert response["profile"] in {"auto", "test1_legacy_qlib", "new_framework"}
     assert "new_framework_entry_threshold" in response
     assert "weights" in response
+    assert response["memory_mode"] == "shadow_only"
+    assert response["memory_decision_context_enabled"] is False
     assert "kill_switch_active" in response
 
 
@@ -50,6 +52,10 @@ def test_update_runtime_config_rejects_unknown_keys():
         assert "Unsupported runtime config key" in exc.detail
     else:
         raise AssertionError("expected unsupported runtime config key to be rejected")
+
+    with pytest.raises(HTTPException) as exc:
+        update_runtime_config({"memory_decision_context_enabled": True})
+    assert exc.value.status_code == 400
 
 
 def test_update_runtime_config_rejects_invalid_types_and_weights():

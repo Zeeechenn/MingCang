@@ -29,12 +29,12 @@ STATUSES = {"active", "watching", "validated", "refuted", "archived"}
 
 _TYPE_ORDER = {
     "user_preference": 0,
-    "thesis": 1,
-    "risk": 2,
-    "event": 3,
-    "judgment": 4,
-    "outcome": 5,
-    "lesson": 6,
+    "risk": 1,
+    "lesson": 2,
+    "outcome": 3,
+    "thesis": 4,
+    "event": 5,
+    "judgment": 6,
     "research_pointer": 7,
 }
 
@@ -260,6 +260,15 @@ def list_stock_memories(
         params["status"] = status
     elif not include_archived:
         clauses.append("status != 'archived'")
+    if q:
+        clauses.append("""(
+            lower(coalesce(symbol, '')) LIKE :query
+            OR lower(coalesce(memory_type, '')) LIKE :query
+            OR lower(coalesce(summary, '')) LIKE :query
+            OR lower(coalesce(evidence_json, '')) LIKE :query
+            OR lower(coalesce(source_ref, '')) LIKE :query
+        )""")
+        params["query"] = f"%{q.lower()}%"
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     query = f"""
         SELECT *
@@ -270,17 +279,10 @@ def list_stock_memories(
     """  # noqa: S608 - WHERE fragments come only from the fixed filters above.
     rows = db.execute(text(query), params).all()
     now = _utc_now()
-    ql = q.lower() if q else None
     out = []
     for row in rows:
         if not _active(row, now):
             continue
-        if ql:
-            haystack = " ".join(str(v or "") for v in (
-                row.symbol, row.memory_type, row.summary, row.evidence_json, row.source_ref,
-            )).lower()
-            if ql not in haystack:
-                continue
         out.append(_row_to_dict(row))
     return out
 
@@ -354,14 +356,51 @@ def _score_row(row: dict, *, symbol: str | None, query: str | None) -> tuple:
     if query:
         ql = query.lower()
         haystack = " ".join(str(row.get(k) or "") for k in ("summary", "evidence_json", "source_ref")).lower()
-        query_score = 1 if any(part and part in haystack for part in ql.split()) else 0
+        query_score = sum(1 for part in ql.split() if part and part in haystack)
+    try:
+        updated_score = _parse_dt(row.get("updated_at")).timestamp()
+    except (TypeError, ValueError):
+        updated_score = 0.0
     return (
-        _TYPE_ORDER.get(row["memory_type"], 99),
         -symbol_score,
         -query_score,
+        _TYPE_ORDER.get(row["memory_type"], 99),
         -int(row["importance"] or 0),
-        str(row["updated_at"] or ""),
+        -updated_score,
     )
+
+
+def _select_prompt_rows(
+    rows: list[dict],
+    *,
+    symbol: str | None,
+    query: str | None,
+    limit: int,
+    has_calibration: bool,
+    has_recent_reflection: bool,
+) -> list[dict]:
+    """Keep a diverse, quality-first prompt set instead of a signal-log dump."""
+    caps = {
+        "user_preference": 2,
+        "risk": 2,
+        "lesson": 2,
+        "outcome": 0 if has_calibration else 2,
+        "thesis": 2,
+        "event": 1,
+        "research_pointer": 1,
+        "judgment": 0 if (has_calibration or has_recent_reflection) else 1,
+    }
+    selected: list[dict] = []
+    used_per_type: dict[str, int] = {}
+    for row in sorted(rows, key=lambda item: _score_row(item, symbol=symbol, query=query)):
+        memory_type = str(row.get("memory_type") or "")
+        if used_per_type.get(memory_type, 0) >= caps.get(memory_type, 1):
+            continue
+        selected.append(row)
+        used_per_type[memory_type] = used_per_type.get(memory_type, 0) + 1
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def _ai_memory_relevant(row: dict, *, symbol: str | None, query: str | None) -> bool:
@@ -400,7 +439,7 @@ def _ai_memory_context(db, *, symbol: str | None, query: str | None, limit: int)
                 continue
             lines.append(f"- [{category}|{scope}] {value}")
             keys.append(key)
-        elif scope == "research" and category == "deep_research":
+        elif symbol is None and scope == "research" and category == "deep_research":
             if (symbol and symbol in value) or (query and query.lower() in (key + value).lower()):
                 lines.append(f"- [research] {value[:220]}")
                 keys.append(key)
@@ -455,10 +494,43 @@ def build_memory_context(
             logger.warning("stock_memory.build_memory_context: building L0 context failed, using fallback", exc_info=True)
             l0_context = _empty_l0_context()
     try:
-        stock_rows = list_stock_memories(db, symbol=symbol, limit=max(limit * 3, 20))
+        stock_candidates = list_stock_memories(
+            db,
+            symbol=symbol,
+            limit=max(limit * 12, 100),
+        )
     except OperationalError:
-        stock_rows = []
-    stock_rows = sorted(stock_rows, key=lambda r: _score_row(r, symbol=symbol, query=query))[:limit]
+        stock_candidates = []
+
+    calibration: dict[str, Any] = {"text": "", "memory_ids": [], "sample_count": 0}
+    if symbol:
+        try:
+            from backend.memory.experience import build_outcome_calibration
+
+            calibration = build_outcome_calibration(db, symbol=symbol)
+        except OperationalError:
+            calibration = {"text": "", "memory_ids": [], "sample_count": 0}
+
+    layered_text = ""
+    if symbol:
+        try:
+            from backend.decision.memory_layered import get_layered_context
+            layered_text = get_layered_context(symbol, db, record_usage=record_usage)
+        except Exception:
+            logger.warning("stock_memory.build_memory_context: reading layered memory failed, using fallback", exc_info=True)
+            layered_text = ""
+
+    stock_rows = _select_prompt_rows(
+        stock_candidates,
+        symbol=symbol,
+        query=query,
+        limit=limit,
+        has_calibration=bool(calibration.get("text")),
+        has_recent_reflection=any(
+            marker in layered_text
+            for marker in ("【历史决策复盘", "【长期反思】")
+        ),
+    )
 
     ai_lines, ai_keys = _ai_memory_context(db, symbol=symbol, query=query, limit=4)
     stock_lines = [
@@ -470,23 +542,19 @@ def build_memory_context(
         parts.append("【用户偏好 / 项目规则 / 研究索引】\n" + "\n".join(ai_lines))
     if l0_context.get("text"):
         parts.append(l0_context["text"])
+    if calibration.get("text"):
+        parts.append(str(calibration["text"]))
     if stock_lines:
         title = f"【{symbol} 股票长期记忆】" if symbol else "【股票长期记忆】"
         parts.append(title + "\n" + "\n".join(stock_lines))
-
-    layered_text = ""
-    if symbol:
-        try:
-            from backend.decision.memory_layered import get_layered_context
-            layered_text = get_layered_context(symbol, db)
-        except Exception:
-            logger.warning("stock_memory.build_memory_context: reading layered memory failed, using fallback", exc_info=True)
-            layered_text = ""
     if layered_text:
         parts.append(layered_text.strip())
 
     text_value = "\n\n".join(parts)
-    used_ids = [int(r["id"]) for r in stock_rows]
+    used_ids = list(dict.fromkeys([
+        *[int(r["id"]) for r in stock_rows],
+        *[int(row_id) for row_id in calibration.get("memory_ids", [])],
+    ]))
     if record_usage and used_ids:
         now = _utc_now().isoformat(timespec="seconds")
         stmt = text(
@@ -499,7 +567,8 @@ def build_memory_context(
             db,
             "stock_memory.recall",
             f"symbol={symbol} task_type={task_type} empty={not bool(text_value)} "
-            f"stock_ids={used_ids} ai_keys={ai_keys}",
+            f"stock_ids={used_ids[:12]} stock_count={len(used_ids)} "
+            f"outcome_samples={calibration.get('sample_count', 0)} ai_keys={ai_keys}",
             related_symbol=symbol,
         )
     return {
@@ -510,6 +579,58 @@ def build_memory_context(
         "ai_memory_keys": ai_keys,
         "used_memory_atom_ids": l0_context.get("used_memory_atom_ids", []),
         "l0_context": l0_context,
+        "outcome_sample_count": int(calibration.get("sample_count", 0)),
+    }
+
+
+def build_decision_memory_context(
+    db,
+    *,
+    symbol: str | None = None,
+    query: str | None = None,
+    task_type: str = "research",
+    limit: int = 8,
+    record_usage: bool = True,
+    include_l0: bool | None = None,
+) -> dict:
+    """Return memory only when its production decision gate is promoted.
+
+    Outcome accrual, maintenance, explicit memory inspection, and PIT replay
+    continue to use their dedicated paths.  This helper is intentionally used
+    by prompt/signal consumers so the default shadow-only mode cannot leak a
+    remembered prior into AI judgment or official action.
+    """
+    from backend.config import settings
+
+    if not settings.memory_decision_context_enabled:
+        return {
+            "symbol": symbol,
+            "task_type": task_type,
+            "text": "",
+            "used_stock_memory_ids": [],
+            "ai_memory_keys": [],
+            "used_memory_atom_ids": [],
+            "l0_context": _empty_l0_context(),
+            "outcome_sample_count": 0,
+            "memory_mode": "shadow_only",
+            "decision_context_enabled": False,
+            "suppression_reason": "corrected_pit_replay_not_promoted",
+        }
+
+    context = build_memory_context(
+        db,
+        symbol=symbol,
+        query=query,
+        task_type=task_type,
+        limit=limit,
+        record_usage=record_usage,
+        include_l0=include_l0,
+    )
+    return {
+        **context,
+        "memory_mode": "decision_context_enabled",
+        "decision_context_enabled": True,
+        "suppression_reason": None,
     }
 
 
@@ -523,29 +644,33 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
     from backend.decision.signal_policy import is_entry_signal
 
     _ensure_schema(db)
-    clauses = ["memory_type = 'judgment'", "status != 'archived'"]
+    clauses = [
+        "j.memory_type = 'judgment'",
+        "j.status != 'archived'",
+        "NOT EXISTS ("
+        "SELECT 1 FROM stock_memory_items o WHERE o.source_ref = 'outcome:' || j.id"
+        ")",
+    ]
     params: dict[str, Any] = {}
     if symbol:
-        clauses.append("symbol = :symbol")
+        clauses.append("j.symbol = :symbol")
         params["symbol"] = symbol
     query = f"""
-        SELECT * FROM stock_memory_items
+        SELECT j.* FROM stock_memory_items j
         WHERE {' AND '.join(clauses)}
-        ORDER BY id ASC
+        ORDER BY j.id ASC
     """  # noqa: S608 - clauses are fixed literals plus a bound symbol predicate.
     rows = db.execute(text(query), params).all()
     written = 0
     for row in rows:
         source_ref = f"outcome:{row.id}"
-        if _id_by_source_ref(db, source_ref) is not None:
-            continue
         try:
             evidence = json.loads(row.evidence_json or "{}")
         except json.JSONDecodeError:
             evidence = {}
-        decision_date = evidence.get("date")
+        decision_date = str(evidence.get("date") or "")[:10]
         recommendation = evidence.get("recommendation") or ""
-        if not row.symbol or not decision_date:
+        if not row.symbol or len(decision_date) != 10:
             continue
         prices = db.execute(text("""
             SELECT date, close FROM prices
@@ -553,7 +678,7 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
             ORDER BY date ASC
             LIMIT 11
         """), {"symbol": row.symbol, "date": decision_date}).all()
-        if len(prices) < 11 or not prices[0].close:
+        if len(prices) < 11 or prices[0].date != decision_date or not prices[0].close:
             continue
         # M15.3 outcome 基准化：用沪深 300 同期收益做相对强弱判断，避免 A 股高 beta
         # 大盘下跌日把所有正向判断系统性记为"失败"
@@ -596,6 +721,7 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
                 "excess_returns": excess_returns,
                 "benchmark": "sh000300" if excess_returns else None,
                 "recommendation": recommendation,
+                "judgment_evidence": evidence,
             },
             source_type="outcome_update",
             source_ref=source_ref,
@@ -608,15 +734,28 @@ def update_judgment_outcomes(db, *, symbol: str | None = None) -> int:
         # M15.3：lesson 触发改用超额收益（excess vs HS300），无基准数据时回退裸收益
         judgement_returns = excess_returns or returns
         latest_return = next((judgement_returns[k] for k in ("10d", "5d", "3d", "1d") if k in judgement_returns), None)
-        if latest_return is not None and is_entry_signal(recommendation, include_legacy=True) and latest_return < 0:
+        if (
+            latest_return is not None
+            and is_entry_signal(recommendation, include_legacy=True)
+            and latest_return <= -5.0
+        ):
             lesson_ref = f"lesson:{row.id}"
             if _id_by_source_ref(db, lesson_ref) is None:
+                basis = "相对沪深300" if excess_returns else "绝对收益"
                 create_stock_memory(
                     db,
                     symbol=row.symbol,
                     memory_type="lesson",
-                    summary=f"{decision_date} 正向判断后表现为负，后续同类信号需复核技术确认与新闻兑现。",
-                    evidence={"judgment_id": row.id, "latest_return": latest_return},
+                    summary=(
+                        f"{decision_date} 正向判断在完整窗口{basis}{latest_return:+.2f}%，"
+                        "属于显著失效样本；再次出现同类信号时必须核对当时因子与新证据。"
+                    ),
+                    evidence={
+                        "judgment_id": row.id,
+                        "latest_return": latest_return,
+                        "basis": basis,
+                        "judgment_evidence": evidence,
+                    },
                     source_type="outcome_update",
                     source_ref=lesson_ref,
                     importance=4,

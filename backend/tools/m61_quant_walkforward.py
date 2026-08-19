@@ -18,6 +18,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from backend.backtest.grid_backtest import attach_forward_returns, regime_from_pool_equal_weight
 from backend.config import default_sqlite_path
 from backend.data.database import Price
 from backend.tools.m29_hypothesis_registry import (
@@ -28,7 +29,6 @@ from backend.tools.m29_hypothesis_registry import (
     report_to_markdown,
     validate_registry,
 )
-from backend.tools.m58_grid_backtest import attach_forward_returns, regime_from_pool_equal_weight
 from backend.tools.m58_lgbm_walkforward import (
     GATE_IC_FLOOR,
     GATE_ICIR_FLOOR,

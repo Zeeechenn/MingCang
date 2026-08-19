@@ -48,7 +48,8 @@ export function toast(msg, tone = 'accent') {
 // ---------- hash 路由 ----------
 function parseHash() {
   const h = (location.hash || '#/').replace(/^#/, '');
-  const seg = h.split('/').filter(Boolean);
+  const [path] = h.split('?');
+  const seg = path.split('/').filter(Boolean);
   if (seg[0] === 'stock' && seg[1]) {
     if (['CN', 'HK', 'US'].includes(seg[1]) && seg[2]) {
       return { page: 'stock', market: seg[1], symbol: normalizeAssetSymbol(decodeURIComponent(seg[2]), seg[1]) };

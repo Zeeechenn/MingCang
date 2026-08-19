@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import ValidationError
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
@@ -106,6 +108,12 @@ def _runtime_config_payload() -> dict:
         "director_min_confidence": settings.director_min_confidence,
         "long_term_team_enabled": settings.long_term_team_enabled,
         "long_term_constraints_enabled": settings.long_term_constraints_enabled,
+        "memory_decision_context_enabled": settings.memory_decision_context_enabled,
+        "memory_mode": (
+            "decision_context_enabled"
+            if settings.memory_decision_context_enabled
+            else "shadow_only"
+        ),
         "trailing_stop_enabled": settings.trailing_stop_enabled,
         "take_profit_exit_enabled": settings.take_profit_exit_enabled,
         "max_position_per_stock": settings.max_position_per_stock,
@@ -205,9 +213,26 @@ def system_status(
     )
     db_latest_date = latest_price_date[0] if latest_price_date else None
     identity = build_runtime_identity(settings, db_latest_date=db_latest_date)
+    try:
+        schema_row = db.execute(text(
+            "SELECT version, name, applied_at FROM schema_migrations "
+            "ORDER BY version DESC LIMIT 1"
+        )).first()
+        schema_status = {
+            "version": int(schema_row[0]),
+            "name": str(schema_row[1]),
+            "applied_at": str(schema_row[2]),
+        } if schema_row else None
+    except Exception:
+        schema_status = None
     return {
         **identity,
         "atlas_enabled": settings.atlas_enabled,
+        "memory_mode": (
+            "decision_context_enabled"
+            if settings.memory_decision_context_enabled
+            else "shadow_only"
+        ),
         "ai_provider": settings.ai_provider,
         "database_exists": bool(database_path and database_path.exists()),
         "latest_price_date": db_latest_date,
@@ -215,6 +240,7 @@ def system_status(
         "long_term_labels_count": db.query(LongTermLabel).count(),
         "latest_long_term_label_date": latest_label_date[0] if latest_label_date else None,
         "scheduler": scheduler_state,
+        "runtime_schema": schema_status,
         "active_stocks_by_market": {market: int(count) for market, count in market_rows},
         "market_profiles": all_market_profiles_payload(),
         "signal_policy": production_signal_policy_payload(),
@@ -352,10 +378,168 @@ def system_health(db: Session = Depends(get_db)):
         logger.warning("system.system_health: reading scheduler state failed: %s", e)
         scheduler_state = {"error": str(e), "jobs": {}}
 
+    evaluate_daily_bundle_fn: Callable[..., dict[str, Any]] | None = None
+    select_complete_run_for_batch_fn: Callable[..., dict[str, Any]] | None = None
+    signal_producing_jobs: tuple[str, ...] = ()
+    try:
+        from backend.ops.run_envelope import (
+            SIGNAL_PRODUCING_JOBS,
+            run_envelope_from_row,
+            select_complete_daily_run,
+        )
+        from backend.ops.run_envelope import (
+            evaluate_daily_bundle as _evaluate_daily_bundle,
+        )
+        from backend.ops.run_envelope import (
+            select_complete_run_for_batch as _select_complete_run_for_batch,
+        )
+
+        evaluate_daily_bundle_fn = _evaluate_daily_bundle
+        select_complete_run_for_batch_fn = _select_complete_run_for_batch
+        signal_producing_jobs = SIGNAL_PRODUCING_JOBS
+        daily_selection = select_complete_daily_run(db)
+        latest_job = daily_selection.get("job_run")
+    except Exception:
+        logger.warning(
+            "system.system_health: reading workflow ledger failed, using fallback",
+            exc_info=True,
+        )
+        latest_job = None
+        daily_selection = {"status": "error", "job_run": None, "candidates": 0}
+
+    latest_signal_batch: dict[str, Any] | None = None
+    try:
+        latest_signal_date = db.query(func.max(Signal.date)).scalar()
+        if latest_signal_date:
+            latest_signal_date = str(latest_signal_date)
+            signal_rows = (
+                db.query(
+                    func.count(Signal.id),
+                    func.count(func.distinct(Signal.symbol)),
+                    func.min(Signal.data_timestamp),
+                    func.max(Signal.data_timestamp),
+                )
+                .filter(Signal.date == latest_signal_date)
+                .first()
+            )
+            latest_signal_batch = {
+                "batch_id": latest_signal_date,
+                "as_of": latest_signal_date[:10],
+                "signals": int(signal_rows[0] or 0) if signal_rows else 0,
+                "symbols": int(signal_rows[1] or 0) if signal_rows else 0,
+                "data_timestamp_min": str(signal_rows[2]) if signal_rows and signal_rows[2] else None,
+                "data_timestamp_max": str(signal_rows[3]) if signal_rows and signal_rows[3] else None,
+            }
+    except Exception:
+        logger.warning(
+            "system.system_health: reading latest signal batch failed, using fallback",
+            exc_info=True,
+        )
+        latest_signal_batch = None
+
+    signal_batch_selection = None
+    if latest_signal_batch is not None and select_complete_run_for_batch_fn is not None:
+        try:
+            signal_batch_selection = select_complete_run_for_batch_fn(
+                db,
+                as_of=latest_signal_batch["as_of"],
+                batch_id=latest_signal_batch["batch_id"],
+                min_symbols=latest_signal_batch["symbols"],
+                job_names=signal_producing_jobs,
+            )
+        except Exception:
+            logger.warning(
+                "system.system_health: matching latest signal batch to run envelope failed, using fallback",
+                exc_info=True,
+            )
+            signal_batch_selection = {"status": "error", "job_run": None, "candidates": 0}
+
+    latest_job_as_of = str(latest_job.as_of)[:10] if latest_job and latest_job.as_of else None
+    signal_job = (
+        signal_batch_selection.get("job_run")
+        if isinstance(signal_batch_selection, dict)
+        else None
+    )
+    job_age_days = None
+    if latest_job_as_of:
+        try:
+            job_age_days = (
+                datetime.now(UTC).date() - datetime.strptime(latest_job_as_of, "%Y-%m-%d").date()
+            ).days
+        except ValueError:
+            pass
+    workflow_observability = {
+        "observed": daily_selection.get("status") == "selected",
+        "fresh": (
+            None
+            if job_age_days is None
+            else daily_selection.get("status") == "selected"
+            and job_age_days <= kill_switch.DEFAULT_DATA_STALE_DAYS
+        ),
+        "age_days": job_age_days,
+        "selector_status": daily_selection.get("status"),
+        "candidate_count": daily_selection.get("candidates", 0),
+        "latest": (
+            None
+            if latest_job is None
+            else {
+                "job_name": latest_job.job_name,
+                "run_id": latest_job.run_id,
+                "as_of": latest_job.as_of,
+                "status": latest_job.status,
+                "trigger_source": latest_job.trigger_source,
+                "finished_at": (
+                    latest_job.finished_at.isoformat() if latest_job.finished_at else None
+                ),
+                "run_envelope": run_envelope_from_row(latest_job),
+            }
+        ),
+    }
+    signal_batch_observability = {
+        "observed": latest_signal_batch is not None,
+        "latest": latest_signal_batch,
+        "covered_by_job_run": (
+            None
+            if latest_signal_batch is None
+            else signal_batch_selection is not None
+            and signal_batch_selection.get("status") == "selected"
+        ),
+        "selector_status": (
+            signal_batch_selection.get("status")
+            if isinstance(signal_batch_selection, dict)
+            else None
+        ),
+        "candidate_count": (
+            signal_batch_selection.get("candidates", 0)
+            if isinstance(signal_batch_selection, dict)
+            else 0
+        ),
+        "latest_job_as_of": str(signal_job.as_of)[:10] if signal_job and signal_job.as_of else latest_job_as_of,
+        "run_id": signal_job.run_id if signal_job else None,
+        "run_envelope": (
+            signal_batch_selection.get("run_envelope")
+            if isinstance(signal_batch_selection, dict)
+            else None
+        ),
+    }
+    daily_bundle = None
+    if latest_signal_batch is not None and evaluate_daily_bundle_fn is not None:
+        try:
+            daily_bundle = evaluate_daily_bundle_fn(db, as_of=latest_signal_batch["as_of"])
+        except Exception:
+            logger.warning(
+                "system.system_health: evaluating daily bundle failed, using fallback",
+                exc_info=True,
+            )
+            daily_bundle = None
+
     healthy = (
         db_ok
         and (data_age_days is None or data_age_days <= kill_switch.DEFAULT_DATA_STALE_DAYS)
         and not (ks_state and ks_state.get("active"))
+        and workflow_observability["observed"]
+        and workflow_observability["fresh"] is True
+        and signal_batch_observability["covered_by_job_run"] is not False
     )
 
     # GET health stays read-only. Operators can alert from this summary.
@@ -380,10 +564,14 @@ def system_health(db: Session = Depends(get_db)):
         "consecutive_losses": recent_losses,
         "consecutive_losses_threshold": kill_switch.DEFAULT_CONSECUTIVE_LOSSES,
         "scheduler": scheduler_state,
+        "workflow_observability": workflow_observability,
+        "daily_bundle_observability": daily_bundle,
+        "signal_batch_observability": signal_batch_observability,
         "runtime_readiness": runtime_readiness(settings),
         "feature_flags": {
             "long_term_team_enabled": settings.long_term_team_enabled,
             "long_term_constraints_enabled": settings.long_term_constraints_enabled,
+            "memory_decision_context_enabled": settings.memory_decision_context_enabled,
         },
         "llm_budget_alert": llm_budget_alert,
     }

@@ -11,6 +11,7 @@ from backend.ops.job_ledger import (
     start_job_run,
     terminal_status,
 )
+from backend.ops.run_context import RunContext, bind_run_context
 
 
 def execute_tracked_job(
@@ -39,8 +40,16 @@ def execute_tracked_job(
         "last_duration_seconds": None,
         "last_error": None,
     })
+    run_context = RunContext(
+        run_id=ledger_handle.run_id,
+        job_name=job_name,
+        trigger_source=trigger_source,
+        as_of=as_of,
+        persisted=ledger_handle.persisted,
+    )
     try:
-        result = fn()
+        with bind_run_context(run_context):
+            result = fn()
         finished = datetime.now(UTC)
         state.update({
             "running": False,

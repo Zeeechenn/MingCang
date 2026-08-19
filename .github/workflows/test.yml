@@ -27,11 +27,17 @@ jobs:
       - name: Check Python lockfile
         run: make python-lock-check
 
+      - name: Check release version consistency
+        run: make release-check
+
       - name: Run backend lint
         run: make lint
 
       - name: Run release hygiene guard
         run: make hygiene
+
+      - name: Check document authority
+        run: make doc-check
 
       - name: Run backend typecheck
         run: make typecheck
@@ -75,6 +81,58 @@ jobs:
         with:
           name: backend-coverage
           path: coverage.xml
+
+  python-compat:
+    name: Python ${{ matrix.python-version }} compatibility
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install locked test environment
+        run: uv sync --frozen --extra test --python ${{ matrix.python-version }}
+
+      - name: Run compatibility contract suite
+        run: >-
+          PYTHONPATH=. .venv/bin/python -m pytest -q
+          tests/test_schema_authority.py
+          tests/test_runtime_identity_and_job_ledger.py
+          tests/test_m61_p3_research.py
+
+  docker:
+    name: Docker build and health smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build backend and frontend images
+        run: |
+          docker build --target backend -t mingcang-backend:ci .
+          docker build --target frontend -t mingcang-frontend:ci .
+
+      - name: Verify backend container health
+        run: |
+          set -euo pipefail
+          docker run --detach --rm --name mingcang-backend-ci -p 18000:8000 mingcang-backend:ci
+          trap 'docker logs mingcang-backend-ci || true; docker stop mingcang-backend-ci || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18000/health | grep -q '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
 
   security:
     name: Security and dependency audit

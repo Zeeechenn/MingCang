@@ -273,5 +273,5 @@ def test_team_result_carries_m61_prompt_version(monkeypatch, test_db):
 
     label = team_mod.LongTermTeam().run("603986", "兆易创新", test_db)
 
-    assert label.prompt_version == "m61_p3"
-    assert "prompt_version=m61_p3" in label.quality_notes
+    assert label.prompt_version == "m61_p3_memory_shadow_v2"
+    assert "prompt_version=m61_p3_memory_shadow_v2" in label.quality_notes

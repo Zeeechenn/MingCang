@@ -2,7 +2,7 @@
 
 > **A local-first A-share research agent**: a conversational personal workbench for research, signals, position discipline, reviews, and memory.
 
-MingCang is not a quant trading system and not an AI stock picker. It does not promise returns, place orders, or decide for you. It organizes the stocks, sectors, views, risks, and review outcomes you care about, then uses AI to widen the scan, challenge assumptions, gather evidence, and promote only outcome-tested lessons into memory.
+MingCang is not a quant trading system and not an AI stock picker. It does not promise returns, place orders, or decide for you. It organizes the stocks, sectors, views, risks, and review outcomes you care about, then uses AI to widen the scan, challenge assumptions, and gather evidence. Outcome-tested lessons continue to accrue and replay in shadow mode, but do not enter AI judgment or official actions by default.
 
 **Recommended mode today: open the MingCang Agent and talk to it in natural language.** MingCang recently went through a major refactor, and the frontend experience is still being polished. The web UI is useful as a local visual workbench, but daily research, reviews, watchlist maintenance, and risk checks are currently best done through the agent.
 
@@ -20,7 +20,7 @@ MingCang is not a quant trading system and not an AI stock picker. It does not p
 
 ## 30 Seconds
 
-- **Research entry point**: ask in natural language; MingCang routes local research, signals, memory, and risk context for you.
+- **Research entry point**: ask in natural language; MingCang routes local research, signals, and risk context. Historical memory is returned only when explicitly requested.
 - **Daily cadence**: pre-market risk scan, intraday notes, post-market signals/news/risk-line review, and weekend health checks.
 - **Decision boundary**: AI scans wider, pokes holes, and gathers evidence; final judgment, sizing, and trading actions remain yours.
 - **Data boundary**: local-first by default. Prices, news, positions, reviews, and memory stay on your machine unless you explicitly enable remote features.
@@ -39,9 +39,19 @@ MingCang is not a quant trading system and not an AI stock picker. It does not p
 | Track a theme | "Track 1.6T optical-module demand as a long-term thesis and list invalidation conditions." |
 | Feed an opinion | "I saw a view that advanced packaging may accelerate. Archive it and look for counterevidence." |
 | Review a trade | "Review this CATL loss and see whether it should become a rule." |
-| Inspect memory | "What mistakes have I made before in semiconductor names? Remind me next time." |
+| Inspect memory | "List my past mistakes in semiconductor names, but do not change the current recommendation." |
 
 MingCang turns these natural-language requests into local tool calls. You do not need to memorize internal entry points or module names.
+
+---
+
+## Requirements
+
+- Python 3.11 or newer. The primary CI runtime is 3.11, with compatibility contracts on 3.12 and 3.13.
+- Node.js 20 is required to develop or build the web workbench; Agent/API-only use does not require Node.js.
+- `uv` is recommended for reproducible installs from `uv.lock`. Docker Compose v2 is also supported.
+
+Use `python --version`, `node --version`, and `docker compose version` to confirm your local environment. Existing SQLite databases are upgraded by the idempotent `init_db()` runtime schema path; backing up the local database before an upgrade is still recommended.
 
 ---
 
@@ -57,7 +67,7 @@ mingcang
 Then talk to it directly, for example:
 
 ```text
-Look at 300308. Combine signals, news, long-term labels, and past memory, then give me a research conclusion.
+Look at 300308. Combine signals, news, and long-term labels, then give me a research conclusion.
 ```
 
 The default local mode prefers your logged-in local AI runtime. You only need cloud model, search, or data-provider keys when you explicitly enable those features.
@@ -111,7 +121,7 @@ Signals provide tiered calls and ATR risk lines. They do not predict price moves
 | Research analyst modules | Encodes finance-quality, prosperity, and supply-chain frameworks for long-term research without overriding daily signals. |
 | Dossier loop | Links research, signals, positions, reviews, and memory so you can audit why a judgment was made. |
 | Local data foundation | SQLite, cache contracts, quality gates, and point-in-time discipline reduce dirty data and hindsight bias. |
-| Memory system | Promotes only outcome-tested, reviewed lessons into trusted memory. |
+| Memory system | Records, validates, and replays historical lessons; default use is explicit inspection and shadow evaluation only, with no effect on AI judgment, signals, sizing, or stops. |
 | Frontend workbench | Visualizes dossiers, signals, reviews, and source health; still in product-experience polishing. |
 
 ---
@@ -132,7 +142,7 @@ MingCang runs research as a loop: judgment -> signal -> position -> review attri
 
 Full chain: [CATL live sample](docs_public/ningde_live_sample.md).
 
-The point: **a loss is survivable; failing to learn from it is the real problem.** MingCang turns review attribution into candidate memory, and only confirmed lessons become trusted context for future research.
+The point: **a loss is survivable; unaudited attribution is the real problem.** MingCang keeps confirmed lessons in a shadow ledger, but they do not alter later judgments until forward evaluation earns promotion.
 
 ---
 
@@ -229,7 +239,7 @@ Inputs (data + news + your judgment + external theses)
         └────────── memory update (outcome-gated, human-confirmed) ◀────┘
 ```
 
-Plain English: record why something is worth researching, decide whether it is actionable now, record why it is held or exited, then review what the result taught you. Only outcome-tested, human-confirmed lessons become trusted memory. Full architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Plain English: record why something is worth researching, decide whether it is actionable now, record why it is held or exited, then review what the result taught you. Only outcome-tested, human-confirmed lessons become trusted memory. Full architecture: [docs_public/ARCHITECTURE.md](docs_public/ARCHITECTURE.md).
 
 ### Current Capability Status
 
@@ -296,15 +306,16 @@ MINGCANG_AGENT_REMOTE_WRITE_ACTIONS=
 | [docs_public/index.md](docs_public/index.md) | Public docs home: navigation, shortest path, core capabilities |
 | [docs_public/USER_GUIDE.md](docs_public/USER_GUIDE.md) | Agent usage guide: natural-language stock research, daily scans, long-term theses, review memory |
 | [docs_public/FEATURE_MAP.md](docs_public/FEATURE_MAP.md) | Feature map: description, entry, status, write/signal/key boundary |
+| [docs_public/ARCHITECTURE.md](docs_public/ARCHITECTURE.md) | Layered architecture, Case types, fusion logic |
 | [docs_public/DEVELOPER_GUIDE.md](docs_public/DEVELOPER_GUIDE.md) | Development guide: pages, APIs, actions, research modules, quant modules |
 | [docs_public/REFERENCE.md](docs_public/REFERENCE.md) | Reference: low-level interfaces, config, key files |
+| [docs_public/WHY_NOT_AI_STOCK_PICKER.md](docs_public/WHY_NOT_AI_STOCK_PICKER.md) | Why MingCang is not an AI stock picker: LLM boundary, ATR discipline, memory gates |
+| [docs_public/ningde_live_sample.md](docs_public/ningde_live_sample.md) | CATL live sample: natural language to evidence chain, shadow conclusion, and risk notes |
 | [AGENTS.md](AGENTS.md) | Agent rules and safety boundaries |
 | [PROJECT.md](PROJECT.md) | Repository navigation and key-file index |
 | [STATUS.md](STATUS.md) | Current production status, signal weights, validation entry points |
 | [CHANGELOG.md](CHANGELOG.md) | Version history and completed updates |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development environment and contribution flow |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layered architecture, Case types, fusion logic |
-| [docs/WHY_NOT_AI_STOCK_PICKER.md](docs/WHY_NOT_AI_STOCK_PICKER.md) | Why MingCang is not an AI stock picker: LLM boundary, ATR discipline, memory gates |
 
 ---
 

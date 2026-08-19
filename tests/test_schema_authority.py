@@ -111,3 +111,18 @@ def test_snapshot_is_deterministic():
     first = _snapshot_schema(_build_schema_engine())
     second = _snapshot_schema(_build_schema_engine())
     assert first == second
+
+
+def test_runtime_schema_version_is_recorded_idempotently():
+    from backend.data.schema_runtime import RUNTIME_SCHEMA_NAME, RUNTIME_SCHEMA_VERSION
+
+    engine = _build_schema_engine()
+    from backend.data.database import _ensure_runtime_schema
+
+    _ensure_runtime_schema(engine)
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT version, name FROM schema_migrations ORDER BY version"
+        )).fetchall()
+
+    assert rows == [(RUNTIME_SCHEMA_VERSION, RUNTIME_SCHEMA_NAME)]

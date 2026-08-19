@@ -149,9 +149,15 @@ def scan_paths(paths: Iterable[Path], root: Path | None = None) -> HygieneResult
     scanned_files = 0
 
     for path in paths:
-        scanned_files += 1
         display_path = _display_path(path, root)
-        text = path.read_text(encoding="utf-8", errors="replace")
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            # ``git ls-files`` includes tracked paths deleted in the current
+            # worktree. A pending deletion has no bytes to scan and must not
+            # make the hygiene gate crash; other read failures still surface.
+            continue
+        scanned_files += 1
         for line_number, line in enumerate(text.splitlines(), start=1):
             if ALLOW_MARKER in line:
                 allowed_lines += 1

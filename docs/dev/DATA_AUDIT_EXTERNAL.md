@@ -223,7 +223,7 @@ TickFlow 完全无关联代码路径。证据链：
    FLOW_MISSING)`。**这条路径对每一次调用都成立，等于 FLOW_MISSING 会 100% 触发**，与任何
    具体股票/日期的真实资金流数据是否存在无关。
 
-5. 设计文档 `docs/dev/M54_NEWS_LAYER_V2_DESIGN.md` L147/L177 写着 "flow_score = s_flow_data
+5. 已归档的 M54 news-layer 设计笔记曾写着 "flow_score = s_flow_data
    （复用 m52_flow_floor 真实资金流,独立通道）" 且标注"已有真实数据底座,边际成本低"——
    即设计时**假设** M52 阶段已经把真实资金流数据打好了地基，但对照代码，这个地基从未被
    实际建出来（模块不存在），M54 只是在文档层面"复用"了一个不存在的东西。

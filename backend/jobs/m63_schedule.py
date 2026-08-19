@@ -16,6 +16,7 @@ def job_m63_postmarket() -> dict:
 
         result = m63_daily.build_postmarket_report()
         path = m63_daily.write_report(result["mode"], result["date"], result["text"])
+        result["batch_id"] = f"m63_postmarket:{result['date']}"
         result["output_path"] = str(path)
         return result
 
@@ -27,6 +28,7 @@ def job_m63_postmarket() -> dict:
             "workflow": "m63_daily",
             "mode": "postmarket",
             "scope": "test2_union_positions_focus",
+            "required_steps": ["m59_panel", "trigger_router", "task_capsule"],
         },
     )
 

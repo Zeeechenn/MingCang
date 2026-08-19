@@ -83,6 +83,31 @@ def _holding(symbol: str, flags: int) -> dict:
     }
 
 
+def test_context_builder_skips_governor_memory_in_shadow_mode(tmp_path, monkeypatch):
+    from backend.memory import context_governor
+
+    monkeypatch.setattr(m59_discretion.settings, "memory_decision_context_enabled", False)
+    monkeypatch.setattr(m59_discretion, "build_stock_context_pack", lambda *args, **kwargs: {"symbol": "C0"})
+    monkeypatch.setattr(m59_discretion, "render_context_text", lambda *args, **kwargs: "base context")
+    monkeypatch.setattr(
+        context_governor,
+        "build_agent_context",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("memory governor must stay off")),
+    )
+
+    pack, text_value = m59_discretion._build_context(
+        "C0",
+        tmp_path / "shadow-context.sqlite",
+        "2026-07-05",
+    )
+
+    assert text_value == "base context"
+    assert pack["context_governor"] == {
+        "mode": "shadow_only",
+        "memory_decision_context_applied": False,
+    }
+
+
 def test_schema_validation_failure_degrades_without_raising(tmp_path, monkeypatch):
     _patch_context(monkeypatch)
     db_path = _db(tmp_path / "m59.sqlite")

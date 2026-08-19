@@ -1,9 +1,15 @@
 """Runtime schema patches for SQLite deployments."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
+
+RUNTIME_SCHEMA_VERSION = 1
+RUNTIME_SCHEMA_NAME = "runtime_schema_baseline_m69"
 
 
 def _quote(identifier: str) -> str:
@@ -325,6 +331,9 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
             conn.execute(text("ALTER TABLE signals ADD COLUMN rule_version TEXT"))
         if "data_timestamp" not in signal_cols:
             conn.execute(text("ALTER TABLE signals ADD COLUMN data_timestamp TEXT"))
+        if "run_id" not in signal_cols:
+            conn.execute(text("ALTER TABLE signals ADD COLUMN run_id TEXT"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_signals_run_id ON signals(run_id)"))
 
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS sentiment_cache (
@@ -750,5 +759,57 @@ def _ensure_runtime_schema(runtime_engine: Any | None = None) -> None:
             ON chat_messages(session_id, created_at)
         """))
 
+        # Runtime patches are the supported upgrade authority for existing
+        # SQLite databases. Record the successfully applied contract so status
+        # endpoints and support tooling can distinguish an upgraded database
+        # from an uninitialised/legacy one without guessing from table counts.
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        conn.execute(
+            text("""
+                INSERT OR IGNORE INTO schema_migrations(version, name)
+                VALUES (:version, :name)
+            """),
+            {"version": RUNTIME_SCHEMA_VERSION, "name": RUNTIME_SCHEMA_NAME},
+        )
 
-__all__ = ["_ensure_runtime_schema", "_ensure_memory_recall_schema"]
+
+_SIGNALS_RUN_ID_ENSURED: set[str] = set()
+
+
+def ensure_signals_run_id_column(db) -> None:
+    """Idempotently add ``signals.run_id`` to a database opened without init_db.
+
+    The daily signal entrypoints do not call :func:`init_db`, so a database that
+    predates the column would otherwise fail the next official write. Adding the
+    column is additive and reversible, and is attempted once per engine.
+    """
+    from sqlalchemy import text
+
+    bind = db.get_bind()
+    key = str(getattr(bind, "url", bind))
+    if key in _SIGNALS_RUN_ID_ENSURED:
+        return
+    try:
+        columns = {row[1] for row in db.execute(text("PRAGMA table_info(signals)")).fetchall()}
+        if columns and "run_id" not in columns:
+            db.execute(text("ALTER TABLE signals ADD COLUMN run_id TEXT"))
+            db.execute(text("CREATE INDEX IF NOT EXISTS ix_signals_run_id ON signals(run_id)"))
+            db.commit()
+    except Exception:  # noqa: BLE001 - a schema probe must never block the write path.
+        logger.debug("signals.run_id column check failed", exc_info=True)
+    _SIGNALS_RUN_ID_ENSURED.add(key)
+
+
+__all__ = [
+    "RUNTIME_SCHEMA_NAME",
+    "RUNTIME_SCHEMA_VERSION",
+    "_ensure_memory_recall_schema",
+    "_ensure_runtime_schema",
+    "ensure_signals_run_id_column",
+]

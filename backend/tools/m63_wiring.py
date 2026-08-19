@@ -21,14 +21,22 @@ class WiringEntry(TypedDict):
 
 
 WIRING_MAP: dict[str, WiringEntry] = {
+    "backend.tools.memory_backtest": {
+        "bucket": "manual_only",
+        "reason": "记忆PIT收益/止损A/B证据工具,只读快照且仅人工触发",
+    },
+    "backend.tools.memory_health": {
+        "bucket": "manual_only",
+        "reason": "记忆健康审计默认只读;维护写入需显式--apply",
+    },
     "backend.tools.m67_gray_bootstrap": {"bucket": "manual_only", "reason": "M67港美股小池初始化与补数,仅显式灰度操作"},
     "backend.tools.m67_gray_price_resync": {"bucket": "manual_only", "reason": "M67灰度价格口径重同步,需显式--apply"},
     "backend.tools.rebase_price_history": {"bucket": "manual_only", "reason": "M69复权基准漂移审计;审计只读,重基需显式--apply并同步重述台账"},
     "backend.tools.m67_multimarket_replay": {"bucket": "manual_only", "reason": "M67分市场回放与晋升证据,人工触发只读"},
-    "backend.tools.coverage_snapshot": {"bucket": "daily_postmarket", "reason": "日常数据覆盖快照"},
+    "backend.tools.coverage_snapshot": {"bucket": "manual_only", "reason": "数据覆盖快照由人工或外层验收触发,不由 M63 workflow 直接导入"},
     "backend.tools.check_sensitive_paths": {"bucket": "manual_only", "reason": "提交前敏感路径检查,人工触发"},
     "backend.tools.gate_b_tracker": {"bucket": "manual_only", "reason": "Gate-B观察台账,验收/研究时人工触发"},
-    "backend.tools.long_term_constraint_impact": {"bucket": "daily_postmarket", "reason": "长期标签与日信号约束影响读数"},
+    "backend.tools.long_term_constraint_impact": {"bucket": "manual_only", "reason": "长期标签影响读数是诊断入口,不由 M63 workflow 直接导入"},
     "backend.tools.m59_panel": {"bucket": "daily_postmarket", "reason": "盘后核心面板"},
     "backend.tools.m59_entry_card": {"bucket": "manual_only", "reason": "M59候选区条件卡库函数/单股CLI,由面板消费"},
     "backend.tools.m59_readiness": {"bucket": "manual_only", "reason": "D0入场准备度证据记点与D7校准,由候选区消费"},

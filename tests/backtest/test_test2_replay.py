@@ -54,3 +54,57 @@ def test_neutral_recorded_day_advances_stop_loss_without_creating_entry():
     assert not result.open_holdings
     assert result.closed_trades[0].exit_reason == "stop_loss"
     assert result.closed_trades[0].exit_price == 95
+
+
+def test_entry_filter_vetoes_entry_without_removing_later_exit_signal():
+    framework = Framework("C", "C", 0.0, 0.6, 0.4, 25.0)
+    signals = [
+        Signal("AAA", "A", "2026-07-16", 0, 100, 100, 95, 150),
+        Signal("BBB", "B", "2026-07-16", 0, 90, 90, 95, 150),
+        Signal("BBB", "B", "2026-07-20", 0, 0, 0, 95, 150),
+    ]
+    prices = {
+        ("AAA", "2026-07-17"): PriceBar("AAA", "2026-07-17", 100, 101, 99, 100),
+        ("BBB", "2026-07-17"): PriceBar("BBB", "2026-07-17", 100, 101, 99, 100),
+        ("AAA", "2026-07-20"): PriceBar("AAA", "2026-07-20", 100, 101, 99, 100),
+        ("BBB", "2026-07-20"): PriceBar("BBB", "2026-07-20", 96, 98, 94, 96),
+    }
+
+    result = replay(
+        signals,
+        prices,
+        {"AAA", "BBB"},
+        frameworks={"C": framework},
+        entry_filter=lambda signal, _framework: signal.symbol != "AAA",
+    )["C"]
+
+    assert not result.open_holdings
+    assert [trade.symbol for trade in result.closed_trades] == ["BBB"]
+    assert result.closed_trades[0].exit_reason == "stop_loss"
+
+
+def test_complete_price_calendar_catches_stop_on_day_without_signal_batch():
+    framework = Framework("C", "C", 0.0, 0.6, 0.4, 25.0)
+    signals = [Signal("AAA", "A", "2026-07-16", 0, 100, 100, 95, 150)]
+    prices = {
+        ("AAA", "2026-07-17"): PriceBar("AAA", "2026-07-17", 100, 101, 99, 100),
+        ("AAA", "2026-07-20"): PriceBar("AAA", "2026-07-20", 96, 98, 94, 96),
+    }
+
+    sparse = replay(
+        signals,
+        prices,
+        {"AAA"},
+        frameworks={"C": framework},
+    )["C"]
+    complete = replay(
+        signals,
+        prices,
+        {"AAA"},
+        frameworks={"C": framework},
+        process_all_price_dates=True,
+    )["C"]
+
+    assert len(sparse.open_holdings) == 1
+    assert complete.closed_trades[0].exit_date == "2026-07-20"
+    assert complete.closed_trades[0].exit_reason == "stop_loss"

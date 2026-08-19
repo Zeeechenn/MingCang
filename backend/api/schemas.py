@@ -249,6 +249,7 @@ class ResearchCaseOut(BaseModel):
     as_of: str | None = None
     quality_gate: QualityGateOut = Field(default_factory=QualityGateOut)
     validity_card: StructuralValidityCardOut = Field(default_factory=StructuralValidityCardOut)
+    stage4_research_structure: dict = Field(default_factory=dict)
     ready: bool = False
     generated_at: str | None = None
 
@@ -287,6 +288,34 @@ class DossierAdapterReviewOut(BaseModel):
     evidence_cards: list[EvidenceCardOut] = []
     memory_candidate_preview: MemoryCandidatePreviewOut
     promotion_gate: dict = {}
+
+
+class DailyPanelDrilldownOut(BaseModel):
+    kind: str = "none"
+    href: str | None = None
+    label: str = ""
+
+
+class DailyPanelCardOut(BaseModel):
+    card_type: str
+    lifecycle: str
+    status: str
+    summary: str = ""
+    payload: dict = Field(default_factory=dict)
+    evidence_refs: list[dict] = Field(default_factory=list)
+    run_ref: dict | None = None
+    drilldown: DailyPanelDrilldownOut = Field(default_factory=DailyPanelDrilldownOut)
+
+
+class DailyPanelOut(BaseModel):
+    schema_version: str = "daily_panel.v1"
+    mode: str = "postmarket"
+    as_of: str | None = None
+    generated_at: str | None = None
+    status: str = "degraded"
+    cards: list[DailyPanelCardOut] = Field(default_factory=list)
+    lifecycle_visibility: dict = Field(default_factory=dict)
+    source_contract: dict = Field(default_factory=dict)
 
 
 class ResearchDossierOut(BaseModel):

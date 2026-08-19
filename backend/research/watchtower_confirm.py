@@ -31,9 +31,8 @@ Context assembly (all read-only, no new writes):
   - the symbol's research reference — long_term_label + research_pointer,
     same helper M59 uses (``backend.research.reference.build_research_reference``);
   - today's trigger detail (type/value/detail) for this symbol, deduplicated;
-  - L0 memory recall when ``settings.research_l0_recall_enabled`` is True,
-    via the same ``build_memory_context`` channel used by stock-context /
-    project-context (``backend.memory.stock_memory``).
+  - Memory recall only when the separate decision-context promotion switch is
+    enabled. The default shadow-only mode returns no remembered prior.
 """
 from __future__ import annotations
 
@@ -149,15 +148,18 @@ def _memory_recall_text(db: Any, symbol: str) -> dict[str, Any]:
     if db is None:
         return {"text": "", "status": "missing:no_db_session"}
     try:
-        from backend.memory.stock_memory import build_memory_context
+        from backend.memory.stock_memory import build_decision_memory_context
 
-        context = build_memory_context(
+        context = build_decision_memory_context(
             db,
             symbol=symbol,
             task_type="watchtower_confirm",
             include_l0=settings.research_l0_recall_enabled,
         )
-        return {"text": context.get("text", ""), "status": "ok"}
+        return {
+            "text": context.get("text", ""),
+            "status": str(context.get("memory_mode", "decision_context_enabled")),
+        }
     except Exception as exc:  # noqa: BLE001 — memory recall must never break the confirm layer
         return {"text": "", "status": f"error:{exc}"}
 
@@ -345,7 +347,9 @@ def build_confirmation_report(
 
     resolved_db_path = Path(db_path) if db_path is not None else default_sqlite_path()
     entries, watchlist_errors = (
-        load_watchlists(watchlist_dir) if watchlist_dir is not None else load_watchlists()
+        load_watchlists(watchlist_dir, authoritative_thesis=False)
+        if watchlist_dir is not None
+        else load_watchlists()
     )
     entries_by_symbol = _watchlist_entries_by_symbol(entries)
 

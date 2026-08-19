@@ -83,7 +83,7 @@ needs them:
 | current status, next step, testing, trading, milestone work | `STATUS.md` |
 | architecture, repository navigation, ownership boundaries | `PROJECT.md` |
 | onboarding, install, public copy, GitHub-facing docs | `README.md` |
-| planning, continuation, milestone sequencing, "what next" | `docs/ROADMAP.md` |
+| planning, continuation, governance sequencing, "what next" | `docs/ROADMAP.md` (the single active One Loop plan) |
 | release notes, version history, historical verification | `CHANGELOG.md` only when explicitly relevant |
 
 Do not preload `CHANGELOG.md`, `README_EN.md`, `docs/dev/*`, research reports,
@@ -96,9 +96,16 @@ For MingCang trading, testing, review, or research decisions, prefer
 project-owned runtime truth over assistant-only chat memory:
 
 1. current SQLite state: positions, watchlist, signals, labels, reviews
-2. `ai_memory` rows for rules, preferences, research indexes, and risk notes
-3. `decision_memory_layered` and `~/.mingcang/memory/*.md`
-4. recent `audit_log_fts` entries
+2. validated `stock_memory_items` outcomes/lessons and the compact calibration
+   returned by `memory-context`
+3. `ai_memory` rows for rules, preferences, research indexes, and risk notes
+4. `decision_memory_layered`; legacy `~/.mingcang/memory/*.md` is fallback/cold
+   history only
+5. recent `audit_log_fts` entries
+
+Do not inject raw daily judgment rows when validated outcome calibration exists.
+Treat `watching`/`pending` memory as a question to re-check, not as current fact;
+memory never directly changes official weights, stops, positions, or orders.
 
 ## Single-Stock Research Output
 
@@ -162,6 +169,49 @@ The operator commands in `Daily Routing` intentionally keep their compatible
 `backend.tools.*` CLI paths. That does not authorize production modules to use
 those paths as implementation dependencies.
 
+## One Loop Project Governance
+
+`docs/ROADMAP.md` is the only active project-level plan. The former M-number
+roadmap is frozen history: old identifiers may remain in compatibility paths,
+schemas, tests, Git history, and `CHANGELOG.md`, but do not create new
+M-numbered modules, files, workstreams, or product concepts.
+
+Use the lifecycle vocabulary in the roadmap exactly: `proposed`,
+`experimental`, `shadow`, `stable`, `dormant`, `rejected`, or `archived`.
+Code existence is not evidence that a capability is active. Before calling a
+capability stable or in use, verify its owner, runtime consumer, entrypoint,
+job/run ledger, fresh output, evidence status, and rollback path.
+
+Keep implementation work bounded:
+
+- work from the earliest unblocked One Loop stage and satisfy its exit gate
+  before advancing;
+- at most two implementation batches may be in progress at once;
+- do not combine structural migration with trading, provider, scheduler, DB,
+  API, memory-routing, or risk-policy behavior changes;
+- each batch must identify owner domain, invariants, tests, runtime evidence,
+  and rollback before editing;
+- one new top-level capability should normally replace, merge, or retire one
+  existing capability.
+
+### External Capability Admission
+
+Before adapting an external repository, paper, skill, agent, model, or strategy,
+record all of the following in the active roadmap proposal:
+
+1. the existing MingCang problem it solves and the current baseline;
+2. overlapping MingCang capabilities and why reuse is insufficient;
+3. whether the adaptation is an idea, interface, algorithm, or code import;
+4. owner domain, canonical entrypoint, and the single formal consumer;
+5. input/output/failure/degradation contracts and affected safety surfaces;
+6. experimental or shadow isolation, success metric, minimum sample, and expiry;
+7. stop, rollback, deletion, and replacement/merge plan;
+8. contract tests, runtime metrics, provenance, and required user decision gate.
+
+Without an owner, consumer, metric, expiry, rollback, and replacement target,
+the capability must remain outside production code. Prefer absorbing a useful
+design into an existing domain over importing a parallel framework.
+
 ## Agent Runtime Checklist
 
 For local agent work, start with the smallest command that matches the task:
@@ -211,14 +261,30 @@ Do not create generic planning files in this repository, including
 
 Use existing durable docs:
 
-- `PROJECT.md` for navigation and index updates.
-- `STATUS.md` for the current operational snapshot.
-- `docs/ROADMAP.md` for active or future milestone work using M-numbered
-  sections.
-- `CHANGELOG.md` for completed milestone history, release notes, and historical
+- `AGENTS.md` for agent rules, safety, routing, and project governance.
+- `PROJECT.md` for architecture, navigation, domain ownership, and canonical
+  versus compatibility paths.
+- `STATUS.md` for the current operational snapshot and runtime truth only.
+- `docs/ROADMAP.md` for the single active One Loop plan, ordering, gates, and
+  current blockers.
+- `CHANGELOG.md` for completed history, release notes, and historical
   verification only.
-- `docs/dev/` for archived experiments, old plans, and maintainer-only deep
-  references that should not be part of default agent startup.
+- `docs_public/` for the public documentation site; one topic must have one
+  authoritative source.
+- `docs/ARCHITECTURE.md` and `docs/WHY_NOT_AI_STOCK_PICKER.md` are one-release
+  compatibility stubs only; update public-facing links to `docs_public/`.
+- `docs/data-sources/` and `docs/evidence/` are live internal contracts and
+  reproducibility evidence, not public-site authority.
+- `docs/dev/` only for living maintainer contracts that cannot yet be expressed
+  in code/tests. Closed plans and experiment narratives belong in the external
+  governance archive after their still-binding invariants are extracted.
+
+Local research reports, review outputs, generated reports, logs, and planning
+archives must live outside the MingCang repository directory, not merely outside
+Git tracking. Do not maintain duplicate `docs/` and `docs_public/` authority for
+the same topic. A compatibility stub may exist for one bounded release cycle.
+Run `make doc-check` when changing documentation navigation, README docs
+indexes, `docs_public/`, or `docs/dev/` authority.
 
 ## Common Commands
 

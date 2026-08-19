@@ -18,6 +18,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy import text
+
 from backend.config import settings
 from backend.decision.signal_policy import entry_recommendations
 
@@ -57,6 +59,13 @@ def _trim_medium_content(content: str, *, max_rows: int | None = None) -> str:
     return f"{title}\n\n{header}{''.join(row + chr(10) for row in kept_rows)}"
 
 
+def _replace_medium_date_row(content: str, *, date: str, row: str) -> str:
+    """Keep one latest medium-term row per close-confirmed observation date."""
+    prefix = f"| {date} |"
+    kept = [line for line in content.splitlines() if not line.startswith(prefix)]
+    return "\n".join(kept).rstrip() + "\n" + row
+
+
 def save_short_term(symbol: str, signal: dict) -> None:
     """写入运行时短期记忆"""
     arr = _SHORT_TERM.setdefault(symbol, [])
@@ -72,16 +81,23 @@ def save_short_term(symbol: str, signal: dict) -> None:
         arr.pop(0)
 
 
-def save_medium_term(symbol: str, date: str, signal: dict, db=None) -> None:
-    """追加到该股的中期记忆 markdown 表（保留全部历史）。
+def _observation_date(run_date: str, signal: dict) -> str:
+    """Prefer the close-confirmed data date over a wall-clock/manual run date."""
+    candidate = str(signal.get("data_timestamp") or run_date)[:10]
+    if len(candidate) == 10 and candidate[4:5] == "-" and candidate[7:8] == "-":
+        return candidate
+    return str(run_date)[:10]
 
-    M9.1：文件 + DB 双写。文件保留作为本地镜像，DB 是 source of truth；
-    若未提供 db 则仅写文件（保持兼容）。
+
+def save_medium_term(symbol: str, date: str, signal: dict, db=None) -> None:
+    """Append one bounded medium-term row.
+
+    The database is canonical when a session is provided.  File-only writes
+    remain as a compatibility fallback for callers without a database, but the
+    production path no longer creates a second Markdown copy of every signal.
     """
     if not settings.layered_memory_enabled:
         return
-    _ensure_dir()
-    path = _medium_path(symbol)
     header = ("| 日期 | 建议 | 综合分 | 仓位 | 止损 | 止盈 | 风控备注 |\n"
               "|------|------|--------|------|------|------|----------|\n")
     arb = signal.get("llm_arbitration", {}) or {}
@@ -97,29 +113,42 @@ def save_medium_term(symbol: str, date: str, signal: dict, db=None) -> None:
         f"{signal.get('take_profit', 0):.2f} | "
         f"{note} |\n"
     )
+    if db is not None:
+        existing = db.execute(text("""
+            SELECT content FROM decision_memory_layered
+            WHERE symbol = :symbol AND layer = 'medium'
+            LIMIT 1
+        """), {"symbol": symbol}).first()
+        content = (
+            str(existing.content)
+            if existing and existing.content
+            else f"# {symbol} 中期决策记忆\n\n{header}"
+        )
+        trimmed = _trim_medium_content(_replace_medium_date_row(content, date=date, row=row))
+        _upsert_layered_row(db, symbol=symbol, layer="medium", content=trimmed)
+        return
+
+    _ensure_dir()
+    path = _medium_path(symbol)
     if not path.exists() or path.stat().st_size == 0:
         path.write_text(f"# {symbol} 中期决策记忆\n\n{header}", encoding="utf-8")
-    with path.open("a", encoding="utf-8") as f:
-        f.write(row)
-    trimmed = _trim_medium_content(path.read_text(encoding="utf-8"))
+    content = path.read_text(encoding="utf-8")
+    trimmed = _trim_medium_content(_replace_medium_date_row(content, date=date, row=row))
     path.write_text(trimmed, encoding="utf-8")
 
-    if db is not None:
-        _upsert_layered_row(db, symbol=symbol, layer="medium",
-                            content=trimmed)
-
-
 def save_decision_layered(symbol: str, date: str, signal: dict, db=None) -> None:
-    """统一入口：同时写短期+中期；若提供 db 则同时写一笔 audit + 双写 DB。"""
+    """统一入口：同时写短期+中期；若提供 db 则同时写 audit + DB。"""
+    observation_date = _observation_date(date, signal)
     save_short_term(symbol, signal)
-    save_medium_term(symbol, date, signal, db=db)
+    save_medium_term(symbol, observation_date, signal, db=db)
     if db is not None:
         from backend.memory.audit_log import audit_write
         from backend.memory.stock_memory import create_stock_memory
         audit_write(
             db,
             "decision_memory.save",
-            f"symbol={symbol} date={date} rec={signal.get('recommendation','-')} "
+            f"symbol={symbol} date={observation_date} run_date={date} "
+            f"rec={signal.get('recommendation','-')} "
             f"score={signal.get('composite_score', 0):+.0f}",
             related_symbol=symbol,
         )
@@ -128,20 +157,28 @@ def save_decision_layered(symbol: str, date: str, signal: dict, db=None) -> None
             symbol=symbol,
             memory_type="judgment",
             summary=(
-                f"{date} 建议{signal.get('recommendation','-')}，"
+                f"{observation_date} 建议{signal.get('recommendation','-')}，"
                 f"综合分{signal.get('composite_score', 0):+.0f}，"
                 f"仓位{(signal.get('position_pct') or 0) * 100:.1f}%"
             ),
             evidence={
-                "date": date,
+                "date": observation_date,
+                "run_date": date,
                 "recommendation": signal.get("recommendation"),
                 "composite_score": signal.get("composite_score"),
                 "stop_loss": signal.get("stop_loss"),
                 "take_profit": signal.get("take_profit"),
                 "veto_reason": signal.get("veto_reason"),
+                "breakdown": signal.get("breakdown"),
+                "confidence": signal.get("confidence"),
+                "rule_version": signal.get("rule_version"),
+                "risk_notes": signal.get("risk_notes"),
+                "research_constraints": signal.get("research_constraints"),
+                "research_conflicts": signal.get("research_conflicts"),
+                "llm_action_bias": (signal.get("llm_arbitration") or {}).get("action_bias"),
             },
             source_type="postmarket_signal",
-            source_ref=f"{symbol}:{date}",
+            source_ref=f"{symbol}:{observation_date}",
             importance=3,
             confidence=0.6,
         )
@@ -240,7 +277,13 @@ def get_long_term_context(db=None) -> str:
     return "【长期反思】\n## " + sections[-1] + "\n" if len(sections) > 1 else text
 
 
-def get_layered_context(symbol: str, db, lookback_days: int = 30) -> str:
+def get_layered_context(
+    symbol: str,
+    db,
+    lookback_days: int = 30,
+    *,
+    record_usage: bool = True,
+) -> str:
     """注入给 LLM debate 的完整分层记忆"""
     if not settings.layered_memory_enabled:
         from backend.decision.decision_memory import get_reflection_context
@@ -257,7 +300,7 @@ def get_layered_context(symbol: str, db, lookback_days: int = 30) -> str:
     if short:
         parts.append(short)
     result = "\n".join(parts)
-    if result:
+    if result and record_usage:
         from backend.memory.audit_log import audit_write
         audit_write(
             db,

@@ -5,6 +5,7 @@ modules, so they cannot trigger provider registration, network clients, or DB
 initialization while checking import boundaries.
 """
 import ast
+import importlib
 import re
 from pathlib import Path
 
@@ -25,15 +26,29 @@ CORE_DOMAIN_DIRS = (
     "portfolio",
     "research",
 )
-WORKFLOW_TOOL_MIGRATION_ALLOWLIST = {
-    "backend.tools.m54_daily_accrual",
-    "backend.tools.m58_exit_shadow",
-    "backend.tools.m59_discretion",
-    "backend.tools.m59_panel",
-    "backend.tools.m60_second_entry",
-    "backend.tools.m60_watchtower",
-    "backend.tools.m61_backfill",
-    "backend.tools.m63_trade_journal",
+WORKFLOW_TOOL_MIGRATION_ALLOWLIST: set[str] = set()
+CANONICAL_TOOL_ALIASES = {
+    "backend.tools.m26_quant_baseline": "backend.backtest.quant_baseline",
+    "backend.tools.m46_5_lookahead_one_time_audit": "backend.evidence.lookahead_audit",
+    "backend.tools.m52_flow_floor": "backend.data.flow_floor",
+    "backend.tools.m54_daily_accrual": "backend.evidence.daily_accrual",
+    "backend.tools.m54_news_v2_oos": "backend.evidence.news_v2_oos",
+    "backend.tools.m58_entry_arena": "backend.backtest.entry_arena",
+    "backend.tools.m58_exit_shadow": "backend.portfolio.exit_shadow",
+    "backend.tools.m58_exit_sweep": "backend.backtest.exit_sweep_m58",
+    "backend.tools.m58_grid_backtest": "backend.backtest.grid_backtest",
+    "backend.tools.m59_discretion": "backend.decision.discretion",
+    "backend.tools.m59_entry_card": "backend.decision.entry_card",
+    "backend.tools.m59_panel": "backend.portfolio.daily_panel",
+    "backend.tools.m59_readiness": "backend.decision.readiness",
+    "backend.tools.m60_second_entry": "backend.research.second_entry",
+    "backend.tools.m60_thesis_conditions": "backend.research.thesis_conditions",
+    "backend.tools.m60_watchtower": "backend.research.watchtower",
+    "backend.tools.m61_backfill": "backend.data.category_backfill",
+    "backend.tools.m63_daily": "backend.workflows.m63_daily",
+    "backend.tools.m63_render": "backend.workflows.render",
+    "backend.tools.m63_trade_journal": "backend.portfolio.trade_journal",
+    "backend.tools.m68_test2_compare": "backend.backtest.test2_compare",
 }
 LEGACY_FRONTEND_IMPORT = re.compile(
     r"(?:from\s+|import\s*\(\s*)['\"](?:\.\.?/)+(?:api|live)['\"]"
@@ -185,24 +200,83 @@ def test_frontend_production_code_uses_service_boundaries():
 
 
 def test_m66_legacy_modules_alias_canonical_implementations():
-    from backend.backtest import quant_baseline
-    from backend.data import flow_floor
-    from backend.evidence import lookahead_audit
-    from backend.tools import (
-        m26_quant_baseline,
-        m46_5_lookahead_one_time_audit,
-        m52_flow_floor,
-        m63_daily,
-        m63_render,
-    )
-    from backend.workflows import m63_daily as daily_workflow
-    from backend.workflows import render
+    for legacy_module, canonical_module in CANONICAL_TOOL_ALIASES.items():
+        legacy = importlib.import_module(legacy_module)
+        canonical = importlib.import_module(canonical_module)
 
-    assert m26_quant_baseline is quant_baseline
-    assert m46_5_lookahead_one_time_audit is lookahead_audit
-    assert m52_flow_floor is flow_floor
-    assert m63_daily is daily_workflow
-    assert m63_render is render
+        assert legacy is canonical, f"{legacy_module} should alias {canonical_module}"
+
+
+def test_tools_registry_canonical_entrypoints_match_alias_contracts():
+    from backend.tools.registry import list_tool_entries
+
+    registry = {entry["module"]: entry for entry in list_tool_entries()}
+
+    for legacy_module, canonical_module in CANONICAL_TOOL_ALIASES.items():
+        assert registry[legacy_module]["canonical_entrypoint"] == canonical_module
+        assert registry[legacy_module]["replacement"] == canonical_module
+
+
+def test_tools_registry_consumers_cover_direct_canonical_importers():
+    from backend.tools.registry import CANONICAL_ENTRYPOINTS, list_tool_entries
+
+    registry = {entry["module"]: entry for entry in list_tool_entries()}
+    module_paths = _backend_modules()
+    production_prefixes = (
+        "backend.analysis.",
+        "backend.api.",
+        "backend.backtest.",
+        "backend.data.",
+        "backend.decision.",
+        "backend.evidence.",
+        "backend.jobs.",
+        "backend.memory.",
+        "backend.ops.",
+        "backend.portfolio.",
+        "backend.research.",
+        "backend.workflows.",
+    )
+
+    def direct_imports(path: Path, target: str) -> bool:
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                if any(alias.name == target for alias in node.names):
+                    return True
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                if node.module == target or target.startswith(f"{node.module}."):
+                    return True
+            elif isinstance(node, ast.Call):
+                func = node.func
+                is_import_call = (
+                    isinstance(func, ast.Name)
+                    and func.id == "__import__"
+                    or isinstance(func, ast.Attribute)
+                    and func.attr == "import_module"
+                )
+                if (
+                    is_import_call
+                    and node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == target
+                ):
+                    return True
+        return False
+
+    for legacy_module, canonical_module in CANONICAL_ENTRYPOINTS.items():
+        consumers = set(registry[legacy_module]["consumers"])
+        direct_consumers = {
+            module
+            for module, path in module_paths.items()
+            if module != canonical_module
+            and module.startswith(production_prefixes)
+            and direct_imports(path, canonical_module)
+        }
+
+        assert direct_consumers <= consumers, (
+            f"{legacy_module} registry consumers miss direct importers of "
+            f"{canonical_module}: {sorted(direct_consumers - consumers)}"
+        )
 
 
 def test_core_facades_stay_below_growth_thresholds():

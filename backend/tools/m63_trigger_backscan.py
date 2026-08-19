@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from backend.config import default_sqlite_path
-from backend.tools.m60_watchtower import (
+from backend.research.watchtower import (
     CATEGORY_TRIGGER_DAMPER_TRADING_DAYS,
     TRIGGER_FLOW_ANOMALY,
     TRIGGER_LHB_SPOTLIGHT,

@@ -10,6 +10,8 @@ from datetime import datetime
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def seeded_db(test_db):

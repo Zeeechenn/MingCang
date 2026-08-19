@@ -214,6 +214,14 @@ def aggregate(
         llm_arbitration: dict | None  (含 bull_points/bear_points/action_bias/rationale)
         kronos: dict | None  (前端展示用预测支撑/阻力)
     """
+    memory_decision_context_applied = bool(
+        settings.memory_decision_context_enabled
+        and (reflection_context or (memory_context or {}).get("text"))
+    )
+    if not settings.memory_decision_context_enabled:
+        reflection_context = ""
+        memory_context = None
+
     tech_score = technical_result.get("score", 0)
     blended_quant, kronos_info = _blend_quant(quant_score, kronos_result)
     effective_sentiment = _effective_sentiment_score(sentiment_score, sentiment_result)
@@ -284,6 +292,7 @@ def aggregate(
         "research_constraints": constrained.constraints,
         "research_conflicts": constrained.conflicts,
         "official_action": constrained.final_action,
+        "memory_decision_context_applied": memory_decision_context_applied,
         "rule_version": f"aggregate_v1:{weights.profile}",
     }
     if llm_arb:
@@ -333,6 +342,12 @@ def aggregate_v2(
         has_divergence,
         multi_round_debate,
     )
+
+    memory_decision_context_applied = bool(
+        settings.memory_decision_context_enabled and reflection_context
+    )
+    if not settings.memory_decision_context_enabled:
+        reflection_context = ""
 
     sentiment_result = _sentiment_for_signal(sentiment_result)
 
@@ -402,6 +417,7 @@ def aggregate_v2(
     ))
 
     result = decision.to_signal_dict()
+    result["memory_decision_context_applied"] = memory_decision_context_applied
     result["rule_version"] = f"multi_agent_v2:{active_signal_weights().profile}"
     # quant 模型溯源（lgbm_alpha_v1 / placeholder_v0）：降级必须在数据层可审计
     result["quant_model"] = quant_result.get("model")
@@ -420,6 +436,59 @@ def aggregate_v2(
             result["regime_dampened"] = True
 
     return result
+
+
+class UntrackedSignalWriteError(RuntimeError):
+    """Raised when an official signal would be persisted outside any tracked run."""
+
+
+_UNTRACKED_WRITE_WARNED: set[str] = set()
+
+
+def _run_id_for_official_write(symbol: str, date: str, signal_scope: str, db) -> str | None:
+    """Return the owning run id, making an untracked official write visible.
+
+    A production signal written outside a tracked run cannot be attached to a
+    RunEnvelope by any later audit, so it silently costs a continuity day. It is
+    always recorded as a degradation, and fails closed when the operator has
+    turned the guard on.
+    """
+    from backend.data.schema_runtime import ensure_signals_run_id_column
+    from backend.ops.run_context import current_run_id
+
+    ensure_signals_run_id_column(db)
+    run_id = current_run_id()
+    if run_id is not None or signal_scope != "production":
+        return run_id
+
+    if settings.require_signal_run_context:
+        raise UntrackedSignalWriteError(
+            f"official signal write for {symbol} {date} has no tracked run context; "
+            "run it through backend.scheduler.run_tracked_job or set "
+            "REQUIRE_SIGNAL_RUN_CONTEXT=false to allow untracked writes"
+        )
+
+    if date not in _UNTRACKED_WRITE_WARNED:
+        _UNTRACKED_WRITE_WARNED.add(date)
+        logger.warning(
+            "⚠️ 官方信号写入无运行上下文（date=%s）：该批次无法归属任何 RunEnvelope，"
+            "One Loop 连续性审计不会计入这一天。请走 tracked 入口重跑。",
+            date,
+        )
+        try:
+            from backend.data.degradation import emit_degradation
+
+            emit_degradation(
+                component="decision.aggregator",
+                category="untracked_signal_write",
+                provider="internal",
+                error=f"official signal persisted without run context on {date}",
+                context={"symbol": symbol, "date": date, "signal_scope": signal_scope},
+                db=db,
+            )
+        except Exception:  # noqa: BLE001 - visibility must never block the write path.
+            logger.debug("failed to record untracked_signal_write degradation", exc_info=True)
+    return None
 
 
 def save_signal(symbol: str, date: str, result: dict, db, market: str | None = None) -> None:
@@ -441,6 +510,8 @@ def save_signal(symbol: str, date: str, result: dict, db, market: str | None = N
             f"official signals are CN-only unless allowlisted gray; "
             f"{symbol} market={resolved_market} is observe-only"
         )
+
+    run_id = _run_id_for_official_write(symbol, date, signal_scope, db)
 
     arb = result.get("llm_arbitration")
     rationale_json = json.dumps(arb, ensure_ascii=False) if arb else None
@@ -467,6 +538,7 @@ def save_signal(symbol: str, date: str, result: dict, db, market: str | None = N
         existing.data_timestamp = data_timestamp
         existing.market = resolved_market
         existing.signal_scope = signal_scope
+        existing.run_id = run_id
     else:
         db.add(Signal(
             symbol=stock.symbol if stock is not None else symbol,
@@ -485,6 +557,7 @@ def save_signal(symbol: str, date: str, result: dict, db, market: str | None = N
             llm_rationale=rationale_json,
             rule_version=rule_version,
             data_timestamp=data_timestamp,
+            run_id=run_id,
         ))
     db.commit()
 

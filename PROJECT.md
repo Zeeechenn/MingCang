@@ -4,7 +4,7 @@
 
 Alpha 来自人的判断；AI 负责广度扫描、证伪和短期风险纪律；最终决策始终由用户负责。
 
-**核心约束**：止盈止损由 ATR 公式计算；默认用 ATR 2.5 移动止损保护浮盈；LLM 不做价格预测，不做自动交易；记忆促进需要 outcome 结果和人工确认。
+**核心约束**：止盈止损由 ATR 公式计算；默认用 ATR 2.5 移动止损保护浮盈；LLM 不做价格预测，不做自动交易；记忆促进需要 outcome 结果和人工确认，且当前 `MEMORY_DECISION_CONTEXT_ENABLED=false`，只记录、显式查询和影子回测。
 
 ---
 
@@ -14,11 +14,11 @@ Alpha 来自人的判断；AI 负责广度扫描、证伪和短期风险纪律�
 |------|------|
 | [AGENTS.md](AGENTS.md) | 默认 agent 规则、任务路由和安全边界 |
 | [STATUS.md](STATUS.md) | 当前状态、生产权重、验证快照和下一步入口 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 当前/未来工作，使用 M-numbered 结构 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 唯一活跃的 MingCang One Loop 治理与执行计划 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本、历史变更、历史验证记录；不要默认读取 |
 | [README.md](README.md) | GitHub 门面、安装、配置和公开说明 |
 | [docs/ATLAS_MERGE.md](docs/ATLAS_MERGE.md) | Atlas dormant merge 的详细核验记录 |
-| [docs/dev/](docs/dev/) | 历史实验、旧计划、维护者参考；按名称需要时再读 |
+| [docs/dev/](docs/dev/) | 尚未归口到代码/测试的活维护契约；关闭计划将迁出仓库 |
 
 ---
 
@@ -31,10 +31,57 @@ tracking.
 
 ---
 
-## 里程碑总览
+## 项目级计划
 
-不在本文件维护里程碑状态：活跃线与排序见 `docs/ROADMAP.md`，已完成历史见
-`CHANGELOG.md`，生产权重/当前结论见 `STATUS.md`。
+当前唯一活跃计划是 **MingCang One Loop**。执行顺序、阶段门、六个外部项目的处理决定、
+能力生命周期与文档治理见 `docs/ROADMAP.md`；已完成历史见 `CHANGELOG.md`；生产权重、
+运行新鲜度和当前结论见 `STATUS.md`。
+
+旧 M 编号只作为历史、证据标签和兼容入口，不再组织新模块、新工作线或产品概念。
+
+## One Loop Operating Model
+
+MingCang uses one modular-monolith production core, one daily orchestration
+surface, one operator-facing daily panel, and an isolated research lab:
+
+```text
+data/evidence → research → decision/risk → portfolio/review
+       │              one complete RunEnvelope              │
+       └────────────── daily orchestration ──────────────────┘
+                              │
+                    authoritative daily panel
+
+research lab ── explicit promotion gate ──▶ production core
+archive ── no imports / no default context ──▶ history only
+```
+
+Capabilities use the lifecycle states `proposed`, `experimental`, `shadow`,
+`stable`, `dormant`, `rejected`, and `archived`. A module is not active merely
+because code exists; active use requires a canonical owner, real consumer,
+tracked run, fresh output, evidence status, and rollback path.
+
+## Documentation Authority
+
+| Truth | Authority |
+|---|---|
+| agent rules, safety, governance | `AGENTS.md` |
+| architecture, ownership, canonical paths | `PROJECT.md` |
+| current runtime and production truth | `STATUS.md` |
+| active ordering, gates, blockers | `docs/ROADMAP.md` |
+| completed releases and historical verification | `CHANGELOG.md` |
+| public documentation site | `docs_public/` |
+| data-source live manuals | `docs/data-sources/` |
+| reproducibility evidence | `docs/evidence/` |
+| active maintainer contracts not yet encoded in code/tests | `docs/dev/` allowlist only |
+
+The same topic must not have independent authority in both `docs/` and
+`docs_public/`. Local research, reviews, logs, generated reports, and historical
+planning archives stay outside the repository directory.
+
+Current public docs authority lives in `docs_public/`; `docs/ARCHITECTURE.md`
+and `docs/WHY_NOT_AI_STOCK_PICKER.md` are one-release compatibility stubs only.
+Historical `docs/research/`, `docs/reviews/`, and closed `docs/dev/` plans are
+kept in the external One Loop governance archive, not in the repo.
 
 ---
 
@@ -50,18 +97,19 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 | Market data | `backend/data/market*.py`, `backend/data/providers.py`, `backend/data/flow_floor.py`, `backend/data/tavily_news.py` | A/HK/US read-only facades, provider fallback, flow/news acquisition, M41 envelopes, M42 write guard |
 | News pyramid mirror | `backend/data/news_shadow.py`, `backend/data/models/news_shadow.py`, `backend/api/routes/news_shadow.py`, `backend/tools/m68_news_shadow.py`, `backend/tools/m68_test2_compare.py`, `frontend/src/services/news-shadow.ts`, `frontend/src/page-news-shadow.tsx` | M68 production-shaped observe-only dual run, event-risk review queue, independent test2-v2 C comparison, counterfactual API/UI and evidence-bound feedback; never writes official signals or original A/B state |
 | Decision layer | `backend/decision/` | aggregation, harness, signal policy, decision memory |
-| Research and memory | `backend/research/`, `backend/memory/`, `backend/agents/` | dossier/deep research, layered memory, multi-agent pipelines |
-| Portfolio and risk | `backend/portfolio/`, `backend/ops/kill_switch.py` | sizing, trailing stops, kill switch |
-| API routes | `backend/api/routes/`, `backend/api/schemas.py`, `backend/main.py` | FastAPI app and REST surfaces |
-| Scheduler and workflows | `backend/scheduler.py`, `backend/jobs/`, `backend/workflows/` | scheduled jobs plus stable orchestration facades; API/jobs depend on workflows, not tool implementations |
+| Research and memory | `backend/research/`, `backend/memory/`, `backend/agents/` | dossier/deep research, outcome-backed calibration (`experience.py`), reversible health/compaction (`maintenance.py`), layered memory, multi-agent pipelines |
+| Portfolio and risk | `backend/portfolio/`, `backend/ops/kill_switch.py` | sizing, trailing stops, kill switch, exit-shadow adjudication and panel-domain compatibility |
+| API routes | `backend/api/routes/`, `backend/api/schemas.py`, `backend/main.py` | FastAPI app and REST surfaces, including the read-only daily panel API |
+| Scheduler and workflows | `backend/scheduler.py`, `backend/jobs/`, `backend/workflows/`, `backend/ops/run_envelope.py`, `backend/ops/job_ledger.py` | scheduled/manual jobs plus stable orchestration facades and the explicit completed-run contract; API/jobs depend on workflows, not tool implementations |
 | Agent bridge | `backend/agent/` | local CLI, action registry, MCP/tool context |
-| Analysis and backtests | `backend/analysis/`, `backend/backtest/`, `backend/evidence/` | quant engine, statistics, backtests and audit/evidence contracts |
+| Analysis, backtests and evidence | `backend/analysis/`, `backend/backtest/`, `backend/evidence/`, `backend/ops/one_loop_continuity.py`, `backend/tools/memory_backtest.py` | quant engine, statistics, PIT replay, run cards, committed daily-panel artifacts and immutable continuity audit |
 | Tools registry | `backend/tools/registry.py`, `backend/tools/`, `python3 -m backend.agent.cli tools` | CLI, maintenance, experiment and compatibility adapters; stable business modules must not depend on tool implementations |
 | M31/M41/M42/M45 tools | `backend/tools/m31_*`, `backend/tools/m41_*`, `backend/tools/m42_*`, `backend/tools/m45_*` | cache benchmark, probe health, qfq/hfq remediation, source-gated import/scoreboard |
-| Frontend | `frontend/src/main.tsx`, `frontend/src/page-*.tsx`, `frontend/src/services/` | hash-routed pages plus canonical API/live service boundary; feature grouping remains incremental M66 work |
-| Public docs | `README.md`, `docs/WHY_NOT_AI_STOCK_PICKER.md`, `docs/assets/` | GitHub-facing product explanation and visuals |
+| Frontend | `frontend/src/main.tsx`, `frontend/src/page-*.tsx`, `frontend/src/features/`, `frontend/src/services/` | hash-routed pages, feature-owned Daily/Debate views and canonical API/live service boundaries; pages must not import other page implementations |
+| Public docs | `README.md`, `README_EN.md`, `docs_public/`, `mkdocs.yml` | GitHub entrypoints and the canonical public documentation site; checked by `make doc-check` |
+| Internal evidence docs | `docs/data-sources/`, `docs/evidence/`, `docs/dev/` allowlist | live data/source contracts, reproducibility evidence, and minimal active maintainer contracts |
 
-### M66 canonical / compatibility map
+### Canonical / compatibility map
 
 New code imports the canonical path. Compatibility paths remain available for at least one release cycle and may still
 be used by CLI commands or external callers.
@@ -77,6 +125,9 @@ be used by CLI commands or external callers.
 | frontend API/live | `frontend/src/services/api.ts`, `frontend/src/services/live.ts` | `frontend/src/api.ts`, `frontend/src/live.ts` |
 | M68 news mirror | `backend.data.news_shadow` | `backend.tools.m68_news_shadow` (CLI) |
 | test2-compatible replay | `backend.backtest.test2_replay`, `backend.backtest.test2_models` | `backend.tools.m68_test2_compare` (derived A/B/C evaluator) |
+| completed-run contract | `backend.ops.run_envelope`, `backend.ops.job_ledger` | scheduler/manual/test2 entrypoint adapters |
+| daily panel evidence | `backend.evidence.daily_panel`, `backend.api.routes.daily`, `frontend/src/features/daily/` | `backend.portfolio.daily_panel` compatibility facade |
+| continuity acceptance | `backend.ops.one_loop_continuity`, `scripts/audit_one_loop_continuity.py` | none; explicit immutable DB path is required |
 
 ## 研究模块地图
 

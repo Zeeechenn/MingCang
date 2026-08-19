@@ -192,7 +192,7 @@ def _analyze_postmarket_stock(
     from backend.analysis.technical import technical_score
     from backend.data.market import load_price_df
     from backend.decision.aggregator import aggregate, aggregate_v2
-    from backend.memory.stock_memory import build_memory_context, list_stock_memories
+    from backend.memory.stock_memory import build_decision_memory_context, list_stock_memories
 
     df = load_price_df(stock.symbol, db, days=200, market=stock.market)
     if as_of_date:
@@ -237,22 +237,25 @@ def _analyze_postmarket_stock(
         }
     sentiment_result = postmarket_news_sentiment(stock, db)
     if stock.market == "CN":
-        memory_context = build_memory_context(
+        memory_context = build_decision_memory_context(
             db,
             symbol=stock.symbol,
             query=f"{stock.symbol} {stock.name}",
             task_type="postmarket_signal",
             record_usage=_should_record_memory_usage(context),
         )
-        try:
-            research_pointers = list_stock_memories(
-                db,
-                symbol=stock.symbol,
-                memory_type="research_pointer",
-                limit=5,
-            )
-        except Exception as exc:
-            logger.warning("research pointer context unavailable %s: %s", stock.symbol, exc)
+        if memory_context.get("decision_context_enabled"):
+            try:
+                research_pointers = list_stock_memories(
+                    db,
+                    symbol=stock.symbol,
+                    memory_type="research_pointer",
+                    limit=5,
+                )
+            except Exception as exc:
+                logger.warning("research pointer context unavailable %s: %s", stock.symbol, exc)
+                research_pointers = []
+        else:
             research_pointers = []
     else:
         memory_context = {"text": "", "used_stock_memory_ids": [], "ai_memory_keys": []}
@@ -310,7 +313,6 @@ def _analyze_postmarket_stock(
 def _persist_postmarket_stock(stock, analysis: dict, db) -> None:
     from backend.config import settings
     from backend.decision.aggregator import save_signal
-    from backend.decision.decision_memory import save_decision
     from backend.decision.memory_layered import save_decision_layered
 
     date_str = analysis["date"]
@@ -318,12 +320,20 @@ def _persist_postmarket_stock(stock, analysis: dict, db) -> None:
     save_signal(stock.symbol, date_str, result, db, market=stock.market)
     if stock.market != "CN":
         return
-    try:
-        save_decision(stock.symbol, date_str, result)
-    except Exception as exc:
-        logger.warning("save_decision failed for %s %s (best-effort): %s", stock.symbol, date_str, exc)
     if settings.layered_memory_enabled:
         save_decision_layered(stock.symbol, date_str, result, db=db)
+
+    # Outcome accrual must share the postmarket path.  The separate 01:00
+    # scheduler remains a safety net, but a stopped background scheduler can no
+    # longer leave thousands of judgments permanently unvalidated.
+    try:
+        from backend.memory.stock_memory import update_judgment_outcomes
+
+        written = update_judgment_outcomes(db, symbol=stock.symbol)
+        if written:
+            logger.info("postmarket memory outcomes %s: +%d", stock.symbol, written)
+    except Exception as exc:
+        logger.warning("postmarket memory outcome accrual failed %s: %s", stock.symbol, exc)
 
     try:
         from backend.decision.harness import review_latest_signal
@@ -351,6 +361,18 @@ def _maybe_send_postmarket_alert(stock, result: dict) -> bool:
         take_profit=result["take_profit"],
         position_pct=result.get("position_pct"),
     )
+
+
+def _sync_postmarket_memory_recall(db) -> bool:
+    """Make newly persisted judgments/outcomes searchable once per CN batch."""
+    try:
+        from backend.memory.recall import sync_recall_index
+
+        sync_recall_index(db)
+        return True
+    except Exception as exc:
+        logger.warning("postmarket memory recall sync failed: %s", exc)
+        return False
 
 
 def _open_position_weights(db) -> dict[str, float]:
@@ -527,6 +549,7 @@ def run_postmarket_batch(
         "production_stocks": sum(scope == "production" for scope in scopes.values()),
         "gray_stocks": sum(scope == "gray" for scope in scopes.values()),
         "fresh_close_required": market in {"HK", "US"},
+        "memory_recall_synced": False,
     }
     batch_items: list[tuple[Any, dict]] = []
     for stock in stocks:
@@ -568,6 +591,8 @@ def run_postmarket_batch(
             stats["errors"] += 1
             logger.error("postmarket failed %s: %s", stock.symbol, e)
     logger.info("post-market done: %d stocks processed", stats["processed"])
+    if stats["saved"] and any(stock.market == "CN" for stock, _ in batch_items):
+        stats["memory_recall_synced"] = _sync_postmarket_memory_recall(db)
     if market in {None, "CN"} or any(stock.market == "CN" for stock in stocks):
         run_kill_switch_checks(db)
     return stats

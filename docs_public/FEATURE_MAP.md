@@ -20,7 +20,7 @@
 | 开发启动 | 启动 FastAPI 后端和 Vite 前端。 | `make dev`, `cd frontend && npm run dev` | 维护者 | 本地服务；不改信号。 |
 | 健康检查 | 检查 DB、agent mode、watchlist、positions、memory 摘要是否可读。 | `mingcang doctor`, `backend.agent.cli health` | 常用/只读 | 不写入；不需要 key。 |
 | 项目上下文 | 一次性读取项目概况，包括自选、持仓、记忆、配置摘要。 | `mingcang project`, `project-context` | 常用/只读 | 不写入。 |
-| 单股上下文 | 读取单只股票的信号、新闻、研究、记忆上下文。 | `mingcang stock <symbol>`, `stock-context` | 常用/只读 | 不写入；不改信号。 |
+| 单股上下文 | 读取单只股票的信号、新闻和当前研究；记忆正文默认关闭。 | `mingcang stock <symbol>`, `stock-context` | 常用/只读 | 不写入；不改信号。 |
 | 全局数据上下文 | 按 market/symbol/intent 读取 A/HK/US global data envelope。 | `global-data` CLI, `/api/system/global-data` | 只读 | HK/US 白名单可进入零仓位影子信号，非白名单 observe-only；不改 CN 官方信号。 |
 
 ## 2. 前端页面
@@ -98,7 +98,7 @@
 | Memory Overview | 展示记忆概况、数量、健康和最近记录。 | `/api/memory/overview` | 常用/只读 | 不写入。 |
 | AI Memory | 保存全局偏好、规则、风险提醒和项目级记忆。 | `memory.write`, `backend/memory/ai_memory.py` | 需确认 | 写记忆；不自动 trusted。 |
 | Stock Memory | 保存某只股票相关的经验、风险、研究指针和用户偏好。 | `stock_memory.write`, stock memory API | 需确认 | 写 stock_memory；可进入上下文。 |
-| Memory Context | 按 symbol/query/task_type 取 prompt-ready 记忆上下文。 | `memory-context`, `/api/memory/stock/{symbol}/context` | 常用/只读 | 不写入。 |
+| Memory Context | 用户明确请求时，按 symbol/query/task_type 只读查看历史记忆。 | `memory-context`, `/api/memory/stock/{symbol}/context` | 显式查询/只读 | 不写入，不自动改变当前判断。 |
 | L0 Atoms | 原子记忆，带 trust_state、source、scope、evidence。 | `/api/memory/l0/atoms` | 常用/需确认 | 写入需确认；可信度分层。 |
 | L0 Context | 根据任务取 L0 相关上下文。 | `/api/memory/l0/context` | 只读 | 不写入。 |
 | Memory Scenarios | 场景化记忆，用于把经验绑定到类似市场或研究场景。 | memory layered | 影子/维护者 | 不直接改信号。 |

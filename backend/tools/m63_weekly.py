@@ -204,7 +204,7 @@ def _date_from_source_ref(source_ref: str) -> str | None:
 
 
 def _stale_watchlists(watchlist_dir: Path | str, *, as_of: str) -> tuple[list[dict[str, Any]], list[str]]:
-    entries, errors = load_watchlists(watchlist_dir)
+    entries, errors = load_watchlists(watchlist_dir, authoritative_thesis=False)
     day = date.fromisoformat(as_of)
     stale: list[dict[str, Any]] = []
     for entry in entries:
@@ -258,7 +258,7 @@ def _symbol_sectors(con: sqlite3.Connection, universe_paths: tuple[Path, ...] | 
 
 
 def _sector_concentration(con: sqlite3.Connection, watchlist_dir: Path | str) -> list[dict[str, Any]]:
-    entries, _ = load_watchlists(watchlist_dir)
+    entries, _ = load_watchlists(watchlist_dir, authoritative_thesis=False)
     symbols = set(m63_daily._holding_symbols(con))
     for entry in entries:
         symbols.update(str(symbol) for symbol in entry.get("symbols", []) if symbol)
@@ -378,7 +378,7 @@ def _lines_data_health(data_health: dict[str, Any]) -> list[str]:
 def _exit_shadow_divergences(builder, *, db_path: str | Path | None, as_of: str) -> list[dict[str, Any]]:
     if builder is None:
         try:
-            from backend.tools.m58_exit_shadow import build_shadow_report
+            from backend.portfolio.exit_shadow import build_shadow_report
             from paper_trading.test2_ab_data import DEFAULT_UNIVERSE
 
             def builder(**_):
@@ -664,7 +664,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--as-of", default=None, help="日期 YYYY-MM-DD")
     parser.add_argument("--db", type=Path, default=None, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
-    run_weekly(db_path=args.db, as_of=args.as_of, no_llm=args.no_llm)
+    if args.db is not None:
+        run_weekly(db_path=args.db, as_of=args.as_of, no_llm=args.no_llm)
+        return 0
+
+    from backend.scheduler import run_tracked_job
+
+    run_tracked_job(
+        "m63_weekend",
+        lambda: {
+            **run_weekly(db_path=args.db, as_of=args.as_of, no_llm=args.no_llm),
+            "batch_id": f"m63_weekend:{args.as_of or _today()}",
+        },
+        trigger_source="manual_cli",
+        as_of=args.as_of,
+        input_coverage={
+            "workflow": "m63_weekly",
+            "mode": "weekend",
+            "scope": "m63_weekend",
+            "llm_enabled": not args.no_llm,
+            "database": "configured" if args.db is None else "custom",
+        },
+    )
     return 0
 
 

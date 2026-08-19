@@ -48,7 +48,7 @@ def remember_deep_research(
         scope="research",
     )
     for symbol in symbols:
-        pointer_summary = f"{symbol} 研究索引：{clipped_summary}"
+        pointer_summary = f"{symbol} 研究索引《{topic}》：{clipped_summary}"
         base_evidence = {
             "topic": topic,
             "symbol": symbol,

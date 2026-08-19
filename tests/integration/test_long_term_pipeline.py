@@ -6,10 +6,14 @@
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
+import pytest
+
 from backend.agents.long_term.base import LongTermLabel, LongTermReport
 from backend.agents.long_term.storage import bulk_get_labels, save_label
 from backend.agents.long_term.team import LongTermTeam
 from backend.data.database import Price, Stock
+
+pytestmark = pytest.mark.integration
 
 # ── 数据 helper ───────────────────────────────────────────────────────
 

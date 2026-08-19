@@ -545,6 +545,54 @@ def test_timestamp_batch_signal_is_consumed(tmp_path: Path) -> None:
     assert [stock["symbol"] for stock in payload["stocks"]] == ["600001"]
 
 
+def test_catch_up_signal_run_date_keeps_trade_bar_freshness_pinned(tmp_path: Path) -> None:
+    """A later catch-up batch may be selected, but only for the original fresh bar day."""
+    from live_trading.live_funnel import build_live_subset
+
+    db_path = tmp_path / "source.sqlite"
+    _init_db(db_path)
+    with sqlite3.connect(db_path) as con:
+        con.executemany(
+            "INSERT INTO prices(symbol, date, close) VALUES (?, '2026-07-14', 10)",
+            [("600001",), ("600002",)],
+        )
+        con.executemany(
+            "INSERT INTO signals(symbol, date, data_timestamp, composite_score) VALUES (?, ?, ?, ?)",
+            [
+                ("600001", "2026-07-15T08:00+08:00", "2026-07-14", 40.0),
+                ("600002", "2026-07-15T08:00+08:00", "2026-07-13", 40.0),
+            ],
+        )
+    stocks = [
+        {"symbol": symbol, "name": symbol, "sector": "A", "origin": "fixture"}
+        for symbol in ("600001", "600002")
+    ]
+    live_universe = tmp_path / "live_universe.json"
+    test2_universe = tmp_path / "test2_universe.json"
+    state = tmp_path / "live_state.json"
+    output = tmp_path / "subset.json"
+    _write_json(live_universe, {"version": "test", "stocks": stocks})
+    _write_json(test2_universe, {"version": "test", "stocks": []})
+    _write_json(
+        state,
+        {"version": 1, "as_of": "2026-07-14", "portfolio_value": 100_000, "positions": []},
+    )
+
+    result = build_live_subset(
+        db_path=db_path,
+        live_universe_path=live_universe,
+        test2_universe_path=test2_universe,
+        state_path=state,
+        trade_date="2026-07-14",
+        signal_run_date="2026-07-15",
+        output_path=output,
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert [stock["symbol"] for stock in payload["stocks"]] == ["600001"]
+    assert result["excluded_symbols"] == ["600002"]
+
+
 def test_stale_data_timestamp_signal_is_excluded_even_if_signal_day_matches(tmp_path: Path) -> None:
     """信号日前缀等于交易日，但 data_timestamp 是前一日（429/代理故障回退旧bar）——
     必须 fail-closed 排除，而不是被当作当日新鲜信号消费。"""

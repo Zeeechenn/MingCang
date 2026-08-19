@@ -48,33 +48,39 @@ def get_reflection_context(symbol: str, db, lookback_days: int = 30) -> str:
         return ""
 
     lines: list[str] = []
+    seen_dates: set[str] = set()
     for sig in past_signals:
+        signal_date = str(sig.date)[:10]
+        if signal_date in seen_dates:
+            continue
+        seen_dates.add(signal_date)
         # 信号当日收盘价
         sig_row = (
             db.query(Price.close)
-            .filter(Price.symbol == symbol, Price.date == sig.date)
+            .filter(Price.symbol == symbol, Price.date == signal_date)
             .first()
         )
         # 信号后首个可用交易日收盘价
         next_row = (
             db.query(Price.close)
-            .filter(Price.symbol == symbol, Price.date > sig.date)
+            .filter(Price.symbol == symbol, Price.date > signal_date)
             .order_by(Price.date.asc())
             .first()
         )
 
-        if sig_row and next_row and sig_row[0]:
-            pct = (next_row[0] - sig_row[0]) / sig_row[0] * 100
-            # 判断实际结果与建议是否一致
-            bullish_rec = is_entry_signal(sig.recommendation, include_legacy=True)
-            correct = (bullish_rec and pct > 0) or (not bullish_rec and pct < 0)
-            verdict = "✓ 方向正确" if correct else "✗ 方向有误"
-            outcome = f"实际 {pct:+.1f}%（{verdict}）"
-        else:
-            outcome = "尚无后续数据"
+        if not (sig_row and next_row and sig_row[0]):
+            continue
+        pct = (next_row[0] - sig_row[0]) / sig_row[0] * 100
+        # 判断实际结果与建议是否一致
+        bullish_rec = is_entry_signal(sig.recommendation, include_legacy=True)
+        correct = (bullish_rec and pct > 0) or (not bullish_rec and pct < 0)
+        verdict = "✓ 方向正确" if correct else "✗ 方向有误"
+        outcome = f"实际 {pct:+.1f}%（{verdict}）"
 
         lines.append(
-            f"- {sig.date}: 建议{sig.recommendation}(综合分{sig.composite_score:+.0f}) → {outcome}"
+            f"- {signal_date}: 建议{sig.recommendation}(综合分{sig.composite_score:+.0f}) → {outcome}"
         )
 
+    if not lines:
+        return ""
     return "【历史决策复盘（供参考，不作为主要依据）】\n" + "\n".join(lines) + "\n"

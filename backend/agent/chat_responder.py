@@ -144,7 +144,7 @@ def context_answer(
     symbol = symbol_from_text(message)
     stocks = db.query(Stock).filter(Stock.active).limit(6).all()
     positions = db.query(Position).filter(Position.status == "open").limit(6).all()
-    parts = ["我会在 MingCang 项目内回答：已读取自选股、持仓、信号、复盘和研究记忆。"]
+    parts = ["我会在 MingCang 项目内回答：已读取自选股、持仓、信号和当前研究证据。"]
     used_resources = ["stocks", "positions", "project_research"]
     if session_id:
         chat_context = chat_context_for_session(db, session_id)
@@ -153,8 +153,8 @@ def context_answer(
     if symbol:
         try:
             from backend.config import settings
-            from backend.memory.stock_memory import build_memory_context
-            memory_context = build_memory_context(
+            from backend.memory.stock_memory import build_decision_memory_context
+            memory_context = build_decision_memory_context(
                 db,
                 symbol=symbol,
                 query=message,
@@ -199,8 +199,8 @@ def long_term_answer(message: str, db: Session) -> AIChatResponse:
     findings = "；".join(label.key_findings[:3]) if label.key_findings else "暂无关键发现"
     try:
         from backend.config import settings
-        from backend.memory.stock_memory import build_memory_context
-        memory_context = build_memory_context(
+        from backend.memory.stock_memory import build_decision_memory_context
+        memory_context = build_decision_memory_context(
             db,
             symbol=stock.symbol,
             query=message,

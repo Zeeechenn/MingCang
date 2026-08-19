@@ -1,6 +1,8 @@
 import pandas as pd
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 def test_m27_alpha_features_are_in_training_panel():
     from backend.data.qlib_data import FEATURE_COLS, _build_features

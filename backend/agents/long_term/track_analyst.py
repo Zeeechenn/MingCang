@@ -178,7 +178,8 @@ def _fetch_supply_chain_evidence(industry: str, name: str) -> list[str]:
 
 
 def _build_prompt(symbol: str, name: str, industry: str | None,
-                  moves: dict, evidence: list[str], context_text: str = "") -> str:
+                  moves: dict, evidence: list[str], context_text: str = "",
+                  memory_text: str = "") -> str:
     """Build the user prompt for track-analyst five-layer analysis."""
     today = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
     move_txt = ""
@@ -202,6 +203,13 @@ def _build_prompt(symbol: str, name: str, industry: str | None,
             f"- {t}" for t in evidence[:8]
         )
     context_section = f"\n\n统一上下文包（只使用以下可见数据，不要编造缺失字段）：\n{context_text}" if context_text else ""
+    memory_section = ""
+    if memory_text:
+        memory_section = (
+            "\n\n历史经验（只作为待验证先验，不是当前事实，也不得直接决定标签）：\n"
+            "- validated/outcome 可用于校准；watching/pending 必须重新核验；当前证据冲突时以当前证据为准。\n"
+            f"{memory_text[:2400]}"
+        )
 
     industry_txt = f"行业：{industry}" if industry else "行业：未知（请基于公司名推断）"
     return (
@@ -212,6 +220,7 @@ def _build_prompt(symbol: str, name: str, industry: str | None,
         f"{move_txt}"
         f"{evidence_txt}\n\n"
         f"{context_section}\n\n"
+        f"{memory_section}\n\n"
         f"输出 JSON 必须含 layer1-5 + score(-100~+100) + label_vote + key_findings(≤3条)。"
     )
 
@@ -292,9 +301,31 @@ def analyze(symbol: str, name: str, db) -> LongTermReport:
         ),
         1800,
     )
+    memory_context: dict = {"text": "", "used_stock_memory_ids": []}
+    try:
+        from backend.memory.stock_memory import build_decision_memory_context
+
+        memory_context = build_decision_memory_context(
+            db,
+            symbol=symbol,
+            query=f"{symbol} {name} {industry or ''}",
+            task_type="long_term_track",
+            limit=8,
+            include_l0=settings.research_l0_recall_enabled,
+        )
+    except Exception:
+        logger.warning("track_analyst %s: memory context unavailable", symbol, exc_info=True)
 
     system = _load_skill_system_prompt()
-    prompt = _build_prompt(symbol, name, industry, moves, evidence, context_text)
+    prompt = _build_prompt(
+        symbol,
+        name,
+        industry,
+        moves,
+        evidence,
+        context_text,
+        str(memory_context.get("text") or ""),
+    )
     readiness = runtime_readiness(settings)
     if not readiness["usable"]:
         return _neutral_fallback(symbol, industry, moves, evidence, context_text, readiness["reason"], db)
@@ -331,6 +362,10 @@ def analyze(symbol: str, name: str, db) -> LongTermReport:
             "moves": moves,
             "evidence_count": len(evidence),
             "context_text": context_text,
+            "memory_refs": memory_context.get("used_stock_memory_ids", []),
+            "outcome_sample_count": memory_context.get("outcome_sample_count", 0),
+            "memory_mode": memory_context.get("memory_mode", "shadow_only"),
+            "memory_decision_context_applied": bool(memory_context.get("text")),
             "layers": {k: data.get(k) for k in (
                 "layer1_supply_chain", "layer2_overseas",
                 "layer3_cycle_or_structural", "layer4_speculation_risk",

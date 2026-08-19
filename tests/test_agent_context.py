@@ -147,7 +147,7 @@ def test_mingcang_memory_context_handles_uninitialized_database(tmp_path):
     assert "l0_context" in context
 
 
-def test_mingcang_context_includes_rules_memory_and_positions(test_db, sample_stocks):
+def test_mingcang_context_keeps_memory_shadow_only_and_positions_visible(test_db, sample_stocks):
     from backend.data.database import Position, Signal
     from backend.memory.ai_memory import remember
     from backend.memory.stock_memory import create_stock_memory
@@ -188,9 +188,10 @@ def test_mingcang_context_includes_rules_memory_and_positions(test_db, sample_st
     ))
     test_db.commit()
 
-    from backend.agent.context import mingcang_context
+    from backend.agent.context import mingcang_context, mingcang_memory_context
 
     context = mingcang_context(test_db, symbol="300308")
+    explicit_memory = mingcang_memory_context(test_db, symbol="300308")
 
     assert context["agent_mode"] == "local"
     assert context["memory"]["ai_memory_count"] == 1
@@ -198,8 +199,12 @@ def test_mingcang_context_includes_rules_memory_and_positions(test_db, sample_st
     assert context["symbol_context"]["symbol"] == "300308"
     assert context["symbol_context"]["latest_signal"]["recommendation"] == "可小仓试错"
     assert "memory_context" in context
-    assert "300308 若缩量上冲需降低仓位" in context["memory_context"]["text"]
-    assert "300308 若缩量上冲需降低仓位" in context["symbol_context"]["memory_context"]["text"]
+    assert context["memory_context"]["text"] == ""
+    assert context["symbol_context"]["memory_context"]["text"] == ""
+    assert context["memory_policy"]["mode"] == "shadow_only"
+    assert context["symbol_context"]["memory_policy"]["mode"] == "shadow_only"
+    assert context["symbol_context"]["layered_memory"] == []
+    assert "300308 若缩量上冲需降低仓位" in explicit_memory["text"]
 
 
 def test_mingcang_stock_context_tracked_flag_and_hint_for_unknown_symbol(test_db):

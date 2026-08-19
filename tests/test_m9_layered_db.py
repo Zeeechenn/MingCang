@@ -4,7 +4,7 @@ from __future__ import annotations
 from sqlalchemy import text
 
 
-def test_save_medium_term_double_writes_to_db(test_db, tmp_path, monkeypatch):
+def test_save_medium_term_uses_db_as_canonical_store(test_db, tmp_path, monkeypatch):
     from backend.decision import memory_layered
 
     monkeypatch.setattr(memory_layered, "MEMORY_DIR", tmp_path)
@@ -28,9 +28,44 @@ def test_save_medium_term_double_writes_to_db(test_db, tmp_path, monkeypatch):
     assert row is not None
     assert "2026-05-19" in row.content
     assert "300308 中期决策记忆" in row.content
+    assert not (tmp_path / "medium_300308.md").exists()
 
 
-def test_save_medium_term_keeps_recent_rows_only(test_db, tmp_path, monkeypatch):
+def test_layered_judgment_uses_data_timestamp_and_deduplicates_reruns(test_db):
+    import json
+
+    from backend.decision import memory_layered
+
+    signal = {
+        "recommendation": "可小仓试错",
+        "composite_score": 32,
+        "position_pct": 0.075,
+        "stop_loss": 9.5,
+        "take_profit": 11.0,
+        "risk_notes": [],
+        "data_timestamp": "2026-07-24",
+    }
+
+    memory_layered.save_decision_layered("300308", "2026-07-25", signal, db=test_db)
+    memory_layered.save_decision_layered("300308", "2026-07-26", signal, db=test_db)
+
+    rows = test_db.execute(text(
+        "SELECT source_ref, evidence_json FROM stock_memory_items "
+        "WHERE symbol='300308' AND memory_type='judgment'"
+    )).all()
+    assert len(rows) == 1
+    evidence = json.loads(rows[0].evidence_json)
+    assert rows[0].source_ref == "300308:2026-07-24"
+    assert evidence["date"] == "2026-07-24"
+    assert evidence["run_date"] == "2026-07-26"
+    medium = test_db.execute(text(
+        "SELECT content FROM decision_memory_layered "
+        "WHERE symbol='300308' AND layer='medium'"
+    )).scalar()
+    assert medium.count("| 2026-07-24 |") == 1
+
+
+def test_save_medium_term_keeps_recent_db_rows_only(test_db, tmp_path, monkeypatch):
     from backend.decision import memory_layered
 
     monkeypatch.setattr(memory_layered, "MEMORY_DIR", tmp_path)
@@ -48,12 +83,16 @@ def test_save_medium_term_keeps_recent_rows_only(test_db, tmp_path, monkeypatch)
     for day in range(1, 6):
         memory_layered.save_medium_term("300308", f"2026-05-{day:02d}", signal, db=test_db)
 
-    content = (tmp_path / "medium_300308.md").read_text(encoding="utf-8")
+    content = test_db.execute(text(
+        "SELECT content FROM decision_memory_layered "
+        "WHERE symbol='300308' AND layer='medium'"
+    )).scalar()
     assert "2026-05-01" not in content
     assert "2026-05-02" not in content
     assert "2026-05-03" in content
     assert "2026-05-05" in content
     assert content.count("| 2026-05-") == 3
+    assert not (tmp_path / "medium_300308.md").exists()
 
 
 def test_save_medium_term_without_db_only_writes_file(test_db, tmp_path, monkeypatch):

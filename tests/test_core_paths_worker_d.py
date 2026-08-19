@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -11,6 +12,9 @@ from sqlalchemy import text
 from backend.data.database import get_db
 from backend.main import app
 from backend.version import APP_VERSION
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+PRIMARY_DB_URL = f"sqlite:///{REPO_ROOT / 'mingcang.db'}"
 
 
 def _client_for_db(test_db):
@@ -79,8 +83,8 @@ def test_ai_confirm_action_auth_fails_for_pending_dynamic_action(test_db, monkey
 
 
 def test_system_status_happy_path_counts_core_tables(test_db, monkeypatch):
-    from backend.api.deps import get_settings
     from backend.api.routes.system import system_status
+    from backend.config import Settings
     from backend.data.database import FinancialMetric, LongTermLabel, Price
 
     monkeypatch.setattr("backend.llm.runtime_readiness", lambda settings: {"ready": True})
@@ -97,7 +101,8 @@ def test_system_status_happy_path_counts_core_tables(test_db, monkeypatch):
     ))
     test_db.commit()
 
-    payload = system_status(db=test_db, settings=get_settings())
+    isolated_settings = Settings(_env_file=None, database_url=PRIMARY_DB_URL, database_role="auto")
+    payload = system_status(db=test_db, settings=isolated_settings)
 
     assert payload["version"] == APP_VERSION
     assert payload["build_commit"]
@@ -105,6 +110,7 @@ def test_system_status_happy_path_counts_core_tables(test_db, monkeypatch):
     assert payload["db_latest_date"] == "2026-05-29"
     assert payload["scheduler_mode"] == "manual"
     assert payload["atlas_enabled"] is False
+    assert payload["memory_mode"] == "shadow_only"
     assert "database_url" not in payload
     assert "database_path" not in payload
     assert "/Users/" not in json.dumps(payload, ensure_ascii=False)

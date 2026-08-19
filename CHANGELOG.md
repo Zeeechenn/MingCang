@@ -10,6 +10,43 @@
 
 ### Added / 新增
 
+- **MingCang One Loop implementation**：统一 scheduler、手动 CLI 与 test2-compatible
+  路径的显式完成批次合同；消费者和系统健康接口对 legacy、partial、ambiguous、stale、
+  custom-DB 与 non-authoritative 证据 fail-closed。新增固定八卡盘后面板 API/前端入口、
+  与 JobRun 绑定的 pending→committed 证据产物、以及只读 immutable 的 20 日连续性审计器。
+  结构侧把 workflow→tool 实现依赖清零并保留兼容 facade；文档以 `docs_public/` 为公开
+  唯一源，关闭计划移至仓库外治理档案。真实实施后连续运行目前为 0/20，因此治理周期
+  尚未完成，也没有生产能力晋升或发布。
+
+- **One Loop shadow-domain contracts**：在既有 research/evidence/notification/event-risk/
+  portfolio owner 下加入 ResearchCase 情景与证伪条件、Run Card/PIT、通知去重影子合同、
+  事件风险方向隔离及出场裁决，不建立平行框架。预注册锁定出场样本保留 baseline；四个
+  替代方案均更差且未过最大回撤门，未修改正式 signal、position、weight、stop 或订单边界。
+
+- **MingCang One Loop governance plan**：`docs/ROADMAP.md` 现为唯一活跃的
+  项目级计划，统一承接仓库结构、完成批次合同、日常编排、能力生命周期、单一盘后面板、
+  六个外部项目的有限吸收、前端收口、文档治理和连续运行验收。`AGENTS.md` 增加外部能力
+  准入门、一进一出、WIP 上限和 AI 接手协议；`PROJECT.md` 与 `STATUS.md` 分别只维护架构
+  所有权和当前运行真相。计划采纳本身不改变 signal、position、权重、止盈止损、scheduler、
+  API、数据库或真实交易边界。
+
+- **M57 outcome-backed memory repair**：新增 `backend/memory/experience.py`，把逐条
+  outcome 压缩为按标的、入场/非入场、10 日相对沪深300收益、兑现率和最差样本组成的
+  prompt 校准块；新增 `backend/memory/maintenance.py` 与
+  `python3 -m backend.tools.memory_health`（默认只读，`--apply` 才回填/归档/重建索引）。
+  2026-08-18 真实库一次性恢复 1,398 条 validated outcomes（72.14% judgment coverage），
+  对应 1,398 条原始判断做可逆 archived，45 条深研索引补齐可读主题，active recall
+  index 2,274/2,274。随后盘后实时 accrual 把结果推进至 1,718 / 2,019（85.09% raw；
+  可解析判断覆盖率 93.27%）；批末统一召回同步接线并执行维护后，177 条缺少精确观察日
+  价格且已成熟的判断被可逆归档，active recall index 精确为 2,337/2,337，missing/stale 均为 0。
+- **M57 PIT memory A/B evaluator**：新增只读
+  `python3 -m backend.tools.memory_backtest`，按股票日规范化重复信号/判断，严格等待
+  10 个后续交易日结果成熟后才允许历史记忆进入下一次决策；保留原止盈止损并逐交易日
+  检查触发，报告组合收益、最大回撤、止损次数、同池持有基线和单票贡献。加载器按
+  close-confirmed `data_timestamp` 选择每个观察日最新完整 25/25 批次，禁止把后续 partial rerun
+  拼成不存在的混合批。2026-08-18 修正口径后的快照主规则未显示稳健增益，工具与结果均不具
+  生产信号权限。
+
 - **M69 复权基准漂移防线**：新增 `backend/data/price_quality.py::detect_adjustment_basis_drift`，
   抓价时把 provider 新返回的收盘价与库内**同日期**行做重叠比对（同源同日本应逐位相同），
   检出 provider 对序列重基（现金分红=additive / 拆股=multiplicative），并在
@@ -22,6 +59,17 @@
 
 ### Changed / 变更
 
+- **M57 记忆决策上下文转为 fail-closed 影子模式**：新增
+  `MEMORY_DECISION_CONTEXT_ENABLED=false`，默认让 chat、stock/project context、盘后聚合、
+  research constraints、watchtower、M59 与长期 track analyst 收不到记忆正文；聚合器和约束层
+  另有二次清空，防调用方误传。开关只允许 env + restart 显式晋升，不进入 Admin 运行时编辑。
+  outcome 写入、01:00 维护、召回索引、专用 `mingcang_memory_context` 显式查询和 PIT 回测继续运行。
+- **记忆样本按真实观察去重**：同一股票同一天的重复重跑只计为一个入场或非入场观察，
+  避免把 1,938 条判断流水误当成 1,938 份独立市场经验（实际为 1,300 个股票日）。
+- **收敛重复存储**：有 DB session 的生产路径只写 `decision_memory_layered`，不再同时生成
+  plain + `medium_*.md` 两套新日志；无 DB 调用仍保留文件兼容回退，既有 107 对 Markdown
+  作为冷历史保留，不物理删除。
+
 - **Anspire 新闻源默认停用**：新增 `settings.anspire_enabled`（默认 `False`）。线上 key 失效后
   每股一次 401、单批 82 条且零产出（2026-07-20），现在总开关关闭时
   `fetch_stock_news_anspire` 直接空返、不发请求，每进程只记一条 INFO 而非逐股 WARNING。
@@ -29,6 +77,54 @@
   + 有效 key 即恢复；`deep_research` 的 provider 选择同步改为在停用时直接落到 tavily。
 
 ### Fixed / 修复
+
+- **盘后面板的收盘确认门（阶段 6 第二道断口）**：面板产物链本身是好的——在生产库副本上
+  实跑 `m63_daily --mode postmarket` 能落台账行、写出八卡产物并标记 committed。真正的问题
+  是**顺序**：盘中 12:00 跑的一次盘后，在库内最新价仍是前一交易日的情况下，照样产出
+  `status=complete` / `trade_date=当日` 的**已提交**面板，等当晚收盘价落库后会被审计器当成
+  当日权威面板采信（数据其实是前一日收盘）。更糟的是收盘后补跑会以
+  `run_selection_ambiguous` 硬失败，这一天等于被永久烧掉。
+  现在面板产物构建时按 `prices` 是否已有该交易日数据写入 `close_confirmed`（同时进
+  `run_envelope.freshness` 与 `artifact_contract`）；`select_complete_daily_run` 与连续性
+  审计都排除自述未收盘确认的运行，因此盘中跑不再占用当日权威位、收盘后补跑成为唯一完整运行；
+  被取代的盘中运行记为 `notes` 而非 blocker，不再连坐扣掉这一天。两个已收盘确认的运行同日
+  并存仍然 fail-closed。生产库副本上已实证跑出**第一个 status=complete 的 One Loop 日**
+  （completeness_rate 1/1，五项 checks 全绿）。
+
+- **信号写入侧的运行归属断口**：真实库审计发现 signals/prices 已到 2026-08-18，
+  而 `job_runs` 最新证据仍是 2026-07-16 的 smoke 行——台账写入器本身完好（tracked
+  入口落账正常），断口在于**写入侧从不强制**：`signals` 无运行身份列、
+  `save_signal` 不要求任何运行上下文、`run_postmarket_batch` 可绕过
+  `@tracked_job("postmarket")`，任何临时调用都能静默写出无法归属的正式信号。
+  连续性审计因此在 2026-07-01 起的 35 个 close-confirmed 日上全部 incomplete
+  （`missing_authoritative_complete_run` 35/35、`missing_authoritative_signal_run` 35/35、
+  `missing_panel_artifact_reference` 35/35、`missing_signal_batch` 22/35、
+  `ambiguous_signal_batches` 12/35）。
+  现在新增 `backend/ops/run_context.py` ambient RunContext（由 `execute_tracked_job`
+  绑定）、`signals.run_id`（nullable + 索引，alembic `e6f3c2b81a47` 与运行期自愈补列
+  两条路径，日常入口不调 `init_db` 也不会因缺列失败），`save_signal` 按运行盖章；
+  无运行上下文的正式写入记 `degradation_events(untracked_signal_write)` + WARNING，
+  并可由 `REQUIRE_SIGNAL_RUN_CONTEXT=true` 转为 fail-closed（默认 false）。
+  连续性审计改为优先按 run_id 归属：同日多批次时若**恰有一批全行绑定同一运行**即可
+  消歧（`signal_batch_identity=unique_by_run_id`），部分盖章、绑定到别的运行、
+  或无绑定的多批次仍然 fail-closed；旧行无 run_id 时保持原按日匹配路径不变。
+  未改动任何打分、权重、止盈止损、仓位或订单边界，也未修改生产数据库。
+
+- One Loop 全量门修复了三类治理回归：release-hygiene 扫描合法的 tracked deletion
+  时不再因文件缺失崩溃；canonical compatibility facade 的内部消费者改用领域入口并保持
+  mypy 可见；自定义 watchlist/回放路径不再隐式连接全局 thesis DB。测试公共 fixture 现在
+  同时禁用持久 job ledger 与 LLM usage 写入，避免隔离测试污染开发者的真实 SQLite。
+
+- 修复 stock-memory 文本查询在 SQL `LIMIT` 之后过滤、导致旧但相关经验永远进不了候选集；
+  修复同类排序偏向原始 judgment 而 outcome/lesson 靠后；修复只读 agent context 因召回审计
+  尝试写 SQLite 而告警；近期反思按交易日前缀匹配且同日去重，无实际后续价格的行不再污染提示。
+- outcome 扫描改为只查 unresolved judgment、严格要求信号日有对应价格并兼容批次时间戳；
+  generic lesson 只在完整窗口表现 `<= -5%` 的显著失效样本生成，并携带当时 rule/breakdown/
+  risk evidence，而不是为每次轻微负收益写同一句模板。
+- 判断记忆改用 close-confirmed `data_timestamp` 作为观察日，同一股票观察日稳定 upsert；中期
+  Markdown 表格同日行替换而非累积重复。校准样本先按股票日/动作去重再应用 limit，避免重跑
+  流水挤掉更早的独立经验。记忆健康检查支持显式 `--db`、默认 immutable 只读，并比较召回
+  索引精确 ID 集合而非只比数量；同日创建的 outcome 不再被回放误报为历史当时已可用。
 
 - 首轮 M69 审计（60 日窗口）检出并量化三处历史基准漂移：600900 长江电力 additive −0.79
   （库内 04-22..07-14）、600547 山东黄金 additive −0.18（04-22..07-03）、601899 紫金矿业

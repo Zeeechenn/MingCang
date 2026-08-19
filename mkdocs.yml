@@ -71,5 +71,6 @@ nav:
       - 开发指南: DEVELOPER_GUIDE.md
   - 证据与贡献:
       - 证据与复现: EVIDENCE.md
+      - 宁德活样本: ningde_live_sample.md
       - 贡献指南: CONTRIBUTING_GUIDE.md
   - GitHub: https://github.com/Zeeechenn/MingCang

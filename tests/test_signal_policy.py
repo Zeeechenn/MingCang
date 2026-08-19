@@ -20,8 +20,10 @@ def test_signal_policy_separates_watch_from_entry():
     assert should_send_signal_alert("可小仓试错")
 
 
-def test_test1_uses_legacy_qlib_weights_and_test2_uses_new_weights():
-    from backend.config import active_signal_weights
+def test_test1_uses_legacy_qlib_weights_and_test2_uses_new_weights(monkeypatch):
+    from backend.config import active_signal_weights, settings
+
+    monkeypatch.setattr(settings, "paper_trading_profile", "auto")
 
     test1_weights = active_signal_weights(date(2026, 5, 16))
     assert test1_weights.quant == 0.45
@@ -78,7 +80,7 @@ def test_postmarket_analysis_can_clip_to_as_of(monkeypatch):
     monkeypatch.setattr("backend.analysis.qlib_engine.qlib_score", lambda *args, **kwargs: {"score": 0.0})
     monkeypatch.setattr(scheduler, "_postmarket_news_sentiment", lambda *args, **kwargs: {"sentiment": 0.0})
     monkeypatch.setattr(
-        "backend.memory.stock_memory.build_memory_context",
+        "backend.memory.stock_memory.build_decision_memory_context",
         lambda *args, **kwargs: {"text": ""},
     )
     monkeypatch.setattr(
@@ -133,7 +135,7 @@ def test_postmarket_read_only_context_disables_memory_usage_recording(monkeypatc
         seen["record_usage"] = kwargs.get("record_usage")
         return {"text": "", "used_stock_memory_ids": [], "ai_memory_keys": []}
 
-    monkeypatch.setattr("backend.memory.stock_memory.build_memory_context", fake_build_memory_context)
+    monkeypatch.setattr("backend.memory.stock_memory.build_decision_memory_context", fake_build_memory_context)
     monkeypatch.setattr(
         "backend.analysis.technical.technical_score",
         lambda clipped, **kwargs: {

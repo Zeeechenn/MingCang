@@ -6,6 +6,7 @@ from backend.memory.l0_memory import build_l0_context, create_memory_atom, list_
 from backend.memory.research_memory import remember_deep_research
 from backend.memory.should_remember import should_remember
 from backend.memory.stock_memory import (
+    build_decision_memory_context,
     build_memory_context,
     create_stock_memory,
     list_stock_memories,
@@ -26,4 +27,5 @@ __all__ = [
     "create_stock_memory",
     "list_stock_memories",
     "build_memory_context",
+    "build_decision_memory_context",
 ]

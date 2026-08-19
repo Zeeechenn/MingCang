@@ -138,6 +138,13 @@ def mingcang_memory_snapshot(
         ORDER BY layer
         """,
     )
+    try:
+        from backend.memory.maintenance import memory_health_snapshot
+
+        health = memory_health_snapshot(db, memory_dir=memory_path)
+    except Exception:
+        logger.warning("context.mingcang_memory_snapshot: health audit failed", exc_info=True)
+        health = {}
 
     return {
         "database": {
@@ -173,6 +180,7 @@ def mingcang_memory_snapshot(
             for row in audit_rows
         ],
         "files": _memory_files(memory_path),
+        "health": health,
     }
 
 
@@ -232,8 +240,8 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
     """Return the project context most useful before discussing one stock."""
     try:
         from backend.config import settings
-        from backend.memory.stock_memory import build_memory_context
-        memory_context = build_memory_context(
+        from backend.memory.stock_memory import build_decision_memory_context
+        memory_context = build_decision_memory_context(
             db,
             symbol=symbol,
             task_type="stock_context",
@@ -261,17 +269,19 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
         stock = None
         position = None
         label = None
-    layered = _rows(
-        db,
-        """
-        SELECT layer, length(content) AS size, updated_at, content
-        FROM decision_memory_layered
-        WHERE symbol = :symbol
-        ORDER BY updated_at DESC
-        LIMIT 3
-        """,
-        {"symbol": symbol},
-    )
+    layered = []
+    if memory_context.get("decision_context_enabled"):
+        layered = _rows(
+            db,
+            """
+            SELECT layer, length(content) AS size, updated_at, content
+            FROM decision_memory_layered
+            WHERE symbol = :symbol
+            ORDER BY updated_at DESC
+            LIMIT 3
+            """,
+            {"symbol": symbol},
+        )
     if stock is None:
         tracked = False
         hint = "该股票不在明仓数据库,可用 watchlist.add 添加后开始追踪"
@@ -312,6 +322,11 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
             for row in layered
         ],
         "memory_context": memory_context,
+        "memory_policy": {
+            "mode": memory_context.get("memory_mode", "shadow_only"),
+            "decision_context_enabled": bool(memory_context.get("decision_context_enabled")),
+            "explicit_retrieval_tool": "mingcang_memory_context",
+        },
         "context_pack": context_pack,
         "context_text": context_text,
     }
@@ -349,8 +364,8 @@ def mingcang_context(
     memory = mingcang_memory_snapshot(db, memory_dir=memory_dir)
     try:
         from backend.config import settings
-        from backend.memory.stock_memory import build_memory_context
-        memory_context = build_memory_context(
+        from backend.memory.stock_memory import build_decision_memory_context
+        memory_context = build_decision_memory_context(
             db,
             symbol=symbol,
             task_type="project_context",
@@ -379,6 +394,11 @@ def mingcang_context(
         },
         "memory": memory["database"],
         "memory_context": memory_context,
+        "memory_policy": {
+            "mode": memory_context.get("memory_mode", "shadow_only"),
+            "decision_context_enabled": bool(memory_context.get("decision_context_enabled")),
+            "explicit_retrieval_tool": "mingcang_memory_context",
+        },
         "positions": _open_positions(db),
         "watchlist": _watchlist(db),
     }
@@ -400,7 +420,7 @@ def mingcang_memory_context(
         from backend.config import settings
         from backend.memory.stock_memory import build_memory_context
 
-        return build_memory_context(
+        context = build_memory_context(
             db,
             symbol=symbol,
             query=query,
@@ -408,6 +428,11 @@ def mingcang_memory_context(
             limit=limit,
             include_l0=settings.research_l0_recall_enabled,
         )
+        return {
+            **context,
+            "memory_mode": "explicit_retrieval",
+            "decision_context_enabled": settings.memory_decision_context_enabled,
+        }
     except Exception:
         logger.warning("context.mingcang_memory_context: building memory context failed, using fallback", exc_info=True)
         return {
@@ -418,4 +443,6 @@ def mingcang_memory_context(
             "ai_memory_keys": [],
             "used_memory_atom_ids": [],
             "l0_context": {},
+            "memory_mode": "explicit_retrieval_unavailable",
+            "decision_context_enabled": False,
         }

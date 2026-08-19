@@ -2,7 +2,7 @@
 // 脉冲页 — 自选与候选池首页
 // ============================================================
 import React from 'react';
-import { DebateReport } from './page-reports';
+import { DebateReport } from './features/shared/DebateReport';
 import { Badge, CCY, Card, DataSourceNotice, MCStore, MKT, Metric, Modal, PageHead, PoolShell, RefreshButton, ScoreBar, SortSeg, Spark, applyPoolSort, assetKey, currencyAmount, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, stockPath, toast, useSortCtl, useStockPoolFilter, useStockSuggest, useStore } from './shared';
 const { useState: usePState, useMemo: usePMemo } = React;
 

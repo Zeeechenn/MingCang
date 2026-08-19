@@ -55,7 +55,7 @@ def test_validate_watchlist_entry_rejects_non_dict():
 
 def test_load_watchlists_loads_valid_files(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(_VALID_ENTRY), encoding="utf-8")
-    entries, errors = load_watchlists(tmp_path)
+    entries, errors = load_watchlists(tmp_path, authoritative_thesis=False)
     assert errors == []
     assert len(entries) == 1
     assert entries[0]["theme_key"] == "innovative_drug"
@@ -64,7 +64,7 @@ def test_load_watchlists_loads_valid_files(tmp_path):
 def test_load_watchlists_reports_invalid_json_without_dropping_valid_entries(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(_VALID_ENTRY), encoding="utf-8")
     (tmp_path / "b.json").write_text("{not valid json", encoding="utf-8")
-    entries, errors = load_watchlists(tmp_path)
+    entries, errors = load_watchlists(tmp_path, authoritative_thesis=False)
     assert len(entries) == 1
     assert any("invalid JSON" in e for e in errors)
 
@@ -73,7 +73,7 @@ def test_load_watchlists_reports_schema_violation_without_dropping_valid_entries
     (tmp_path / "a.json").write_text(json.dumps(_VALID_ENTRY), encoding="utf-8")
     bad_entry = dict(_VALID_ENTRY, theme_key="broken", symbols=[])
     (tmp_path / "b.json").write_text(json.dumps(bad_entry), encoding="utf-8")
-    entries, errors = load_watchlists(tmp_path)
+    entries, errors = load_watchlists(tmp_path, authoritative_thesis=False)
     assert len(entries) == 1
     assert any("symbols must be" in e for e in errors)
 
@@ -81,13 +81,13 @@ def test_load_watchlists_reports_schema_violation_without_dropping_valid_entries
 def test_load_watchlists_reports_duplicate_theme_key(tmp_path):
     (tmp_path / "a.json").write_text(json.dumps(_VALID_ENTRY), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps(_VALID_ENTRY), encoding="utf-8")
-    entries, errors = load_watchlists(tmp_path)
+    entries, errors = load_watchlists(tmp_path, authoritative_thesis=False)
     assert len(entries) == 1
     assert any("duplicate theme_key" in e for e in errors)
 
 
 def test_load_watchlists_missing_directory_reports_explicit_error(tmp_path):
-    entries, errors = load_watchlists(tmp_path / "does_not_exist")
+    entries, errors = load_watchlists(tmp_path / "does_not_exist", authoritative_thesis=False)
     assert entries == []
     assert errors == [f"missing:directory:{tmp_path / 'does_not_exist'}"]
 
@@ -95,7 +95,7 @@ def test_load_watchlists_missing_directory_reports_explicit_error(tmp_path):
 def test_load_watchlists_accepts_json_array_of_entries(tmp_path):
     second = dict(_VALID_ENTRY, theme_key="other_theme", title="其他主题", symbols=["000001"])
     (tmp_path / "combined.json").write_text(json.dumps([_VALID_ENTRY, second]), encoding="utf-8")
-    entries, errors = load_watchlists(tmp_path)
+    entries, errors = load_watchlists(tmp_path, authoritative_thesis=False)
     assert errors == []
     assert {e["theme_key"] for e in entries} == {"innovative_drug", "other_theme"}
 
@@ -175,7 +175,7 @@ def test_seed_innovative_drug_file_is_valid():
     """Guard the local Phase 0 seed entry against schema drift when present."""
     if not WATCHLIST_DIR.is_dir():
         pytest.skip("paper_trading watchlist seeds are local-only and not checked into CI")
-    entries, errors = load_watchlists()
+    entries, errors = load_watchlists(authoritative_thesis=False)
     assert errors == []
     innovative_drug = next(e for e in entries if e["theme_key"] == "innovative_drug")
     assert innovative_drug["title"] == "创新药/CXO"

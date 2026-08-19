@@ -38,6 +38,7 @@ class Signal(Base):
     llm_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)     # LLM 综合判断理由
     rule_version: Mapped[str | None] = mapped_column(String, nullable=True)     # 决策规则版本
     data_timestamp: Mapped[str | None] = mapped_column(String, nullable=True)   # 信号使用的数据日期/时间戳
+    run_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)  # 产出该行的 RunEnvelope；旧行为 NULL
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
