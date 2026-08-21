@@ -50,6 +50,25 @@ _QUOTA_MARKERS = (
 )
 
 _quota_tripped_at: float | None = None
+_call_count = 0
+
+
+def _call_budget() -> int:
+    """LOCAL_CLI_CALL_BUDGET=N：本进程最多发 N 次 claude 调用，超出即熔断。
+
+    额度是 owner 订阅池里的共享资源，跑批（深评/标签）是 O(百) 次调用的大户，
+    一次失控就会把当天的额度吃光、连带影响 One Loop 那条最小路径和对话本身。
+    给跑批显式设预算，宁可少刷几支也要留余量。0/未设 = 不限制。
+    """
+    raw = os.environ.get("LOCAL_CLI_CALL_BUDGET", "").strip()
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
+
+
+def calls_made() -> int:
+    return _call_count
 
 
 def _looks_like_quota_exhaustion(*chunks: str) -> bool:
@@ -68,8 +87,9 @@ def quota_guard_tripped() -> bool:
 
 def reset_quota_guard() -> None:
     """额度恢复后清除熔断（无需重启进程）。"""
-    global _quota_tripped_at
+    global _quota_tripped_at, _call_count
     _quota_tripped_at = None
+    _call_count = 0
 
 
 def _trip_quota_guard(source: str) -> None:
@@ -158,8 +178,15 @@ class LocalCLIProvider(LLMProvider):
         no_codex_fallback = os.environ.get("LOCAL_CLI_NO_CODEX_FALLBACK", "").strip().lower() in ("1", "true", "yes")
 
         if quota_guard_tripped():
-            # 已知额度耗尽：不再 spawn 子进程，也不重试。
+            # 已知额度耗尽（或已用满预算）：不再 spawn 子进程，也不重试。
             raise _FatalResult({}) from None
+
+        global _call_count
+        budget = _call_budget()
+        if budget and _call_count >= budget:
+            _trip_quota_guard(f"call budget {budget} 用尽")
+            raise _FatalResult({}) from None
+        _call_count += 1
 
         try:
             claude = subprocess.run(

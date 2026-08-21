@@ -87,3 +87,32 @@ def test_force_fast_tier_downgrades_capable(monkeypatch):
     monkeypatch.setenv("LOCAL_CLI_FORCE_FAST_TIER", "true")
     assert provider_mod._model_for_tier("capable") == provider_mod.settings.local_cli_model_fast
     assert provider_mod._model_for_tier("fast") == provider_mod.settings.local_cli_model_fast
+
+
+def test_call_budget_trips_breaker(no_codex, monkeypatch):
+    """预算上限：跑批吃不到底，给 20 日门和对话留余量。"""
+    calls = []
+    monkeypatch.setattr(provider_mod.subprocess, "run", _fake_claude(calls, '{"s": 1}'))
+    monkeypatch.setenv("LOCAL_CLI_CALL_BUDGET", "3")
+    p = LocalCLIProvider(timeout=5)
+
+    for _ in range(10):
+        p.complete_structured("打分", TOOL)
+
+    assert len(calls) == 3, f"预算 3 次，实际发出 {len(calls)} 次"
+    assert provider_mod.quota_guard_tripped() is True
+    assert provider_mod.calls_made() == 3
+
+
+def test_no_budget_by_default(no_codex, monkeypatch):
+    """默认不限制 —— 生产与单跑研究不受影响。"""
+    calls = []
+    monkeypatch.setattr(provider_mod.subprocess, "run", _fake_claude(calls, '{"s": 1}'))
+    monkeypatch.delenv("LOCAL_CLI_CALL_BUDGET", raising=False)
+    p = LocalCLIProvider(timeout=5)
+
+    for _ in range(10):
+        p.complete_structured("打分", TOOL)
+
+    assert len(calls) == 10
+    assert provider_mod.quota_guard_tripped() is False
