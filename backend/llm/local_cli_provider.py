@@ -20,9 +20,68 @@ logger = logging.getLogger(__name__)
 
 
 def _model_for_tier(model_tier: str) -> str:
-    if model_tier == "capable":
+    # LOCAL_CLI_FORCE_FAST_TIER=true 把 capable 档也压到 fast（haiku）。
+    # 用于日常跑批：一次跑测试是 O(百) 次调用，capable 档的那几个位置
+    # （track_analyst / discretion / researcher）会显著抬高订阅额度消耗。
+    # 默认关闭 —— 生产与单跑研究不受影响；降档会降低这些位置的判断质量，
+    # 只在"跑通比跑准更重要"的批处理里开。
+    if model_tier == "capable" and not _force_fast_tier():
         return settings.local_cli_model_capable
     return settings.local_cli_model_fast
+
+
+def _force_fast_tier() -> bool:
+    return os.environ.get("LOCAL_CLI_FORCE_FAST_TIER", "").strip().lower() in ("1", "true", "yes")
+
+
+# 额度耗尽时 claude CLI 不会挂起，而是秒回一句人话（returncode != 0）。
+# 2026-08-20 之前这被 _extract_json 当成"输出非 JSON"的可恢复错误，于是每个调用
+# 重试满 3 次、且没有任何全局熔断——一个跑批会为剩下的每一支标的重复付出
+# 3 次子进程 + 6s sleep（实测 m63_postmarket 空转 3 小时 / 572 次徒劳调用），
+# 更糟的是上层把这些空结果当"降级"静默写进产物（标签作业 25/25"完成"，
+# 其中 131 次调用其实是失败值）。
+_QUOTA_MARKERS = (
+    "reached your usage limit",
+    "usage limit reached",
+    "exceeded your usage limit",
+    "out of usage",
+    "已达到使用上限",
+    "额度已用尽",
+)
+
+_quota_tripped_at: float | None = None
+
+
+def _looks_like_quota_exhaustion(*chunks: str) -> bool:
+    blob = " ".join(c for c in chunks if c).lower()
+    return any(marker in blob for marker in _QUOTA_MARKERS)
+
+
+def quota_guard_tripped() -> bool:
+    """本进程是否已判定 claude CLI 额度耗尽。
+
+    跑批脚本应在每个标的之后检查它：一旦为真，继续跑只会产出降级值污染产物，
+    正确做法是停下并如实报告"已完成 N / 未完成 M"。
+    """
+    return _quota_tripped_at is not None
+
+
+def reset_quota_guard() -> None:
+    """额度恢复后清除熔断（无需重启进程）。"""
+    global _quota_tripped_at
+    _quota_tripped_at = None
+
+
+def _trip_quota_guard(source: str) -> None:
+    global _quota_tripped_at
+    if _quota_tripped_at is None:
+        _quota_tripped_at = time.time()
+        logger.critical(
+            "LLM_QUOTA_EXHAUSTED %s：claude CLI 额度耗尽，本进程后续调用一律短路。"
+            "已产出的结果里可能含降级值，不要当成正常产物；额度恢复后调用 "
+            "reset_quota_guard() 或重跑。",
+            source,
+        )
 
 
 def _cli_retry(max_attempts: int = 3, delay: float = 2.0):
@@ -98,6 +157,10 @@ class LocalCLIProvider(LLMProvider):
         # Default-off, so production is unaffected.
         no_codex_fallback = os.environ.get("LOCAL_CLI_NO_CODEX_FALLBACK", "").strip().lower() in ("1", "true", "yes")
 
+        if quota_guard_tripped():
+            # 已知额度耗尽：不再 spawn 子进程，也不重试。
+            raise _FatalResult({}) from None
+
         try:
             claude = subprocess.run(
                 ["claude", "-p", "--model", _model_for_tier(model_tier), "--output-format", "text"],
@@ -108,6 +171,11 @@ class LocalCLIProvider(LLMProvider):
             )
             if claude.returncode != 0:
                 logger.warning("LocalCLI Claude stderr: %s", claude.stderr[:300])
+            if _looks_like_quota_exhaustion(claude.stdout, claude.stderr):
+                _trip_quota_guard("claude -p")
+                if no_codex_fallback:
+                    raise _FatalResult({}) from None
+                raise _FatalResult(self._complete_with_codex(full_prompt)) from None
             data = self._extract_json(claude.stdout)
             if data:
                 return data
@@ -134,6 +202,8 @@ class LocalCLIProvider(LLMProvider):
             if no_codex_fallback:
                 raise _FatalResult({}) from None
             return self._complete_with_codex(full_prompt)
+        except _FatalResult:
+            raise
         except Exception as e:
             logger.warning("LocalCLIProvider: 调用异常: %s", e)
             return {}
