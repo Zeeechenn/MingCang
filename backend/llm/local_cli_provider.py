@@ -4,6 +4,7 @@
 时才先尝试 `claude -p`，并在 Claude 不可用时回退到 Codex。
 生产环境切换回 openai/anthropic provider 即可。
 """
+import atexit
 import functools
 import json
 import logging
@@ -69,6 +70,19 @@ def _call_budget() -> int:
 
 def calls_made() -> int:
     return _call_count
+
+
+def _log_call_total() -> None:
+    """进程退出时报一次本次跑批的 claude 调用总数。
+
+    额度是订阅池里的共享资源，但此前没有任何地方记录"这次跑批到底调了多少次"，
+    只能靠日志里的失败行反推——于是每次讨论优化都在猜。这行让每个作业自己说话。
+    """
+    if _call_count:
+        logger.warning("LLM_CALL_TOTAL claude 调用 %d 次（本进程）", _call_count)
+
+
+atexit.register(_log_call_total)
 
 
 def _looks_like_quota_exhaustion(*chunks: str) -> bool:
