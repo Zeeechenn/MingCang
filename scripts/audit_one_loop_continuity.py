@@ -6,6 +6,13 @@ import argparse
 import sys
 from pathlib import Path
 
+# Direct execution sets sys.path[0] to ``scripts/`` rather than the repository
+# root.  Add the root before importing the backend package so this read-only
+# CLI works from any current working directory without requiring PYTHONPATH.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from backend.ops.one_loop_continuity import (
     DEFAULT_REQUIRED_DAYS,
     ContinuityAuditError,

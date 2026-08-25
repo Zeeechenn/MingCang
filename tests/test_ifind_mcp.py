@@ -1,3 +1,5 @@
+import threading
+
 import pandas as pd
 import pytest
 
@@ -77,6 +79,93 @@ def test_ifind_client_call_tool_text(monkeypatch):
 
     assert result.ok is True
     assert result.text == "hello"
+
+
+def test_ifind_clients_share_process_qps_limiter(monkeypatch):
+    """New clients still serialize requests through one process-wide limiter."""
+    from backend.config import settings
+    from backend.data import ifind_mcp
+
+    clock = [100.0]
+    sleeps = []
+    request_times = []
+
+    monkeypatch.setattr(settings, "ifind_mcp_qps_limit", 1.0)
+    monkeypatch.setattr(ifind_mcp, "_IFIND_LAST_REQUEST_AT", 0.0)
+    monkeypatch.setattr(ifind_mcp.time, "monotonic", lambda: clock[0])
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+        clock[0] += seconds
+
+    monkeypatch.setattr(ifind_mcp.time, "sleep", fake_sleep)
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"result": {"tools": []}}
+
+    class FakeSession:
+        trust_env = True
+
+        def post(self, *args, **kwargs):
+            request_times.append(clock[0])
+            return FakeResponse()
+
+    monkeypatch.setattr(ifind_mcp.requests, "Session", FakeSession)
+
+    IfindMcpClient = ifind_mcp.IfindMcpClient
+    IfindMcpClient(token="unit-token").list_tools()
+    IfindMcpClient(token="unit-token").list_tools()
+    IfindMcpClient(token="unit-token").list_tools()
+
+    assert request_times == [100.0, 101.0, 102.0]
+    assert sleeps == [pytest.approx(1.0), pytest.approx(1.0)]
+
+
+def test_ifind_clients_share_qps_limiter_across_threads(monkeypatch):
+    """Concurrent new clients must not issue requests less than one second apart."""
+    from backend.config import settings
+    from backend.data import ifind_mcp
+
+    clock = [100.0]
+    request_times = []
+    barrier = threading.Barrier(3)
+
+    monkeypatch.setattr(settings, "ifind_mcp_qps_limit", 1.0)
+    monkeypatch.setattr(ifind_mcp, "_IFIND_LAST_REQUEST_AT", 0.0)
+    monkeypatch.setattr(ifind_mcp.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(ifind_mcp.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"result": {"tools": []}}
+
+    class FakeSession:
+        trust_env = True
+
+        def post(self, *args, **kwargs):
+            request_times.append(clock[0])
+            return FakeResponse()
+
+    monkeypatch.setattr(ifind_mcp.requests, "Session", FakeSession)
+
+    def worker():
+        barrier.wait()
+        ifind_mcp.IfindMcpClient(token="unit-token").list_tools()
+
+    threads = [threading.Thread(target=worker) for _ in range(3)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(request_times) == [100.0, 101.0, 102.0]
 
 
 def test_ifind_client_requires_token():

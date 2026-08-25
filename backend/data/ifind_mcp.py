@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -21,6 +22,14 @@ STOCK_MCP_ID = "hexin-ifind-ds-stock-mcp"
 NEWS_MCP_ID = "hexin-ifind-ds-news-mcp"
 INDEX_MCP_ID = "hexin-ifind-ds-index-mcp"
 GLOBAL_STOCK_MCP_ID = "hexin-ifind-ds-global-stock-mcp"
+
+# iFinD enforces a process-wide request quota.  A client is intentionally cheap
+# and callers create one per operation, so the limiter cannot live on the
+# client instance.  Keep the lock around the actual HTTP request as well as
+# the scheduling decision: otherwise another thread could start its request
+# while the first thread is still between the limiter and ``Session.post``.
+_IFIND_QPS_LOCK = threading.Lock()
+_IFIND_LAST_REQUEST_AT = 0.0
 
 
 @dataclass(frozen=True)
@@ -44,22 +53,22 @@ class IfindMcpClient:
         self.token = token if token is not None else settings.ifind_mcp_token
         self.base_url = (base_url or settings.ifind_mcp_base_url).rstrip("/")
         self.timeout_seconds = timeout_seconds or settings.ifind_mcp_timeout_seconds
-        self._last_request_at = 0.0
 
     def _request(self, mcp_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.token:
             raise ValueError("IFIND_MCP_TOKEN is not configured")
         if not self.base_url:
             raise ValueError("IFIND_MCP_BASE_URL is not configured")
-        self._respect_qps_limit()
-        session = requests.Session()
-        session.trust_env = False
-        response = session.post(
-            f"{self.base_url}/{mcp_id}",
-            headers={"Authorization": self.token, "Content-Type": "application/json"},
-            json=payload,
-            timeout=self.timeout_seconds,
-        )
+        with _IFIND_QPS_LOCK:
+            self._respect_qps_limit_unlocked()
+            session = requests.Session()
+            session.trust_env = False
+            response = session.post(
+                f"{self.base_url}/{mcp_id}",
+                headers={"Authorization": self.token, "Content-Type": "application/json"},
+                json=payload,
+                timeout=self.timeout_seconds,
+            )
         response.raise_for_status()
         data = response.json()
         if data.get("error"):
@@ -68,16 +77,24 @@ class IfindMcpClient:
         return data
 
     def _respect_qps_limit(self) -> None:
+        """Wait for the process-wide request slot (for direct callers/tests)."""
+        with _IFIND_QPS_LOCK:
+            self._respect_qps_limit_unlocked()
+
+    @staticmethod
+    def _respect_qps_limit_unlocked() -> None:
+        """Reserve the next process-wide request slot; caller holds the lock."""
+        global _IFIND_LAST_REQUEST_AT
         qps_limit = float(settings.ifind_mcp_qps_limit)
         if qps_limit <= 0:
             return
         min_interval = 1.0 / qps_limit
         now = time.monotonic()
-        wait_seconds = min_interval - (now - self._last_request_at)
+        wait_seconds = min_interval - (now - _IFIND_LAST_REQUEST_AT)
         if wait_seconds > 0:
             time.sleep(wait_seconds)
             now = time.monotonic()
-        self._last_request_at = now
+        _IFIND_LAST_REQUEST_AT = now
 
     def list_tools(self, mcp_id: str = STOCK_MCP_ID) -> list[dict[str, Any]]:
         data = self._request(mcp_id, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})

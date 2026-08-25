@@ -356,8 +356,9 @@ def _batch_run_met_expectation(conn: sqlite3.Connection, batch: SignalBatch) -> 
     outage mid-batch is the usual cause. Such a batch is superseded residue, not
     a rival candidate for "the day's official batch".
 
-    Returns None whenever this is unknowable (no run binding, no envelope, no
-    counts) so an unreadable run is never silently dropped.
+    Returns None when no run binding or readable envelope exists.  Once a run
+    envelope exists, missing or inconsistent counts are an explicit failure so
+    an under-filled batch cannot win by elimination.
     """
     if not batch.run_bound or not _table_exists(conn, "job_runs"):
         return None
@@ -370,14 +371,20 @@ def _batch_run_met_expectation(conn: sqlite3.Connection, batch: SignalBatch) -> 
     envelope = _stored_run_envelope(row)
     if envelope is None:
         return None
+    if envelope.get("status") != "complete":
+        return False
     failed = _as_int(_as_dict(envelope.get("failed")).get("symbols"))
     expected = _as_int(_as_dict(envelope.get("expected")).get("symbols"))
     completed = _as_int(_as_dict(envelope.get("completed")).get("symbols"))
-    if failed is None and expected is None and completed is None:
-        return None
-    if failed:
+    # A complete-looking envelope without explicit counts is not evidence of a
+    # complete batch.  The continuity gate must fail closed when a producer
+    # omitted its counts, rather than allowing an under-filled signal batch to
+    # become the day's official batch by elimination.
+    if failed is None or expected is None or completed is None:
         return False
-    if expected is not None and completed is not None and expected != completed:
+    if failed != 0:
+        return False
+    if expected != completed or expected != batch.symbols:
         return False
     return True
 
@@ -399,11 +406,11 @@ def _envelope_covers_batch(envelope: dict[str, Any], batch: SignalBatch) -> bool
     expected_symbols = _as_int(_as_dict(envelope.get("expected")).get("symbols"))
     completed_symbols = _as_int(_as_dict(envelope.get("completed")).get("symbols"))
     failed_symbols = _as_int(_as_dict(envelope.get("failed")).get("symbols"))
-    if expected_symbols is not None and expected_symbols != batch.symbols:
+    if expected_symbols is None or expected_symbols != batch.symbols:
         return False
-    if completed_symbols is not None and completed_symbols != batch.symbols:
+    if completed_symbols is None or completed_symbols != batch.symbols:
         return False
-    return failed_symbols in (None, 0)
+    return failed_symbols == 0
 
 
 def _envelope_identifiers(envelope: dict[str, Any]) -> set[str]:

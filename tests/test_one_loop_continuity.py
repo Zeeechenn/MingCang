@@ -516,7 +516,7 @@ def test_continuity_cli_prints_json_without_default_file_write(tmp_path: Path) -
     proc = subprocess.run(
         [
             sys.executable,
-            "scripts/audit_one_loop_continuity.py",
+            str(Path(__file__).resolve().parents[1] / "scripts" / "audit_one_loop_continuity.py"),
             "--db",
             str(db_path),
             "--implementation-since",
@@ -524,7 +524,7 @@ def test_continuity_cli_prints_json_without_default_file_write(tmp_path: Path) -
             "--repo-root",
             str(repo_root),
         ],
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=tmp_path,
         check=True,
         text=True,
         capture_output=True,
@@ -961,3 +961,41 @@ def test_continuity_still_fails_closed_when_every_batch_reported_failure(
     assert "superseded_signal_batches:1" not in first_day["notes"]
     assert first_day["status"] == "incomplete"
     assert result["status"] == "incomplete"
+
+
+def test_continuity_fails_closed_when_signal_counts_are_missing(
+    tmp_path: Path,
+) -> None:
+    """A producer that omits counts cannot certify a complete signal batch."""
+    days = _days(20)
+    db_path, repo_root, conn = _seed_days(tmp_path, days)
+    day = days[0]
+    conn.execute(
+        "UPDATE signals SET run_id = ? WHERE data_timestamp = ?",
+        (f"signal-{day}", day),
+    )
+    row = conn.execute(
+        "SELECT output_summary_json FROM job_runs WHERE run_id = ?", (f"signal-{day}",)
+    ).fetchone()
+    envelope = json.loads(row[0])["run_envelope"]
+    envelope.pop("expected", None)
+    envelope.pop("completed", None)
+    envelope.pop("failed", None)
+    encoded = json.dumps({"run_envelope": envelope})
+    conn.execute(
+        "UPDATE job_runs SET output_summary_json = ?, input_coverage_json = ? WHERE run_id = ?",
+        (encoded, encoded, f"signal-{day}"),
+    )
+    conn.commit()
+    conn.close()
+
+    result = audit_one_loop_continuity(
+        db_path=db_path,
+        implementation_since=days[0],
+        repo_root=repo_root,
+    )
+
+    first_day = result["days"][0]
+    assert first_day["status"] == "incomplete"
+    assert "missing_authoritative_signal_run" in first_day["blockers"]
+    assert "superseded_signal_batches:1" not in first_day["notes"]
