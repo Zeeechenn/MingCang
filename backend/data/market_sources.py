@@ -182,6 +182,89 @@ def fetch_cn_daily_tushare_qfq(symbol: str, days: int = 365) -> pd.DataFrame:
     return fetch_tushare_qfq_daily(symbol, days=days)
 
 
+@_retry(max_attempts=2, delay=1.0)
+def fetch_cn_daily_ifind(symbol: str, days: int = 365) -> pd.DataFrame:
+    """A股日线**兜底**源：iFinD MCP。
+
+    定位是兜底而非主源。iFinD 服务端 QPS=1（`_respect_qps_limit()` 强制串行）
+    且单次延迟实测约 10s，整池并发取数远慢于 efinance/eastmoney；把它排在免费源
+    之后，只在它们全挂时补位。2026-08-25 实测：免费源 429 限流 + 代理断连导致
+    4 支拿不到当日 bar、test2 卡在 21/25 过不了门，iFinD 全部补齐，且收盘价与
+    免费源恢复后的取值一致。
+
+    三个服务端特性必须在这里消化，否则会污染下游：
+
+    1. **默认「不复权」**，与其余 CN 源的 qfq 冲突（同 `fetch_cn_daily_yfinance`
+       那条注释所述的错位问题）——query 里显式要求「前复权」，并校验返回的
+       `indicators_params` 确实是前复权；不是就抛错，让 fallback 继续往下走，
+       宁可没有数据也不能把混口径的 bar 喂进技术指标。
+    2. **返回含非交易日行**：周末行的 close 用前一交易日填充、OHLC 与成交量为空，
+       直接入库会造出假 bar —— 按 OHLCV 完整性过滤掉。
+    3. **列顺序由服务端语义解析决定**，同一 query 两次调用都可能不同（实测成交量
+       在两次返回里分别落在第 8 列和第 6 列）—— 只能按表头列名映射，绝不能按
+       列位置取值；末尾再做一次 OHLC 自洽校验兜住映射错位。
+    """
+    if not settings.ifind_mcp_enabled:
+        raise ValueError("IFIND_MCP_ENABLED is false")
+    if not settings.ifind_mcp_token:
+        raise ValueError("IFIND_MCP_TOKEN is not configured")
+
+    from backend.data.ifind_mcp import (
+        STOCK_MCP_ID,
+        call_ifind_mcp_tool,
+        extract_stock_daily_table,
+    )
+
+    end = date.today()
+    start = end - timedelta(days=max(days, 5))
+    result = call_ifind_mcp_tool(
+        "get_stock_performance",
+        {
+            "query": (
+                f"{symbol} {start.isoformat()} 至 {end.isoformat()} 前复权 "
+                "每日开盘价 最高价 最低价 收盘价 成交量"
+            )
+        },
+        mcp_id=STOCK_MCP_ID,
+    )
+    if not result.get("ok"):
+        raise ValueError(f"iFinD MCP call failed for {symbol}: {result.get('error')}")
+
+    parsed_json = (result.get("parsed") or {}).get("json") or {}
+
+    # 口径闸门：服务端没按前复权返回就放弃这个源
+    params = parsed_json.get("indicators_params") or {}
+    price_fields = [key for key in params if str(key).endswith("价")]
+    if not price_fields:
+        raise ValueError(f"iFinD returned no indicators_params for {symbol}")
+    for field in price_fields:
+        basis = str((params.get(field) or {}).get("复权方式") or "")
+        if "前复权" not in basis:
+            raise ValueError(
+                f"iFinD {symbol} {field} adjustment is {basis!r}, expected 前复权"
+            )
+
+    df = extract_stock_daily_table(result.get("parsed"))
+    if df.empty:
+        raise ValueError(f"No iFinD daily data for {symbol}")
+
+    # 非交易日行：close 被填充但 OHLC/成交量为空
+    df = df.dropna(subset=["open", "high", "low", "close", "volume"])
+    if df.empty:
+        raise ValueError(f"iFinD returned no complete bars for {symbol}")
+
+    inconsistent = df[
+        (df["high"] < df[["open", "close"]].max(axis=1))
+        | (df["low"] > df[["open", "close"]].min(axis=1))
+    ]
+    if not inconsistent.empty:
+        raise ValueError(
+            f"iFinD {symbol} OHLC inconsistent on {list(inconsistent.index)[:3]}"
+        )
+
+    return _normalize_ohlcv(df)
+
+
 @_retry(max_attempts=3, delay=1.0)
 def fetch_cn_daily_yfinance(symbol: str, days: int = 365) -> pd.DataFrame:
     """Yahoo Finance A-share daily data。

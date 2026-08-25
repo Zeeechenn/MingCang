@@ -348,6 +348,40 @@ def _batch_authoritative(conn: sqlite3.Connection, run_id: str | None) -> bool |
     return _is_authoritative(envelope)
 
 
+def _batch_run_met_expectation(conn: sqlite3.Connection, batch: SignalBatch) -> bool | None:
+    """Whether the run that wrote this batch reported hitting its own target.
+
+    A run that declares `failed>0`, or whose `completed` never reached its own
+    `expected`, has already said it did not finish the day's work — a data-source
+    outage mid-batch is the usual cause. Such a batch is superseded residue, not
+    a rival candidate for "the day's official batch".
+
+    Returns None whenever this is unknowable (no run binding, no envelope, no
+    counts) so an unreadable run is never silently dropped.
+    """
+    if not batch.run_bound or not _table_exists(conn, "job_runs"):
+        return None
+    row = conn.execute(
+        "SELECT * FROM job_runs WHERE run_id = ? LIMIT 1",
+        (batch.run_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    envelope = _stored_run_envelope(row)
+    if envelope is None:
+        return None
+    failed = _as_int(_as_dict(envelope.get("failed")).get("symbols"))
+    expected = _as_int(_as_dict(envelope.get("expected")).get("symbols"))
+    completed = _as_int(_as_dict(envelope.get("completed")).get("symbols"))
+    if failed is None and expected is None and completed is None:
+        return None
+    if failed:
+        return False
+    if expected is not None and completed is not None and expected != completed:
+        return False
+    return True
+
+
 def _envelope_covers_batch(envelope: dict[str, Any], batch: SignalBatch) -> bool:
     coverage = _coverage(envelope)
     identifiers = {
@@ -582,6 +616,22 @@ def _audit_day(conn: sqlite3.Connection, day: str, repo_root: Path) -> dict[str,
     research_batches = len(all_batches) - len(batches)
     if research_batches:
         notes.append(f"non_authoritative_signal_batches:{research_batches}")
+    # A run that itself reported failed>0 (or never reached its own expected
+    # count) is superseded residue, not a rival for the day's official batch.
+    # Re-running after a data-source outage is routine — 2026-08-25 needed three
+    # attempts (21/25, 23/25, then 25/25) — and without this the surviving good
+    # batch is drowned out by its own failed predecessors and the day reads as
+    # `ambiguous_signal_batches`, reporting a gate that is in fact locked as broken.
+    # This is the judgement `_envelope_covers_batch` already applies when picking
+    # a run, pulled forward to batch selection. Never applied when it would empty
+    # the candidate set: an all-incomplete day must still read incomplete.
+    met_expectation = [
+        batch for batch in batches if _batch_run_met_expectation(conn, batch) is not False
+    ]
+    if met_expectation and len(met_expectation) < len(batches):
+        notes.append(f"superseded_signal_batches:{len(batches) - len(met_expectation)}")
+        batches = met_expectation
+
     run_bound_batches = [batch for batch in batches if batch.run_bound]
     selected_batch: SignalBatch | None = None
     if len(batches) == 1:
