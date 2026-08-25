@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     ifind_mcp_enabled: bool = False
     ifind_mcp_token: str = ""
     ifind_mcp_base_url: str = "https://api-mcp.51ifind.com:8643/ds-mcp-servers"
-    ifind_mcp_timeout_seconds: float = 12.0
+    ifind_mcp_timeout_seconds: float = 30.0
     ifind_mcp_qps_limit: float = 1.0
     sec_user_agent: str = "MingCang local research mingcang@localhost"
     log_level: str = "INFO"

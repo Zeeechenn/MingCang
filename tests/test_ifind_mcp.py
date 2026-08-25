@@ -168,6 +168,48 @@ def test_ifind_clients_share_qps_limiter_across_threads(monkeypatch):
     assert sorted(request_times) == [100.0, 101.0, 102.0]
 
 
+def test_ifind_request_does_not_hold_qps_lock_during_http_call(monkeypatch):
+    """The QPS lock must be released before ``session.post`` executes.
+
+    Regression pin for the fix that narrowed ``_IFIND_QPS_LOCK`` to guard only
+    the rate-limit slot reservation. If a future change widens the lock back
+    around the HTTP request, this test fails because the lock would still be
+    held while the fake ``post`` runs.
+    """
+    from backend.config import settings
+    from backend.data import ifind_mcp
+
+    monkeypatch.setattr(settings, "ifind_mcp_qps_limit", 1.0)
+    monkeypatch.setattr(ifind_mcp, "_IFIND_LAST_REQUEST_AT", 0.0)
+    monkeypatch.setattr(ifind_mcp.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(ifind_mcp.time, "sleep", lambda seconds: None)
+
+    lock_was_free_during_post = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"result": {"tools": []}}
+
+    class FakeSession:
+        trust_env = True
+
+        def post(self, *args, **kwargs):
+            acquired = ifind_mcp._IFIND_QPS_LOCK.acquire(blocking=False)
+            lock_was_free_during_post.append(acquired)
+            if acquired:
+                ifind_mcp._IFIND_QPS_LOCK.release()
+            return FakeResponse()
+
+    monkeypatch.setattr(ifind_mcp.requests, "Session", FakeSession)
+
+    ifind_mcp.IfindMcpClient(token="unit-token").list_tools()
+
+    assert lock_was_free_during_post == [True]
+
+
 def test_ifind_client_requires_token():
     from backend.data.ifind_mcp import IfindMcpClient
 

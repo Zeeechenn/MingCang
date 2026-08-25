@@ -5,6 +5,7 @@ provider 只把它当成"输出非 JSON"的软失败 → _cli_retry 重试满 3 
 于是为每一个标的重复付出 3 次子进程 + 6s sleep。m63_postmarket 因此空转 3 小时
 （572 次徒劳调用），同期的标签作业"跑完"25 支但其中 131 次调用是失败降级值。
 """
+import logging
 import subprocess
 
 import pytest
@@ -116,3 +117,54 @@ def test_no_budget_by_default(no_codex, monkeypatch):
 
     assert len(calls) == 10
     assert provider_mod.quota_guard_tripped() is False
+
+
+def test_budget_exhaustion_logs_distinct_marker(no_codex, monkeypatch, caplog):
+    """本进程自设预算用尽 ≠ 账号真额度耗尽：日志身份必须可区分，不能被上层误判。
+
+    2026-08-25 bug：两种熔断都打 LLM_QUOTA_EXHAUSTED / 含「额度耗尽」，上层跑批
+    脚本按关键字抓这条日志，于是"预算用尽"（正常纪律）被误判成"账号没额度了"，
+    导致整轮流水线被错误中止。
+    """
+    calls = []
+    monkeypatch.setattr(provider_mod.subprocess, "run", _fake_claude(calls, '{"s": 1}'))
+    monkeypatch.setenv("LOCAL_CLI_CALL_BUDGET", "2")
+    p = LocalCLIProvider(timeout=5)
+
+    with caplog.at_level(logging.WARNING, logger=provider_mod.logger.name):
+        for _ in range(5):
+            p.complete_structured("打分", TOOL)
+
+    assert len(calls) == 2
+    log_text = caplog.text
+    assert provider_mod.BUDGET_MARKER in log_text
+    assert provider_mod.QUOTA_MARKER not in log_text
+    assert "额度耗尽" not in log_text
+    assert provider_mod.quota_guard_reason() == "budget"
+
+
+def test_real_quota_exhaustion_logs_quota_marker(no_codex, monkeypatch, caplog):
+    """真账号额度耗尽必须仍走 LLM_QUOTA_EXHAUSTED / 含「额度耗尽」的原有告警路径。"""
+    calls = []
+    monkeypatch.setattr(provider_mod.subprocess, "run", _fake_claude(calls, QUOTA_STDOUT))
+
+    with caplog.at_level(logging.WARNING, logger=provider_mod.logger.name):
+        assert LocalCLIProvider(timeout=5).complete_structured("打分", TOOL) == {}
+
+    log_text = caplog.text
+    assert provider_mod.QUOTA_MARKER in log_text
+    assert "额度耗尽" in log_text
+    assert provider_mod.BUDGET_MARKER not in log_text
+    assert provider_mod.quota_guard_reason() == "quota"
+
+
+def test_reset_clears_reason(no_codex, monkeypatch):
+    """reset_quota_guard() 后 quota_guard_reason() 回到 None。"""
+    calls = []
+    monkeypatch.setattr(provider_mod.subprocess, "run", _fake_claude(calls, QUOTA_STDOUT))
+    p = LocalCLIProvider(timeout=5)
+    p.complete_structured("打分", TOOL)
+    assert provider_mod.quota_guard_reason() == "quota"
+
+    provider_mod.reset_quota_guard()
+    assert provider_mod.quota_guard_reason() is None

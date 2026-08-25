@@ -25,9 +25,14 @@ GLOBAL_STOCK_MCP_ID = "hexin-ifind-ds-global-stock-mcp"
 
 # iFinD enforces a process-wide request quota.  A client is intentionally cheap
 # and callers create one per operation, so the limiter cannot live on the
-# client instance.  Keep the lock around the actual HTTP request as well as
-# the scheduling decision: otherwise another thread could start its request
-# while the first thread is still between the limiter and ``Session.post``.
+# client instance.  The lock only needs to guard the scheduling decision
+# (``_respect_qps_limit_unlocked``): reserving a slot already advances
+# ``_IFIND_LAST_REQUEST_AT`` to the current time before the lock is released,
+# which is enough to guarantee >= 1/QPS spacing between request *start*
+# times. Holding the lock across the HTTP call as well would degrade the
+# limiter from "one request start per second" to "one full response per
+# second" and serialize the whole pool during multi-threaded fetches, since
+# iFinD's ~10s single-request latency would then gate every other thread.
 _IFIND_QPS_LOCK = threading.Lock()
 _IFIND_LAST_REQUEST_AT = 0.0
 
@@ -61,14 +66,14 @@ class IfindMcpClient:
             raise ValueError("IFIND_MCP_BASE_URL is not configured")
         with _IFIND_QPS_LOCK:
             self._respect_qps_limit_unlocked()
-            session = requests.Session()
-            session.trust_env = False
-            response = session.post(
-                f"{self.base_url}/{mcp_id}",
-                headers={"Authorization": self.token, "Content-Type": "application/json"},
-                json=payload,
-                timeout=self.timeout_seconds,
-            )
+        session = requests.Session()
+        session.trust_env = False
+        response = session.post(
+            f"{self.base_url}/{mcp_id}",
+            headers={"Authorization": self.token, "Content-Type": "application/json"},
+            json=payload,
+            timeout=self.timeout_seconds,
+        )
         response.raise_for_status()
         data = response.json()
         if data.get("error"):

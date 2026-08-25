@@ -50,7 +50,11 @@ _QUOTA_MARKERS = (
     "额度已用尽",
 )
 
+QUOTA_MARKER = "LLM_QUOTA_EXHAUSTED"
+BUDGET_MARKER = "LLM_CALL_BUDGET_EXHAUSTED"
+
 _quota_tripped_at: float | None = None
+_trip_reason: str | None = None
 _call_count = 0
 
 
@@ -101,21 +105,36 @@ def quota_guard_tripped() -> bool:
 
 def reset_quota_guard() -> None:
     """额度恢复后清除熔断（无需重启进程）。"""
-    global _quota_tripped_at, _call_count
+    global _quota_tripped_at, _trip_reason, _call_count
     _quota_tripped_at = None
+    _trip_reason = None
     _call_count = 0
 
 
-def _trip_quota_guard(source: str) -> None:
-    global _quota_tripped_at
+def quota_guard_reason() -> str | None:
+    """熔断原因："quota"=真额度耗尽 / "budget"=本进程预算用尽 / None=未熔断。"""
+    return _trip_reason
+
+
+def _trip_quota_guard(source: str, *, reason: str = "quota") -> None:
+    global _quota_tripped_at, _trip_reason
     if _quota_tripped_at is None:
         _quota_tripped_at = time.time()
-        logger.critical(
-            "LLM_QUOTA_EXHAUSTED %s：claude CLI 额度耗尽，本进程后续调用一律短路。"
-            "已产出的结果里可能含降级值，不要当成正常产物；额度恢复后调用 "
-            "reset_quota_guard() 或重跑。",
-            source,
-        )
+        _trip_reason = reason
+        if reason == "budget":
+            logger.warning(
+                "LLM_CALL_BUDGET_EXHAUSTED 本进程调用预算 %s 次已用尽：后续调用一律短路。"
+                "这是本次跑批自设的预算，不是账号真的没额度了，不要据此中止整轮流水线；"
+                "已产出的结果里可能含降级值。",
+                source,
+            )
+        else:
+            logger.critical(
+                "LLM_QUOTA_EXHAUSTED %s：claude CLI 额度耗尽，本进程后续调用一律短路。"
+                "已产出的结果里可能含降级值，不要当成正常产物；额度恢复后调用 "
+                "reset_quota_guard() 或重跑。",
+                source,
+            )
 
 
 def _cli_retry(max_attempts: int = 3, delay: float = 2.0):
@@ -198,7 +217,7 @@ class LocalCLIProvider(LLMProvider):
         global _call_count
         budget = _call_budget()
         if budget and _call_count >= budget:
-            _trip_quota_guard(f"call budget {budget} 用尽")
+            _trip_quota_guard(str(budget), reason="budget")
             raise _FatalResult({}) from None
         _call_count += 1
 

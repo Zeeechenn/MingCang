@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from scripts.audit_runtime_followups import audit_runtime_followups
 
 
@@ -132,3 +134,77 @@ def test_runtime_followups_cli_requires_explicit_db_and_accepts_cwd_outside_repo
         [sys.executable, str(script)], cwd=tmp_path, capture_output=True, text=True
     )
     assert missing.returncode != 0
+
+
+@pytest.mark.parametrize("sidecar_suffix", ["-wal", "-shm"])
+def test_runtime_followups_rejects_active_wal_db(tmp_path: Path, sidecar_suffix: str) -> None:
+    db_path = _db(tmp_path / "audit.sqlite")
+    sidecar_path = db_path.with_name(db_path.name + sidecar_suffix)
+    sidecar_path.write_bytes(b"")
+
+    with pytest.raises(ValueError) as excinfo:
+        audit_runtime_followups(db_path=db_path, as_of="2026-08-25 18:00:00")
+
+    message = str(excinfo.value)
+    assert "sqlite_consistent_snapshot" in message
+    assert "-wal/-shm" in message
+
+
+@pytest.mark.parametrize("sidecar_suffix", ["-wal", "-shm"])
+def test_runtime_followups_cli_rejects_active_wal_db(
+    tmp_path: Path, sidecar_suffix: str
+) -> None:
+    db_path = _db(tmp_path / "audit.sqlite")
+    sidecar_path = db_path.with_name(db_path.name + sidecar_suffix)
+    sidecar_path.write_bytes(b"")
+    script = Path(__file__).resolve().parents[1] / "scripts" / "audit_runtime_followups.py"
+
+    proc = subprocess.run(
+        [sys.executable, str(script), "--db", str(db_path), "--as-of", "2026-08-25"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 2
+    assert "sqlite_consistent_snapshot" in proc.stderr
+
+
+def test_runtime_followups_allow_live_db_bypasses_wal_check(tmp_path: Path) -> None:
+    db_path = _db(tmp_path / "audit.sqlite")
+    wal_path = db_path.with_name(db_path.name + "-wal")
+    wal_path.write_bytes(b"")
+
+    result = audit_runtime_followups(
+        db_path=db_path,
+        as_of="2026-08-25 18:00:00",
+        allow_live_db=True,
+    )
+
+    assert result["schema_version"] == "runtime_followups.v1"
+
+
+def test_runtime_followups_cli_allow_live_db_bypasses_wal_check(tmp_path: Path) -> None:
+    db_path = _db(tmp_path / "audit.sqlite")
+    wal_path = db_path.with_name(db_path.name + "-wal")
+    wal_path.write_bytes(b"")
+    script = Path(__file__).resolve().parents[1] / "scripts" / "audit_runtime_followups.py"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--db",
+            str(db_path),
+            "--as-of",
+            "2026-08-25",
+            "--allow-live-db",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    payload = json.loads(proc.stdout)
+    assert payload["schema_version"] == "runtime_followups.v1"

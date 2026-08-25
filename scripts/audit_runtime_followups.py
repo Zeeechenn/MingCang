@@ -23,10 +23,22 @@ SCHEMA_VERSION = "runtime_followups.v1"
 INTENTIONAL_SKIP_MARKERS = ("--no-llm", "--no_llm", "--no-shadow", "--no_shadow")
 
 
-def _connect_immutable(path_value: str | Path) -> sqlite3.Connection:
+def _connect_immutable(
+    path_value: str | Path, *, allow_live_db: bool = False
+) -> sqlite3.Connection:
     path = Path(path_value).expanduser().resolve()
     if not path.exists():
         raise FileNotFoundError(f"database path does not exist: {path}")
+    if not allow_live_db:
+        wal_path = path.with_name(path.name + "-wal")
+        shm_path = path.with_name(path.name + "-shm")
+        if wal_path.exists() or shm_path.exists():
+            raise ValueError(
+                f"{path} 旁边存在 -wal/-shm，说明这是活跃的 WAL 库而不是静态副本；"
+                "immutable=1 会漏读 WAL 里已提交的行，审计结论不可信。请先跑 "
+                f"python3 scripts/sqlite_consistent_snapshot.py --source {path} "
+                "--destination <副本路径> 再对副本审计；确知这是静态副本可加 --allow-live-db。"
+            )
     quoted = quote(str(path), safe="/:")
     connection = sqlite3.connect(f"file:{quoted}?mode=ro&immutable=1", uri=True)
     connection.row_factory = sqlite3.Row
@@ -232,6 +244,7 @@ def audit_runtime_followups(
     continuity_path: str | Path | None = None,
     stale_running_hours: float = 6.0,
     as_of: str | None = None,
+    allow_live_db: bool = False,
 ) -> dict[str, Any]:
     if stale_running_hours < 0:
         raise ValueError("--stale-running-hours must be >= 0")
@@ -244,7 +257,7 @@ def audit_runtime_followups(
         if not isinstance(continuity, dict):
             raise ValueError("continuity JSON must contain an object")
         continuity_source = str(path)
-    connection = _connect_immutable(db_path)
+    connection = _connect_immutable(db_path, allow_live_db=allow_live_db)
     try:
         return {
             "schema_version": SCHEMA_VERSION,
@@ -277,6 +290,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--stale-running-hours", type=float, default=6.0)
     parser.add_argument("--as-of", help="ISO date/datetime used as the deterministic age clock")
+    parser.add_argument(
+        "--allow-live-db",
+        dest="allow_live_db",
+        action="store_true",
+        help="确知目标是静态副本时跳过 WAL 旁证检查",
+    )
     return parser
 
 
