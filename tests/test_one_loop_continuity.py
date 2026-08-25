@@ -99,6 +99,7 @@ def _envelope(
     freshness_as_of: str | None = None,
     run_id: str | None = None,
     symbols: int = 2,
+    degradations: list[object] | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": "run_envelope.v1",
@@ -122,7 +123,7 @@ def _envelope(
                 "signal_batch_id": batch_id,
             },
         },
-        "degradations": [],
+        "degradations": list(degradations) if degradations is not None else [],
         "artifacts": [artifact],
     }
 
@@ -231,6 +232,8 @@ def _seed_complete_day(
     panel_card_types: tuple[str, ...] = CARD_TYPES,
     panel_run_identity: str = "match",
     panel_work_metrics: dict[str, dict[str, object]] | None = None,
+    panel_degradations: list[object] | None = None,
+    signal_degradations: list[object] | None = None,
 ) -> None:
     _seed_price(conn, day)
     signal_batch = _seed_signals(conn, day, batch_id=batch_id)
@@ -247,6 +250,7 @@ def _seed_complete_day(
         authoritative=authoritative,
         freshness_as_of=panel_freshness_as_of or freshness_as_of,
         run_id=f"panel-{day}",
+        degradations=panel_degradations,
     )
     if artifact_kind == "markdown_only":
         artifact_path.write_text(f"# Panel {artifact_date or day}\n", encoding="utf-8")
@@ -271,6 +275,7 @@ def _seed_complete_day(
         authoritative=authoritative,
         freshness_as_of=signal_freshness_as_of or freshness_as_of,
         run_id=f"signal-{day}",
+        degradations=signal_degradations,
     )
     _seed_job(conn, day, signal_envelope, str(artifact_path), job_name=signal_entrypoint)
     if duplicate:
@@ -475,6 +480,112 @@ def test_continuity_zero_denominator_work_metrics_are_not_applicable_not_zero(tm
     assert work["human_review_rate"]["value"] is None
     assert work["review_freshness"]["status"] == "not_applicable"
     assert work["review_freshness"]["value"] is None
+
+
+def _audit_with_first_day_degradations(tmp_path: Path, panel_degradations: list[object]) -> dict[str, object]:
+    """Seed 20 clean close-confirmed days except the first, which carries
+    `panel_degradations` on its panel envelope."""
+    days = _days(20)
+    db_path = tmp_path / "audit.db"
+    repo_root = tmp_path / "repo"
+    _init_db(db_path)
+    conn = sqlite3.connect(db_path)
+    for index, day in enumerate(days):
+        if index == 0:
+            _seed_complete_day(conn, repo_root, day, panel_degradations=panel_degradations)
+        else:
+            _seed_complete_day(conn, repo_root, day)
+    conn.commit()
+    conn.close()
+    return audit_one_loop_continuity(db_path=db_path, implementation_since=days[0], repo_root=repo_root)
+
+
+def test_continuity_classifies_quota_discipline_skips_as_intentional_not_degraded(tmp_path: Path) -> None:
+    # Real degradations text observed from the m63 postmarket (--no-llm) and
+    # test2 (--no-shadow) quota-discipline runs -- these are deliberate
+    # operating decisions, not runtime failures.
+    intentional_reasons = [
+        "m54_daily_accrual skipped: --no-llm:跳过会消耗LLM的accrual scoring",
+        "m68_news_shadow skipped: --no-llm:跳过可能消耗LLM的新闻金字塔生产镜像",
+        "--no-shadow: skipped optional M68 shadow followup",
+        "m68_shadow_followup skipped: --no-shadow",
+    ]
+
+    result = _audit_with_first_day_degradations(tmp_path, intentional_reasons)
+
+    assert result["status"] == "complete"
+    first_day = result["days"][0]
+    assert first_day["degradations"] == intentional_reasons
+    assert first_day["intentional_skips"] == intentional_reasons
+    assert first_day["unexpected_degradations"] == []
+    work = result["metrics"]["work_metrics"]
+    assert work["degradation_rate"]["status"] == "available"
+    assert work["degradation_rate"]["value"] == 0.0
+    assert work["degradation_rate"]["evidence"] == {
+        "degraded_days": 0,
+        "intentional_skip_days": 1,
+        "close_confirmed_days": 20,
+    }
+
+
+def test_continuity_counts_a_real_degradation_toward_degradation_rate(tmp_path: Path) -> None:
+    real_reasons = ["provider fallback exhausted: eastmoney_cn"]
+
+    result = _audit_with_first_day_degradations(tmp_path, real_reasons)
+
+    first_day = result["days"][0]
+    assert first_day["degradations"] == real_reasons
+    assert first_day["intentional_skips"] == []
+    assert first_day["unexpected_degradations"] == real_reasons
+    work = result["metrics"]["work_metrics"]
+    assert work["degradation_rate"]["value"] == pytest.approx(1 / 20)
+    assert work["degradation_rate"]["evidence"] == {
+        "degraded_days": 1,
+        "intentional_skip_days": 0,
+        "close_confirmed_days": 20,
+    }
+
+
+def test_continuity_mixed_day_counts_as_degraded_and_keeps_both_lists(tmp_path: Path) -> None:
+    mixed_reasons = [
+        "m54_daily_accrual skipped: --no-llm:跳过会消耗LLM的accrual scoring",
+        "provider fallback exhausted: eastmoney_cn",
+    ]
+
+    result = _audit_with_first_day_degradations(tmp_path, mixed_reasons)
+
+    first_day = result["days"][0]
+    assert first_day["degradations"] == mixed_reasons
+    assert first_day["intentional_skips"] == [mixed_reasons[0]]
+    assert first_day["unexpected_degradations"] == [mixed_reasons[1]]
+    work = result["metrics"]["work_metrics"]
+    # A day with both an intentional skip and a real degradation still counts
+    # as degraded, and does NOT also count as an intentional-only day.
+    assert work["degradation_rate"]["evidence"] == {
+        "degraded_days": 1,
+        "intentional_skip_days": 0,
+        "close_confirmed_days": 20,
+    }
+
+
+def test_intentional_skip_markers_match_runtime_followups_script() -> None:
+    """The two INTENTIONAL_SKIP_MARKERS constants must never drift apart.
+
+    scripts/audit_runtime_followups.py is deliberately standalone (no import
+    of backend), so it keeps its own copy of the constant; this test is the
+    guard that pins both copies equal instead of a shared import.
+    """
+    import importlib.util
+
+    from backend.ops.one_loop_continuity import INTENTIONAL_SKIP_MARKERS as backend_markers
+
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "audit_runtime_followups.py"
+    spec = importlib.util.spec_from_file_location("audit_runtime_followups_module", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.INTENTIONAL_SKIP_MARKERS == backend_markers
 
 
 @pytest.mark.parametrize("ledger_commit_state", [None, "pending"])

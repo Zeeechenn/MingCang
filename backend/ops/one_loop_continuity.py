@@ -39,6 +39,15 @@ PANEL_WORK_METRIC_INPUTS = (
 AUTHORITATIVE_POSTMARKET_ENTRYPOINT = "m63_postmarket"
 DEFAULT_REQUIRED_DAYS = 20
 
+# Markers that identify a `degradations` entry as the pipeline's own LLM-quota
+# discipline (m63 postmarket always runs --no-llm; test2 always runs
+# --no-shadow) rather than a genuine runtime degradation. Kept byte-for-byte
+# identical to scripts/audit_runtime_followups.py::INTENTIONAL_SKIP_MARKERS;
+# that script is deliberately a standalone sqlite tool that does not import
+# backend, so the two constants are duplicated on purpose and pinned equal by
+# tests/test_one_loop_continuity.py instead of sharing an import.
+INTENTIONAL_SKIP_MARKERS = ("--no-llm", "--no_llm", "--no-shadow", "--no_shadow")
+
 
 class ContinuityAuditError(ValueError):
     """Raised when the audit request itself is invalid."""
@@ -140,6 +149,46 @@ def _as_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _degradation_text(item: Any) -> str:
+    """Extract the readable text of one raw `degradations` entry.
+
+    Mirrors scripts/audit_runtime_followups.py::_flatten_degradations's lookup
+    order (reason -> name -> code -> str(item)) so the per-day classification
+    here and that script's cross-day summary agree on what a degradation entry
+    "says".
+    """
+    if isinstance(item, dict):
+        reason = item.get("reason") or item.get("name") or item.get("code")
+        if reason:
+            return str(reason)
+    return str(item)
+
+
+def _classify_degradations(items: list[Any]) -> tuple[list[Any], list[Any]]:
+    """Split raw `degradations` entries into (intentional_skips, unexpected).
+
+    The pipeline's own LLM-quota discipline (m63 postmarket always runs
+    --no-llm; test2 always runs --no-shadow) shows up verbatim inside
+    `degradations` because that field is a full, unfiltered record of what a
+    run reported skipping -- it is not itself evidence of a runtime failure.
+    Folding those entries into degradation_rate would make the 20-day
+    acceptance metric permanently ~0.8-1.0 for a deliberate operating
+    decision, and would bury a real degradation inside that noise so the rate
+    would not move when one actually happens. This function only classifies;
+    callers still keep the full list untouched (see `degradations` on each
+    day) and only use the split to compute the rate.
+    """
+    intentional: list[Any] = []
+    unexpected: list[Any] = []
+    for item in items:
+        text = _degradation_text(item).lower()
+        if any(marker in text for marker in INTENTIONAL_SKIP_MARKERS):
+            intentional.append(item)
+        else:
+            unexpected.append(item)
+    return intentional, unexpected
 
 
 def _stored_run_envelope(row: sqlite3.Row) -> dict[str, Any] | None:
@@ -706,6 +755,14 @@ def _audit_day(conn: sqlite3.Connection, day: str, repo_root: Path) -> dict[str,
         checks["artifact_panel"] = "missing"
         blockers.append("missing_panel_artifact_reference")
 
+    # `degradations` above is left untouched -- it stays the full,
+    # unfiltered record and none of the blocker/status judgment above changes.
+    # This split exists only to feed the degradation_rate metric in
+    # `_work_metrics`: see `_classify_degradations` for why the pipeline's own
+    # --no-llm / --no-shadow quota-discipline skips must not count as runtime
+    # degradations.
+    intentional_skips, unexpected_degradations = _classify_degradations(degradations)
+
     blockers = list(dict.fromkeys(blockers))
     status = "complete" if not blockers else "incomplete"
     return {
@@ -723,6 +780,8 @@ def _audit_day(conn: sqlite3.Connection, day: str, repo_root: Path) -> dict[str,
         "artifacts": artifacts,
         "panel_work_metrics": panel_work_metrics,
         "degradations": degradations,
+        "intentional_skips": intentional_skips,
+        "unexpected_degradations": unexpected_degradations,
         "stale": stale,
         "blockers": blockers,
     }
@@ -765,7 +824,21 @@ def _work_metrics(days: list[dict[str, Any]], close_confirmed_days: int) -> dict
             "failure_recovery": unavailable,
         }
     complete_days = sum(1 for day in days if day["status"] == "complete")
-    degradation_days = sum(1 for day in days if day["degradations"])
+    # degradation_rate counts only days that have at least one *unexpected*
+    # degradation. A day whose only degradations are the pipeline's own
+    # LLM-quota discipline (m63 postmarket --no-llm, test2 --no-shadow) is not
+    # a degraded day for this metric -- those are deliberate operating
+    # decisions, not runtime failures. Counting them would keep this
+    # acceptance metric permanently ~0.8-1.0 for a reason that is "working as
+    # designed", and would hide a real degradation appearing alongside them.
+    # Nothing is dropped: the full list still lives in each day's
+    # `degradations` field, and the intentional ones are also visible in
+    # `intentional_skips`; only the rate is reclassified. See
+    # `_classify_degradations` / `INTENTIONAL_SKIP_MARKERS`.
+    degraded_days = sum(1 for day in days if day.get("unexpected_degradations"))
+    intentional_skip_days = sum(
+        1 for day in days if day.get("intentional_skips") and not day.get("unexpected_degradations")
+    )
     metrics = {
         "completeness_rate": _metric(
             "available",
@@ -774,8 +847,12 @@ def _work_metrics(days: list[dict[str, Any]], close_confirmed_days: int) -> dict
         ),
         "degradation_rate": _metric(
             "available",
-            _rate(degradation_days, close_confirmed_days),
-            evidence={"degraded_days": degradation_days, "close_confirmed_days": close_confirmed_days},
+            _rate(degraded_days, close_confirmed_days),
+            evidence={
+                "degraded_days": degraded_days,
+                "intentional_skip_days": intentional_skip_days,
+                "close_confirmed_days": close_confirmed_days,
+            },
         ),
     }
     duplicate_inputs, missing_duplicate = _aggregate_panel_input(days, "duplicate_suppression")

@@ -335,6 +335,21 @@ def _run(repo: Path, runtime: Path, **stub_overrides: str) -> subprocess.Complet
     )
 
 
+def _run_args(
+    repo: Path, runtime: Path, argv: list[str], **stub_overrides: str
+) -> subprocess.CompletedProcess:
+    """Like `_run` but with a caller-controlled argv (for --one-loop-only /
+    positional-order scenarios) instead of the hardcoded `[FAKE_DAY]`."""
+    return subprocess.run(
+        ["bash", str(RUNNER), *argv],
+        cwd=ROOT,
+        env=_scenario_env(repo, runtime, **stub_overrides),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 def test_scenario_all_green_reports_pipeline_done(tmp_path: Path) -> None:
     repo = _build_fake_repo(tmp_path)
     proc = _run(repo, tmp_path / "runtime")
@@ -407,3 +422,133 @@ def test_scenario_non_today_date_rejected_before_any_step(tmp_path: Path) -> Non
     # No step ever ran: no log files, no lock, no state file.
     assert not (repo / "paper_trading" / "_test2_20200101.log").exists()
     assert not (tmp_path / "runtime" / "pipeline.lock").exists()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# --one-loop-only: run Track A (①②③⑧) only, never touch Track B (④⑤⑥⑦).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_scenario_one_loop_only_all_green_skips_track_b(tmp_path: Path) -> None:
+    repo = _build_fake_repo(tmp_path)
+    proc = _run_args(repo, tmp_path / "runtime", [FAKE_DAY, "--one-loop-only"])
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ONE_LOOP_ONLY_DONE" in proc.stdout
+    assert "ONE_LOOP_COMPLETE" in proc.stdout
+    assert "PIPELINE_DONE" not in proc.stdout
+    assert "PIPELINE_PARTIAL" not in proc.stdout
+    assert "PIPELINE_ABORTED" not in proc.stdout
+
+    # Track B never ran: none of its stubs left artifacts or log lines behind.
+    stamp = FAKE_DAY.replace("-", "")
+    assert not (repo / "live_trading" / f"_live_broad_{stamp}.log").exists()
+    assert not (repo / "live_trading" / f"_live_subset_{FAKE_DAY}.json").exists()
+    assert not (repo / "paper_trading" / f"_longterm_labels_{stamp}.log").exists()
+    assert not (repo / "live_trading" / f"_live_deep_{stamp}.log").exists()
+    assert not (repo / "live_trading" / f"_live_deep_subset_{FAKE_DAY}.json").exists()
+    assert "④ 实盘广筛" not in proc.stdout
+    assert "⑤ 漏斗" not in proc.stdout
+    assert "⑥ 长期标签" not in proc.stdout
+    assert "子集深评" not in proc.stdout
+    assert "股票池 live 陈旧剔除" not in proc.stdout  # ④ stub's own output line
+
+    state = json.loads(
+        (repo / "paper_trading" / f"_run_state_{stamp}.json").read_text(encoding="utf-8")
+    )
+    assert state["status"] == "complete"
+    # Track B is recorded as intentionally not attempted, never "complete".
+    assert state["tracks"]["live"]["status"] != "complete"
+    assert "--one-loop-only" in state["tracks"]["live"]["message"]
+
+
+def test_scenario_one_loop_only_step1_incomplete_aborts_and_skips_ab(
+    tmp_path: Path,
+) -> None:
+    repo = _build_fake_repo(tmp_path)
+    proc = _run_args(
+        repo, tmp_path / "runtime", [FAKE_DAY, "--one-loop-only"], STUB_STEP1_COUNT="21"
+    )
+
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "PIPELINE_ABORTED" in proc.stdout
+    assert "PIPELINE_DONE" not in proc.stdout
+    assert "PIPELINE_PARTIAL" not in proc.stdout
+    assert "ONE_LOOP_ONLY_DONE" not in proc.stdout
+    assert "ONE_LOOP_COMPLETE" not in proc.stdout
+    assert "⑧ 跳过" in proc.stdout
+
+    # Track B still never ran, even though Track A failed.
+    stamp = FAKE_DAY.replace("-", "")
+    assert not (repo / "live_trading" / f"_live_broad_{stamp}.log").exists()
+
+
+def test_scenario_one_loop_only_rerun_appends_instead_of_truncating(
+    tmp_path: Path,
+) -> None:
+    repo = _build_fake_repo(tmp_path)
+    runtime = tmp_path / "runtime"
+    stamp = FAKE_DAY.replace("-", "")
+
+    summary_path = repo / "paper_trading" / f"_run_summary_{stamp}.md"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        "=== 明仓跑测试 2026-08-25 ===\nPREVIOUS_ATTEMPT_MARKER 21/25\n",
+        encoding="utf-8",
+    )
+
+    state_path = repo / "paper_trading" / f"_run_state_{stamp}.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "daily_pipeline.v1",
+                "date": FAKE_DAY,
+                "started_at": "2026-08-25T00:00:00+00:00",
+                "events": [
+                    {
+                        "at": "2026-08-25T00:00:00+00:00",
+                        "status": "aborted",
+                        "step": "01_test2",
+                        "message": "prior partial attempt",
+                    }
+                ],
+                "one_loop_status": "pending",
+                "tracks": {
+                    "one_loop": {
+                        "status": "aborted",
+                        "step": "01_test2",
+                        "message": "prior partial attempt",
+                        "updated_at": "2026-08-25T00:00:00+00:00",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    proc = _run_args(repo, runtime, [FAKE_DAY, "--one-loop-only"])
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "ONE_LOOP_ONLY_DONE" in proc.stdout
+
+    summary_text = summary_path.read_text(encoding="utf-8")
+    assert "PREVIOUS_ATTEMPT_MARKER 21/25" in summary_text
+    assert "重跑 Track A" in summary_text
+    assert "--one-loop-only" in summary_text
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    # Prior event history survived -- state is merged across the same date,
+    # never wiped by `rm -f` for this mode.
+    assert any(e["message"] == "prior partial attempt" for e in state["events"])
+
+
+def test_scenario_one_loop_only_flag_position_independent(tmp_path: Path) -> None:
+    repo_a = _build_fake_repo(tmp_path / "case-a")
+    proc_a = _run_args(repo_a, tmp_path / "runtime-a", ["--one-loop-only", FAKE_DAY])
+    assert proc_a.returncode == 0, proc_a.stdout + proc_a.stderr
+    assert "ONE_LOOP_ONLY_DONE" in proc_a.stdout
+
+    repo_b = _build_fake_repo(tmp_path / "case-b")
+    proc_b = _run_args(repo_b, tmp_path / "runtime-b", [FAKE_DAY, "--one-loop-only"])
+    assert proc_b.returncode == 0, proc_b.stdout + proc_b.stderr
+    assert "ONE_LOOP_ONLY_DONE" in proc_b.stdout

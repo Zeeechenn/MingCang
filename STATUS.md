@@ -101,10 +101,17 @@ snapshot it found:
   the audit clock); it is diagnostic debt and was not rewritten or reconciled;
 - 33 persisted `adjustment_basis_drift` events across 17 symbols, led by 601899
   (9) and 600547 (6); no price history or trading ledger was rebased;
-- contract degradation rate 0.8 because four of five days record 16 intentional
-  `--no-llm` / `--no-shadow` skip observations; the same five-day evidence has
-  zero unexpected degradation reasons, so the contract rate must not be read as
-  an 80% runtime failure rate;
+- the 20-day continuity contract's `degradation_rate` metric itself now excludes
+  the pipeline's own `--no-llm` / `--no-shadow` quota-discipline skips (see
+  `INTENTIONAL_SKIP_MARKERS` / `_classify_degradations` in
+  `backend/ops/one_loop_continuity.py`, and `CHANGELOG.md`); each day's
+  `degradations` field stays the full unfiltered record, split into
+  `intentional_skips` and `unexpected_degradations`, and only the latter counts
+  toward the rate. Verified on 2026-08-25 against a fresh consistent snapshot of
+  the production database: the rate reads `0.0` with evidence
+  `{degraded_days: 0, intentional_skip_days: 4, close_confirmed_days: 5}`,
+  where it previously read `0.8`. The five days' gate verdicts are unchanged
+  (all `complete`, 5/20) — this batch changed a metric's meaning, not the gate;
 - human review is 0/88 created-on-day observations. Review freshness is
   88 fresh / 546 stale / 634 total **cross-day backlog observations**, not 634
   unique queue items; both remain follow-up work and do not redefine a complete

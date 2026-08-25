@@ -11,8 +11,14 @@
 #
 # --no-shadow、m63 的 --no-llm、标签不带 --force 且先于深评等额度纪律固定在这里。
 #
-# 用法：bash scripts/run_daily_tests.sh [YYYY-MM-DD]
-#   不传日期 = 今天。收盘后跑（数据必须已定盘）。
+# 用法：bash scripts/run_daily_tests.sh [YYYY-MM-DD] [--one-loop-only]
+#   不传日期 = 今天。收盘后跑（数据必须已定盘）。参数位置无关。
+#   --one-loop-only：只跑 Track A（①②③⑧），完全不碰 Track B（④⑤⑥⑦，含⑥标签
+#   120 次预算和⑦ multi-agent 深评）。用于 20 日门当天没过、需要同日重跑到过
+#   门为止，又不想为此重烧 Track B 的 LLM 额度。成功打 ONE_LOOP_ONLY_DONE
+#   （exit 0），失败打 PIPELINE_ABORTED（exit 1）——两种情况都绝不打
+#   PIPELINE_DONE：Track B 是有意没跑，不是跑完了。此模式下 summary 追加不
+#   截断、state 不删，前一次尝试的记录留在文件里（同日重跑安全）。
 #   ①④⑥⑦ 的跑手（test2_signal_runner.py / build_longterm_labels.py）没有
 #   --date 参数，永远只跑「今天」；传历史日期会在这里直接拒绝（exit 2），
 #   补跑历史日请单独手工处理。仅测试/开发场景可设 MINGCANG_ALLOW_NON_TODAY=1
@@ -23,7 +29,19 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${MINGCANG_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 cd "$REPO" || exit 1
 PY="${MINGCANG_PYTHON:-$REPO/.venv/bin/python3}"
-DAY="${1:-$(date +%F)}"
+ONE_LOOP_ONLY=false
+DAY=""
+for arg in "$@"; do
+  case "$arg" in
+    --one-loop-only)
+      ONE_LOOP_ONLY=true
+      ;;
+    *)
+      [ -z "$DAY" ] && DAY="$arg"
+      ;;
+  esac
+done
+DAY="${DAY:-$(date +%F)}"
 [[ "$DAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
   || { echo "PIPELINE_ABORTED: 日期必须为 YYYY-MM-DD"; exit 2; }
 if [ "$DAY" != "$(date +%F)" ] && [ "${MINGCANG_ALLOW_NON_TODAY:-0}" != "1" ]; then
@@ -144,8 +162,22 @@ mark_track_failed() {
   write_state aborted "$2" --track "$1" >/dev/null 2>&1 || true
 }
 
-: > "$SUMMARY"
-rm -f "$STATE"
+# 把某条 track 标成「有意未尝试」（不是失败）：--one-loop-only 模式下 Track B
+# 完全没跑。update_daily_pipeline_state.py 的 --status 只接受
+# running|aborted|complete，没有专门语义——complete 会误导成「跑完了」，所以
+# 沿用实盘数据门未过时 skip 的既有写法：status 留 running（不设
+# finished_at），靠 message 讲清楚是主动跳过、不是失败也不是还在跑。
+mark_track_not_attempted() {
+  write_state running "$2" --track "$1" >/dev/null 2>&1 || true
+}
+
+if $ONE_LOOP_ONLY; then
+  # 同日重跑保护：不截断 summary、不删 state，前一次尝试的记录留在文件里。
+  say "=== 重跑 Track A（--one-loop-only） $(date +%H:%M:%S) ==="
+else
+  : > "$SUMMARY"
+  rm -f "$STATE"
+fi
 say "=== 明仓跑测试 $DAY ==="
 write_state running "pipeline started" >/dev/null || fail "无法初始化结构化运行状态：$STATE"
 
@@ -278,6 +310,15 @@ abort_track_b() {
   say "⛔ $1"
 }
 
+if $ONE_LOOP_ONLY; then
+  # --one-loop-only：Track B（④⑤⑥⑦）有意完全不跑，省下它的 LLM 额度
+  # （⑥ 120 次预算 + ⑦ multi-agent 深评）。不是失败，是没尝试。
+  CURRENT_STEP="track_b_not_attempted"
+  say "④⑤⑥⑦ 跳过：--one-loop-only 只跑 Track A，Track B 本轮未尝试"
+  mark_track_not_attempted live "Track B (④⑤⑥⑦) not attempted: --one-loop-only 主动跳过，非失败"
+  TRACK_B_FINAL="not_attempted"
+else
+
 L4="live_trading/_live_broad_${STAMP}.log"
 begin_step "04_live_broad" "live broad scan" "live"
 say "④ 实盘广筛（56 支，--no-multi-agent --no-shadow）"
@@ -396,6 +437,8 @@ else
   TRACK_B_FINAL="ok"
 fi
 
+fi  # end: else branch of `if $ONE_LOOP_ONLY` (Track B execution)
+
 # ── 汇总 ────────────────────────────────────────────────────────────────
 TOTAL=0
 for f in "$L1" "$L4" "$L6" "$L7"; do
@@ -415,13 +458,30 @@ if [ "$TRACK_B_FINAL" = ok ]; then
   say "Track B（实盘 ④⑤⑥⑦）：✅ 成功"
 elif [ "$TRACK_B_FINAL" = skipped ]; then
   say "Track B（实盘 ④⑤⑥⑦）：⏭ skipped — 行情门未过（见 ${GATE_JSON:-无}）"
+elif [ "$TRACK_B_FINAL" = not_attempted ]; then
+  say "Track B（实盘 ④⑤⑥⑦）：⏭ 未尝试 — --one-loop-only 主动跳过"
 else
   say "Track B（实盘 ④⑤⑥⑦）：⛔ aborted — ${TRACK_B_REASON:-见上方日志}"
 fi
 
 CURRENT_STEP="done"
 say "产物：$L1 / $L4 / $L6 / $L7 / $L8 / $SUB / $DEEP / $STATE"
-if [ "$TRACK_A_FINAL" = ok ] && [ "$TRACK_B_FINAL" = ok ]; then
+if $ONE_LOOP_ONLY; then
+  # 这个模式下 Track B 是有意未尝试，绝不能打 PIPELINE_DONE（那意味着两条
+  # track 都跑完了）。也不复用 PIPELINE_PARTIAL：那表示「有东西失败了」，
+  # 这里是「没打算跑」，语义不同。
+  if [ "$TRACK_A_FINAL" = ok ]; then
+    write_state complete "one-loop-only run finished (Track B not attempted: --one-loop-only)" \
+      --llm-calls "$TOTAL" >/dev/null || fail "无法写入最终结构化状态"
+    say "ONE_LOOP_ONLY_DONE"
+    exit 0
+  else
+    write_state aborted "PIPELINE_ABORTED: track A=$TRACK_A_FINAL (${TRACK_A_REASON:-见日志}); track B=not_attempted (--one-loop-only)" \
+      --llm-calls "$TOTAL" >/dev/null || fail "无法写入最终结构化状态"
+    say "PIPELINE_ABORTED"
+    exit 1
+  fi
+elif [ "$TRACK_A_FINAL" = ok ] && [ "$TRACK_B_FINAL" = ok ]; then
   write_state complete "pipeline finished" --llm-calls "$TOTAL" >/dev/null \
     || fail "无法写入最终结构化状态"
   say "PIPELINE_DONE"

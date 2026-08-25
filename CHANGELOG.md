@@ -63,6 +63,20 @@
 
 ### Changed / 变更
 
+- **One Loop 连续性合同 `degradation_rate` 口径改为只数「非预期降级」**：
+  `backend/ops/one_loop_continuity.py` 新增 `INTENTIONAL_SKIP_MARKERS =
+  ("--no-llm", "--no_llm", "--no-shadow", "--no_shadow")`（与
+  `scripts/audit_runtime_followups.py` 里同名常量逐字节保持一致，测试钉死相等），
+  以及 `_classify_degradations`。原因：流水线自身的额度纪律（m63 盘后固定
+  `--no-llm`、test2 固定 `--no-shadow`）会在 `degradations` 里写下自己跳过了什么，
+  这是有意的运行决策，不是运行时降级；把它计入 `degradation_rate` 会让这个
+  20 日验收指标恒为 0.8~1.0，真降级出现时反而被这堆有意跳过淹没、指标纹丝不动。
+  现在每天新增 `intentional_skips` / `unexpected_degradations` 两个字段，
+  `degradations` 全量字段本身不变（有意跳过依旧完整可见，只是不再计入比率）；
+  `degradation_rate` 只数 `unexpected_degradations` 非空的天数，evidence 变为
+  `{"degraded_days", "intentional_skip_days", "close_confirmed_days"}`。
+  不影响任何 blocker / status / close_confirmed 判据，20 日门的
+  complete/incomplete 判定不变。
 - **M57 记忆决策上下文转为 fail-closed 影子模式**：新增
   `MEMORY_DECISION_CONTEXT_ENABLED=false`，默认让 chat、stock/project context、盘后聚合、
   research constraints、watchtower、M59 与长期 track analyst 收不到记忆正文；聚合器和约束层
