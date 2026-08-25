@@ -12,7 +12,8 @@
 #   不传日期 = 今天。收盘后跑（数据必须已定盘）。
 set -uo pipefail
 
-REPO="/Users/zeeechenn/mingcang"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO="${MINGCANG_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 cd "$REPO" || exit 1
 PY="$REPO/.venv/bin/python3"
 DAY="${1:-$(date +%F)}"

@@ -89,8 +89,8 @@
   记 notes 不再连坐扣掉这一天；没选出时它们照旧作为 blocker 解释失败原因。
 
 - **提交后暴露的 9 处发布卫生违规**：`backend/backtest/exit_sweep_m58.py`、
-  `backend/portfolio/exit_shadow.py`、`backend/tools/memory_backtest.py` 把 `/private/tmp/...`
-  硬编码为默认产物路径，`docs/dev/README.md` 直接写了 owner 本机绝对路径
+  `backend/portfolio/exit_shadow.py`、`backend/tools/memory_backtest.py` 把平台临时目录
+  硬编码为默认产物路径，`docs/dev/README.md` 直接写了个人本机绝对路径示例
   （违反 ROADMAP §1「本地绝对路径不写入版本库」）。这些文件此前一直未提交，
   release-hygiene 扫的是 tracked 文件所以完全看不见。现改为 `backend.config.scratch_output_dir()`
   （默认平台临时目录，`MINGCANG_SCRATCH_DIR` 可覆盖），文档改为说明性描述不写路径。
