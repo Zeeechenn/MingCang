@@ -857,3 +857,107 @@ def test_continuity_fails_closed_when_only_a_research_rerun_exists(tmp_path: Pat
     first_day = result["days"][0]
     assert "missing_signal_batch" in first_day["blockers"]
     assert result["status"] == "incomplete"
+
+
+def _seed_failed_rerun(
+    conn: sqlite3.Connection,
+    repo_root: Path,
+    day: str,
+    *,
+    run_id: str,
+    batch_time: str,
+) -> None:
+    """An earlier attempt that lost its data source mid-batch and said so."""
+    batch = _seed_signals(
+        conn, day, batch_id=f"{day}T{batch_time}+08:00", symbols=1, run_id=run_id
+    )
+    envelope = _envelope(
+        day,
+        batch,
+        str(repo_root / "panels" / f"panel-{day}.json"),
+        entrypoint="test2_signal_runner",
+        status="incomplete",
+        run_id=run_id,
+    )
+    _seed_job(
+        conn, day, envelope, str(repo_root / "panels" / f"panel-{day}.json"),
+        job_name="test2_signal_runner",
+    )
+
+
+def test_continuity_lets_a_self_reported_failed_batch_yield_to_the_complete_one(
+    tmp_path: Path,
+) -> None:
+    """数据源故障后重跑是常态（2026-08-25 连跑三轮才 25/25）。
+
+    先前那轮自己在 envelope 里写了 failed>0，它是被取代的残留，不该和达标批次
+    并列竞争当天的官方批次，把一扇实际已锁上的门报成断的。
+    """
+    days = _days(20)
+    db_path, repo_root, conn = _seed_days(tmp_path, days)
+    day = days[0]
+    conn.execute(
+        "UPDATE signals SET run_id = ? WHERE data_timestamp = ?",
+        (f"signal-{day}", day),
+    )
+    _seed_failed_rerun(conn, repo_root, day, run_id=f"failed-{day}", batch_time="16:29:00")
+    conn.commit()
+    conn.close()
+
+    result = audit_one_loop_continuity(
+        db_path=db_path,
+        implementation_since=days[0],
+        repo_root=repo_root,
+    )
+
+    first_day = result["days"][0]
+    assert "superseded_signal_batches:1" in first_day["notes"]
+    assert first_day["checks"]["signal_batch_identity"] == "unique"
+    assert first_day["blockers"] == []
+    assert first_day["status"] == "complete"
+
+
+def test_continuity_still_fails_closed_when_every_batch_reported_failure(
+    tmp_path: Path,
+) -> None:
+    """不放水的边界：当天没有任何一轮达标时，排除逻辑必须整个让开。
+
+    否则「全都没跑完」会被误读成「有一个干净批次」，门就被凭空放行了。
+    """
+    days = _days(20)
+    db_path, repo_root, conn = _seed_days(tmp_path, days)
+    day = days[0]
+    conn.execute(
+        "UPDATE signals SET run_id = ? WHERE data_timestamp = ?",
+        (f"signal-{day}", day),
+    )
+    # 当天唯一那轮也自报未达标
+    row = conn.execute(
+        "SELECT output_summary_json FROM job_runs WHERE run_id = ?", (f"signal-{day}",)
+    ).fetchone()
+    envelope = json.loads(row[0])["run_envelope"]
+    envelope["status"] = "incomplete"
+    envelope["completed"] = {"symbols": 1}
+    envelope["failed"] = {"symbols": 1}
+    conn.execute(
+        "UPDATE job_runs SET output_summary_json = ?, input_coverage_json = ? WHERE run_id = ?",
+        (
+            json.dumps({"run_envelope": envelope}),
+            json.dumps({"run_envelope": envelope}),
+            f"signal-{day}",
+        ),
+    )
+    _seed_failed_rerun(conn, repo_root, day, run_id=f"failed-{day}", batch_time="16:29:00")
+    conn.commit()
+    conn.close()
+
+    result = audit_one_loop_continuity(
+        db_path=db_path,
+        implementation_since=days[0],
+        repo_root=repo_root,
+    )
+
+    first_day = result["days"][0]
+    assert "superseded_signal_batches:1" not in first_day["notes"]
+    assert first_day["status"] == "incomplete"
+    assert result["status"] == "incomplete"
