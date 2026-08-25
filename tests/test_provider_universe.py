@@ -72,6 +72,8 @@ def test_fetch_daily_registers_cn_multi_source_chain(monkeypatch):
 
     monkeypatch.setattr(market.settings, "tickflow_enabled", False)
     monkeypatch.setattr(market.settings, "tickflow_api_key", "")
+    monkeypatch.setattr(market.settings, "ifind_mcp_enabled", False)
+    monkeypatch.setattr(market.settings, "ifind_mcp_token", "")
     monkeypatch.setattr(market, "_efinance_available", lambda: True)
     monkeypatch.setattr(market, "fetch_daily_with_fallback", fake_fetch)
 
@@ -96,6 +98,8 @@ def test_fetch_daily_skips_optional_efinance_when_not_installed(monkeypatch):
     reset_provider_registry()
     monkeypatch.setattr(market.settings, "tickflow_enabled", False)
     monkeypatch.setattr(market.settings, "tickflow_api_key", "")
+    monkeypatch.setattr(market.settings, "ifind_mcp_enabled", False)
+    monkeypatch.setattr(market.settings, "ifind_mcp_token", "")
     monkeypatch.setattr(market, "_efinance_available", lambda: False)
 
     def fake_fetch(symbol, market_name, days):

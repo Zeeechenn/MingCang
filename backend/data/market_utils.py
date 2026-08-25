@@ -19,6 +19,7 @@ DAILY_PROVIDER_ADJUSTMENTS = {
     "eastmoney_cn": "qfq",
     "akshare_em_cn": "qfq",
     "tushare_qfq_cn": "qfq",
+    "ifind_cn": "qfq",
     "yfinance_hk": "auto_adjust",
     "yfinance_us": "auto_adjust",
 }

@@ -19,6 +19,7 @@ from backend.data.market_sources import (  # noqa: F401 - compatibility facade r
     fetch_cn_daily_akshare_sina,
     fetch_cn_daily_akshare_tx,
     fetch_cn_daily_efinance,
+    fetch_cn_daily_ifind,
     fetch_cn_daily_tickflow,
     fetch_cn_daily_tushare,
     fetch_cn_daily_tushare_qfq,
@@ -71,6 +72,10 @@ def register_default_market_providers() -> None:
     register_daily_provider("akshare_em_cn", {"CN"}, fetch_cn_daily_akshare_em, priority=30, cooldown_seconds=60)
     if settings.tushare_qfq_enabled and settings.tushare_token:
         register_daily_provider("tushare_qfq_cn", {"CN"}, fetch_cn_daily_tushare_qfq, priority=50, cooldown_seconds=120)
+    # iFinD 是**兜底**：QPS=1 且单次约 10s，做主源会把整池取数从数分钟拖到十几分钟，
+    # 因此 priority 排在所有免费源之后，只在它们全挂时补位（无 token 的部署自动跳过）。
+    if settings.ifind_mcp_enabled and settings.ifind_mcp_token:
+        register_daily_provider("ifind_cn", {"CN"}, fetch_cn_daily_ifind, priority=60, cooldown_seconds=120)
     # M19.2: yfinance 对 A 股是后复权含分红再投，与其余源 qfq 口径冲突，不进入 CN fallback。
     # akshare_tx 当前返回结构缺 volume，暂不进入 CN 生产 fallback；保留函数供手动调试。
     register_daily_provider("yfinance_hk", {"HK"}, fetch_hk_daily, priority=90, cooldown_seconds=120)

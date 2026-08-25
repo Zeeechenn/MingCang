@@ -161,6 +161,11 @@ def extract_ifind_answer(payload: Any) -> str:
         nested = data.get("data")
         if isinstance(nested, dict) and isinstance(nested.get("answer"), str):
             return nested["answer"]
+        # 生产响应里 `data` 已被 _parse_first_json 解开一层，answer 直接落在顶层。
+        # 缺这一支就会退回 raw_text，而那里的表格是转义的 \n 字面量，解析不出表格
+        # ——线上表现为 extract_stock_daily_table() 对真实响应恒返回空 DataFrame。
+        if isinstance(data.get("answer"), str):
+            return data["answer"]
     return str(parsed.get("raw_text") or "") if isinstance(parsed, dict) else ""
 
 
