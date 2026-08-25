@@ -31,9 +31,9 @@ Full-market promotion remains explicitly on HOLD (v0.7.0).
 | completed history | v0.3.3–v0.7.0 and completed historical records: see `CHANGELOG.md` and Git history; the pre-One-Loop roadmap snapshot is stored outside the repo governance archive |
 | paper trading test2 | v1 ended 2026-07-02 (10 trades, 60% win, +19.53% weighted); **v2 started 2026-07-03**: exit params unchanged per M21.4 decision C (single-variable), direction-only evidence as before. **Boundary override 2026-07-06 (owner directive)**: LLM treatment arm may exceed ALL hard boundaries — entry threshold 25, per-stock 15%, per-sector 30%, **and total 80% ceiling** — with mandatory per-crossing rationale logging; mechanical control arm (`test2_ab_models.py`) keeps 25/15/30/80 fixed. Scoped to test2 v2 LLM arm ONLY — `config.py` global 15/30/80, copilot shadow, real-position validation, `risk_manager.py` unchanged. No mechanical floor under ~20% drawdown target now; rationale in `paper_trading/test2.md` §规则. Note: this adds a variable to v2, so v2 is no longer a clean single-variable exit-only continuation |
 | remote agent mode | opt-in only; read-only by default |
-| active project program | **MingCang One Loop** implementation stages 0/1/3/4/5 are complete in the current worktree; the unified run/batch contract and continuity auditor are implemented, but the mandatory post-implementation evidence gate is only **0/20 close-confirmed days**, so the governance cycle is not complete |
+| active project program | **MingCang One Loop** implementation stages 0/1/3/4/5 are complete; the mandatory post-implementation evidence gate is **5/20 close-confirmed days**, so the governance cycle is not complete |
 | repository structure | core and workflows have no implementation dependency on `backend.tools`; canonical domain owners and compatibility facades are enforced by architecture tests, while intentional compatibility entrypoints remain for a release-cycle review |
-| One Loop runtime truth | real SQLite audit on 2026-08-19 found latest prices at 2026-08-18 (82 symbols) and latest signals at 2026-08-18 (81 rows across two timestamp batches), but latest persisted `job_runs` evidence was still the 2026-07-16 smoke run. Root cause was writer-side, not a broken ledger: signals carried no run identity and `save_signal` required no run context, so any ad-hoc call bypassed the tracked facade silently. Continuity across the 35 close-confirmed days since 2026-07-01 was 0 complete (`missing_authoritative_complete_run` 35/35, `missing_authoritative_signal_run` 35/35, `missing_panel_artifact_reference` 35/35, `missing_signal_batch` 22/35, `ambiguous_signal_batches` 12/35). `signals.run_id` + an ambient RunContext now bind every tracked write, an untracked official write records a `untracked_signal_write` degradation (fail-closed under `REQUIRE_SIGNAL_RUN_CONTEXT=true`, default off), and the auditor resolves same-day duplicates by explicit binding. Historical rows stay unattributable by design, so the 20-day window starts from the first tracked close-confirmed day. The panel-artifact chain was verified end to end on a production-database copy and is sound; its failure mode was ordering — a mid-session postmarket run produced a committed panel stamped with the current trade date while holding the previous session's data, and the correct post-close rerun then died as `run_selection_ambiguous`. Runs now declare `close_confirmed`; the selector and auditor exclude pre-close runs so a post-close rerun is the unique authoritative run, and the superseded run is a note rather than a blocker. On that copy the first `status=complete` One Loop day was produced (completeness_rate 1/1). Two close-confirmed runs on one day still fail closed. Owner ruling 2026-08-19: the default test2 25-name pool is the day's official signal batch; runner invocations over any other universe are already flagged non-authoritative and are excluded from batch identity while staying visible as evidence, so the existing daily test routine no longer collides with the one-batch-per-day invariant; no current day may be counted until an authoritative complete RunEnvelope, exact signal batch, committed eight-card panel, and work metrics all agree |
+| One Loop runtime truth | immutable audit on 2026-08-25 counts 2026-08-19, 20, 21, 24 and 25 as five complete close-confirmed days. Each has one selected authoritative RunEnvelope, exact official signal batch and committed eight-card panel; the current status is `insufficient_days` at **5/20**, not a broken window. The 2026-08-25 official batch is the final 25/25 run; two earlier partial attempts remain visible as `superseded_signal_batches:2`. The daily runner now snapshots SQLite with `backup()` so committed WAL rows are included, and it only emits `PIPELINE_DONE` when the target day and every later step succeed |
 | M68 news pyramid | **continuous mirror + independent test2-v2 C arm are wired, not production direction authority**: M63 and the local default-25 `test2_signal_runner` share one post-test2 follow-up (`M54 accrual → M68 shadow → A/B/C compare`). The test2 hook runs only after a 25/25 successful batch whose `data_date` is the current run date; stale/partial/custom/no-LLM batches fail closed. Original test2 A/B state, official `signals`, weights, stops and positions remain untouched. First real C day is pending the next complete close-confirmed test2 session; no historical pyramid backfill is allowed |
 | memory outcome loop | **operationally repaired, then isolated as shadow-only on 2026-08-18**: 1,718 of 2,019 judgments have validated 1d/3d/5d/10d outcomes (85.09% raw coverage; 93.27% among resolvable judgments). Maintenance reversibly archived 177 mature judgments whose exact observation-day price does not exist. All 2,337 active rows match the recall index by exact ID set (missing 0, stale 0); mature unresolved judgments and automatic `trusted` atoms are both 0. Because corrected complete-batch PIT A/B did not show robust P&L/stop benefit, `MEMORY_DECISION_CONTEXT_ENABLED=false` is the fail-closed default: chat, stock/project context, postmarket aggregation, research constraints, watchtower, M59 and the long-term track analyst receive no memory text. Outcome accrual, health/index maintenance, explicit `mingcang_memory_context` lookup and PIT backtests remain operational. The switch is restart/env-only rather than Admin-editable; production weights/stops/positions/orders remain unchanged. |
 
@@ -64,7 +64,7 @@ Stop loss / take profit remain ATR-derived project rules, not LLM predictions.
 ## Active Work
 
 `docs/ROADMAP.md` is the single source of truth for sequencing. Current program
-state on 2026-08-19:
+state on 2026-08-25:
 
 - Baseline/conflict inventory and the pre-One-Loop roadmap archive are complete;
   the production database was only audited through an immutable copy and its hash
@@ -74,7 +74,7 @@ state on 2026-08-19:
 - Scheduler, manual CLI and test2-compatible paths now emit an explicit
   `run_envelope.v1`; consumers and `/api/system/health` reject legacy, partial,
   ambiguous, stale, custom-DB and non-authoritative batches. The implementation is
-  complete, but the real 20-day acceptance window is still 0/20.
+  complete, and the real 20-day acceptance window is currently 5/20.
 - Workflow-to-tool implementation dependencies are zero. Canonical domain modules,
   lifecycle registry metadata and compatibility facades are covered by boundary
   tests.
@@ -90,6 +90,28 @@ state on 2026-08-19:
   temporal rather than another implementation batch: collect 20 qualifying
   close-confirmed days, investigate any recovery blockers, rerun the full gate, and
   obtain explicit user confirmation before declaring One Loop complete.
+
+## Operational Follow-ups
+
+The read-only `scripts/audit_runtime_followups.py` report separates operational
+cleanup from the 20-day continuity contract. Against the 2026-08-25 immutable
+snapshot it found:
+
+- one `m63_postmarket` JobRun left `running` since 2026-08-20 (about 116 hours at
+  the audit clock); it is diagnostic debt and was not rewritten or reconciled;
+- 33 persisted `adjustment_basis_drift` events across 17 symbols, led by 601899
+  (9) and 600547 (6); no price history or trading ledger was rebased;
+- contract degradation rate 0.8 because four of five days record 16 intentional
+  `--no-llm` / `--no-shadow` skip observations; the same five-day evidence has
+  zero unexpected degradation reasons, so the contract rate must not be read as
+  an 80% runtime failure rate;
+- human review is 0/88 created-on-day observations. Review freshness is
+  88 fresh / 546 stale / 634 total **cross-day backlog observations**, not 634
+  unique queue items; both remain follow-up work and do not redefine a complete
+  RunEnvelope or waive the 20-day gate.
+
+The diagnostic requires an explicit immutable database copy and can optionally
+consume the continuity JSON; it never repairs the ledger, queue or prices.
 
 ## Validation Snapshot
 
@@ -134,6 +156,17 @@ checks and 14 mobile checks, including the Daily entry, with zero console or pag
 errors. Strict MkDocs, release consistency and diff checks also passed. This is
 worktree evidence, not a published release or a substitute for the open 20-day
 continuity gate.
+
+Current daily-pipeline hardening verification (2026-08-25) used an isolated
+worktree, temporary SQLite database/caches, and a temporary copy of local-only
+paper-trading Python fixtures. Backend pytest passed `1983 / 5 skipped`; Ruff,
+release hygiene (764 present tracked files), document authority and mypy (364
+source files, 0 errors) are green. Frontend TypeScript, 37 Vitest checks across
+15 files, production build and zero-warning ESLint passed. Browser smoke passed
+18 desktop/live-source checks and 14 mobile checks with no console or page
+errors. The live database hash was unchanged across the immutable SQLite backup
+and operational audits. This is local worktree evidence, not a published release
+or a substitute for the open 5/20 continuity gate.
 
 Memory P&L follow-up (2026-08-18): immutable-snapshot PIT replay over the 25-name
 test2 pool now selects one latest **complete 25/25 batch** per close-confirmed

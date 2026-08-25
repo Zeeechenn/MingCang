@@ -15,13 +15,17 @@
   custom-DB 与 non-authoritative 证据 fail-closed。新增固定八卡盘后面板 API/前端入口、
   与 JobRun 绑定的 pending→committed 证据产物、以及只读 immutable 的 20 日连续性审计器。
   结构侧把 workflow→tool 实现依赖清零并保留兼容 facade；文档以 `docs_public/` 为公开
-  唯一源，关闭计划移至仓库外治理档案。真实实施后连续运行目前为 0/20，因此治理周期
+  唯一源，关闭计划移至仓库外治理档案。真实实施后连续运行目前为 5/20，因此治理周期
   尚未完成，也没有生产能力晋升或发布。
 
 - **One Loop shadow-domain contracts**：在既有 research/evidence/notification/event-risk/
   portfolio owner 下加入 ResearchCase 情景与证伪条件、Run Card/PIT、通知去重影子合同、
   事件风险方向隔离及出场裁决，不建立平行框架。预注册锁定出场样本保留 baseline；四个
   替代方案均更差且未过最大回撤门，未修改正式 signal、position、weight、stop 或订单边界。
+
+- **只读运行跟进审计**：新增 `scripts/audit_runtime_followups.py`，只接受显式 SQLite
+  副本并以 `mode=ro&immutable=1` 打开；独立报告陈旧 `running` JobRun、已落账复权漂移、
+  有意额度跳过与意外降级，以及人工复核的跨日观测口径，不修改 One Loop 完整批次合同。
 
 - **MingCang One Loop governance plan**：`docs/ROADMAP.md` 现为唯一活跃的
   项目级计划，统一承接仓库结构、完成批次合同、日常编排、能力生命周期、单一盘后面板、
@@ -77,6 +81,17 @@
   + 有效 key 即恢复；`deep_research` 的 provider 选择同步改为在停用时直接落到 tavily。
 
 ### Fixed / 修复
+
+- **每日测试流水线改为 fail-closed**：保留原八步顺序和参数，但仓库根目录不再绑定个人
+  路径；同一时间只允许一个实例。One Loop 审计快照由裸复制改为 SQLite `backup()`，会
+  纳入 WAL 中已提交的最新行且不 checkpoint 源库；目标日缺失或不完整、任一步非零退出、
+  配额熔断都会写入原子 `daily_pipeline.v1` 状态并以 `PIPELINE_ABORTED` 结束，只有八步全部
+  成功才输出 `PIPELINE_DONE`。第 1 步的实际 Claude 调用数按日志记账，不再错误宣称为零。
+
+- **提交审查缺口**：iFinD 新建 client 现在共享进程内线程安全的 QPS 门，避免逐 client
+  重置限速；One Loop 对缺失或不一致的 `expected/completed/failed` 计数 fail-closed；
+  连续性审计 CLI 可从任意当前目录直接执行。新增顺序/并发限速、partial envelope、裸 CLI、
+  WAL 快照、并发 runner 和故障注入回归测试。
 
 - **当日官方信号批次口径（owner 2026-08-19 裁决：test2 默认 25 支池为官方）**：日常跑测试
   一天会调用 signal runner 2–3 次（test2 25 支 → 实盘广筛 → 子集深评），而 `signals.date` 是
