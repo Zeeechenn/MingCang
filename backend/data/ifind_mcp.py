@@ -269,9 +269,9 @@ def call_ifind_mcp_tool(
         }
 
 
-def extract_stock_daily_table(text: str) -> pd.DataFrame:
+def extract_stock_daily_table(payload: Any) -> pd.DataFrame:
     """Return a normalized single-day stock table when iFinD provides complete fields."""
-    tables = parse_markdown_tables(extract_ifind_answer(text))
+    tables = parse_markdown_tables(extract_ifind_answer(payload))
     if not tables:
         return pd.DataFrame()
     table = tables[0].copy()
