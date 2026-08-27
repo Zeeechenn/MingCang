@@ -8,11 +8,12 @@ MingCang is an agent-ready, local-first A/HK/US equity research workspace. It
 supports research, backtests, local validation, memory/context inspection, and
 code maintenance. It does not place real trades or provide financial advice.
 
-Current release surface: package/API/frontend versions are `0.7.1`; the latest
-documented release is `v0.7.1` — freshness fail-closed signal generation
-(`expected_trade_date` gate, stale symbols excluded before persist),
-timestamp-aware signal readers, persistent job-run ledger + runtime identity
-handshake, and the M68 news-pyramid production mirror (see `CHANGELOG.md`).
+Release-ready surface: package/API/frontend versions are `0.8.0`; the documented
+release candidate is `v0.8.0` — One Loop run contracts, the daily operator
+panel, continuity auditing, daily pipeline hardening, iFinD daily-bar fallback,
+signal run attribution, shadow-only memory routing, and adjustment basis drift
+detection (see `CHANGELOG.md`). Local exact-tree `make verify` passed on
+2026-08-27; hosted CI still must pass after push before publication is complete.
 Full-market promotion remains explicitly on HOLD (v0.7.0).
 
 ## Current State
@@ -131,13 +132,14 @@ MYPY_CACHE_DIR=/private/tmp/mingcang_mypy_cache \
 make verify PYTEST='.venv/bin/python -m pytest -p no:cacheprovider'
 ```
 
-Last recorded full-suite run (2026-07-16, v0.7.1 release gate): backend
-pytest 1827 passed / 5 skipped; ruff, release hygiene (732 files scanned) and
-mypy (333 source files, 0 errors) green; frontend typecheck, 32 Vitest checks
-across 14 files, production build, zero-warning ESLint, and Playwright smoke
-(desktop + mobile routes plus both live-source truth states, 32 checks) all
-green with no console or page errors. Release tags are published only after
-the matching GitHub CI jobs also pass on the exact release commit.
+Local exact-tree release gate (2026-08-27, v0.8.0 candidate) passed with
+`make verify` exit 0: backend pytest `2019 passed / 5 skipped / 2 warnings`;
+ruff; release hygiene with 52 allowlisted lines across 766 scanned files;
+document authority; mypy over 364 source files; frontend 15 test files / 37
+tests; production build (43 modules); zero-warning ESLint; and Playwright smoke
+covering 18 desktop/live checks plus 14 mobile checks with zero console or page
+errors. This is local release-prepared-tree evidence only. Hosted GitHub CI must
+still pass on the pushed release commit before publication is complete.
 
 Current M68 worktree verification (2026-07-15): an initialized isolated DB
 produced backend `1730 passed / 12 skipped`; ruff, release hygiene and mypy

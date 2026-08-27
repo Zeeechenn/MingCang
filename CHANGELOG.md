@@ -10,6 +10,16 @@
 
 ### Added / 新增
 
+### Changed / 变更
+
+### Fixed / 修复
+
+---
+
+## [v0.8.0] One Loop 运行合同与每日流水线加固 / One Loop run contract & daily pipeline hardening（2026-08-27）
+
+### Added / 新增
+
 - **MingCang One Loop implementation**：统一 scheduler、手动 CLI 与 test2-compatible
   路径的显式完成批次合同；消费者和系统健康接口对 legacy、partial、ambiguous、stale、
   custom-DB 与 non-authoritative 证据 fail-closed。新增固定八卡盘后面板 API/前端入口、
