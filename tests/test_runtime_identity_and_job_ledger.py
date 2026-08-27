@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -682,7 +683,11 @@ def test_test2_signal_runner_main_persists_batch_timestamp_and_stale_partial(tmp
     from backend.config import settings
     from backend.data.database import Base
     from backend.data.models.job import JobRun
-    from paper_trading import test2_signal_runner as runner
+
+    runner = pytest.importorskip(
+        "paper_trading.test2_signal_runner",
+        reason="paper_trading/test2 replay helpers are local-only and not checked into CI",
+    )
 
     engine = create_engine(f"sqlite:///{tmp_path / 'test2-ledger.db'}")
     Session = sessionmaker(bind=engine)
