@@ -314,6 +314,152 @@ def detect_adjustment_basis_drift(
     )
 
 
+# M69 follow-up (2026-09-02 audit): a drift event on its own cannot tell you
+# whether the provider re-based the series or whether a *different* provider
+# answered this time, on its own basis.  The 47 events recorded up to that
+# audit split across four providers (akshare_sina_cn 23 / tickflow_cn 21 /
+# ifind_cn 2 / eastmoney_cn 1), so the "true re-basing" share was unknowable
+# after the fact.  Recording the stored rows' provider makes the two cases
+# separable at write time, which is what the follow-up blocker keys off.
+UNKNOWN_PRICE_SOURCE = "unknown"
+
+
+def classify_drift_source(
+    fetch_source: str | None,
+    stored_sources: Sequence[str] | None,
+) -> bool | None:
+    """Is this drift event a cross-provider comparison rather than a re-basing?
+
+    Returns ``True`` when the stored rows did not all come from the provider we
+    just fetched from (the comparison straddles two adjustment bases), ``False``
+    when stored history and fetch share a single provider (a genuine re-basing
+    the operator must clear), and ``None`` when we cannot tell — no fetch source,
+    or no provider recorded on any stored row.
+    """
+    if not stored_sources:
+        return None
+    known = {str(src) for src in stored_sources if src}
+    if not known:
+        return None
+    if fetch_source is None:
+        return None
+    return known != {str(fetch_source)}
+
+
+@dataclass(frozen=True)
+class SourceMixingReport:
+    """How many symbols hold price history stitched from multiple providers.
+
+    Each provider carries its own adjustment basis, so every source boundary
+    inside one symbol's series is a potential seam.  This is deliberately its
+    own metric rather than a by-product of drift detection: the drift detector
+    only ever sees a symbol when a backfill happens to overlap stored rows, so
+    it under-reports splicing by construction.
+    """
+
+    total_symbols: int
+    single_source_symbols: int
+    mixed_symbols: int
+    distribution: dict[int, int]
+    worst: list[tuple[str, list[str]]]
+
+    @property
+    def clean(self) -> bool:
+        return self.mixed_symbols == 0
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "total_symbols": self.total_symbols,
+            "single_source_symbols": self.single_source_symbols,
+            "mixed_symbols": self.mixed_symbols,
+            "distribution": {str(k): v for k, v in sorted(self.distribution.items())},
+            "worst": [{"symbol": sym, "sources": srcs} for sym, srcs in self.worst],
+        }
+
+    def describe(self) -> str:
+        if self.clean:
+            return f"{self.total_symbols} symbols, all single-source"
+        shape = ", ".join(
+            f"{n} sources ×{count}" for n, count in sorted(self.distribution.items()) if n > 1
+        )
+        return (
+            f"{self.mixed_symbols}/{self.total_symbols} symbols hold multi-provider "
+            f"price history ({shape})"
+        )
+
+
+def summarize_source_mixing(
+    rows: Sequence[tuple[str, str | None]],
+    *,
+    worst_limit: int = 10,
+) -> SourceMixingReport:
+    """Summarize per-symbol provider mixing from ``(symbol, source)`` pairs.
+
+    A ``None`` source counts as its own bucket rather than being dropped: rows
+    written before provenance was recorded have an unknown basis, and pretending
+    they match whatever sits next to them is exactly the assumption that hid the
+    seams in the first place.
+    """
+    by_symbol: dict[str, set[str]] = {}
+    for symbol, source in rows:
+        by_symbol.setdefault(str(symbol), set()).add(
+            UNKNOWN_PRICE_SOURCE if source is None else str(source)
+        )
+    distribution: dict[int, int] = {}
+    for sources in by_symbol.values():
+        distribution[len(sources)] = distribution.get(len(sources), 0) + 1
+    mixed = sorted(
+        ((sym, sorted(srcs)) for sym, srcs in by_symbol.items() if len(srcs) > 1),
+        key=lambda item: (-len(item[1]), item[0]),
+    )
+    return SourceMixingReport(
+        total_symbols=len(by_symbol),
+        single_source_symbols=sum(1 for srcs in by_symbol.values() if len(srcs) == 1),
+        mixed_symbols=len(mixed),
+        distribution=distribution,
+        worst=mixed[:worst_limit],
+    )
+
+
+def summarize_basis_drift_events(
+    payloads: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Split one day's drift events into "operator must clear" vs "spliced history".
+
+    ``same_source`` events are a genuine re-basing of a series we already hold
+    from that same provider: history and new bars now disagree and only
+    ``backend.tools.rebase_price_history`` can reconcile them, so they gate the
+    day.  ``cross_source`` events merely say two providers disagree, which is
+    expected while a symbol's history is spliced — they are reported, not gated,
+    because rebasing on whichever provider answered today would just move the
+    seam.  ``unknown`` (no provider recorded on the stored rows) gates too: we
+    cannot prove it benign, and fail-closed is the house rule.
+    """
+    same: list[str] = []
+    cross: list[str] = []
+    unknown: list[str] = []
+    for payload in payloads:
+        symbol = str(payload.get("symbol") or "")
+        flag = payload.get("cross_source")
+        if flag is True:
+            cross.append(symbol)
+        elif flag is False:
+            same.append(symbol)
+        else:
+            unknown.append(symbol)
+    uncleared = sorted(set(same) | set(unknown))
+    return {
+        "status": "available",
+        "events": len(payloads),
+        "same_source": sorted(set(same)),
+        "cross_source": sorted(set(cross)),
+        "unknown_source": sorted(set(unknown)),
+        "uncleared_symbols": uncleared,
+        "uncleared": len(uncleared),
+        "clean": not uncleared,
+    }
+
+
 def not_applicable_price_quality_gate() -> PriceQualityGate:
     return PriceQualityGate(
         status="not_applicable",

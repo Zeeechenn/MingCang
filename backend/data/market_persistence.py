@@ -21,6 +21,14 @@ def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
     rows back a real-money ledger, so re-basing them is an explicit operator
     decision (see ``backend.tools.rebase_price_history``), not a side effect of
     a routine backfill.
+
+    We record the *stored* rows' provider alongside the fetch provider.  Without
+    it a drift event is ambiguous: "the provider re-based this series" and "a
+    different provider answered today, on its own basis" are indistinguishable,
+    and the 2026-09-02 audit found the 47 recorded events split across four
+    providers.  A same-source event is a genuine re-basing that an operator must
+    clear; a cross-source event says the stored history is spliced and needs a
+    single-source rebuild instead.
     """
     from backend.data.database import Price
     from backend.data.price_quality import detect_adjustment_basis_drift
@@ -34,7 +42,7 @@ def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
         if not fetched_closes:
             return
         stored_rows = (
-            db.query(Price.date, Price.close)
+            db.query(Price.date, Price.close, Price.source)
             .filter(
                 Price.asset_key == asset_key,
                 Price.date.in_(list(fetched_closes)),
@@ -42,6 +50,9 @@ def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
             .all()
         )
         stored_closes = {r.date: float(r.close) for r in stored_rows if r.close}
+        stored_sources = sorted({
+            str(r.source) for r in stored_rows if r.close and r.source is not None
+        })
         drift = detect_adjustment_basis_drift(fetched_closes, stored_closes)
         if not drift.detected:
             return
@@ -52,19 +63,27 @@ def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
             "未自动改写历史，如确认需重基请跑 backend.tools.rebase_price_history。",
             symbol, source or "unknown", drift.describe(),
         )
-        _record_basis_drift_event(db, symbol=symbol, source=source, drift=drift)
+        _record_basis_drift_event(
+            db, symbol=symbol, source=source, drift=drift, stored_sources=stored_sources,
+        )
     except Exception as exc:  # pragma: no cover - detection must never break ingestion
         logger.warning("M69 复权基准漂移检查失败 %s: %s", symbol, exc)
 
 
-def _record_basis_drift_event(db, *, symbol: str, source: str | None, drift) -> None:
+def _record_basis_drift_event(
+    db, *, symbol: str, source: str | None, drift,
+    stored_sources: list[str] | None = None,
+) -> None:
     import json
 
     try:
         from backend.data.models.degradation import DegradationEvent
+        from backend.data.price_quality import classify_drift_source
 
         payload = drift.to_payload()
         payload["symbol"] = symbol
+        payload["stored_sources"] = list(stored_sources or [])
+        payload["cross_source"] = classify_drift_source(source, stored_sources)
         db.add(DegradationEvent(
             component="market_persistence",
             category="adjustment_basis_drift",

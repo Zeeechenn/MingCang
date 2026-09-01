@@ -550,6 +550,16 @@ def _daily_panel_work_metrics(payload: dict[str, Any]) -> tuple[dict[str, dict[s
             blockers.append(f"unavailable_panel_work_metric:{name}")
             continue
         metrics[name] = metric
+    # M69 follow-up (2026-09-02 audit): optional by design.  Panels written
+    # before the follow-up do not carry this metric, so its absence must not
+    # retroactively invalidate days that are otherwise complete; but when a
+    # panel does publish it and the day is not clean, the official batch ran on
+    # prices whose adjustment basis nobody reconciled, and the day is blocked.
+    basis = source.get("price_basis_integrity")
+    if isinstance(basis, dict) and basis.get("status") == "available":
+        metrics["price_basis_integrity"] = basis
+        if not basis.get("clean", True):
+            blockers.append("uncleared_adjustment_basis_drift")
     return metrics, blockers
 
 

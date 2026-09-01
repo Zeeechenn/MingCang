@@ -325,12 +325,54 @@ def _build_work_metrics(
         }
     except Exception as exc:  # noqa: BLE001 - Stage6 artifact must not invent recovery.
         failure_recovery = _metric_unavailable(f"failure_recovery_query_failed:{exc.__class__.__name__}")
+
+    price_basis_integrity = _build_price_basis_integrity(db, as_of=as_of)
     return {
         "duplicate_suppression": duplicate_suppression,
         "human_review": human_review,
         "review_freshness": review_freshness,
         "failure_recovery": failure_recovery,
+        "price_basis_integrity": price_basis_integrity,
     }
+
+
+def _build_price_basis_integrity(db, *, as_of: str) -> dict[str, Any]:
+    """M69 follow-up: surface unresolved adjustment-basis drift as panel evidence.
+
+    Before this the detector only ever wrote a log warning, and the 2026-09-02
+    audit found ten consecutive days of warnings that nobody acted on while the
+    affected symbols kept flowing into the official signal batch.  Publishing it
+    as a work metric lets the continuity auditor gate the day on it.
+    """
+    import json as _json
+
+    try:
+        from sqlalchemy import func
+
+        from backend.data.models.degradation import DegradationEvent
+        from backend.data.price_quality import summarize_basis_drift_events
+
+        rows = (
+            db.query(DegradationEvent.context_json)
+            .filter(
+                DegradationEvent.category == "adjustment_basis_drift",
+                func.date(DegradationEvent.ts) == as_of[:10],
+            )
+            .all()
+        )
+        payloads: list[dict[str, Any]] = []
+        for (context_json,) in rows:
+            if not context_json:
+                continue
+            try:
+                parsed = _json.loads(context_json)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(parsed, dict):
+                payloads.append(parsed)
+        return summarize_basis_drift_events(payloads)
+    except Exception as exc:  # noqa: BLE001 - never let evidence collection break the panel.
+        return _metric_unavailable(f"price_basis_query_failed:{exc.__class__.__name__}")
 
 
 def _require_available_work_metrics(work_metrics: dict[str, dict[str, Any]]) -> None:
