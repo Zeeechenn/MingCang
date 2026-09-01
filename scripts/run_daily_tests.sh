@@ -168,7 +168,26 @@ mark_track_failed() {
 # 沿用实盘数据门未过时 skip 的既有写法：status 留 running（不设
 # finished_at），靠 message 讲清楚是主动跳过、不是失败也不是还在跑。
 mark_track_not_attempted() {
-  write_state running "$2" --track "$1" >/dev/null 2>&1 || true
+  write_state running "$2" --track "$1" --track-outcome not_attempted >/dev/null 2>&1 || true
+}
+
+# 收尾时把某条 track 的终局判定回填进 state。顶层 status 此刻还是 running（最终
+# 的 complete/aborted 由本函数之后那次 write_state 写），所以这里必须用
+# --track-status 单独指定该 track 的终态，否则 tracks 会一直停在最后一次
+# begin_step 留下的 running —— 那正是 08-27/08-28 两轮 state 里的记录瑕疵。
+# skipped / not_attempted 没有对应的终态状态位（既非失败也非跑完），沿用既有
+# 写法留在 running，由 outcome 讲清语义。best-effort：这笔状态写不进去也不能
+# 把已经跑完的一轮判成失败。
+finalize_track() {
+  # $1=track（one_loop|live） $2=outcome（ok|aborted|skipped|not_attempted） $3=消息
+  local track_status
+  case "$2" in
+    ok) track_status=complete ;;
+    aborted) track_status=aborted ;;
+    *) track_status=running ;;
+  esac
+  write_state running "$3" --track "$1" --track-status "$track_status" \
+    --track-outcome "$2" >/dev/null 2>&1 || true
 }
 
 if $ONE_LOOP_ONLY; then
@@ -315,7 +334,8 @@ if $ONE_LOOP_ONLY; then
   # （⑥ 120 次预算 + ⑦ multi-agent 深评）。不是失败，是没尝试。
   CURRENT_STEP="track_b_not_attempted"
   say "④⑤⑥⑦ 跳过：--one-loop-only 只跑 Track A，Track B 本轮未尝试"
-  mark_track_not_attempted live "Track B (④⑤⑥⑦) not attempted: --one-loop-only 主动跳过，非失败"
+  TRACK_B_REASON="Track B (④⑤⑥⑦) not attempted: --one-loop-only 主动跳过，非失败"
+  mark_track_not_attempted live "$TRACK_B_REASON"
   TRACK_B_FINAL="not_attempted"
 else
 
@@ -342,6 +362,7 @@ if [ "$TRACK_B_ABORTED" = false ]; then
     say "   ✅ 实盘数据门通过（见 ${GATE_JSON}）"
   elif [ "$gate_rc" -eq 5 ]; then
     TRACK_B_SKIPPED=true
+    TRACK_B_REASON="Track B (④⑤⑥⑦) skipped: 实盘行情门未过（见 ${GATE_JSON}）"
     say "LIVE_TRACK_SKIPPED: 行情门未过（见 ${GATE_JSON}）"
   else
     abort_track_b "实盘数据门用法/IO 错误（exit=${gate_rc}），见 $GATE_LOG"
@@ -465,6 +486,10 @@ else
 fi
 
 CURRENT_STEP="done"
+finalize_track one_loop "$TRACK_A_FINAL" \
+  "Track A (①②③⑧) ${TRACK_A_FINAL}: ${TRACK_A_REASON:-完成，无中止}"
+finalize_track live "$TRACK_B_FINAL" \
+  "Track B (④⑤⑥⑦) ${TRACK_B_FINAL}: ${TRACK_B_REASON:-完成，无中止}"
 say "产物：$L1 / $L4 / $L6 / $L7 / $L8 / $SUB / $DEEP / $STATE"
 if $ONE_LOOP_ONLY; then
   # 这个模式下 Track B 是有意未尝试，绝不能打 PIPELINE_DONE（那意味着两条

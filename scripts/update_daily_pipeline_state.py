@@ -12,6 +12,11 @@ from typing import Any
 
 SCHEMA_VERSION = "daily_pipeline.v1"
 VALID_STATUSES = ("running", "aborted", "complete")
+# 每条 track 的终局判定。ok/aborted 有对应的 track status（complete/aborted）；
+# skipped（行情门未过）与 not_attempted（--one-loop-only 主动跳过）没有——它们
+# 既不是失败也不是跑完，沿用既有写法把 track status 留在 running，靠 outcome
+# 这一位把语义讲清楚。
+VALID_TRACK_OUTCOMES = ("ok", "aborted", "skipped", "not_attempted")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -24,6 +29,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--one-loop-status", choices=("pending", "complete"), default=None)
     parser.add_argument("--llm-calls", type=int, default=None)
     parser.add_argument("--track", choices=("one_loop", "live"), default=None)
+    parser.add_argument("--track-status", choices=VALID_STATUSES, default=None)
+    parser.add_argument("--track-outcome", choices=VALID_TRACK_OUTCOMES, default=None)
     parser.add_argument("--gate-json", default=None)
     return parser
 
@@ -52,6 +59,8 @@ def update_state(
     one_loop_status: str | None = None,
     llm_calls: int | None = None,
     track: str | None = None,
+    track_status: str | None = None,
+    track_outcome: str | None = None,
     gate_json: str | None = None,
 ) -> dict[str, Any]:
     now = datetime.now(UTC).isoformat()
@@ -92,12 +101,33 @@ def update_state(
         payload.pop("finished_at", None)
 
     if track is not None:
-        payload["tracks"][track] = {
-            "status": status,
+        # track 的状态独立于顶层 status：收尾时顶层还在 running，两条 track 却
+        # 已经各自定局，必须能分别回填 complete/aborted，否则 tracks 会永远停在
+        # 最后一次 begin_step 写下的 running（2026-08-27/08-28 两轮的记录瑕疵）。
+        effective_status = track_status or status
+        entry: dict[str, Any] = {
+            "status": effective_status,
             "step": step,
             "message": message,
             "updated_at": now,
         }
+        # outcome 只在收尾时给，四个取值都表示这条 track 已定局——因此它、而不是
+        # 状态位，才是该打 finished_at 的判据：mark_track_failed 在跑到一半写下的
+        # aborted 不带 outcome，不能因此显得这条 track 已经收尾。
+        if track_outcome is not None:
+            entry["outcome"] = track_outcome
+            entry["finished_at"] = now
+        previous = payload["tracks"].get(track) or {}
+        # 收尾时 step 已经是 "done" 了，但一条 aborted 的 track 最有用的信息就是
+        # 「在哪一步倒的」——那是跑到一半 mark_track_failed 记下的。终态回填只补
+        # outcome/finished_at 和更完整的原因，绝不能把失败步号抹成 done。
+        if track_outcome == "aborted" and previous.get("status") == "aborted":
+            entry["step"] = previous.get("step", step)
+        # 实盘数据门的判决挂在 tracks.live.gate 上，是 ⑤⑥⑦ 之前写入的；本次
+        # 覆盖不能把它丢掉（此前每次 begin_step --track live 都会抹掉它）。
+        if previous.get("gate") is not None:
+            entry["gate"] = previous["gate"]
+        payload["tracks"][track] = entry
 
     gate_payload = _load_gate_json(gate_json)
     if gate_payload is not None:
@@ -126,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         one_loop_status=args.one_loop_status,
         llm_calls=args.llm_calls,
         track=args.track,
+        track_status=args.track_status,
+        track_outcome=args.track_outcome,
         gate_json=args.gate_json,
     )
     return 0

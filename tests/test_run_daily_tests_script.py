@@ -552,3 +552,68 @@ def test_scenario_one_loop_only_flag_position_independent(tmp_path: Path) -> Non
     proc_b = _run_args(repo_b, tmp_path / "runtime-b", [FAKE_DAY, "--one-loop-only"])
     assert proc_b.returncode == 0, proc_b.stdout + proc_b.stderr
     assert "ONE_LOOP_ONLY_DONE" in proc_b.stdout
+
+
+def _state_of(repo: Path) -> dict:
+    stamp = FAKE_DAY.replace("-", "")
+    return json.loads(
+        (repo / "paper_trading" / f"_run_state_{stamp}.json").read_text(encoding="utf-8")
+    )
+
+
+def test_scenario_all_green_backfills_both_tracks_final_state(tmp_path: Path) -> None:
+    """收尾必须把两条 track 的终态写回 tracks，而不是停在最后一次 begin_step 的
+    running（2026-08-27/08-28 两轮 state 里的记录瑕疵）。"""
+    repo = _build_fake_repo(tmp_path)
+    proc = _run(repo, tmp_path / "runtime")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    state = _state_of(repo)
+    assert state["status"] == "complete"
+    for track in ("one_loop", "live"):
+        assert state["tracks"][track]["status"] == "complete", track
+        assert state["tracks"][track]["outcome"] == "ok", track
+        assert "finished_at" in state["tracks"][track], track
+        assert state["tracks"][track]["step"] == "done", track
+    # The live gate verdict attached mid-run survives every later track write.
+    assert state["tracks"]["live"]["gate"] is not None
+
+
+def test_scenario_partial_backfills_aborted_track_and_keeps_the_other_complete(
+    tmp_path: Path,
+) -> None:
+    repo = _build_fake_repo(tmp_path)
+    proc = _run(repo, tmp_path / "runtime", STUB_STEP1_COUNT="21")
+    assert proc.returncode == 4, proc.stdout + proc.stderr
+
+    state = _state_of(repo)
+    assert state["tracks"]["one_loop"]["status"] == "aborted"
+    assert state["tracks"]["one_loop"]["outcome"] == "aborted"
+    assert "未达 25/25" in state["tracks"]["one_loop"]["message"]
+    assert state["tracks"]["live"]["status"] == "complete"
+    assert state["tracks"]["live"]["outcome"] == "ok"
+
+
+def test_scenario_live_gate_skip_is_labelled_skipped_not_complete(tmp_path: Path) -> None:
+    repo = _build_fake_repo(tmp_path)
+    proc = _run(repo, tmp_path / "runtime", STUB_GATE_EXIT="5")
+    assert proc.returncode == 4, proc.stdout + proc.stderr
+
+    state = _state_of(repo)
+    assert state["tracks"]["live"]["outcome"] == "skipped"
+    # Skipped is neither a failure nor a completion, so the status bit stays running.
+    assert state["tracks"]["live"]["status"] == "running"
+    assert "finished_at" in state["tracks"]["live"]
+    assert state["tracks"]["one_loop"]["status"] == "complete"
+
+
+def test_scenario_one_loop_only_labels_track_b_not_attempted(tmp_path: Path) -> None:
+    repo = _build_fake_repo(tmp_path)
+    proc = _run_args(repo, tmp_path / "runtime", [FAKE_DAY, "--one-loop-only"])
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+    state = _state_of(repo)
+    assert state["tracks"]["one_loop"]["status"] == "complete"
+    assert state["tracks"]["one_loop"]["outcome"] == "ok"
+    assert state["tracks"]["live"]["outcome"] == "not_attempted"
+    assert state["tracks"]["live"]["status"] != "complete"

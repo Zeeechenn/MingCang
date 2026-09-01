@@ -46,6 +46,13 @@ _QUOTA_MARKERS = (
     "usage limit reached",
     "exceeded your usage limit",
     "out of usage",
+    # 2026-09-01：test2 标签批跑撞上的真实文案是
+    # "You've hit your session limit · resets 8:50pm (Asia/Singapore)"，
+    # 上面六个 marker 一个都不匹配 → 守卫没跳闸，剩余 19 支全部写成
+    # quality='failed' 的降级标签落库，正是本模块开头那段注释要防的事故。
+    "hit your session limit",
+    "session limit reached",
+    "hit your usage limit",
     "已达到使用上限",
     "额度已用尽",
 )
