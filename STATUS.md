@@ -7,7 +7,7 @@
 
 MingCang is a local-first A/HK/US equity research and decision-support workspace.
 It does not place real trades or provide financial advice. Package, API, and
-frontend versions remain `0.8.0`; this P0 batch is not a release.
+frontend versions are aligned at the `v0.8.1` patch-release candidate.
 
 ## Current Runtime Truth
 
@@ -35,27 +35,30 @@ deliberately narrower than the full development plan:
 
 | Work | Integrated capability | Still open |
 |---|---|---|
-| P0-G | one canonical default for the One Loop implementation start date; daily runner and standalone audit use it by default | non-canonical override must become fail-closed or enter an explicit migration record; audit should expose the compared day set directly |
-| P0-B1 | explicit-database, immutable dry-run rebase planner; execute mode is limited to temporary standalone SQLite snapshots with source/basis pins, backup, transaction, coverage and hash checks | harden the normal provider write path against cross-source basis mixing; explain the 601899 ATR direction anomaly; no B2 repair yet |
-| P0-R | `manual_only` cash-NAV replay with lot sizing, next-session fills, T+1, locked-price handling, conservative stops, costs, caps and loss attribution | company actions, explicit halt/partial-fill models, immutable control/candidate experiment IDs, and clean price-basis rerun |
+| P0-G | complete: one canonical start date; operator CLIs reject ad-hoc overrides; output directly lists compared and complete close dates | a future date change requires a reviewed code migration; no current implementation work remains |
+| P0-B1 | immutable rebase dry-run plus an opt-in strict write guard that rejects mixed/missing provenance and overlap drift in temporary tests | strict mode remains disabled for routine One Loop callers; explain the 601899 ATR anomaly and separately approve any activation/B2 repair |
+| P0-R | `manual_only` NAV v2 adds explicit halts, volume-capped partial fills, split/dividend events and deterministic control/execution/input/replay IDs | snapshot adapter still lacks an authoritative corporate-action ledger; candidate ID belongs to P2; clean price-basis rerun remains blocked |
 | P0-A | G1 category decision is recorded; a disabled preview exists only in external review history | not merged: stable/shadow product contract, three missing-card producers, human-readable empty states, real workflow regression, and post-20/20 activation gate |
 | P0-B2 | none | production/history repair requires a separate owner-approved impact list, full-history source coverage, backup, rollback and maintenance window |
 
 Latest read-only diagnostics from the frozen 2026-09-02 snapshot:
 
-- the P0-G audit was semantically identical before and after the default-source
-  change when generation time and snapshot path were excluded;
+- P0-G now prints the same 11 compared and complete dates directly; after removing
+  the two additive date-list fields plus generation path/time, output is identical
+  to the pre-change audit;
 - the P0-B1 `000568` dry-run found 6 disagreements in 14 fetched rows and did not
   cover 2,487 of 2,501 stored rows, so execute correctly refused to proceed;
-- P0-R returned `blocked_price_basis` with 19 affected signal symbols and
-  `promotion_eligible=false`. Its diagnostic NAV result is not return evidence.
+- P0-R v2 returned `blocked_price_basis` with 19 affected signal symbols and
+  `promotion_eligible=false`; its frozen control/replay IDs are recorded and the
+  snapshot SHA-256 stayed unchanged. Its diagnostic NAV is not return evidence.
 
 ## Open Gates
 
 1. Continue the existing daily One Loop unchanged until 20 qualifying days are
    present; do not reinterpret this engineering gate as a return gate.
-2. Finish P0-B1 provider-write prevention. Prepare P0-B2 only as an impact and
-   rollback proposal; do not modify production prices without separate approval.
+2. Keep the P0-B1 strict write guard disabled while the current continuity window
+   runs. Investigate 601899 and prepare P0-B2 only as an impact/rollback proposal;
+   do not modify production prices without separate approval.
 3. At 20/20, freeze the old `daily_panel.v1` baseline, then decide whether P0-A
    may be implemented/merged. A new output-quality window starts after activation;
    the old 20 days do not prove the new contract.
@@ -69,10 +72,10 @@ Latest read-only diagnostics from the frozen 2026-09-02 snapshot:
 
 The canonical code-quality gate is `make verify`. The 2026-09-03 isolated P0
 integration candidate passed Ruff, release hygiene, documentation authority,
-mypy, backend tests, frontend tests/build/ESLint, and desktop/mobile browser
-smoke. Exact final-tree counts belong in the current `CHANGELOG.md` Unreleased
-entry after the gate is rerun; older verification snapshots remain in Git history
-and are intentionally not repeated here.
+mypy, 2,088 backend tests (14 skipped), 37 frontend tests, production build,
+ESLint, and desktop/mobile browser smoke. Exact release-tree details are recorded
+in the `v0.8.1` entry of `CHANGELOG.md`; older verification snapshots remain in
+Git history and are intentionally not repeated here.
 
 Runtime acceptance must also rerun the immutable continuity audit:
 

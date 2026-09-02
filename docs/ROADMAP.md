@@ -176,14 +176,14 @@ replacement
 
 | 批次 | 已合入/已决定 | 尚未完成 |
 |---|---|---|
-| P0-G | 日跑、独立 CLI、审计函数共享唯一默认起算日；同快照语义零差异 | 非权威 override 仍须 fail-closed 或进入显式迁移；输出直接报告被比较日集合 |
-| P0-B1 | `manual_only` 重基工具默认 immutable dry-run；execute 仅允许临时独立 SQLite，具备来源/口径 pin、全历史覆盖断言、备份、事务、逐支校验和哈希检查 | 日常 provider 写路径仍须阻断跨源复权拼接；601899 ATR 反向变化原因未解释 |
-| P0-R | `manual_only` 现金 NAV v1：下一会话开盘、T+1、锁价不可成交、保守止损、成本、仓位/行业/总仓门和亏损归因 | 公司行动、显式停牌/部分成交、冻结 control/candidate ID；价格口径清零后重跑 |
+| P0-G | **完成**：日跑/函数/CLI 共用唯一起算日；operator CLI 拒绝临时 override，结果直接列 compared/complete 日期 | 未来改日期必须提交受审迁移记录；当前无剩余实现项 |
+| P0-B1 | `manual_only` 重基工具保持 immutable dry-run；另有默认关闭的 strict write guard，可在临时 DB 阻断来源/口径不一致和重基漂移 | 20/20 前不激活到日常 caller；601899 ATR 反向变化仍待解释，B2 仍需单独批准 |
+| P0-R | `manual_only` 现金 NAV v2：下一开盘、T+1、显式停牌、量能分批成交、成本、拆股/分红和冻结 control/execution/input/replay ID | 快照缺权威公司行动 ledger；candidate ID 由 P2 管理；价格口径清零后重跑 |
 | P0-A | G1 的 `1/5/2` 产品分类已定；disabled preview 只保存在外部评审历史 | 20/20 前不合入；stable/shadow 生命周期、三张 missing 卡 producer、空状态前端和真实组合回归仍开放 |
 | P0-B2 | 未开始 | 生产/历史价格修复仍需独立批准，不包含在本次“合入代码”授权中 |
 
-P0-R 当前 frozen-snapshot 输出为 `blocked_price_basis`、19 个价格口径问题、
-`promotion_eligible=false`。P0-B1 对 `000568` 的实源 dry-run 只取得 14 行，和库内 14 行中
+P0-R v2 当前 frozen-snapshot 输出仍为 `blocked_price_basis`、19 个价格口径问题、
+`promotion_eligible=false`，且快照哈希前后一致。P0-B1 对 `000568` 的实源 dry-run 只取得 14 行，和库内 14 行中
 6 行不一致，且未覆盖 2,501 行历史中的 2,487 行，因此拒绝 execute。两项结果都只能作为
 诊断，不能证明策略收益。
 
@@ -243,8 +243,9 @@ P0-R 当前 frozen-snapshot 输出为 `blocked_price_basis`、19 个价格口径
 
 #### 后续唯一顺序
 
-1. One Loop 每日继续到 20/20；同时完成 P0-G override/迁移留痕和 P0-B1 日常写入防混源。
-2. 价格口径清零后重跑 P0-R，补齐成交/公司行动边界并冻结 control。
+1. One Loop 保持现有 caller 和行为继续到 20/20；P0-G 已完成，P0-B1 strict guard 保持关闭。
+2. 解释 601899、提交 P0-B2 逐支影响/备份/回滚方案并单独获批；价格口径清零后用权威
+   公司行动 ledger 重跑 P0-R，P2 再分配 candidate ID。
 3. 20/20 后封存 v1 基线，经 owner 确认再做 P0-A producer、产品合同和前端空状态。
 4. P1 将运行门、产出门、数据门和收益门分账；20 日门只证明链路运行。
 5. P2 扩展现有 M29 为 research-only Candidate Manifest：canonical signature、数据快照

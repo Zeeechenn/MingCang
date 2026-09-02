@@ -102,7 +102,7 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 | API routes | `backend/api/routes/`, `backend/api/schemas.py`, `backend/main.py` | FastAPI app and REST surfaces, including the read-only daily panel API |
 | Scheduler and workflows | `backend/scheduler.py`, `backend/jobs/`, `backend/workflows/`, `backend/ops/run_envelope.py`, `backend/ops/job_ledger.py` | scheduled/manual jobs plus stable orchestration facades and the explicit completed-run contract; API/jobs depend on workflows, not tool implementations |
 | Agent bridge | `backend/agent/` | local CLI, action registry, MCP/tool context |
-| Analysis, backtests and evidence | `backend/analysis/`, `backend/backtest/`, `backend/evidence/`, `backend/ops/one_loop_continuity.py` | quant/statistics, PIT replay, independent cash NAV, run cards, committed daily-panel artifacts and immutable continuity audit |
+| Analysis, backtests and evidence | `backend/analysis/`, `backend/backtest/`, `backend/evidence/`, `backend/ops/one_loop_continuity.py` | quant/statistics, PIT replay, independent cash NAV with explicit execution/action boundaries, run cards, committed daily-panel artifacts and immutable continuity audit |
 | Tools registry | `backend/tools/registry.py`, `backend/tools/`, `python3 -m backend.agent.cli tools` | CLI, maintenance, experiment and compatibility adapters, including manual-only P0-R evidence and price-rebase planning; stable business modules must not depend on tool implementations |
 | M31/M41/M42/M45 tools | `backend/tools/m31_*`, `backend/tools/m41_*`, `backend/tools/m42_*`, `backend/tools/m45_*` | cache benchmark, probe health, qfq/hfq remediation, source-gated import/scoreboard |
 | Frontend | `frontend/src/main.tsx`, `frontend/src/page-*.tsx`, `frontend/src/features/`, `frontend/src/services/` | hash-routed pages, feature-owned Daily/Debate views and canonical API/live service boundaries; pages must not import other page implementations |
@@ -128,8 +128,8 @@ be used by CLI commands or external callers.
 | completed-run contract | `backend.ops.run_envelope`, `backend.ops.job_ledger` | scheduler/manual/test2 entrypoint adapters |
 | daily panel evidence | `backend.evidence.daily_panel`, `backend.api.routes.daily`, `frontend/src/features/daily/` | `backend.portfolio.daily_panel` compatibility facade |
 | continuity acceptance | `backend.ops.one_loop_continuity`, `scripts/audit_one_loop_continuity.py` | none; explicit immutable DB path is required |
-| independent cash NAV evidence | `backend.backtest.nav_replay` | `backend.tools.p0r_nav_replay` manual-only snapshot CLI |
-| price-history rebase planning | none; maintenance-only | `backend.tools.rebase_price_history`, explicit DB and dry-run by default |
+| independent cash NAV evidence | `backend.backtest.nav_replay` | `backend.tools.p0r_nav_replay` manual-only snapshot CLI; no scheduler or production-ledger consumer |
+| price-history rebase/write safety | none; maintenance-only | `backend.tools.rebase_price_history` dry-run plus opt-in strict write guard; routine callers keep the guard disabled until separately activated |
 
 ## 研究模块地图
 
