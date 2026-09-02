@@ -13,8 +13,50 @@ BACKFILL_THRESHOLD_DAYS = 1   # 最新数据距今超过此天数才触发回填
 REFRESH_WINDOW_DAYS = 5  # refresh_today=True 时覆盖回写的最近窗口
 
 
+class PriceBasisWriteBlocked(RuntimeError):
+    """Raised only when a caller explicitly enables strict basis protection."""
+
+
+def _price_write_provenance_conflicts(
+    db,
+    *,
+    asset_key: str,
+    source: str | None,
+    adjustment: str | None,
+) -> list[str]:
+    """Return reasons why appending this provider would splice stored history."""
+    from backend.data.database import Price
+
+    rows = (
+        db.query(Price.source, Price.adjustment)
+        .filter(Price.asset_key == asset_key)
+        .distinct()
+        .all()
+    )
+    if not rows:
+        return []
+    stored_sources = {str(row.source) if row.source else "missing" for row in rows}
+    stored_adjustments = {
+        str(row.adjustment) if row.adjustment else "missing" for row in rows
+    }
+    conflicts: list[str] = []
+    if source is None:
+        conflicts.append("fetched_source_missing")
+    elif stored_sources != {source}:
+        conflicts.append(
+            "stored_source_mismatch:" + ",".join(sorted(stored_sources))
+        )
+    if adjustment is None:
+        conflicts.append("fetched_adjustment_missing")
+    elif stored_adjustments != {adjustment}:
+        conflicts.append(
+            "stored_adjustment_mismatch:" + ",".join(sorted(stored_adjustments))
+        )
+    return conflicts
+
+
 def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
-                                  fetched: pd.DataFrame, source: str | None) -> None:
+                                  fetched: pd.DataFrame, source: str | None) -> bool | None:
     """Warn (and record) when stored history sits on a stale adjustment basis.
 
     Detect-and-report only: we deliberately do NOT rewrite history here.  These
@@ -40,7 +82,7 @@ def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
             if row.get("close") is not None and not pd.isna(row["close"])
         }
         if not fetched_closes:
-            return
+            return False
         stored_rows = (
             db.query(Price.date, Price.close, Price.source)
             .filter(
@@ -55,7 +97,7 @@ def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
         })
         drift = detect_adjustment_basis_drift(fetched_closes, stored_closes)
         if not drift.detected:
-            return
+            return False
 
         logger.warning(
             "M69 复权基准漂移：%s（provider=%s）——%s。"
@@ -66,8 +108,10 @@ def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
         _record_basis_drift_event(
             db, symbol=symbol, source=source, drift=drift, stored_sources=stored_sources,
         )
+        return True
     except Exception as exc:  # pragma: no cover - detection must never break ingestion
         logger.warning("M69 复权基准漂移检查失败 %s: %s", symbol, exc)
+        return None
 
 
 def _record_basis_drift_event(
@@ -183,6 +227,7 @@ def backfill_if_needed(
     backfill_years: int = BACKFILL_YEARS,
     backfill_threshold_days: int = BACKFILL_THRESHOLD_DAYS,
     refresh_window_days: int = REFRESH_WINDOW_DAYS,
+    strict_basis_write_guard: bool = False,
 ) -> int:
     """
     检查该股历史数据是否充足。若最新记录距今超过阈值（或无记录），
@@ -240,13 +285,28 @@ def backfill_if_needed(
     # append.  Left undetected this silently breaks P&L, stop/target levels and
     # ATR across the seam — 600900 on 2026-07-15 carried a 0.79 offset that the
     # 3x ratio guard below could never see.
-    _check_adjustment_basis_drift(
+    drift_detected = _check_adjustment_basis_drift(
         db,
         symbol=symbol,
         asset_key=asset_key,
         fetched=df,
         source=source,
     )
+    provenance_conflicts = _price_write_provenance_conflicts(
+        db,
+        asset_key=asset_key,
+        source=str(source) if source else None,
+        adjustment=str(adjustment) if adjustment else None,
+    )
+    if strict_basis_write_guard and (drift_detected is not False or provenance_conflicts):
+        details = list(provenance_conflicts)
+        if drift_detected is True:
+            details.append("overlap_close_drift")
+        elif drift_detected is None:
+            details.append("drift_check_failed")
+        raise PriceBasisWriteBlocked(
+            f"strict price-basis guard blocked {asset_key}: {', '.join(details)}"
+        )
 
     if refresh_today and latest_date_str:
         window_start = (date.today() - timedelta(days=refresh_window_days)).isoformat()

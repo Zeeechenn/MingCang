@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 import pandas as pd
+import pytest
 
 
 def test_market_facade_keeps_public_entrypoints():
@@ -93,6 +94,77 @@ def test_backfill_write_guard_rejects_hfq_scaled_rows(test_db, monkeypatch):
         == 0
     )
     assert test_db.query(Price).filter(Price.symbol == "600519").count() == 10
+
+
+def test_strict_basis_guard_blocks_cross_provider_append_without_changing_prices(
+    test_db, monkeypatch
+):
+    from backend.analysis import factors
+    from backend.data import market
+    from backend.data.database import Price
+    from backend.data.market_persistence import PriceBasisWriteBlocked
+
+    stored_days = [date.today() - timedelta(days=offset) for offset in range(6, 1, -1)]
+    for day in stored_days:
+        test_db.add(Price(
+            symbol="600519",
+            asset_key="CN:600519",
+            market="CN",
+            currency="CNY",
+            date=day.isoformat(),
+            open=10,
+            high=11,
+            low=9,
+            close=10,
+            volume=1_000_000,
+            source="provider_a",
+            adjustment="qfq",
+        ))
+    test_db.commit()
+    before = [
+        (row.date, row.source, row.adjustment)
+        for row in test_db.query(Price).order_by(Price.date).all()
+    ]
+
+    next_day = date.today() - timedelta(days=1)
+    frame = pd.DataFrame(
+        [
+            {"open": 10, "high": 11, "low": 9, "close": 10, "volume": 1_000_000}
+            for _ in [*stored_days, next_day]
+        ],
+        index=[day.isoformat() for day in [*stored_days, next_day]],
+    )
+    frame.attrs["source"] = "provider_b"
+    frame.attrs["fetched_at"] = market._utcnow_naive()
+    frame.attrs["adjustment"] = "qfq"
+    monkeypatch.setattr(market, "fetch_daily", lambda *args, **kwargs: frame)
+    monkeypatch.setattr(factors, "add_all_factors", lambda value: value.assign(atr14=0.1))
+
+    with pytest.raises(PriceBasisWriteBlocked, match="stored_source_mismatch:provider_a"):
+        market.backfill_if_needed(
+            "600519",
+            "CN",
+            test_db,
+            years=1,
+            strict_basis_write_guard=True,
+        )
+
+    after = [
+        (row.date, row.source, row.adjustment)
+        for row in test_db.query(Price).order_by(Price.date).all()
+    ]
+    assert after == before
+
+
+def test_strict_basis_guard_is_opt_in_for_current_one_loop_callers() -> None:
+    import inspect
+
+    from backend.data import market
+
+    parameter = inspect.signature(market.backfill_if_needed).parameters[
+        "strict_basis_write_guard"
+    ]
+    assert parameter.default is False
 
 
 def _ifind_response(answer: str, adjustment: str = "前复权") -> dict:
