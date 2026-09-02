@@ -16,7 +16,9 @@ from backend.backtest.nav_replay import DailyBar, ReplayConfig, SignalIntent, ru
 from backend.ops.one_loop_continuity import (
     DEFAULT_IMPLEMENTATION_SINCE,
     DEFAULT_REQUIRED_DAYS,
+    ContinuityAuditError,
     audit_one_loop_continuity,
+    require_canonical_implementation_since,
 )
 
 
@@ -240,7 +242,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", required=True, help="Standalone SQLite snapshot")
     parser.add_argument("--repo-root", required=True, help="Root for continuity artifacts")
     parser.add_argument("--output", required=True, help="JSON output under a temporary directory")
-    parser.add_argument("--implementation-since", default=DEFAULT_IMPLEMENTATION_SINCE)
+    parser.add_argument(
+        "--implementation-since",
+        default=DEFAULT_IMPLEMENTATION_SINCE,
+        help="Must equal the canonical One Loop start date; CLI overrides fail closed.",
+    )
     parser.add_argument("--required-days", type=int, default=DEFAULT_REQUIRED_DAYS)
     parser.add_argument("--end", help="Optional inclusive evidence end date")
     parser.add_argument("--initial-cash", type=float, default=1_000_000.0)
@@ -250,15 +256,22 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     output = Path(args.output).expanduser().resolve()
-    _assert_temporary_output(output)
-    result = build_evidence(
-        args.db,
-        repo_root=args.repo_root,
-        implementation_since=args.implementation_since,
-        required_days=args.required_days,
-        end=args.end,
-        config=ReplayConfig(initial_cash=args.initial_cash),
-    )
+    try:
+        _assert_temporary_output(output)
+        implementation_since = require_canonical_implementation_since(
+            args.implementation_since
+        )
+        result = build_evidence(
+            args.db,
+            repo_root=args.repo_root,
+            implementation_since=implementation_since,
+            required_days=args.required_days,
+            end=args.end,
+            config=ReplayConfig(initial_cash=args.initial_cash),
+        )
+    except (ContinuityAuditError, FileNotFoundError, OSError, ValueError) as exc:
+        print(f"P0-R replay failed: {exc}", file=sys.stderr)
+        return 2
     payload = json.dumps(result, ensure_ascii=False, indent=2)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(payload + "\n", encoding="utf-8")

@@ -18,6 +18,7 @@ from backend.ops.one_loop_continuity import (
     DEFAULT_REQUIRED_DAYS,
     ContinuityAuditError,
     audit_one_loop_continuity,
+    require_canonical_implementation_since,
     to_json,
 )
 
@@ -36,7 +37,8 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_IMPLEMENTATION_SINCE,
         help=(
             "Inclusive ISO date for post-implementation evidence; older rows are ignored. "
-            f"Defaults to the canonical One Loop start date ({DEFAULT_IMPLEMENTATION_SINCE})."
+            f"Must equal the canonical One Loop start date ({DEFAULT_IMPLEMENTATION_SINCE}); "
+            "a different window requires a reviewed code migration."
         ),
     )
     parser.add_argument("--required-days", type=int, default=DEFAULT_REQUIRED_DAYS)
@@ -55,9 +57,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        implementation_since = require_canonical_implementation_since(
+            args.implementation_since
+        )
         result = audit_one_loop_continuity(
             db_path=args.db,
-            implementation_since=args.implementation_since,
+            implementation_since=implementation_since,
             required_days=args.required_days,
             repo_root=args.repo_root,
         )

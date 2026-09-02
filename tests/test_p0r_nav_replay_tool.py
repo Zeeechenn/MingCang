@@ -137,3 +137,21 @@ def test_immutable_connection_rejects_writes(tmp_path: Path) -> None:
     with tool._connect_immutable(database) as connection:
         with pytest.raises(sqlite3.OperationalError, match="readonly|read-only"):
             connection.execute("UPDATE prices SET close=0")
+
+
+def test_cli_rejects_noncanonical_start_date_before_opening_snapshot(
+    tmp_path: Path,
+) -> None:
+    result = tool.main([
+        "--db",
+        str(tmp_path / "unused.db"),
+        "--repo-root",
+        str(tmp_path),
+        "--output",
+        str(tmp_path / "result.json"),
+        "--implementation-since",
+        "2026-08-20",
+    ])
+
+    assert result == 2
+    assert not (tmp_path / "result.json").exists()

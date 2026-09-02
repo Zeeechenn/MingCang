@@ -96,6 +96,18 @@ def _parse_date(value: str, *, field: str) -> str:
         raise ContinuityAuditError(f"{field} must be an ISO date, got {value!r}") from exc
 
 
+def require_canonical_implementation_since(value: str) -> str:
+    """Reject ad-hoc CLI rewrites of the governed One Loop evidence window."""
+    parsed = _parse_date(value, field="implementation_since")
+    if parsed != DEFAULT_IMPLEMENTATION_SINCE:
+        raise ContinuityAuditError(
+            "non-canonical implementation_since is not allowed by operator CLIs; "
+            "change DEFAULT_IMPLEMENTATION_SINCE with a reviewed migration record instead "
+            f"(canonical={DEFAULT_IMPLEMENTATION_SINCE}, requested={parsed})"
+        )
+    return parsed
+
+
 def _connect_immutable(db_path: str | Path) -> sqlite3.Connection:
     path = Path(db_path).expanduser().resolve()
     if not path.exists():
@@ -1014,6 +1026,10 @@ def audit_one_loop_continuity(
         "status": status,
         "db_path": str(db),
         "implementation_since": implementation_day,
+        "compared_close_dates": list(close_days),
+        "complete_close_dates": [
+            str(day["date"]) for day in day_results if day["status"] == "complete"
+        ],
         "required_days": required_days,
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "days": day_results,

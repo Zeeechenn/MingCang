@@ -325,6 +325,8 @@ def test_continuity_completes_on_exactly_twenty_clean_close_confirmed_days(
     assert result["metrics"]["artifact_panel_completeness"] == {"complete": 20}
     assert result["metrics"]["work_metrics"]["completeness_rate"]["value"] == 1.0
     assert result["metrics"]["work_metrics"]["duplicate_suppression_rate"]["status"] == "available"
+    assert result["compared_close_dates"] == _days(20)
+    assert result["complete_close_dates"] == _days(20)
     assert result["days"][0]["panel_envelope_batch_id"] == "m63_postmarket:2026-08-19"
     assert result["days"][0]["signal_envelope_batch_id"] == "2026-08-19T22:00:00+08:00"
 
@@ -656,6 +658,26 @@ def test_continuity_function_uses_canonical_start_date_by_default(tmp_path: Path
     result = audit_one_loop_continuity(db_path=db_path, repo_root=repo_root)
 
     assert result["implementation_since"] == DEFAULT_IMPLEMENTATION_SINCE
+
+
+def test_continuity_cli_rejects_noncanonical_start_date(tmp_path: Path) -> None:
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parents[1] / "scripts" / "audit_one_loop_continuity.py"),
+            "--db",
+            str(tmp_path / "unused.db"),
+            "--implementation-since",
+            "2026-08-20",
+        ],
+        cwd=tmp_path,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert proc.returncode == 2
+    assert "non-canonical implementation_since" in proc.stderr
 
 
 def _seed_days(tmp_path: Path, days: list[str]) -> tuple[Path, Path, sqlite3.Connection]:
