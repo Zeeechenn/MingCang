@@ -195,9 +195,9 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
     {
         "module": "backend.tools.rebase_price_history",
         "category": "maintenance",
-        "purpose": "M69: audit stored price history for provider adjustment-basis drift (dividend/split re-basing) and optionally re-base it.",
-        "read_write_boundary": "Read-only by default; --apply deletes and rewrites prices for the explicitly named symbols only. Never touches ledgers.",
-        "recommended_entrypoint": "python3 -m backend.tools.rebase_price_history --symbols 600900",
+        "purpose": "M69/P0-B1: build a provider-pinned adjustment-basis drift plan and exercise a rebase only on a temporary database copy.",
+        "read_write_boundary": "Requires an explicit DB and is immutable/read-only by default; --execute is restricted to a resolved temporary DB copy, requires pinned source and adjustment, snapshots before one-transaction price replacement, and never touches production DBs or ledgers.",
+        "recommended_entrypoint": "python3 -m backend.tools.rebase_price_history --db <snapshot.db> --symbols 600900",
         "still_runnable": True,
     },
     {
