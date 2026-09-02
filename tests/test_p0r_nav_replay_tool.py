@@ -129,7 +129,7 @@ def test_snapshot_with_sidecar_is_rejected(tmp_path: Path) -> None:
 
 def test_output_must_remain_temporary() -> None:
     with pytest.raises(ValueError, match="temporary directory"):
-        tool._assert_temporary_output(Path("/Users/zeeechenn/p0r.json"))
+        tool._assert_temporary_output(Path("/var/lib/mingcang/p0r.json"))
 
 
 def test_immutable_connection_rejects_writes(tmp_path: Path) -> None:
