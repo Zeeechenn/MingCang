@@ -32,9 +32,9 @@ Full-market promotion remains explicitly on HOLD (v0.7.0).
 | completed history | v0.3.3–v0.7.0 and completed historical records: see `CHANGELOG.md` and Git history; the pre-One-Loop roadmap snapshot is stored outside the repo governance archive |
 | paper trading test2 | v1 ended 2026-07-02 (10 trades, 60% win, +19.53% weighted); **v2 started 2026-07-03**: exit params unchanged per M21.4 decision C (single-variable), direction-only evidence as before. **Boundary override 2026-07-06 (owner directive)**: LLM treatment arm may exceed ALL hard boundaries — entry threshold 25, per-stock 15%, per-sector 30%, **and total 80% ceiling** — with mandatory per-crossing rationale logging; mechanical control arm (`test2_ab_models.py`) keeps 25/15/30/80 fixed. Scoped to test2 v2 LLM arm ONLY — `config.py` global 15/30/80, copilot shadow, real-position validation, `risk_manager.py` unchanged. No mechanical floor under ~20% drawdown target now; rationale in `paper_trading/test2.md` §规则. Note: this adds a variable to v2, so v2 is no longer a clean single-variable exit-only continuation |
 | remote agent mode | opt-in only; read-only by default |
-| active project program | **MingCang One Loop** implementation stages 0/1/3/4/5 are complete; the mandatory post-implementation evidence gate is **5/20 close-confirmed days**, so the governance cycle is not complete |
+| active project program | **MingCang One Loop** implementation stages 0/1/3/4/5 are complete; the mandatory post-implementation evidence gate is **10/20 close-confirmed days**, so the governance cycle is not complete |
 | repository structure | core and workflows have no implementation dependency on `backend.tools`; canonical domain owners and compatibility facades are enforced by architecture tests, while intentional compatibility entrypoints remain for a release-cycle review |
-| One Loop runtime truth | immutable audit on 2026-08-25 counts 2026-08-19, 20, 21, 24 and 25 as five complete close-confirmed days. Each has one selected authoritative RunEnvelope, exact official signal batch and committed eight-card panel; the current status is `insufficient_days` at **5/20**, not a broken window. The 2026-08-25 official batch is the final 25/25 run; two earlier partial attempts remain visible as `superseded_signal_batches:2`. The daily runner now snapshots SQLite with `backup()` so committed WAL rows are included, and it only emits `PIPELINE_DONE` when the target day and every later step succeed |
+| One Loop runtime truth | immutable audit on 2026-09-02 counts 2026-08-19, 20, 21, 24, 25, 26, 27, 28, 31 and 2026-09-01 as ten complete close-confirmed days (`completeness_rate` 1.0, `degradation_rate` 0.0, no audit blockers). Each has one selected authoritative RunEnvelope, exact official signal batch and committed eight-card panel; the current status is `insufficient_days` at **10/20**, not a broken window. The 2026-08-25 official batch is the final 25/25 run; two earlier partial attempts remain visible as `superseded_signal_batches:2`. The daily runner now snapshots SQLite with `backup()` so committed WAL rows are included, and it only emits `PIPELINE_DONE` when the target day and every later step succeed |
 | M68 news pyramid | **continuous mirror + independent test2-v2 C arm are wired, not production direction authority**: M63 and the local default-25 `test2_signal_runner` share one post-test2 follow-up (`M54 accrual → M68 shadow → A/B/C compare`). The test2 hook runs only after a 25/25 successful batch whose `data_date` is the current run date; stale/partial/custom/no-LLM batches fail closed. Original test2 A/B state, official `signals`, weights, stops and positions remain untouched. First real C day is pending the next complete close-confirmed test2 session; no historical pyramid backfill is allowed |
 | memory outcome loop | **operationally repaired, then isolated as shadow-only on 2026-08-18**: 1,718 of 2,019 judgments have validated 1d/3d/5d/10d outcomes (85.09% raw coverage; 93.27% among resolvable judgments). Maintenance reversibly archived 177 mature judgments whose exact observation-day price does not exist. All 2,337 active rows match the recall index by exact ID set (missing 0, stale 0); mature unresolved judgments and automatic `trusted` atoms are both 0. Because corrected complete-batch PIT A/B did not show robust P&L/stop benefit, `MEMORY_DECISION_CONTEXT_ENABLED=false` is the fail-closed default: chat, stock/project context, postmarket aggregation, research constraints, watchtower, M59 and the long-term track analyst receive no memory text. Outcome accrual, health/index maintenance, explicit `mingcang_memory_context` lookup and PIT backtests remain operational. The switch is restart/env-only rather than Admin-editable; production weights/stops/positions/orders remain unchanged. |
 
@@ -75,7 +75,7 @@ state on 2026-08-25:
 - Scheduler, manual CLI and test2-compatible paths now emit an explicit
   `run_envelope.v1`; consumers and `/api/system/health` reject legacy, partial,
   ambiguous, stale, custom-DB and non-authoritative batches. The implementation is
-  complete, and the real 20-day acceptance window is currently 5/20.
+  complete, and the real 20-day acceptance window is currently 10/20.
 - Workflow-to-tool implementation dependencies are zero. Canonical domain modules,
   lifecycle registry metadata and compatibility facades are covered by boundary
   tests.
@@ -113,10 +113,10 @@ snapshot it found:
   `{degraded_days: 0, intentional_skip_days: 4, close_confirmed_days: 5}`,
   where it previously read `0.8`. The five days' gate verdicts are unchanged
   (all `complete`, 5/20) — this batch changed a metric's meaning, not the gate;
-- human review is 0/88 created-on-day observations. Review freshness is
-  88 fresh / 546 stale / 634 total **cross-day backlog observations**, not 634
-  unique queue items; both remain follow-up work and do not redefine a complete
-  RunEnvelope or waive the 20-day gate.
+- human review is 0/92 created-on-day observations (2026-09-02 audit). Review
+  freshness is 92 fresh / 1,248 stale / 1,340 total **cross-day backlog
+  observations**, not 1,340 unique queue items; both remain follow-up work and do
+  not redefine a complete RunEnvelope or waive the 20-day gate.
 
 The diagnostic requires an explicit immutable database copy and can optionally
 consume the continuity JSON; it never repairs the ledger, queue or prices.
@@ -175,7 +175,7 @@ source files, 0 errors) are green. Frontend TypeScript, 37 Vitest checks across
 18 desktop/live-source checks and 14 mobile checks with no console or page
 errors. The live database hash was unchanged across the immutable SQLite backup
 and operational audits. This is local worktree evidence, not a published release
-or a substitute for the open 5/20 continuity gate.
+or a substitute for the open 10/20 continuity gate.
 
 Memory P&L follow-up (2026-08-18): immutable-snapshot PIT replay over the 25-name
 test2 pool now selects one latest **complete 25/25 batch** per close-confirmed
