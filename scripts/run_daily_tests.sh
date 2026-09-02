@@ -254,7 +254,7 @@ run_track_a_123() {
     abort_track_a "③-快照 命令失败，见 $L3_SNAPSHOT"; return 1
   fi
   if ! run_step "$L3_AUDIT" "③-审计" "$PY" scripts/audit_one_loop_continuity.py \
-      --db "$SNAP" --implementation-since 2026-08-19 --output "$AUDIT_JSON"; then
+      --db "$SNAP" --output "$AUDIT_JSON"; then
     abort_track_a "③-审计 命令失败，见 $L3_AUDIT"; return 1
   fi
   "$PY" - "$AUDIT_JSON" "$DAY" << 'PYEOF' | tee -a "$SUMMARY"

@@ -37,6 +37,7 @@ PANEL_WORK_METRIC_INPUTS = (
     "failure_recovery",
 )
 AUTHORITATIVE_POSTMARKET_ENTRYPOINT = "m63_postmarket"
+DEFAULT_IMPLEMENTATION_SINCE = "2026-08-19"
 DEFAULT_REQUIRED_DAYS = 20
 
 # Markers that identify a `degradations` entry as the pipeline's own LLM-quota
@@ -975,7 +976,7 @@ def _metrics(days: list[dict[str, Any]], close_confirmed_days: int, required_day
 def audit_one_loop_continuity(
     *,
     db_path: str | Path,
-    implementation_since: str,
+    implementation_since: str = DEFAULT_IMPLEMENTATION_SINCE,
     required_days: int = DEFAULT_REQUIRED_DAYS,
     repo_root: str | Path | None = None,
 ) -> dict[str, Any]:

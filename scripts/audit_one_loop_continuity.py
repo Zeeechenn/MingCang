@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.ops.one_loop_continuity import (
+    DEFAULT_IMPLEMENTATION_SINCE,
     DEFAULT_REQUIRED_DAYS,
     ContinuityAuditError,
     audit_one_loop_continuity,
@@ -32,8 +33,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", required=True, help="Explicit SQLite DB path opened with mode=ro&immutable=1.")
     parser.add_argument(
         "--implementation-since",
-        required=True,
-        help="Inclusive ISO date for post-implementation evidence; older rows are ignored.",
+        default=DEFAULT_IMPLEMENTATION_SINCE,
+        help=(
+            "Inclusive ISO date for post-implementation evidence; older rows are ignored. "
+            f"Defaults to the canonical One Loop start date ({DEFAULT_IMPLEMENTATION_SINCE})."
+        ),
     )
     parser.add_argument("--required-days", type=int, default=DEFAULT_REQUIRED_DAYS)
     parser.add_argument(

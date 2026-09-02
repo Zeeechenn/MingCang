@@ -9,7 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from backend.ops.one_loop_continuity import audit_one_loop_continuity
+from backend.ops.one_loop_continuity import (
+    DEFAULT_IMPLEMENTATION_SINCE,
+    audit_one_loop_continuity,
+)
 
 CARD_TYPES = (
     "batch_integrity",
@@ -630,8 +633,6 @@ def test_continuity_cli_prints_json_without_default_file_write(tmp_path: Path) -
             str(Path(__file__).resolve().parents[1] / "scripts" / "audit_one_loop_continuity.py"),
             "--db",
             str(db_path),
-            "--implementation-since",
-            "2026-08-19",
             "--repo-root",
             str(repo_root),
         ],
@@ -643,7 +644,18 @@ def test_continuity_cli_prints_json_without_default_file_write(tmp_path: Path) -
 
     payload = json.loads(proc.stdout)
     assert payload["status"] == "complete"
+    assert payload["implementation_since"] == DEFAULT_IMPLEMENTATION_SINCE
     assert not (tmp_path / "one_loop_continuity.json").exists()
+
+
+def test_continuity_function_uses_canonical_start_date_by_default(tmp_path: Path) -> None:
+    db_path = tmp_path / "audit.db"
+    repo_root = tmp_path / "repo"
+    _init_db(db_path)
+
+    result = audit_one_loop_continuity(db_path=db_path, repo_root=repo_root)
+
+    assert result["implementation_since"] == DEFAULT_IMPLEMENTATION_SINCE
 
 
 def _seed_days(tmp_path: Path, days: list[str]) -> tuple[Path, Path, sqlite3.Connection]:
