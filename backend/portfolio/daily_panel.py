@@ -30,7 +30,14 @@ from backend.research.watchtower_paths import DEFAULT_WATCHTOWER_OUTPUT_DIR
 DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
 # M60 Watchtower Phase 1 writes m60_watchtower_*.json/.md here; the panel only
 # reads the latest one, it never triggers a scan itself.
-BUY_RECOMMENDATIONS = {"买", "买入", "强买", "考虑买入", "watch/考虑买入"}
+# 生产 `new_framework` (aggregate_v1) 的 recommendation 词表是
+# 可小仓试错 / 可关注 / 观望 / 规避,一个都不含"买"。2026-09-02 审计:候选卡因此
+# 连续 10 个 close-confirmed 日为空,而底层权威批次每天有 6~14 支过阈标的。
+# 「可小仓试错」恰好等价于过 NEW_FRAMEWORK_ENTRY_THRESHOLD=25 的那一档——
+# 十天逐日核对 |{composite_score >= 25}| == |{recommendation == 可小仓试错}|,
+# 所以只有它进候选卡;可关注/观望/规避是阈下档,不是买入候选。
+ENTRY_TIER_RECOMMENDATION = "可小仓试错"
+BUY_RECOMMENDATIONS = {"买", "买入", "强买", "考虑买入", "watch/考虑买入", ENTRY_TIER_RECOMMENDATION}
 LONG_TERM_VETO_LABELS = {"规避", "不关注", "回避", "avoid"}
 
 # 2026-07-03 网格证伪:动量末档(bottom20%)在下行市反向(弱股反弹),不能当避雷器用,
@@ -361,6 +368,79 @@ def _build_header(con: sqlite3.Connection, as_of: str) -> dict[str, Any]:
     }
 
 
+def _run_declares_authoritative(con: sqlite3.Connection, run_id: Any) -> bool:
+    """Whether a signal batch's owning run claimed authoritative coverage.
+
+    Runs launched with ``--universe`` (live-track sweeps, subset deep-dives)
+    set ``authoritative`` false; the official default-pool batch sets it true.
+    A run predating the flag, or a batch with no owning run row, is treated as
+    authoritative so pre-One-Loop history keeps rendering.
+    """
+    if not run_id or not _table_exists(con, "job_runs"):
+        return True
+    row = con.execute(
+        "SELECT input_coverage_json FROM job_runs WHERE run_id = ? LIMIT 1", (str(run_id),)
+    ).fetchone()
+    if row is None:
+        return True
+    try:
+        coverage = json.loads(row["input_coverage_json"] or "{}")
+    except (TypeError, ValueError):
+        return True
+    flag = coverage.get("authoritative")
+    if flag is None:
+        envelope = coverage.get("run_envelope")
+        flag = envelope.get("authoritative") if isinstance(envelope, dict) else None
+    return flag is not False
+
+
+def _resolve_signal_batch(con: sqlite3.Connection, as_of: str) -> tuple[list[str], list[str]]:
+    """Resolve the one official signal batch to read for a trade date.
+
+    Three properties of ``signals`` make the naive ``date = <trade date>`` wrong,
+    and the 2026-09-02 audit found all three at once behind ten consecutive days
+    of an empty candidate card:
+
+    1. Since One Loop, ``date`` is a minute-precision *run* timestamp, so an
+       exact match on a plain trade date returns nothing.
+    2. A catch-up run stamps the run day, not the trade day -- 2026-08-21's
+       official batch carries ``date`` 2026-08-23T23:19+08:00 -- so even a
+       prefix match on ``date`` silently loses the day. ``data_timestamp`` is
+       the trade date and is the correct key whenever the column exists.
+    3. A bare day match would merge the official 25-name batch with the same
+       day's ``--universe`` research batches. The official batch is the one
+       whose owning run declared authoritative coverage, which is the same
+       batch identity the One Loop continuity auditor accepts.
+
+    Earlier authoritative batches on the same trade date are superseded reruns,
+    not ambiguity: the auditor treats the final one as the day's batch and
+    records the rest as ``superseded_signal_batches``. This mirrors that.
+    """
+    day = str(as_of)[:10]
+    cols = _columns(con, "signals")
+    run_id_expr = "run_id" if "run_id" in cols else "NULL AS run_id"
+    run_id_group = "run_id" if "run_id" in cols else "NULL"
+    if "data_timestamp" in cols:
+        where = "(substr(data_timestamp, 1, 10) = ? OR (data_timestamp IS NULL AND (date = ? OR date LIKE ?)))"
+        params: tuple[Any, ...] = (day, day, f"{day}T%")
+    else:
+        where = "(date = ? OR date LIKE ?)"
+        params = (day, f"{day}T%")
+    rows = con.execute(
+        f"SELECT date, {run_id_expr} FROM signals WHERE {where} GROUP BY date, {run_id_group}",
+        params,
+    ).fetchall()
+    if not rows:
+        return [], [f"missing:no_signal_batch:{day}"]
+    authoritative = [row for row in rows if _run_declares_authoritative(con, row["run_id"])]
+    if not authoritative:
+        return [], [f"missing:no_authoritative_signal_batch:{day}"]
+    authoritative.sort(key=lambda row: str(row["date"]))
+    selected = str(authoritative[-1]["date"])
+    superseded = len(authoritative) - 1
+    return [selected], ([f"superseded_signal_batches:{superseded}"] if superseded else [])
+
+
 def _build_buy_candidates(con: sqlite3.Connection, as_of: str) -> dict[str, Any]:
     flags: list[str] = ["llm_layer:not_implemented"]
     if not _table_exists(con, "signals"):
@@ -371,15 +451,21 @@ def _build_buy_candidates(con: sqlite3.Connection, as_of: str) -> dict[str, Any]
     if missing:
         return {"items": [], "flags": [f"missing:columns:{','.join(missing)}", *flags]}
 
+    batch_dates, batch_flags = _resolve_signal_batch(con, as_of)
+    flags = [*batch_flags, *flags]
+    if not batch_dates:
+        return {"items": [], "flags": flags}
+
     names = _stock_names(con)
+    placeholders = ", ".join("?" * len(batch_dates))
     rows = con.execute(
-        """
+        f"""
         SELECT symbol, date, recommendation, composite_score, stop_loss, take_profit
         FROM signals
-        WHERE date = ?
+        WHERE date IN ({placeholders})
         ORDER BY composite_score DESC
         """,
-        (as_of,),
+        batch_dates,
     ).fetchall()
     items = []
     for row in rows:
