@@ -161,6 +161,14 @@ OWNER_DOMAINS = {
 }
 _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
     {
+        "module": "backend.tools.p0r_nav_replay",
+        "category": "evidence",
+        "purpose": "Build an independent cash-NAV, fill, transaction-cost, and loss-attribution replay from exact authoritative One Loop batches.",
+        "read_write_boundary": "Reads one explicit immutable SQLite snapshot and continuity artifacts; writes only a caller-selected temporary JSON report. Never changes test2 state, signals, prices, positions, stops, weights, ledgers, or orders.",
+        "recommended_entrypoint": "python3 -m backend.tools.p0r_nav_replay --db <snapshot.db> --repo-root <repo> --output <temporary.json>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.memory_backtest",
         "category": "evidence",
         "purpose": "Run a point-in-time A/B replay of outcome-backed stock memory against the unchanged test2 entry/exit contract.",

@@ -21,6 +21,10 @@ class WiringEntry(TypedDict):
 
 
 WIRING_MAP: dict[str, WiringEntry] = {
+    "backend.tools.p0r_nav_replay": {
+        "bucket": "manual_only",
+        "reason": "P0-R真实NAV/撮合/成本独立证据,只读快照且不接One Loop主链",
+    },
     "backend.tools.memory_backtest": {
         "bucket": "manual_only",
         "reason": "记忆PIT收益/止损A/B证据工具,只读快照且仅人工触发",
