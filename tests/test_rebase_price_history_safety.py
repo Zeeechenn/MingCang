@@ -157,7 +157,7 @@ def test_execute_requires_pinned_source_and_adjustment(tmp_path: Path) -> None:
 
 
 def test_execute_refuses_non_temporary_or_symlink_resolved_target(tmp_path: Path) -> None:
-    outside = Path("/Users/zeeechenn/mingcang/mingcang.db")
+    outside = Path("/var/lib/mingcang/mingcang.db")
     with pytest.raises(tool.RebaseSafetyError, match="temporary database copy"):
         tool._assert_temporary_execute_target(outside)
 
