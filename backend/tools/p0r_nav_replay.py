@@ -21,6 +21,8 @@ from backend.ops.one_loop_continuity import (
     require_canonical_implementation_since,
 )
 
+CONTROL_ID = "one-loop-official-control-v1"
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -109,8 +111,13 @@ def _load_inputs(
     placeholders = ",".join("?" for _ in symbols)
     start = str(days[0]["date"])
     end = str(days[-1]["date"])
+    price_columns = {
+        str(row[1]) for row in connection.execute("PRAGMA table_info(prices)").fetchall()
+    }
+    volume_expression = "volume" if "volume" in price_columns else "NULL AS volume"
     price_rows = connection.execute(
-        f"SELECT symbol, date, open, high, low, close, source, adjustment "
+        f"SELECT symbol, date, open, high, low, close, {volume_expression}, "
+        "source, adjustment "
         f"FROM prices WHERE market = 'CN' AND symbol IN ({placeholders}) "
         "AND date >= ? AND date <= ? ORDER BY date, symbol",
         (*symbols, start, end),
@@ -123,6 +130,8 @@ def _load_inputs(
             high=float(row["high"]),
             low=float(row["low"]),
             close=float(row["close"]),
+            volume=float(row["volume"]) if row["volume"] is not None else None,
+            tradable=row["volume"] is None or float(row["volume"]) > 0,
         )
         for row in price_rows
     ]
@@ -168,6 +177,11 @@ def _load_inputs(
         "price_window": {"start": start, "end": end},
         "price_by_symbol": serial_lineage,
         "price_basis_issues": basis_issues,
+        "corporate_actions": {
+            "status": "not_available",
+            "mode": "adjusted_price_proxy",
+            "reason": "snapshot adapter has no authoritative action ledger",
+        },
     }
     return signals, bars, sectors, lineage
 
@@ -207,7 +221,7 @@ def build_evidence(
     else:
         status = "evidence_only"
     return {
-        "schema_version": "p0r_nav_evidence.v1",
+        "schema_version": "p0r_nav_evidence.v2",
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "status": status,
         "production_unchanged": True,
@@ -220,6 +234,14 @@ def build_evidence(
             "sha256_after": after_hash,
             "open_mode": "ro_immutable",
         },
+        "experiment_identity": {
+            "control_id": CONTROL_ID,
+            "candidate_id": None,
+            "execution_contract_id": replay["execution_contract_id"],
+            "input_fingerprint": replay["input_fingerprint"],
+            "replay_id": replay["replay_id"],
+            "frozen": True,
+        },
         "continuity": {
             "status": continuity.get("status"),
             "implementation_since": continuity.get("implementation_since"),
@@ -231,6 +253,8 @@ def build_evidence(
         "caveats": [
             "independent evidence only; not wired into One Loop or test2 state",
             "daily OHLC cannot establish intraday stop/take ordering, so both-hit bars use stop-first",
+            "zero-volume bars are explicit halts; the engine supports partial fills and explicit actions",
+            "this snapshot lacks an authoritative corporate-action ledger, so adjusted prices are only a proxy",
             "current output cannot support return optimization while price-basis issues remain",
             "old continuity days do not validate future code or future returns",
         ],

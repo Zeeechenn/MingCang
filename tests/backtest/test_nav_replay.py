@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from backend.backtest.nav_replay import (
+    CorporateAction,
     DailyBar,
     ReplayConfig,
     ReplayCostModel,
@@ -21,6 +22,8 @@ def _bar(
     high: float | None = None,
     low: float | None = None,
     close: float | None = None,
+    volume: float | None = None,
+    tradable: bool = True,
 ) -> DailyBar:
     return DailyBar(
         symbol,
@@ -29,6 +32,8 @@ def _bar(
         high if high is not None else open_ + 1,
         low if low is not None else open_ - 1,
         close if close is not None else open_,
+        volume,
+        tradable,
     )
 
 
@@ -231,3 +236,112 @@ def test_duplicate_or_invalid_bars_fail_closed() -> None:
         run_nav_replay([], [bar, bar], costs=ZERO_COST)
     with pytest.raises(ValueError, match="high is invalid"):
         run_nav_replay([], [_bar("AAA", "2026-07-01", 10, high=8)], costs=ZERO_COST)
+
+
+def test_explicit_halt_defers_triggered_stop_to_next_tradable_open() -> None:
+    result = run_nav_replay(
+        [SignalIntent("AAA", "2026-07-01", 60, stop_loss=9.5)],
+        [
+            _bar("AAA", "2026-07-01", 10),
+            _bar("AAA", "2026-07-02", 10),
+            _bar(
+                "AAA",
+                "2026-07-03",
+                9,
+                high=9,
+                low=9,
+                close=9,
+                volume=0,
+                tradable=False,
+            ),
+            _bar("AAA", "2026-07-04", 8.5, high=9, low=8, close=8.8),
+        ],
+        config=_config(),
+        costs=ZERO_COST,
+    )
+
+    assert result["fills"][1]["date"] == "2026-07-04"
+    assert result["fills"][1]["reason"] == "stop_loss_deferred_halt"
+    assert result["deferred_orders"] == [{
+        "date": "2026-07-03",
+        "symbol": "AAA",
+        "side": "sell",
+        "reason": "halted",
+    }]
+
+
+def test_volume_participation_splits_exit_and_allocates_cost_basis() -> None:
+    result = run_nav_replay(
+        [SignalIntent("AAA", "2026-07-01", 60, stop_loss=9.5)],
+        [
+            _bar("AAA", "2026-07-01", 10, volume=100_000),
+            _bar("AAA", "2026-07-02", 10, volume=100_000),
+            _bar("AAA", "2026-07-03", 9, high=10, low=8, close=9, volume=4_000),
+            _bar("AAA", "2026-07-04", 8.5, high=9, low=8, close=8.5, volume=100_000),
+        ],
+        config=_config(max_participation_rate=0.05),
+        costs=ZERO_COST,
+    )
+
+    sell_fills = [fill for fill in result["fills"] if fill["side"] == "sell"]
+    assert [fill["shares"] for fill in sell_fills] == [200, 1300]
+    assert [fill["partial"] for fill in sell_fills] == [True, False]
+    assert sell_fills[1]["reason"] == "stop_loss_deferred_partial"
+    assert sum(trade["shares"] for trade in result["trades"]) == 1500
+    assert result["summary"]["open_positions"] == 0
+
+
+def test_explicit_split_and_cash_dividend_update_true_cash_nav() -> None:
+    action = CorporateAction(
+        "AAA",
+        "2026-07-03",
+        cash_dividend_per_share=0.5,
+        split_ratio=2.0,
+    )
+    result = run_nav_replay(
+        [SignalIntent("AAA", "2026-07-01", 60, stop_loss=8, take_profit=14)],
+        [
+            _bar("AAA", "2026-07-01", 10),
+            _bar("AAA", "2026-07-02", 10),
+            _bar("AAA", "2026-07-03", 5.5, high=6, low=5, close=5.5),
+        ],
+        corporate_actions=[action],
+        config=_config(),
+        costs=ZERO_COST,
+    )
+
+    position = result["open_positions"][0]
+    assert position["shares"] == 3000
+    assert position["stop_loss"] == 4
+    assert position["take_profit"] == 7
+    assert result["corporate_actions"][0]["cash_amount"] == 1500
+    assert result["summary"]["ending_nav"] == 103_000
+
+
+def test_replay_identity_is_deterministic_and_contract_sensitive() -> None:
+    signals = [SignalIntent("AAA", "2026-07-01", 60)]
+    bars = [_bar("AAA", "2026-07-01", 10), _bar("AAA", "2026-07-02", 10)]
+
+    first = run_nav_replay(signals, bars, config=_config(), costs=ZERO_COST)
+    second = run_nav_replay(signals, list(reversed(bars)), config=_config(), costs=ZERO_COST)
+    changed = run_nav_replay(
+        signals,
+        bars,
+        config=_config(initial_cash=200_000),
+        costs=ZERO_COST,
+    )
+
+    assert first["replay_id"] == second["replay_id"]
+    assert first["input_fingerprint"] == second["input_fingerprint"]
+    assert first["execution_contract_id"] != changed["execution_contract_id"]
+    assert first["replay_id"] != changed["replay_id"]
+
+
+def test_invalid_or_duplicate_corporate_actions_fail_closed() -> None:
+    invalid = CorporateAction("AAA", "2026-07-01", split_ratio=0)
+    with pytest.raises(ValueError, match="split ratio must be positive"):
+        run_nav_replay([], [], corporate_actions=[invalid], costs=ZERO_COST)
+
+    action = CorporateAction("AAA", "2026-07-01")
+    with pytest.raises(ValueError, match="duplicate corporate action"):
+        run_nav_replay([], [], corporate_actions=[action, action], costs=ZERO_COST)

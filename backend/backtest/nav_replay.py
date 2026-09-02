@@ -6,6 +6,8 @@ conservative daily-bar stop matching, and auditable transaction costs.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -27,6 +29,18 @@ class DailyBar:
     high: float
     low: float
     close: float
+    volume: float | None = None
+    tradable: bool = True
+
+
+@dataclass(frozen=True)
+class CorporateAction:
+    """Cash/split event effective before trading on ``date``."""
+
+    symbol: str
+    date: str
+    cash_dividend_per_share: float = 0.0
+    split_ratio: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -90,6 +104,7 @@ class ReplayConfig:
     max_positions: int = 3
     lot_size: int = 100
     entry_ttl_sessions: int = 1
+    max_participation_rate: float | None = 0.10
 
 
 @dataclass
@@ -122,10 +137,38 @@ def _validate_bar(bar: DailyBar) -> None:
         raise ValueError(f"{bar.symbol} {bar.date}: high is invalid")
     if bar.low > min(bar.open, bar.high, bar.close):
         raise ValueError(f"{bar.symbol} {bar.date}: low is invalid")
+    if bar.volume is not None and bar.volume < 0:
+        raise ValueError(f"{bar.symbol} {bar.date}: volume must not be negative")
+
+
+def _validate_action(action: CorporateAction) -> None:
+    if action.cash_dividend_per_share < 0:
+        raise ValueError(f"{action.symbol} {action.date}: dividend must not be negative")
+    if action.split_ratio <= 0:
+        raise ValueError(f"{action.symbol} {action.date}: split ratio must be positive")
 
 
 def _locked(bar: DailyBar) -> bool:
     return bar.high == bar.low
+
+
+def _fill_capacity(bar: DailyBar, config: ReplayConfig) -> int | None:
+    if not bar.tradable:
+        return 0
+    if config.max_participation_rate is None or bar.volume is None:
+        return None
+    raw_capacity = int(bar.volume * config.max_participation_rate)
+    return raw_capacity // config.lot_size * config.lot_size
+
+
+def _stable_id(prefix: str, payload: Any) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"{prefix}-{hashlib.sha256(encoded).hexdigest()[:16]}"
 
 
 def _drawdown_pct(curve: list[dict[str, Any]]) -> float:
@@ -159,6 +202,7 @@ def run_nav_replay(
     signals: list[SignalIntent],
     bars: list[DailyBar],
     *,
+    corporate_actions: list[CorporateAction] | None = None,
     sectors: dict[str, str] | None = None,
     config: ReplayConfig | None = None,
     costs: ReplayCostModel | None = None,
@@ -166,11 +210,16 @@ def run_nav_replay(
     """Replay one cash account and return a fully serialisable evidence payload."""
     config = config or ReplayConfig()
     costs = costs or ReplayCostModel.for_market("CN")
+    corporate_actions = corporate_actions or []
     sectors = sectors or {}
     if config.initial_cash <= 0:
         raise ValueError("initial_cash must be positive")
     if config.lot_size < 1 or config.entry_ttl_sessions < 1:
         raise ValueError("lot_size and entry_ttl_sessions must be positive")
+    if config.max_participation_rate is not None and not (
+        0 < config.max_participation_rate <= 1
+    ):
+        raise ValueError("max_participation_rate must be in (0, 1]")
 
     bars_by_date: dict[str, dict[str, DailyBar]] = {}
     seen_bars: set[tuple[str, str]] = set()
@@ -184,6 +233,39 @@ def run_nav_replay(
     signals_by_date: dict[str, list[SignalIntent]] = {}
     for input_signal in signals:
         signals_by_date.setdefault(input_signal.date[:10], []).append(input_signal)
+    actions_by_date: dict[str, list[CorporateAction]] = {}
+    seen_actions: set[tuple[str, str]] = set()
+    for action in corporate_actions:
+        _validate_action(action)
+        key = (action.symbol, action.date)
+        if key in seen_actions:
+            raise ValueError(f"duplicate corporate action: {key}")
+        seen_actions.add(key)
+        actions_by_date.setdefault(action.date, []).append(action)
+
+    execution_contract_id = _stable_id(
+        "p0r-execution-v2",
+        {"config": asdict(config), "cost_model": asdict(costs)},
+    )
+    input_fingerprint = _stable_id(
+        "p0r-input",
+        {
+            "signals": [asdict(item) for item in sorted(
+                signals, key=lambda item: (item.date, item.symbol, -item.score)
+            )],
+            "bars": [asdict(item) for item in sorted(
+                bars, key=lambda item: (item.date, item.symbol)
+            )],
+            "corporate_actions": [asdict(item) for item in sorted(
+                corporate_actions, key=lambda item: (item.date, item.symbol)
+            )],
+            "sectors": dict(sorted(sectors.items())),
+        },
+    )
+    replay_id = _stable_id(
+        "p0r-replay",
+        {"execution_contract_id": execution_contract_id, "input": input_fingerprint},
+    )
 
     cash = float(config.initial_cash)
     positions: dict[str, _Position] = {}
@@ -193,24 +275,49 @@ def run_nav_replay(
     fills: list[dict[str, Any]] = []
     trades: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
+    corporate_action_events: list[dict[str, Any]] = []
+    deferred_orders: list[dict[str, Any]] = []
     curve: list[dict[str, Any]] = []
 
-    def sell(symbol: str, day: str, reference_price: float, reason: str) -> None:
+    def sell(
+        symbol: str,
+        day: str,
+        reference_price: float,
+        reason: str,
+        *,
+        max_shares: int | None = None,
+    ) -> bool:
         nonlocal cash
-        position = positions.pop(symbol)
+        position = positions[symbol]
+        requested_shares = position.shares
+        shares = requested_shares if max_shares is None else min(requested_shares, max_shares)
+        if shares <= 0:
+            return False
+        allocation = shares / requested_shares
+        entry_notional = position.entry_notional * allocation
+        entry_fees = position.entry_fees * allocation
         execution_price = reference_price * (1.0 - costs.slippage_sell)
-        notional = position.shares * execution_price
+        notional = shares * execution_price
         fees = costs.fees("sell", notional)
-        slippage = position.shares * max(0.0, reference_price - execution_price)
+        slippage = shares * max(0.0, reference_price - execution_price)
         cash += notional - fees["total"]
-        gross_pnl = notional - position.entry_notional
-        net_pnl = notional - fees["total"] - position.entry_notional - position.entry_fees
+        gross_pnl = notional - entry_notional
+        net_pnl = notional - fees["total"] - entry_notional - entry_fees
+        remaining_shares = requested_shares - shares
+        if remaining_shares:
+            position.shares = remaining_shares
+            position.entry_notional -= entry_notional
+            position.entry_fees -= entry_fees
+        else:
+            positions.pop(symbol)
         fills.append({
             "date": day,
             "symbol": symbol,
             "side": "sell",
             "reason": reason,
-            "shares": position.shares,
+            "shares": shares,
+            "requested_shares": requested_shares,
+            "partial": remaining_shares > 0,
             "reference_price": round(reference_price, 6),
             "execution_price": round(execution_price, 6),
             "notional": round(notional, 2),
@@ -224,20 +331,21 @@ def run_nav_replay(
             "entry_date": position.entry_date,
             "exit_date": day,
             "exit_reason": reason,
-            "shares": position.shares,
+            "shares": shares,
             "gross_pnl": round(gross_pnl, 2),
             "net_pnl": round(net_pnl, 2),
             "net_return_pct": round(
-                net_pnl / (position.entry_notional + position.entry_fees) * 100.0, 4
+                net_pnl / (entry_notional + entry_fees) * 100.0, 4
             ),
-            "total_fees": round(position.entry_fees + fees["total"], 6),
+            "total_fees": round(entry_fees + fees["total"], 6),
             "total_slippage": round(
-                position.shares
+                shares
                 * max(0.0, position.entry_price - position.entry_reference_price)
                 + slippage,
                 6,
             ),
         })
+        return remaining_shares == 0
 
     def buy(order: _PendingEntry, day: str, bar: DailyBar) -> bool:
         nonlocal cash
@@ -266,6 +374,10 @@ def run_nav_replay(
             int(max_by_sector // execution_price // config.lot_size) * config.lot_size,
             int(max_by_total // execution_price // config.lot_size) * config.lot_size,
         )
+        requested_shares = shares
+        capacity = _fill_capacity(bar, config)
+        if capacity is not None:
+            shares = min(shares, capacity)
         while shares > 0:
             notional = shares * execution_price
             fees = costs.fees("buy", notional)
@@ -277,7 +389,11 @@ def run_nav_replay(
                 "signal_date": signal.date,
                 "date": day,
                 "symbol": signal.symbol,
-                "reason": "cash_or_exposure_cap",
+                "reason": (
+                    "liquidity_capacity"
+                    if requested_shares > 0 and capacity == 0
+                    else "cash_or_exposure_cap"
+                ),
             })
             return False
         notional = shares * execution_price
@@ -303,6 +419,8 @@ def run_nav_replay(
             "side": "buy",
             "reason": "next_session_open",
             "shares": shares,
+            "requested_shares": requested_shares,
+            "partial": shares < requested_shares,
             "reference_price": round(bar.open, 6),
             "execution_price": round(execution_price, 6),
             "notional": round(notional, 2),
@@ -311,19 +429,87 @@ def run_nav_replay(
         })
         return True
 
-    for day in sorted(bars_by_date):
-        day_bars = bars_by_date[day]
+    event_dates = sorted(set(bars_by_date) | set(actions_by_date))
+    for day in event_dates:
+        day_bars = bars_by_date.get(day, {})
+
+        for action in sorted(actions_by_date.get(day, []), key=lambda item: item.symbol):
+            position = positions.get(action.symbol)
+            if position is None:
+                continue
+            shares_before = position.shares
+            if action.split_ratio != 1.0:
+                raw_shares = position.shares * action.split_ratio
+                adjusted_shares = round(raw_shares)
+                if abs(raw_shares - adjusted_shares) > 1e-9:
+                    raise ValueError(
+                        f"{action.symbol} {day}: split creates fractional shares"
+                    )
+                position.shares = adjusted_shares
+                position.entry_reference_price /= action.split_ratio
+                position.entry_price /= action.split_ratio
+                if position.stop_loss is not None:
+                    position.stop_loss /= action.split_ratio
+                if position.take_profit is not None:
+                    position.take_profit /= action.split_ratio
+                if action.symbol in last_close:
+                    last_close[action.symbol] /= action.split_ratio
+            dividend_cash = position.shares * action.cash_dividend_per_share
+            cash += dividend_cash
+            corporate_action_events.append({
+                "date": day,
+                "symbol": action.symbol,
+                "shares_before": shares_before,
+                "shares_after": position.shares,
+                "split_ratio": action.split_ratio,
+                "cash_dividend_per_share": action.cash_dividend_per_share,
+                "cash_amount": round(dividend_cash, 6),
+            })
 
         for symbol, reason in list(pending_exits.items()):
             position = positions.get(symbol)
             exit_bar = day_bars.get(symbol)
             if position is None:
                 pending_exits.pop(symbol, None)
-            elif day <= position.entry_date or exit_bar is None or _locked(exit_bar):
+            elif day <= position.entry_date or exit_bar is None:
+                continue
+            elif not exit_bar.tradable:
+                deferred_orders.append({
+                    "date": day,
+                    "symbol": symbol,
+                    "side": "sell",
+                    "reason": "halted",
+                })
+                continue
+            elif _locked(exit_bar):
+                deferred_orders.append({
+                    "date": day,
+                    "symbol": symbol,
+                    "side": "sell",
+                    "reason": "one_price_locked",
+                })
                 continue
             else:
-                sell(symbol, day, exit_bar.open, reason)
-                pending_exits.pop(symbol, None)
+                capacity = _fill_capacity(exit_bar, config)
+                if capacity == 0:
+                    deferred_orders.append({
+                        "date": day,
+                        "symbol": symbol,
+                        "side": "sell",
+                        "reason": "liquidity_capacity",
+                    })
+                    continue
+                closed = sell(
+                    symbol,
+                    day,
+                    exit_bar.open,
+                    reason,
+                    max_shares=capacity,
+                )
+                if closed:
+                    pending_exits.pop(symbol, None)
+                else:
+                    pending_exits[symbol] = reason
 
         remaining_entries: list[_PendingEntry] = []
         pending_entries.sort(key=lambda item: (-item.signal.score, item.signal.date, item.signal.symbol))
@@ -352,6 +538,17 @@ def run_nav_replay(
                     "symbol": signal.symbol,
                     "reason": "max_positions",
                 })
+                continue
+            if not entry_bar.tradable:
+                if order.waited_sessions >= config.entry_ttl_sessions:
+                    rejected.append({
+                        "signal_date": signal.date,
+                        "date": day,
+                        "symbol": signal.symbol,
+                        "reason": "halted",
+                    })
+                else:
+                    remaining_entries.append(order)
                 continue
             if _locked(entry_bar):
                 if order.waited_sessions >= config.entry_ttl_sessions:
@@ -387,10 +584,34 @@ def run_nav_replay(
                 assert position.take_profit is not None
                 reason = "take_profit"
                 reference = max(position_bar.open, float(position.take_profit))
-            if _locked(position_bar):
+            if not position_bar.tradable:
+                pending_exits[symbol] = f"{reason}_deferred_halt"
+                deferred_orders.append({
+                    "date": day,
+                    "symbol": symbol,
+                    "side": "sell",
+                    "reason": "halted",
+                })
+            elif _locked(position_bar):
                 pending_exits[symbol] = f"{reason}_deferred_locked"
             else:
-                sell(symbol, day, reference, reason)
+                capacity = _fill_capacity(position_bar, config)
+                if capacity == 0:
+                    pending_exits[symbol] = f"{reason}_deferred_liquidity"
+                    deferred_orders.append({
+                        "date": day,
+                        "symbol": symbol,
+                        "side": "sell",
+                        "reason": "liquidity_capacity",
+                    })
+                elif not sell(
+                    symbol,
+                    day,
+                    reference,
+                    reason,
+                    max_shares=capacity,
+                ):
+                    pending_exits[symbol] = f"{reason}_deferred_partial"
 
         for symbol, position in positions.items():
             if symbol in day_bars and day > position.entry_date:
@@ -452,8 +673,11 @@ def run_nav_replay(
             loss_by_reason[reason] = loss_by_reason.get(reason, 0.0) + float(trade["net_pnl"])
 
     return {
-        "schema_version": "p0r_nav_replay.v1",
+        "schema_version": "p0r_nav_replay.v2",
         "engine": "independent_cash_nav",
+        "execution_contract_id": execution_contract_id,
+        "input_fingerprint": input_fingerprint,
+        "replay_id": replay_id,
         "config": asdict(config),
         "cost_model": asdict(costs),
         "summary": {
@@ -480,12 +704,17 @@ def run_nav_replay(
         "open_positions": [asdict(item) for item in positions.values()],
         "pending_exits": dict(sorted(pending_exits.items())),
         "rejections": rejected,
+        "deferred_orders": deferred_orders,
+        "corporate_actions": corporate_action_events,
         "assumptions": [
             "signals are observed at close and entries are eligible from the next symbol session",
             "one-price locked bars do not fill",
             "A-share positions cannot exit on their entry date",
             "if stop and take-profit both touch in one daily bar, stop is matched first",
             "gap-through stops fill at open; costs and slippage are applied per side",
+            "explicit halts defer exits and expire entries under the configured TTL",
+            "volume participation can split fills; each partial fill pays its own costs",
+            "explicit splits adjust shares and price levels before trading; cash dividends credit cash",
             "this is research evidence only and never submits or records an order",
         ],
     }

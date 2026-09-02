@@ -23,7 +23,7 @@ def _database(path: Path, *, mixed_source: bool = False) -> Path:
         );
         CREATE TABLE prices (
             symbol TEXT, market TEXT, date TEXT, open REAL, high REAL,
-            low REAL, close REAL, source TEXT, adjustment TEXT
+            low REAL, close REAL, volume REAL, source TEXT, adjustment TEXT
         );
         CREATE TABLE stocks (symbol TEXT, industry TEXT);
         INSERT INTO stocks VALUES ('AAA', '电子');
@@ -35,11 +35,11 @@ def _database(path: Path, *, mixed_source: bool = False) -> Path:
     sources = ["provider_a", "provider_b" if mixed_source else "provider_a", "provider_a"]
     for index, day in enumerate(("2026-07-01", "2026-07-02", "2026-07-03")):
         connection.execute(
-            "INSERT INTO prices VALUES ('AAA', 'CN', ?, 10, ?, 9, ?, ?, 'qfq')",
+            "INSERT INTO prices VALUES ('AAA', 'CN', ?, 10, ?, 9, ?, 1000000, ?, 'qfq')",
             (day, 11 + index, 10 + index, sources[index]),
         )
         connection.execute(
-            "INSERT INTO prices VALUES ('BBB', 'CN', ?, 10, 11, 9, 10, 'provider_a', 'qfq')",
+            "INSERT INTO prices VALUES ('BBB', 'CN', ?, 10, 11, 9, 10, 1000000, 'provider_a', 'qfq')",
             (day,),
         )
     connection.commit()
@@ -80,6 +80,11 @@ def test_build_evidence_uses_only_selected_authoritative_batch_and_never_writes(
     assert result["lineage"]["selected_days"][0]["signal_rows"] == 1
     assert set(result["lineage"]["price_by_symbol"]) == {"AAA"}
     assert result["nav_replay"]["fills"][0]["symbol"] == "AAA"
+    identity = result["experiment_identity"]
+    assert identity["control_id"] == tool.CONTROL_ID
+    assert identity["candidate_id"] is None
+    assert identity["frozen"] is True
+    assert identity["replay_id"] == result["nav_replay"]["replay_id"]
 
 
 def test_mixed_price_source_blocks_return_readiness_but_still_returns_diagnostics(
