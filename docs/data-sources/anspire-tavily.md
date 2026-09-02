@@ -2,7 +2,7 @@
 
 > M61 手册库 | 生成 2026-07-04 | 接入新能力必须同步更新本手册
 
-素材来源：`docs/dev/DATA_AUDIT_EXTERNAL.md` §6（一句话带过，本次未深挖）+ 代码内省。
+素材来源：`docs/evidence/data_source_audit_digest.md` + 代码内省；原始长审计已外部归档。
 
 ## 1. 一句话定位
 

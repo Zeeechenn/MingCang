@@ -102,8 +102,8 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 | API routes | `backend/api/routes/`, `backend/api/schemas.py`, `backend/main.py` | FastAPI app and REST surfaces, including the read-only daily panel API |
 | Scheduler and workflows | `backend/scheduler.py`, `backend/jobs/`, `backend/workflows/`, `backend/ops/run_envelope.py`, `backend/ops/job_ledger.py` | scheduled/manual jobs plus stable orchestration facades and the explicit completed-run contract; API/jobs depend on workflows, not tool implementations |
 | Agent bridge | `backend/agent/` | local CLI, action registry, MCP/tool context |
-| Analysis, backtests and evidence | `backend/analysis/`, `backend/backtest/`, `backend/evidence/`, `backend/ops/one_loop_continuity.py`, `backend/tools/memory_backtest.py` | quant engine, statistics, PIT replay, run cards, committed daily-panel artifacts and immutable continuity audit |
-| Tools registry | `backend/tools/registry.py`, `backend/tools/`, `python3 -m backend.agent.cli tools` | CLI, maintenance, experiment and compatibility adapters; stable business modules must not depend on tool implementations |
+| Analysis, backtests and evidence | `backend/analysis/`, `backend/backtest/`, `backend/evidence/`, `backend/ops/one_loop_continuity.py` | quant/statistics, PIT replay, independent cash NAV, run cards, committed daily-panel artifacts and immutable continuity audit |
+| Tools registry | `backend/tools/registry.py`, `backend/tools/`, `python3 -m backend.agent.cli tools` | CLI, maintenance, experiment and compatibility adapters, including manual-only P0-R evidence and price-rebase planning; stable business modules must not depend on tool implementations |
 | M31/M41/M42/M45 tools | `backend/tools/m31_*`, `backend/tools/m41_*`, `backend/tools/m42_*`, `backend/tools/m45_*` | cache benchmark, probe health, qfq/hfq remediation, source-gated import/scoreboard |
 | Frontend | `frontend/src/main.tsx`, `frontend/src/page-*.tsx`, `frontend/src/features/`, `frontend/src/services/` | hash-routed pages, feature-owned Daily/Debate views and canonical API/live service boundaries; pages must not import other page implementations |
 | Public docs | `README.md`, `README_EN.md`, `docs_public/`, `mkdocs.yml` | GitHub entrypoints and the canonical public documentation site; checked by `make doc-check` |
@@ -128,37 +128,22 @@ be used by CLI commands or external callers.
 | completed-run contract | `backend.ops.run_envelope`, `backend.ops.job_ledger` | scheduler/manual/test2 entrypoint adapters |
 | daily panel evidence | `backend.evidence.daily_panel`, `backend.api.routes.daily`, `frontend/src/features/daily/` | `backend.portfolio.daily_panel` compatibility facade |
 | continuity acceptance | `backend.ops.one_loop_continuity`, `scripts/audit_one_loop_continuity.py` | none; explicit immutable DB path is required |
+| independent cash NAV evidence | `backend.backtest.nav_replay` | `backend.tools.p0r_nav_replay` manual-only snapshot CLI |
+| price-history rebase planning | none; maintenance-only | `backend.tools.rebase_price_history`, explicit DB and dry-run by default |
 
 ## 研究模块地图
 
-消费者来自 `rg`/AST import 查证；`dormant` 模块按 M57 记忆基础设施保留，勿在新功能中引用。
+精确消费者和调用关系容易随代码变化，不在本文件维护逐文件长表；架构任务应先查
+CodeGraph，再以 `rg`/AST 和 registry 复核。稳定分组如下：
 
-| 文件 | 代际 | 状态 | 消费者 | 一句话职责 |
-|---|---|---|---|---|
-| `backend/research/__init__.py` | M63 现役 | active | package import/export `DeepResearchReport`/`run_deep_research` | 研究包门面，透出手动深研入口。 |
-| `backend/research/agents.py` | M63 现役 | active | `backend/research/deep_research.py` | 为手动深研生成确定性角色段落。 |
-| `backend/research/ai_supply_chain_template.py` | ATLAS-dormant | dormant | `backend/api/routes/research.py`, `backend/research/theme_hypothesis_engine.py` | Atlas AI 供应链主题模板归 M57 记忆基础设施保留，勿在新功能中引用。 |
-| `backend/research/case.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/dossier.py`, `backend/research/gate_b_recorder.py` | 把 dossier 派生成 ResearchCase、quality gate 和 validity card。 |
-| `backend/research/case_view.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py` | 聚合 thesis/review/forward/theme 记录供 Case View 读取。 |
-| `backend/research/copilot.py` | M63 现役 | active | `backend/api/routes/research.py`, `backend/tools/m63_research.py` | 生成单股研究副驾驶影子结论。 |
-| `backend/research/deep_research.py` | M63 现役 | active | `backend/api/routes/research.py`, `backend/research/research_report_gate.py`, `backend/tools/m63_research.py` | 执行手动周末/主题深研并在写入前过报告门。日常入口经 `m63_research` 路由；模块直调属高级用法（R2 收敛）。 |
-| `backend/research/dossier.py` | M63 现役 | active | `backend/api/routes/research.py` | 汇总单股研究 dossier 供 API 和 M63 研究上下文使用。 |
-| `backend/research/forward_thesis.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/watchlist.py`, `backend/tools/m45_import_track_theses.py`, `backend/tools/m60_thesis_sync.py`, `backend/tools/m60_watchtower.py` | 存储前瞻 thesis、置信区间和证据清单。 |
-| `backend/research/gate_b_recorder.py` | ATLAS-dormant | gate-guarded | `backend/tools/atlas_stage2b_strict_gate.py`, `backend/tools/atlas_test4_stage2b_shadow.py`, `backend/tools/gate_b_tracker.py` | Atlas Gate-B 前瞻观察记录和报告工具层。 |
-| `backend/research/research_evidence_defs.py` | M39-M55 论点与门 | gate-guarded | `backend/research/ai_supply_chain_template.py`, `backend/research/research_report_gate.py`, `backend/tools/m45_*.py`, `backend/workflows/render.py` | 定义研究证据等级、禁用表述和报告扫描函数。 |
-| `backend/research/research_report_gate.py` | M39-M55 论点与门 | gate-guarded | `backend/research/deep_research.py` | 在深研报告落盘前执行 M50 报告门。 |
-| `backend/research/review_loop.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/case_view.py`, `backend/tools/m45_falsification_scoreboard.py` | 维护 review case、memory candidate 和独立复核结构门。 |
-| `backend/research/serenity_chokepoint.py` | ATLAS-dormant | dormant | `backend/research/research_report_gate.py(type-only)` | Serenity 方法论形状归 M57 记忆基础设施保留，勿在新功能中引用。 |
-| `backend/research/stress_test.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py` | 对 ResearchCase 做一次 evidence-bounded red-team stress test。 |
-| `backend/research/theme_hypothesis_engine.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/case_view.py` | 存储主题和 hypothesis，并挂接前向证据。 |
-| `backend/research/thesis_ledger.py` | M39-M55 论点与门 | gate-guarded | `backend/api/routes/research.py`, `backend/research/case_view.py` | 存储 thesis、状态流转、confidence 历史和 review 关联。 |
-| `backend/research/universe_guard.py` | ATLAS-dormant | gate-guarded | `backend/api/routes/research.py` | 维护回测/前向验证用 universe snapshot 和 provenance 报告。 |
-| `backend/research/watchlist.py` | M63 现役 | active | `backend/research/watchtower_confirm.py`, `backend/tools/m60_thesis_sync.py`, `backend/tools/m60_watchtower.py`, `backend/tools/m63_opinion.py`, `backend/tools/m63_research.py`, `backend/tools/m63_weekly.py` | 读取和校验观察哨主题，并用 ForwardThesis 作为 thesis 权威来源。 |
-| `backend/research/watchtower_confirm.py` | M63 现役 | active | `backend/tools/m60_watchtower.py` | 对观察哨触发符号生成 LLM 确认卡。 |
-| `backend/agents/director.py` | M63 现役 | active | `backend/agents/pipeline.py`, `backend/decision/aggregator.py` | 评估分析师报告质量并提出辩论议题。 |
-| `backend/agents/trader.py` | M63 现役 | active | `backend/agents/pipeline.py`, `backend/agents/risk_manager.py` | 合成分析师和研究员结论，给出建议、仓位、止盈止损。 |
-| `backend/agents/portfolio_manager.py` | M63 现役 | active | `backend/agents/__init__.py`, `backend/jobs/postmarket.py` | 盘后对候选信号做组合层仓位裁剪。 |
-| `backend/agents/researcher.py` | M63 现役 | active | `backend/agents/pipeline.py`, `backend/agents/trader.py`, `backend/decision/aggregator.py` | 在分歧时执行多空辩论或快速共识。 |
-| `backend/agents/analyst.py` | M63 现役 | active | `backend/agents/director.py`, `backend/agents/pipeline.py`, `backend/agents/researcher.py`, `backend/agents/trader.py`, `backend/decision/aggregator.py` | 将技术、量化、情绪、新闻结果包装为结构化 AnalystReport。 |
-| `backend/agents/pipeline.py` | M63 现役 | active | `backend/agents/__init__.py`, `backend/decision/aggregator.py` | 编排 Analysts → Director → Researcher → Trader → RiskManager 决策流。 |
-| `backend/agents/risk_manager.py` | M63 现役 | active | `backend/agents/pipeline.py` | 对 trader 提案执行风控否决、降级和执行约束提示。 |
+| 分组 | Canonical paths | 状态与边界 |
+|---|---|---|
+| 深研入口 | `backend/research/deep_research.py`, `dossier.py`, `copilot.py` | active；日常经 `backend.tools.m63_research` 路由 |
+| 论点与证据门 | `case.py`, `thesis_ledger.py`, `review_loop.py`, `research_report_gate.py` | gate-guarded；主观清单不直接改短线分数 |
+| 前瞻观察 | `forward_thesis.py`, `watchlist.py`, `watchtower_confirm.py` | active/gate-guarded；事件和确认结果只进入受控证据路径 |
+| 主题与压力测试 | `theme_hypothesis_engine.py`, `stress_test.py`, `universe_guard.py` | gate-guarded；必须保留 PIT/universe provenance |
+| dormant 模板 | `ai_supply_chain_template.py`, `serenity_chokepoint.py` | dormant 或 type-only；新功能不得依赖 |
+| 多智能体决策 | `backend/agents/` | active；由 pipeline 编排，RiskManager 保持最终机械风险边界 |
+
+新增、移除或晋升研究模块时，更新本分组、`backend.tools.registry`、对应测试和
+`CHANGELOG.md`；不要恢复动态消费者清单作为长期手工维护负担。

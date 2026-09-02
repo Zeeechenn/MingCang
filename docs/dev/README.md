@@ -14,11 +14,14 @@ Current allowlist:
 | File | Surface | Why it remains live |
 |---|---|---|
 | `2026-07-07-live-track-design.md` | live contract | Referenced by `live_trading/LIVE.md` as the live-track design contract. |
-| `DATA_AUDIT_EXTERNAL.md` | data-source contract | Carries falsification evidence for external data gaps. |
-| `DATA_AUDIT_IFIND.md` | data-source contract | Referenced by data-source manuals for iFinD scope and risks. |
 | `M54_OOS_PREREGISTER.md` | research/evidence contract | Referenced by runtime config and OOS tooling as preregistered validation rules. |
 | `M55_SERENITY_CONVERGENCE_PLAN.md` | research gate contract | Referenced by serenity chokepoint code/tests while the gate remains present. |
 | `m50_research_report_gate_spec.md` | report-gate contract | Referenced by `backend/research/research_report_gate.py`. |
+
+The former `DATA_AUDIT_EXTERNAL.md` and `DATA_AUDIT_IFIND.md` narratives were
+archived outside the repository on 2026-09-03. Their binding conclusions live
+in `docs/data-sources/`; provenance and hashes live in
+`docs/evidence/data_source_audit_digest.md`.
 
 When one of these contracts becomes fully encoded in code/tests or is retired,
 move it to the external archive first, update all references, and keep

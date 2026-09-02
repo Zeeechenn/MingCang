@@ -11,8 +11,11 @@ wrapper 依赖）是明仓六源里**理论能力覆盖面最广**的候选（RE
 catalog 条目**——本手册的 13 个端点候选，**验证状态一律"候选未验,待 P1 体检"**，接入与否留待
 P1 体检结果判定，不预设结论。
 
-## ② 能力目录：13 个端点候选（清单来自 `docs/dev/DATA_AUDIT_EXTERNAL.md` §5 + 2026-07-04 对
-   `github.com/simonlin1212/a-stock-data` SKILL.md（V3.3.0）原文核对，URL 均为原文抄录，未经明仓实测）
+## ② 能力目录：13 个端点候选
+
+清单来自 `docs/evidence/data_source_audit_digest.md` 登记的归档审计，以及 2026-07-04 对
+`github.com/simonlin1212/a-stock-data` SKILL.md（V3.3.0）的原文核对；URL 均为原文抄录，
+未经明仓实测。
 
 | # | 端点/接口 | URL / 协议 | 功能 | 覆盖类别 | 验证状态 |
 |---|---|---|---|---|---|
@@ -125,5 +128,5 @@ curl -s "https://www.cninfo.com.cn/new/hisAnnouncement/query" \
   12 个未接口子，而非重复接入已有的新闻端点。
 - 资金流端点（#8/#9）金额单位是**元**而非万元（SKILL.md 原文特别标注 "push2 资金流金额单位是元
   (非万元)"），接入时若沿用其他资金流函数的万元惯例会出现单位错误。
-- 本手册的 URL/参数抄录自 2026-07-04 拉取的 SKILL.md（V3.3.0）原文，比最初的 `DATA_AUDIT_EXTERNAL.md`
+- 本手册的 URL/参数抄录自 2026-07-04 拉取的 SKILL.md（V3.3.0）原文，比归档的原始数据源审计
   （仅拿到 README 摘要）更细，但**仍未做任何真实网络调用验证**——这是文档层核对，不是 P1 体检。

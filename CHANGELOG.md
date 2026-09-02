@@ -10,9 +10,38 @@
 
 ### Added / 新增
 
+- **P0-R 独立现金 NAV 对照证据**：新增只读快照输入的真实现金账本回放和手动 CLI，
+  覆盖 next-open 成交、T+1、费用、涨跌停锁定、止损优先、行业上限和反转延迟；结果只作
+  独立诊断，不接 scheduler、正式信号、仓位、权重或止损。价格口径未清零时明确返回
+  `blocked_price_basis`，不能作为收益晋升证据。
+- **紧凑证据摘要**：新增 `docs/evidence/external_quant_projects.md` 和
+  `docs/evidence/data_source_audit_digest.md`，保留外部项目的固定版本、许可/安全边界、
+  独立验证要求，以及旧数据源审计的哈希和长期有效结论。
+
 ### Changed / 变更
 
+- **P0-B1 价格重基工具安全收口**：价格重基规划必须显式指定数据库，默认只 dry-run；
+  写入需要额外确认并拒绝生产库路径。对抗性测试覆盖部分历史、混源、重复行和错误执行
+  参数。本批未执行 P0-B2，也未修改任何生产数据库。
+- **开发计划内化与活跃上下文压缩**：`docs/ROADMAP.md` 现完整承接 G1/G2/G3、P0
+  依赖、微批次证据合同和 P1-P4 唯一顺序；`STATUS.md` 只保留当前运行真相，`PROJECT.md`
+  将易漂移的逐文件消费者长表压缩为稳定 owner 分组。两份已被手册吸收的原始数据源审计
+  从 `docs/dev/` 移出，并由文档 authority 测试防止误恢复。完整原文保留在仓库外治理档案。
+
 ### Fixed / 修复
+
+- **P0-G One Loop 默认起算日统一**：连续性审计、健康面和默认 CLI 路径共享同一
+  canonical start-date 来源，消除默认值漂移；未改变既有日集合、批次选择、完成判据、
+  scheduler 时序或生产写入。
+
+### Verification / 验证
+
+- 2026-09-03 隔离候选树：聚焦回归 `96 passed`；Ruff、release hygiene、文档
+  authority、mypy 全绿；后端 `2079 passed, 14 skipped`；前端 `37/37`、TypeScript、
+  Vite build、ESLint 全绿；桌面/移动真实浏览器 smoke 全绿且无 console/page error。
+  沙箱内 smoke 首次因禁止监听 `127.0.0.1:4174` 返回 `EPERM`，在仅放开本机临时端口后
+  原命令通过。冻结快照 continuity 与改动前结果在排除生成时间/路径后逐字段相同，仍为
+  `11/20`、完整率 `1.0`、意外降级率 `0.0`、无日级 blocker。
 
 ---
 

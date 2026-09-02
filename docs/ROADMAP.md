@@ -164,93 +164,113 @@ replacement
 
 同一时间最多允许两个实现批次在进行，且结构迁移与业务行为改变不能混在同一批。
 
-### 当前 P0 微批次与治理裁决（2026-09-03）
+### 当前开发计划与接手入口（2026-09-03）
 
-本轮开发必须与正在运行的 One Loop 隔离：只在独立临时 clone 中开发和验证，生产库、
-正式信号、风险规则、scheduler、API 和当前 `daily_panel.v1` 合同均不得改变。P0-G 是
-第一个可评审微批次；P0-R 与 P0-A 可以在它之后并行开发，但不因此获得合入或启用权限。
+本节已吸收仓库外《明仓优化开发指导》和四项目审计中仍有效的执行内容；后续开发只需
+读取 `AGENTS.md → STATUS.md → 本文件`，不得再把外部长报告当第二份路线图。报告的固定
+项目结论已压缩到 `docs/evidence/external_quant_projects.md`。
 
-| 批次 | 当前裁决 | 边界与下一门 |
+#### 当前状态与真实缺口
+
+本轮已获 owner 合入授权，但授权不绕过批次自身前置门：
+
+| 批次 | 已合入/已决定 | 尚未完成 |
 |---|---|---|
-| P0-G | 隔离实现完成，待 owner 审查 | One Loop 起算日只有一个代码来源；同一只读快照上的连续性审计必须语义零差异 |
-| P0-B1 | 隔离实现完成，保持 dry-run/manual-only | 只允许临时数据库、固定来源/复权口径、备份和对抗性测试；不得写生产库 |
-| P0-B2 | 未授权、未开始 | 修复历史价格或重基必须另行提交影响清单、全历史覆盖证明、回滚方案和维护窗口，并由 owner 单独批准 |
-| P0-R | 隔离证据实现完成，不具备晋升资格 | 独立现金 NAV、交易成本和亏损归因只能读取冻结快照；价格口径未清零前不得用于 P3/P4 |
-| P0-A | 隔离 preview 实现完成，禁止合入/启用 | 20/20 后先冻结旧 `daily_panel.v1` 基线，再由 owner 明确批准；旧 20 日不能替代新合同的质量门和前向验证 |
+| P0-G | 日跑、独立 CLI、审计函数共享唯一默认起算日；同快照语义零差异 | 非权威 override 仍须 fail-closed 或进入显式迁移；输出直接报告被比较日集合 |
+| P0-B1 | `manual_only` 重基工具默认 immutable dry-run；execute 仅允许临时独立 SQLite，具备来源/口径 pin、全历史覆盖断言、备份、事务、逐支校验和哈希检查 | 日常 provider 写路径仍须阻断跨源复权拼接；601899 ATR 反向变化原因未解释 |
+| P0-R | `manual_only` 现金 NAV v1：下一会话开盘、T+1、锁价不可成交、保守止损、成本、仓位/行业/总仓门和亏损归因 | 公司行动、显式停牌/部分成交、冻结 control/candidate ID；价格口径清零后重跑 |
+| P0-A | G1 的 `1/5/2` 产品分类已定；disabled preview 只保存在外部评审历史 | 20/20 前不合入；stable/shadow 生命周期、三张 missing 卡 producer、空状态前端和真实组合回归仍开放 |
+| P0-B2 | 未开始 | 生产/历史价格修复仍需独立批准，不包含在本次“合入代码”授权中 |
 
-G1 — 八卡分类采用 `1 / 5 / 2`，只增加分类元数据，不修改 `daily_panel.v1` 的卡片
-身份、顺序或现有语义：
+P0-R 当前 frozen-snapshot 输出为 `blocked_price_basis`、19 个价格口径问题、
+`promotion_eligible=false`。P0-B1 对 `000568` 的实源 dry-run 只取得 14 行，和库内 14 行中
+6 行不一致，且未覆盖 2,501 行历史中的 2,487 行，因此拒绝 execute。两项结果都只能作为
+诊断，不能证明策略收益。
+
+#### G1 — 八卡产品分类与生命周期未决项
+
+八卡采用 `1 / 5 / 2` 分类，只增加产品元数据，不修改 `daily_panel.v1` 的身份、顺序或
+现有语义：
 
 - 运行控制 1 张：`batch_integrity`；
 - 决策证据 5 张：`candidate`、`position_health`、`event_risk`、`watchtower`、`daily_delta`；
 - 治理闭环 2 张：`human_confirmation`、`review_attribution`。
 
-八张卡仍全部必需。任何 v2 合同只能先以 disabled preview 形式存在，不得被当前 runner
-导入，也不得把“生成了新卡”解释为连续性或收益有效。
+八张卡仍全部必需。上述分类不等于 stable/shadow 生命周期裁决；P0-A 开工时仍须明确：
 
-G2 — 本地产物的唯一只读快照协议：
+- `event_risk` 是每日确定性 stable 事件风险，还是 0-LLM 日跑中的 shadow
+  `not_applicable/degraded_zero`；不得为了变绿恢复日常 LLM；
+- `watchtower` 必须同日显式传递或写入耐久 artifact，校验 `as_of/run_id`，不得把
+  `/private/tmp` 当长期证据目录；
+- `daily_delta` 必须有正式 producer，包含 current/previous as-of、结构化变化和
+  `no_previous_reason`；
+- `ready_zero`/`not_applicable` 必须有结构化原因，前端应将原因渲染给人看。
 
-1. SQLite 必须使用 `scripts/sqlite_consistent_snapshot.py` 生成到 `/private/tmp` 的一致性副本，
-   禁止裸复制活动数据库；快照必须是无 `-wal`/`-shm` 依赖的独立文件。
-2. 所有证据工具以 `mode=ro&immutable=1` 打开快照，执行前后记录并核对 SHA-256；测试、
-   dry-run 和回放都不得连接生产数据库的可写句柄。
-3. JSON/Markdown 等本地产物只按显式路径读取，同样核对前后哈希；任何派生报告只写
-   `/private/tmp`，不得回写正式八卡、test2、账本或仓库内忽略目录。
-4. 快照带 sidecar、来源/复权口径混杂、历史覆盖不完整、哈希变化或连续性结果漂移时，
-   必须 fail-closed 并停止该批次。
+任何 v2 只能先以 disabled preview 存在。旧 20 日只证明 v1 运行门，不能证明新合同的
+产出质量或收益。
 
-G3 — 最终合入权限只属于 owner，任何“开发完成”“测试通过”或达到 20/20 都不自动授权
-合入、启用或修库：
+#### G2 — 本地产物唯一只读快照协议
 
-- P0-G 只有在全量验证通过、且同一冻结快照的 One Loop 审计语义零差异后才可提请合入；
-- P0-B1 与 P0-R 只有在 owner 明确批准后才可作为 `manual_only` 工具合入，合入不得新增
-  scheduler/runner/API 消费者，不得改变正式信号、仓位、风险线或生产库；
-- P0-A 在 20/20、旧 v1 基线封存和 owner 明确确认三者全部满足前不得合入或启用；之后
-  仍需重新开始新合同的产物质量门和前向收益验证；
-- P0-B2 永远需要独立批准；P3/P4 必须等待价格口径问题清零、P0-R 重新产出可信 NAV/
-  亏损归因，并通过各自预注册门。
+1. SQLite 使用 `scripts/sqlite_consistent_snapshot.py` 生成到 `/private/tmp`，禁止裸复制
+   活动数据库；快照必须无 `-wal`/`-shm` 依赖。
+2. 证据工具以 `mode=ro&immutable=1` 打开快照，前后核对 SHA-256；写测试只用临时
+   DB/cache/output，不得连接生产可写句柄。
+3. JSON/Markdown 本地产物按显式路径只读并核对哈希；派生报告只写 `/private/tmp`，
+   不回写正式八卡、test2、账本或仓库内忽略目录。
+4. sidecar、来源/复权混杂、历史覆盖不完整、哈希变化或 continuity 日集合漂移均
+   fail-closed。价格修复前后要比较逐日集合，而不只比较 status 或 N/20。
+
+#### G3 — 合入、启用和修库权限
+
+- owner 已授权合入 P0-G、P0-B1、P0-R 和本次文档治理；它们仍保持当前 production
+  consumer 为零或原行为不变。
+- P0-A 必须同时满足 20/20、旧 v1 基线封存和 owner 再次确认，之后还要重新开始
+  output-quality 与 forward-return 验证。
+- P0-B2 永远单独批准：先给逐支影响清单、固定 provider/basis 的全历史覆盖证明、备份、
+  回滚和维护窗口；涉及当前 LIVE 持仓时重新计算 ATR/NAV 并人工确认。
+- P3/P4 等价格口径问题清零且 P0-R 产出可信亏损归因后才可开工。
+
+#### 每个微批次的交付合同
+
+每批只做一个行为主题，并在提交前记录：
+
+1. 基准 commit、依赖事实逐条复核；任一事实不一致就停工报告。
+2. owner domain、唯一消费者、行为不变量、改动文件和回滚方式。
+3. 一个修复前能暴露缺陷的对抗性测试、聚焦测试、最终完整门；skip 逐项解释。
+4. 底层表/JSON 字段和哈希证据；改运行合同须重跑 continuity，改收益引擎须核对
+   ledger/NAV 守恒。
+5. 未决项、失败门、是否允许合入/启用/写库。测试通过本身不授予任何后续权限。
+
+#### 后续唯一顺序
+
+1. One Loop 每日继续到 20/20；同时完成 P0-G override/迁移留痕和 P0-B1 日常写入防混源。
+2. 价格口径清零后重跑 P0-R，补齐成交/公司行动边界并冻结 control。
+3. 20/20 后封存 v1 基线，经 owner 确认再做 P0-A producer、产品合同和前端空状态。
+4. P1 将运行门、产出门、数据门和收益门分账；20 日门只证明链路运行。
+5. P2 扩展现有 M29 为 research-only Candidate Manifest：canonical signature、数据快照
+   hash、完整试验族/预算、inner/outer folds、purge/embargo、holdout 访问记录、生命周期；
+   首版无 DB、UI、scheduler 或第二套 ledger。
+6. P3 先按 P0-R 亏损归因选择一个预注册候选。支撑/阻力只是候选之一；若采用，使用
+   经审阅规格和未读上游源码的实现方，不复制 GPL/AGPL 表达。
+7. P4 使用同一 close-confirmed 数据/universe/撮合/成本/风险预算做冻结 control 与
+   单变量 candidate 前向双臂；候选只写独立 shadow/paper ledger，最终仍需统计门和 owner 确认。
+
+收益主指标为候选相对 control 的扣费净主动收益、日主动收益信息比率和包含现金/费用/
+公司行动的真实 NAV；最大回撤、尾部损失、换手、成本与贡献集中度不得恶化。20 个交易日
+只作运行 smoke，60 日只作方向检查，stock-days 必须按标的/日期 block 处理，不能把重叠样本
+当独立观察。
 
 ### 阶段 0 — 基线、封档与冲突隔离
 
-状态：**完成（2026-08-19）。** Dirty worktree 已逐项归属，运行基线通过生产库的
-immutable 副本审计，旧路线图与关闭计划已进入仓库外治理档案；生产库未被修改。
-
-工作：
-
-- 识别当前 dirty worktree 中每项改动的归属，不覆盖、不回滚用户工作；
-- 记录 commit、版本、文档、工具、运行入口、schema、测试和当前生产输出基线；
-- 形成旧里程碑总账：完成、保留、shadow、dormant、rejected、archived、重新提案条件；
-- 将详细旧规划和实验叙事保存到仓库外治理档案；
-- 保留 CHANGELOG 与 Git 历史，不复制数据库、持仓、日志、密钥或模型。
-
-完成门：
-
-- 当前未提交内容都有归属；
-- 旧工作线均有结算裁决和承接领域；
-- 活跃项目文档不再要求读取旧 M 路线图才能继续开发；
-- 没有删除仍被代码、测试或安全合同引用的资料。
+状态：**完成（2026-08-19）。** Dirty worktree、历史能力和旧规划均已归属；运行
+基线通过 immutable 副本审计，历史叙事进入仓库外治理档案，生产库未被修改。
+详细过程只在 Git/CHANGELOG 和外部档案中保留，不再占用活跃计划上下文。
 
 ### 阶段 1 — 文档单一权威与 AI 导航
 
-状态：**完成（2026-08-19）。** `docs_public/` 为公开唯一源，重复内部页面只保留
-兼容 stub；文档 authority/nav/中英文一致性检查与严格 MkDocs 构建已建立。
-
-工作：
-
-- 逐个文档分类为：当前权威、公开源、活契约、证据、运行产物、历史档案；
-- `AGENTS.md` 只写 Agent 规则；`PROJECT.md` 只写架构与所有权；`STATUS.md` 只写运行真相；本文件只写计划；`CHANGELOG.md` 只写历史；
-- `docs_public` 作为公开站点源，同一主题不得与 `docs` 双份维护；
-- 将已关闭的 `docs/dev` 计划移到外部档案，但先把仍有效的不变量提炼进代码、测试或活契约；
-- 把本地 `docs/research`、`docs/reviews` 等运行产物真正移出仓库目录；
-- 收口重复的 ARCHITECTURE、WHY_NOT、架构图、Fresh-Agent 路由和能力地图；
-- 为内部与公开文档建立链接、nav、authority、上下文预算和中英文一致性检查。
-
-完成门：
-
-- 每个主题只有一个权威来源；
-- 默认 AI 入口不重复加载相同状态；
-- `mkdocs build --strict`、链接、nav、README parity 和文档所有权检查全绿；
-- 归档过程没有丢失安全边界、证伪结论和运行证据。
+状态：**完成并持续守卫。** `docs_public/` 是公开唯一源；AGENTS/PROJECT/STATUS/
+ROADMAP/CHANGELOG 职责分离，旧页面仅保留兼容 stub，`make doc-check` 守卫 authority、
+nav、README parity 和 `docs/dev` allowlist。关闭计划和长审计只保留外部原文与仓内短摘要。
 
 ### 阶段 2 — 统一 RunEnvelope 与完成批次合同
 
@@ -301,77 +321,20 @@ output artifacts
 
 ### 阶段 3 — 编排、工具和领域收口
 
-状态：**完成（2026-08-19）。** core/workflow 到 tool 实现依赖均为 0；稳定能力已
-迁到 canonical domain module，旧路径只作兼容 facade；registry 元数据和边界测试已补齐。
-
-工作：
-
-- 把当前日常总编排器拆成稳定领域服务和薄 workflow；
-- 逐项清零 workflow→tool 实现依赖；
-- tools registry 增加 owner、lifecycle、consumer、expiry、replacement；
-- 默认只展示 stable 工具；maintenance/evidence/attic 分入口；
-- dormant/rejected/archived 能力不被默认导入或运行；
-- 冻结新的 M 编号模块，兼容入口按发布周期退役。
-
-完成门：
-
-- core→tools 和 workflow→tools 实现依赖均为 0；
-- 每项稳定能力只有一个 canonical owner 和入口；
-- 架构边界测试、CodeGraph、聚焦测试和 `make verify` 全绿；
-- 结构批次对 signals、positions、weights、stops、scheduler 时序、API 和 DB schema 的差异为 0。
+状态：**完成（2026-08-19）。** core/workflow 到 tool 实现依赖为 0；稳定能力归
+canonical domain，旧路径只作兼容 facade。工具生命周期和边界由 registry 与架构测试守卫。
 
 ### 阶段 4 — 研究、风险与外部优点归口
 
-状态：**完成（2026-08-19），无生产晋升。** 吸收点均落入现有领域并保持
-additive、shadow/read-only。预注册锁定出场样本中 baseline 为 +14.78%、最大回撤
--27.50%，四个替代方案均更差且未过回撤门，故保留 baseline、冻结新变体。
-
-工作：
-
-- 把 stock-analyzer 的正反论点、三情景和证伪条件合并进现有 ResearchCase/report gate；
-- 把 Vibe 的 Run Card、PIT 和行为复盘合并进 evidence、trade journal、ReviewCase；
-- 把 stock_monitor 的去重、压制原因和频控合并进观察哨/通知层；
-- 把 M54/M68 统一为“新闻与事件风险”能力，风险槽位和方向实验分账；
-- 完成现有出场影子实验的预注册裁决，不新增变体；
-- 记忆继续 shadow-only，达到明确重新提案门前不恢复决策注入。
-
-完成门：
-
-- 六个外部项目没有产生新的平行框架；
-- 每个吸收点都有既有 owner、测试、指标和退出条件；
-- 主观研究清单不直接改变短线分数；
-- 事件风险可以进入面板，方向权重仍需独立统计门和用户确认。
+状态：**完成（2026-08-19），无生产晋升。** 外部方法只作为 additive、shadow/
+read-only 候选进入既有领域。锁定出场样本的四个替代方案均劣于 baseline，故保留
+baseline、冻结变体；新四项目的固定审计结论见短证据摘要，不建立平行框架。
 
 ### 阶段 5 — 单一日常产品面与前端收口
 
-状态：**完成（2026-08-19）。** 后端提供固定八卡的权威盘后面板；前端单一入口、
-shadow 过滤、证据下钻、桌面和 390px 移动布局均已验收。权威产物与 JobRun 绑定，
-先写 pending、账本提交后原子标记 committed，失败时不会伪装成完整证据。
-
-每日权威面板至少展示：
-
-- 批次完整性和数据降级；
-- 候选变化和理由；
-- 持仓体检、机械风险线与风险预算；
-- 新闻/事件风险与证据；
-- 观察哨触发和被压制事件；
-- 与上一交易日的变化；
-- 需要人工确认的问题；
-- 后续 ReviewCase 与结果归因入口。
-
-工作：
-
-- 将 InStock 的“筛选→解释→回测证据”体验用于现有页面，不复制其系统；
-- 前端按 app/features/services/ui 收敛，禁止页面直接依赖其他页面实现；
-- stable/shadow/dormant/rejected 在导航和卡片中明确区分；
-- 合并重复状态面、研究面和报告入口。
-
-完成门：
-
-- 用户从一个入口看清当天发生了什么、为什么、还需确认什么；
-- 每张卡能追溯 RunEnvelope 和证据；
-- 页面之间无实现级依赖；
-- TypeScript、Vitest、ESLint、build 和桌面/移动真实浏览器流程全绿。
+状态：**结构合同完成（2026-08-19），内容质量门仍开放。** 固定八卡、单一入口、
+pending/committed 协议和证据下钻已验收；P0-A 仍需补三张卡的真实 producer、生命周期
+合同与人类可读空状态，因此“八卡 committed”不得写成“八卡都有有效内容”。
 
 ### 阶段 6 — 连续运行证明与治理发布
 

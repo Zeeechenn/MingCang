@@ -2,7 +2,7 @@
 
 > M61 手册库 | 生成 2026-07-04 | 接入新能力必须同步更新本手册
 
-素材来源：`docs/dev/DATA_AUDIT_EXTERNAL.md` §4。
+素材来源：`docs/evidence/data_source_audit_digest.md`；原始长审计已外部归档。
 
 ## 1. 一句话定位
 
@@ -69,8 +69,8 @@ probe_tickflow_daily(symbol="600519", market="CN", days=30)
 
 1. **不要被名字误导去查资金流问题**——`FLOW_MISSING` 告警的真正根因是 `news_fusion.py` 里独立的
    资金流通道试图 `import backend.tools.m52_flow_floor`，该模块在仓库里**根本不存在**，异常被
-   静默吞掉返回 `None`，与 TickFlow 是否启用、是否有数据完全无关（详见
-   `docs/dev/DATA_AUDIT_EXTERNAL.md` §4.3 完整证据链，或 M61 计划 D1）。修复 `FLOW_MISSING`
+   静默吞掉返回 `None`，与 TickFlow 是否启用、是否有数据完全无关（本手册已保留
+   必要证据链，归档来源见 `docs/evidence/data_source_audit_digest.md`）。修复 `FLOW_MISSING`
    要去修 `m52_flow_floor`/`news_fusion.py`，跟本文件无关。
 2. **只有日K，没有分钟线/盘口/资金流/新闻/公告**——`external_sources.py` 里登记的其余 5 项
    `high_value_datasets` 是理论候选，不是已验证/已实现能力，若要真的用需要先补代码+走 P1 体检。

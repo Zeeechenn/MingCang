@@ -177,7 +177,7 @@ df = df[df["预案公告日"] <= "2024-01-31"]
   `stock_zh_a_gdhs` 的 symbol 是报告期字符串（如 `'20230930'`）；`stock_board_industry_cons_em` 的 symbol
   是行业名（如"小金属"）而非股票代码。接入前必须先用 `inspect.signature` 查默认值猜测参数真实含义，不能假设
   "看到 symbol 就传股票代码"。
-- akshare 官方文档存在幻觉风险：`docs/dev/DATA_AUDIT_EXTERNAL.md` 记录过 WebFetch 摘要生成的
+- akshare 官方文档存在幻觉风险：`docs/evidence/data_source_audit_digest.md` 登记的归档审计记录过 WebFetch 摘要生成的
   `stock_individual_research_em`/`stock_zh_a_fund_flow_sina`/`stock_zh_a_dragon_tiger_em` 经本地
   `hasattr` 验证**不存在**于 1.18.60——任何新函数名必须先本地 `hasattr(akshare, name)` 验证再使用。
 - akshare 不需要 key，但限制来自各上游站点的反爬/频率策略，本手册未做压测，未知具体限流阈值。

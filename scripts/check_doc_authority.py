@@ -30,12 +30,15 @@ STUB_TARGETS = {
 
 ALLOWED_DEV_CONTRACTS = {
     "2026-07-07-live-track-design.md",
-    "DATA_AUDIT_EXTERNAL.md",
-    "DATA_AUDIT_IFIND.md",
     "M54_OOS_PREREGISTER.md",
     "M55_SERENITY_CONVERGENCE_PLAN.md",
     "README.md",
     "m50_research_report_gate_spec.md",
+}
+
+ARCHIVED_DEV_NARRATIVES = {
+    "DATA_AUDIT_EXTERNAL.md",
+    "DATA_AUDIT_IFIND.md",
 }
 
 
@@ -84,8 +87,10 @@ def _check_internal_archive_boundaries(root: Path, errors: list[str]) -> None:
     dev_dir = root / "docs/dev"
     if dev_dir.exists():
         current = {path.name for path in dev_dir.glob("*.md")}
-        unexpected = sorted(current - ALLOWED_DEV_CONTRACTS)
+        unexpected = sorted(current - ALLOWED_DEV_CONTRACTS - ARCHIVED_DEV_NARRATIVES)
         _require(not unexpected, errors, f"docs/dev contains non-live archived plans: {unexpected}")
+        restored = sorted(current & ARCHIVED_DEV_NARRATIVES)
+        _require(not restored, errors, f"docs/dev restored archived audit narratives: {restored}")
 
 
 def check_doc_authority(root: Path) -> list[str]:

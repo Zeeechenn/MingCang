@@ -66,6 +66,15 @@ def test_doc_authority_rejects_archived_docs_in_repo(tmp_path: Path) -> None:
     assert any("docs/dev contains non-live archived plans" in error for error in errors)
 
 
+def test_doc_authority_rejects_restored_data_audit_narratives(tmp_path: Path) -> None:
+    _seed_minimal_repo(tmp_path)
+    _write(tmp_path / "docs/dev/DATA_AUDIT_EXTERNAL.md", "dated raw audit\n")
+
+    errors = check_doc_authority(tmp_path)
+
+    assert any("restored archived audit narratives" in error for error in errors)
+
+
 def test_doc_authority_accepts_current_repo() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     if not (repo_root / "mkdocs.yml").exists():

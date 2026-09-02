@@ -92,6 +92,11 @@ work. Follow links into those files only when the user asks for that history,
 when a current doc points to a specific older claim, or when preparing a
 release/audit answer.
 
+The active P0 handoff is fully represented by `STATUS.md` and
+`docs/ROADMAP.md`; no Desktop development guide or external-project audit is
+required to resume it. Consult `docs/evidence/external_quant_projects.md` only
+when selecting or validating an external research candidate.
+
 For MingCang trading, testing, review, or research decisions, prefer
 project-owned runtime truth over assistant-only chat memory:
 
@@ -193,6 +198,12 @@ Keep implementation work bounded:
   and rollback before editing;
 - one new top-level capability should normally replace, merge, or retire one
   existing capability.
+
+Current P0 authority boundaries are fail-closed: P0-G, P0-B1, and P0-R are
+foundation/evidence work and must preserve One Loop behavior; P0-A stays out of
+the active chain until 20/20, a frozen v1 baseline, and renewed owner approval;
+P0-B2 always requires its own backup, maintenance window, and write approval.
+The exact remaining work and acceptance evidence live in `docs/ROADMAP.md`.
 
 ### External Capability Admission
 
