@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [v0.8.2] 决策台研究与实验控制 / Decision-desk research and experiment control（2026-09-08）
+
 ### Added / 新增
 
 - 显式启用的严格研究输入：财务缺失保留 NA、按披露日过滤并约束去年同期比较、
@@ -29,7 +33,10 @@
 - STATUS 更新至 09-07 的 14/20 只读证据，明确 20 个价格口径阻塞标的及财务覆盖缺口；
   修正文档中 SQLite 快照参数为 `--destination`。
 
-### Fixed / 修复
+### Verification / 验证
+
+- 隔离 `make verify` 全绿：后端 2,228 passed / 14 skipped，前端 37 passed，构建、ESLint、桌面/手机浏览器冒烟通过；版本一致性及锁文件检查通过。
+- 所有新能力均未接入现有 One Loop 默认调用；未启动真实模型治疗臂，未执行生产数据修复。
 
 ---
 

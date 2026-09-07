@@ -8,7 +8,7 @@
 
 MingCang is a local-first A/HK/US equity research and decision-support workspace.
 It does not place real trades or provide financial advice. Package, API, and
-frontend versions remain aligned at `v0.8.1`; this development batch does not publish a release.
+frontend versions are aligned at `v0.8.2` for the decision-desk research and experiment-control patch release.
 
 ## Current Runtime Truth
 
@@ -100,18 +100,19 @@ strict reads alone cannot manufacture newer data.
 
 ## Verification
 
-The canonical code-quality gate is `make verify`. On 2026-09-08 the latest isolated
-session-control batch passed Ruff, release hygiene (785 tracked files), documentation
-authority, mypy (370 source files), and 2,228 backend tests (14 skipped), including
-42 new session tests. Coverage includes actual subprocess exit/restart, concurrent
-budget reservation, cross-arm overrun, record corruption, frozen experiment identity, and cutoff timezone boundaries.
-One existing Starlette deprecation warning remains non-blocking.
+The canonical code-quality gate is `make verify`. The isolated v0.8.2 release
+candidate passed the full gate on 2026-09-08: Ruff, release hygiene (785 tracked
+files), documentation authority, mypy (370 source files), 2,228 backend tests
+(14 skipped), 37 frontend tests, TypeScript/production build, ESLint, and
+desktop/mobile browser smoke with no console or page errors. Release version
+consistency and the Python lockfile check also passed. One existing Starlette
+deprecation warning remains non-blocking.
 
-The earlier batch at `df9cf9d0` passed 37 frontend tests, production build, ESLint,
-and desktop/mobile browser smoke. These frontend checks were not repeated: the
-latest batch leaves all 451 previously tracked backend/frontend/script and selected
-configuration/instruction files byte-identical and has no existing production imports.
-The new module is available only through explicit offline Python calls.
+The 42 new session tests cover actual subprocess exit/restart, concurrent budget
+reservation, cross-arm overrun, record corruption, frozen experiment identity,
+and cutoff timezone boundaries. The new module has no existing production
+consumer and is available only through explicit offline Python calls. The release
+version change updates package/API metadata; it does not activate a new daily path.
 
 In the earlier batch, the same immutable DB produced byte-identical default context/render/factor
 outputs across 1,128 symbol/date pairs. Existing copilot function definitions
