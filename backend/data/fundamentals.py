@@ -24,6 +24,7 @@ import json
 import logging
 import time
 from collections.abc import Iterable
+from contextlib import nullcontext
 from datetime import datetime
 from typing import Any
 
@@ -398,6 +399,38 @@ def _no_new_shares_from_holders(symbol: str, as_of: datetime, db) -> bool | None
     return bool(latest.total_shares <= earlier.total_shares * 1.02)
 
 
+def _financial_visible_as_of_filter(as_of: datetime):
+    as_of_date = as_of.strftime("%Y-%m-%d")
+    return (
+        FinancialMetric.report_date <= as_of_date,
+        FinancialMetric.disclosure_date.isnot(None),
+        FinancialMetric.disclosure_date <= as_of_date,
+    )
+
+
+def _metric_rows_for_piotroski(symbol: str, db, *, as_of: datetime | None = None) -> list[FinancialMetric]:
+    query = db.query(FinancialMetric).filter(FinancialMetric.symbol == symbol)
+    if as_of is not None:
+        query = query.filter(*_financial_visible_as_of_filter(as_of))
+    return query.order_by(FinancialMetric.report_date.desc()).limit(8).all()
+
+
+def _no_autoflush(db):
+    return getattr(db, "no_autoflush", nullcontext())
+
+
+def _piotroski_unavailable(reason: str, *, factors: dict[str, bool | None] | None = None) -> dict:
+    return {
+        "score": 0,
+        "score_denominator": sum(1 for value in (factors or {}).values() if value is not None),
+        "factors": factors or {},
+        "report_period": None,
+        "comparison_period": None,
+        "available": False,
+        "reason": reason,
+    }
+
+
 def compute_piotroski_factors(symbol: str, db) -> dict:
     """
     9 因子 F-Score（盈利能力 4 + 杠杆流动性 3 + 经营效率 2）
@@ -412,10 +445,7 @@ def compute_piotroski_factors(symbol: str, db) -> dict:
           "available": bool,
         }
     """
-    rows = (db.query(FinancialMetric)
-              .filter(FinancialMetric.symbol == symbol)
-              .order_by(FinancialMetric.report_date.desc())
-              .limit(8).all())
+    rows = _metric_rows_for_piotroski(symbol, db)
     if len(rows) < 2:
         return {"score": 0, "factors": {}, "report_period": None,
                 "comparison_period": None, "available": False,
@@ -476,6 +506,106 @@ def compute_piotroski_factors(symbol: str, db) -> dict:
             "gm_cur": cur.gross_margin, "gm_prev": prev.gross_margin,
         },
     }
+
+
+def compute_piotroski_factors_strict(
+    symbol: str,
+    db,
+    *,
+    as_of: datetime | str | None = None,
+    min_usable_factors: int = 5,
+) -> dict:
+    """
+    Strict opt-in Piotroski candidate for research inputs.
+
+    Unlike the default compatibility path, missing financial fields remain
+    unknown instead of being counted as failed factors. Rows with unknown
+    disclosure dates are excluded when ``as_of`` is supplied.
+    """
+    if as_of is None:
+        raise ValueError("strict_piotroski_requires_explicit_as_of")
+    if isinstance(min_usable_factors, bool) or not isinstance(min_usable_factors, int) or not 1 <= min_usable_factors <= 9:
+        raise ValueError("min_usable_factors_must_be_between_1_and_9")
+    as_of_dt = _parse_report_datetime(as_of)
+    with _no_autoflush(db):
+        rows = _metric_rows_for_piotroski(symbol, db, as_of=as_of_dt)
+    if len(rows) < 2:
+        return _piotroski_unavailable("insufficient_visible_periods")
+
+    cur = rows[0]
+    prior_year_period = f"{int(cur.report_date[:4]) - 1}{cur.report_date[4:]}"
+    prev = next((r for r in rows[1:] if r.report_date == prior_year_period), None)
+
+    f: dict[str, bool | None] = {}
+    roa_cur = _roa(cur)
+    roa_prev = _roa(prev) if prev is not None else None
+
+    f["roa_positive"] = None if roa_cur is None else roa_cur > 0
+    f["cfo_positive"] = None if cur.operating_cf is None else cur.operating_cf > 0
+    f["roa_improving"] = None if roa_cur is None or roa_prev is None else roa_cur > roa_prev
+    f["cfo_gt_ni"] = None if cur.operating_cf is None or cur.net_profit is None else cur.operating_cf > cur.net_profit
+
+    cur_assets = cur.total_assets
+    prev_assets = prev.total_assets if prev is not None else None
+    cur_debt = cur.long_term_debt
+    prev_debt = prev.long_term_debt if prev is not None else None
+    if (
+        cur_assets is None or cur_assets == 0
+        or prev_assets is None or prev_assets == 0
+        or cur_debt is None
+        or prev_debt is None
+    ):
+        f["leverage_decreasing"] = None
+    else:
+        f["leverage_decreasing"] = (cur_debt / cur_assets) < (prev_debt / prev_assets)
+
+    f["current_ratio_improving"] = (
+        None if prev is None or cur.current_ratio is None or prev.current_ratio is None
+        else cur.current_ratio > prev.current_ratio
+    )
+    f["no_new_shares"] = None
+    f["gross_margin_improving"] = (
+        None if prev is None or cur.gross_margin is None or prev.gross_margin is None
+        else cur.gross_margin > prev.gross_margin
+    )
+    f["asset_turnover_improving"] = (
+        None if prev is None or cur.asset_turnover is None or prev.asset_turnover is None
+        else cur.asset_turnover > prev.asset_turnover
+    )
+
+    factor_reasons = {
+        "no_new_shares": "holder_disclosure_as_of_unavailable",
+    }
+    if prev is None:
+        factor_reasons.update({
+            "roa_improving": "same_period_comparison_missing",
+            "leverage_decreasing": "same_period_comparison_missing",
+            "current_ratio_improving": "same_period_comparison_missing",
+            "gross_margin_improving": "same_period_comparison_missing",
+            "asset_turnover_improving": "same_period_comparison_missing",
+        })
+
+    score = sum(1 for value in f.values() if value is True)
+    score_denominator = sum(1 for value in f.values() if value is not None)
+    available = score_denominator >= min_usable_factors
+    result = {
+        "score": score,
+        "score_denominator": score_denominator,
+        "factors": f,
+        "report_period": cur.report_date,
+        "comparison_period": prev.report_date if prev is not None else None,
+        "available": available,
+        "factor_reasons": factor_reasons,
+        "raw": {
+            "roa_cur": roa_cur, "roa_prev": roa_prev,
+            "cfo_cur": cur.operating_cf, "ni_cur": cur.net_profit,
+            "gm_cur": cur.gross_margin,
+            "gm_prev": prev.gross_margin if prev is not None else None,
+        },
+    }
+    if not available:
+        result["reason"] = "insufficient_usable_factors"
+    return result
 
 
 # ── 景气投资 jingqi（Δ 类指标 + 行业分位） ───────────────────────────

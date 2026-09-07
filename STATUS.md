@@ -1,13 +1,14 @@
 # MingCang — Current Status Snapshot
 
-> Runtime evidence is current through the 2026-09-02 close; the P0 development
-> handoff was integrated on 2026-09-03. Read `docs/ROADMAP.md` for sequencing and
+> One Loop evidence was refreshed from an immutable snapshot on 2026-09-08
+> through the 2026-09-07 close. Configuration rows below retain the 2026-09-02
+> inspection unless explicitly dated; they are not a claim that a worker is running. Read `docs/ROADMAP.md` for sequencing and
 > `CHANGELOG.md` only for history. This file does not replace the live ledger,
 > SQLite state, or fresh artifacts.
 
 MingCang is a local-first A/HK/US equity research and decision-support workspace.
 It does not place real trades or provide financial advice. Package, API, and
-frontend versions are aligned at the `v0.8.1` patch-release candidate.
+frontend versions remain aligned at `v0.8.1`; this development batch does not publish a release.
 
 ## Current Runtime Truth
 
@@ -15,8 +16,8 @@ frontend versions are aligned at the `v0.8.1` patch-release candidate.
 |---|---|
 | production profile | `new_framework`; technical/sentiment `0.6/0.4`; `WEIGHT_QUANT=0.0`; entry threshold `25.0` |
 | market rollout | CN unchanged; HK 2-name and US 3-name gray/shadow only, no alerts or orders |
-| One Loop | `11/20` close-confirmed days, status `insufficient_days`; all 11 selected days are complete |
-| One Loop quality | completeness `1.0`, degradation `0.0`, no day-level audit blockers; 9 qualifying days still required |
+| One Loop | `14/20` close-confirmed days through 2026-09-07, status `insufficient_days`; all 14 selected days are complete |
+| One Loop quality | completeness `1.0`, 3 degraded days out of 14 (`0.214286`); 6 qualifying days still required |
 | daily evidence | each selected day has one authoritative RunEnvelope, exact official signal batch, and committed `daily_panel.v1` artifact |
 | panel output | candidate card has one fresh producing day; `event_risk`, `watchtower`, and `daily_delta` product/producer gaps remain open |
 | price basis | mixed provider/adjustment history remains a blocker for trustworthy return attribution; no production price repair was executed |
@@ -24,8 +25,8 @@ frontend versions are aligned at the `v0.8.1` patch-release candidate.
 | M68 direction | shadow/test2 comparison only; not production direction authority |
 | production safety | signals, positions, weights, stops, scheduler, API contracts, and production database were unchanged by the P0 batch |
 
-The 11 accepted dates are 2026-08-19, 20, 21, 24, 25, 26, 27, 28, 31,
-2026-09-01, and 2026-09-02. The start date is intentionally non-rolling: an
+The 14 accepted dates are 2026-08-19, 20, 21, 24, 25, 26, 27, 28, 31,
+2026-09-01, 02, 03, 04, and 07. The start date is intentionally non-rolling: an
 incomplete accepted day does not age out of the set.
 
 ## Active P0 Handoff
@@ -52,6 +53,31 @@ Latest read-only diagnostics from the frozen 2026-09-02 snapshot:
   `promotion_eligible=false`; its frozen control/replay IDs are recorded and the
   snapshot SHA-256 stayed unchanged. Its diagnostic NAV is not return evidence.
 
+## Decision-Desk Development — 2026-09-08
+
+The approved direction is a human-controlled decision desk. Candidate development
+uses explicit inputs and separate evidence; it does not activate a new daily
+strategy. The sole active plan remains `docs/ROADMAP.md`, with implementation
+instructions in `docs_public/DEVELOPER_GUIDE.md`.
+
+Implemented research-only entries now include strict financial/label/context
+reads, account-aware decision drafts, a non-persistent copilot preview, experiment
+record validation and injected-provider observation recording. Default consumers
+remain unchanged. No real model treatment arm was started; these are preparatory
+capabilities, not evidence of improved investment returns.
+
+The fresh immutable snapshot shows 20 symbols blocked by price-source or
+adjustment provenance in P0-R; the corporate-action ledger is still unavailable.
+`blocked_price_basis` and `promotion_eligible=false` remain in force. No repair was
+performed and the snapshot hash was unchanged by the replay.
+
+The official 25-name pool plus the three holdings in the dated 2026-09-04 local
+state yields 28 distinct symbols. All latest financial rows remain 2026-Q1.
+Publication dates exist, but this does not prove current coverage, intraday
+visibility, or historical revision correctness. Backfill must first specify
+source coverage, publication/revision provenance, changed rows, and rollback;
+strict reads alone cannot manufacture newer data.
+
 ## Open Gates
 
 1. Continue the existing daily One Loop unchanged until 20 qualifying days are
@@ -62,25 +88,31 @@ Latest read-only diagnostics from the frozen 2026-09-02 snapshot:
 3. At 20/20, freeze the old `daily_panel.v1` baseline, then decide whether P0-A
    may be implemented/merged. A new output-quality window starts after activation;
    the old 20 days do not prove the new contract.
-4. Rerun P0-R only after price-basis blockers are zero. P2/P3/P4 cannot use its
+4. Read-only P0-R diagnostics may run on snapshots now; promote return evidence only after price-basis blockers are zero. P2/P3/P4 cannot use its
    current NAV result for promotion.
-5. Build P2 Candidate Manifest before any external strategy candidate. Select P3
+5. Freeze the P2 experiment specification before any real treatment decision. Select P3
    from measured loss attribution; P4 is a one-variable, frozen-control forward
    comparison with the same execution and cost model on both arms.
 
 ## Verification
 
-The canonical code-quality gate is `make verify`. The 2026-09-03 isolated P0
-integration candidate passed Ruff, release hygiene, documentation authority,
-mypy, 2,088 backend tests (14 skipped), 37 frontend tests, production build,
-ESLint, and desktop/mobile browser smoke. Exact release-tree details are recorded
-in the `v0.8.1` entry of `CHANGELOG.md`; older verification snapshots remain in
-Git history and are intentionally not repeated here.
+The canonical code-quality gate is `make verify`. On 2026-09-08 the isolated
+candidate passed every constituent target: Ruff, release hygiene (782 tracked
+files), documentation authority, mypy (369 source files), 2,186 backend tests
+(14 skipped), 37 frontend tests, production build, ESLint, and desktop/mobile
+browser smoke. One existing Starlette deprecation warning remains non-blocking.
+
+The same immutable DB produced byte-identical default context/render/factor
+outputs across 1,128 symbol/date pairs. Existing copilot function definitions
+were unchanged. The full One Loop audit was identical except `generated_at`;
+AGENTS/CLAUDE instructions, production DB and 293 paper/live artifacts were
+unchanged. This is code compatibility evidence, not a real-model equivalence
+experiment or return certification. Historical release checks remain in Git.
 
 Runtime acceptance must also rerun the immutable continuity audit:
 
 ```bash
-python3 scripts/sqlite_consistent_snapshot.py --source <live.db> --output /private/tmp/mingcang.snapshot.db
+python3 scripts/sqlite_consistent_snapshot.py --source <live.db> --destination /private/tmp/mingcang.snapshot.db
 python3 scripts/audit_one_loop_continuity.py --db /private/tmp/mingcang.snapshot.db --repo-root .
 ```
 

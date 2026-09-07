@@ -23,6 +23,75 @@ class CopilotInputError(RuntimeError):
     """Raised when the copilot lacks the minimum local inputs."""
 
 
+def prepare_candidate_copilot(
+    symbol: str,
+    *,
+    db,
+    as_of: datetime,
+    account_id: str,
+    account_snapshot: dict,
+    proposal: dict,
+    risk_limits: dict,
+    human_constraint: dict | None = None,
+    historical_target: dict | None = None,
+    max_chars: int = 4000,
+) -> dict:
+    """Explicit, non-persistent research preview; never calls a model or executes.
+
+    The caller must supply a read-only research session. Existing CN cache rows
+    use local wall-clock times; the envelope retains the aware decision cutoff.
+    Historical revision and intraday publication visibility remain unverified.
+    This function is deliberately not a consumer of the default copilot route.
+    """
+    import hashlib
+    from zoneinfo import ZoneInfo
+
+    from backend.data.context_builder import (
+        StrictContextBudgetError,
+        build_stock_context_pack,
+        render_context_text,
+    )
+    from backend.research.decision_draft import build_decision_draft
+
+    if db is None or not isinstance(as_of, datetime) or as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise CopilotInputError("candidate_requires_explicit_db_and_aware_as_of")
+    pack = build_stock_context_pack(
+        symbol, db=db, as_of=as_of.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None),
+        strict_research_inputs=True,
+    )
+    draft = build_decision_draft(
+        symbol, as_of=as_of, account_id=account_id, account_snapshot=account_snapshot,
+        proposal=proposal, risk_limits=risk_limits, human_constraint=human_constraint,
+        historical_target=historical_target,
+    )
+    issues = [name for name, value in pack.items() if isinstance(value, dict) and (
+        value.get("error") or value.get("empty") or value.get("piotroski", {}).get("available") is False
+    )]
+    try:
+        text = render_context_text(pack, max_chars=max_chars, strict_research_inputs=True)
+    except StrictContextBudgetError:
+        text = ""
+        issues.append("context_budget_insufficient")
+    if not text:
+        draft["target_pct"] = None
+        draft["blockers"].append("context_unavailable")
+    return {
+        "schema_version": "candidate_copilot_input.v1",
+        "mode": "research_only",
+        "as_of": as_of.isoformat(),
+        "context": pack,
+        "context_text": text,
+        "context_text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest() if text else None,
+        "context_status": "unavailable" if not text else "partial" if issues else "available",
+        "input_issues": issues,
+        "draft": draft,
+        "model_called": False,
+        "can_execute": False,
+        "caveats": ["CN cache local wall-clock convention", "intraday visibility and revisions unverified",
+                    "draft is a risk-bounded proposal, not a validated investment recommendation"],
+    }
+
+
 _SYSTEM_PROMPT = (
     "你是 MingCang 的 A 股研究副驾驶。你只输出影子研究意见，"
     "不得声称会修改官方信号，不得给投资保证。"

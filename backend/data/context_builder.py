@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 from statistics import mean
 from typing import Any
@@ -23,7 +24,7 @@ from backend.data.database import (
     SessionLocal,
 )
 from backend.data.degradation import emit_degradation, recent_degradations
-from backend.data.fundamentals import compute_piotroski_factors
+from backend.data.fundamentals import compute_piotroski_factors, compute_piotroski_factors_strict
 from backend.data.market_features import FAKE_FEATURE_FLAGS
 
 SECTION_ORDER = [
@@ -55,6 +56,11 @@ SECTION_LABELS = {
     "long_term_label": "长期标签",
     "data_health": "数据健康",
 }
+
+
+class StrictContextBudgetError(ValueError):
+    """Raised when a strict context budget cannot fit required risk markers."""
+
 
 _FINANCIAL_FIELDS = [
     "report_date",
@@ -133,6 +139,19 @@ def _financial_visible_expr(as_of: datetime) -> str:
     return as_of_date
 
 
+def _financial_disclosed_filter(as_of: datetime) -> tuple:
+    as_of_date = _date_string(as_of)
+    return (
+        FinancialMetric.report_date <= as_of_date,
+        FinancialMetric.disclosure_date.isnot(None),
+        FinancialMetric.disclosure_date <= as_of_date,
+    )
+
+
+def _no_autoflush(db):
+    return getattr(db, "no_autoflush", nullcontext())
+
+
 def _build_financials(symbol: str, as_of: datetime, db) -> dict:
     as_of_date = _financial_visible_expr(as_of)
     row = (
@@ -158,6 +177,43 @@ def _build_financials(symbol: str, as_of: datetime, db) -> dict:
             "report_period": piotroski.get("report_period"),
             "comparison_period": piotroski.get("comparison_period"),
         },
+    }
+
+
+def _build_financials_strict(symbol: str, as_of: datetime, db) -> dict:
+    with _no_autoflush(db):
+        row = (
+            db.query(FinancialMetric)
+            .filter(FinancialMetric.symbol == symbol, *_financial_disclosed_filter(as_of))
+            .order_by(FinancialMetric.report_date.desc())
+            .first()
+        )
+        piotroski = compute_piotroski_factors_strict(symbol, db, as_of=as_of)
+    visibility = {
+        "cutoff": _date_string(as_of),
+        "granularity": "date_level",
+        "revision_history": "unverified",
+        "note": "FinancialMetric disclosure_date is date-level only; historical revision storage is not available.",
+    }
+    if row is None:
+        return {
+            "empty": True,
+            "reason": "no_disclosed_financials_as_of",
+            "piotroski": piotroski,
+            "visibility": visibility,
+        }
+    return {
+        "latest": {field: getattr(row, field, None) for field in _FINANCIAL_FIELDS},
+        "piotroski": {
+            "factors": piotroski.get("factors", {}),
+            "score": piotroski.get("score"),
+            "score_denominator": piotroski.get("score_denominator"),
+            "available": piotroski.get("available"),
+            "reason": piotroski.get("reason"),
+            "report_period": piotroski.get("report_period"),
+            "comparison_period": piotroski.get("comparison_period"),
+        },
+        "visibility": visibility,
     }
 
 
@@ -456,6 +512,30 @@ def _build_long_term_label(symbol: str, as_of: datetime, db) -> dict:
     }
 
 
+def _build_long_term_label_strict(symbol: str, as_of: datetime, db) -> dict:
+    as_of_date = _date_string(as_of)
+    with _no_autoflush(db):
+        row = (
+            db.query(LongTermLabel)
+            .filter(
+                LongTermLabel.symbol == symbol,
+                LongTermLabel.date <= as_of_date,
+                LongTermLabel.expires_at >= as_of_date,
+                LongTermLabel.created_at <= as_of,
+            )
+            .order_by(LongTermLabel.date.desc(), LongTermLabel.created_at.desc())
+            .first()
+        )
+    if row is None:
+        return {"empty": True, "reason": "no_active_label_as_of"}
+    return {
+        "label": row.label,
+        "score": row.score,
+        "date": row.date,
+        "expires_at": row.expires_at,
+    }
+
+
 def _degradation_matches_symbol(event: dict, symbol: str) -> bool:
     raw_context = event.get("context_json")
     if not raw_context:
@@ -503,6 +583,8 @@ def build_stock_context_pack(
     as_of: datetime | None = None,
     sections: list[str] | None = None,
     db=None,
+    *,
+    strict_research_inputs: bool = False,
 ) -> dict:
     """Build a point-in-time stock context pack without calling LLMs or networks."""
     requested = SECTION_ORDER if sections is None else sections
@@ -510,24 +592,39 @@ def build_stock_context_pack(
     if unknown:
         raise ValueError(f"unknown section name(s): {', '.join(unknown)}")
 
+    if strict_research_inputs and (db is None or as_of is None or not isinstance(as_of, datetime)):
+        reason = "strict_research_inputs_requires_explicit_db_and_as_of"
+        return {
+            "symbol": symbol,
+            "as_of": _iso(as_of),
+            **{section: {"error": reason} for section in requested},
+        }
+
     own_session = db is None
     session = db or SessionLocal()
     as_of_dt = _as_datetime(as_of)
     pack: dict[str, Any] = {"symbol": symbol, "as_of": as_of_dt.isoformat()}
     try:
-        for section in requested:
-            try:
-                pack[section] = _SECTION_BUILDERS[section](symbol, as_of_dt, session)
-            except Exception as exc:
-                pack[section] = {"error": str(exc)}
-                emit_degradation(
-                    component="context_builder",
-                    category=section,
-                    provider="context_builder",
-                    error=f"failure:{exc}",
-                    context={"symbol": symbol, "as_of": as_of_dt.isoformat(), "section": section},
-                    db=session,
-                )
+        with (_no_autoflush(session) if strict_research_inputs else nullcontext()):
+            for section in requested:
+                try:
+                    if strict_research_inputs and section == "financials":
+                        pack[section] = _build_financials_strict(symbol, as_of_dt, session)
+                    elif strict_research_inputs and section == "long_term_label":
+                        pack[section] = _build_long_term_label_strict(symbol, as_of_dt, session)
+                    else:
+                        pack[section] = _SECTION_BUILDERS[section](symbol, as_of_dt, session)
+                except Exception as exc:
+                    pack[section] = {"error": str(exc)}
+                    if not strict_research_inputs:
+                        emit_degradation(
+                            component="context_builder",
+                            category=section,
+                            provider="context_builder",
+                            error=f"failure:{exc}",
+                            context={"symbol": symbol, "as_of": as_of_dt.isoformat(), "section": section},
+                            db=session,
+                        )
         return pack
     finally:
         if own_session:
@@ -542,12 +639,23 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
-def _section_lines(section: str, value: dict) -> list[str]:
+def _section_lines(section: str, value: dict, *, strict_research_inputs: bool = False) -> list[str]:
     label = SECTION_LABELS[section]
     if value.get("error") is not None:
+        if strict_research_inputs:
+            return [f"⚠️ {label}: 数据获取失败 reason={value.get('error')}"]
         return [f"⚠️ {label}: 数据获取失败"]
     if value.get("empty") is True:
-        return [f"({label}: 无数据)"]
+        lines = [f"({label}: 无数据)"]
+        if strict_research_inputs and value.get("reason"):
+            lines[0] = f"({label}: unavailable reason={value.get('reason')})"
+        piotroski = value.get("piotroski") or {}
+        if strict_research_inputs and piotroski.get("available") is False:
+            lines.append(
+                f"Piotroski unavailable reason={piotroski.get('reason')}; "
+                f"score_denominator={piotroski.get('score_denominator')}"
+            )
+        return lines
     lines = [f"【{label}】"]
     if section == "price":
         lines.append(
@@ -559,6 +667,11 @@ def _section_lines(section: str, value: dict) -> list[str]:
     elif section == "financials":
         latest = value.get("latest") or {}
         piotroski = value.get("piotroski") or {}
+        if strict_research_inputs and piotroski.get("available") is False:
+            lines.append(
+                f"Piotroski unavailable reason={piotroski.get('reason')}; "
+                f"score_denominator={piotroski.get('score_denominator')}"
+            )
         lines.append(
             "报告期 {report_date}; ROE {roe}; 收入同比 {revenue_yoy}%; 净利同比 {net_profit_yoy}%; "
             "毛利率 {gross_margin}; 经营现金流 {operating_cf}; 流动比率 {current_ratio}".format(
@@ -607,12 +720,34 @@ def _section_lines(section: str, value: dict) -> list[str]:
     return lines
 
 
-def render_context_text(pack: dict, max_chars: int = 4000) -> str:
+def render_context_text(
+    pack: dict,
+    max_chars: int = 4000,
+    *,
+    strict_research_inputs: bool = False,
+) -> str:
     """Render a deterministic Chinese plain-text context prompt."""
     lines = [f"股票: {pack.get('symbol', 'NA')}", f"截至: {pack.get('as_of', 'NA')}"]
-    for section in SECTION_ORDER:
+    section_order = (
+        [
+            "data_health",
+            "financials",
+            "long_term_label",
+            *[
+                section
+                for section in SECTION_ORDER
+                if section not in {"data_health", "financials", "long_term_label"}
+            ],
+        ]
+        if strict_research_inputs
+        else SECTION_ORDER
+    )
+    for section in section_order:
         if section in pack:
-            lines.extend(_section_lines(section, pack[section]))
+            lines.extend(_section_lines(section, pack[section], strict_research_inputs=strict_research_inputs))
+
+    if strict_research_inputs:
+        return _render_context_text_strict(lines, max_chars)
 
     output: list[str] = []
     used = 0
@@ -623,3 +758,54 @@ def render_context_text(pack: dict, max_chars: int = 4000) -> str:
         output.append(line)
         used += candidate_len
     return "\n".join(output)
+
+
+def _render_context_text_strict(lines: list[str], max_chars: int) -> str:
+    required_lines = [line for line in lines if _strict_line_required(line)]
+    base_lines = lines[:2]
+    ordinary_lines = [line for line in lines[2:] if line not in required_lines]
+    output: list[str] = []
+    used = 0
+
+    def append_required(line: str) -> None:
+        nonlocal used
+        candidate_len = len(line) if not output else len(line) + 1
+        if used + candidate_len > max_chars:
+            raise StrictContextBudgetError("strict_context_budget_too_small_for_required_risk_markers")
+        output.append(line)
+        used += candidate_len
+
+    for line in [*base_lines, *required_lines]:
+        if line not in output:
+            append_required(line)
+
+    required_count = len(output)
+    truncated = False
+    for line in ordinary_lines:
+        candidate_len = len(line) if not output else len(line) + 1
+        if used + candidate_len > max_chars:
+            truncated = True
+            break
+        output.append(line)
+        used += candidate_len
+
+    if truncated:
+        marker = "(TRUNCATED ordinary context)"
+        while len(output) > required_count and used + len(marker) + 1 > max_chars:
+            used -= len(output.pop()) + 1
+        append_required("(TRUNCATED ordinary context)")
+    return "\n".join(output)
+
+
+def _strict_line_required(line: str) -> bool:
+    markers = (
+        "⚠️",
+        "unavailable reason=",
+        "Piotroski unavailable",
+        "近期降级",
+        "假特征占位:",
+        "(TRUNCATED ordinary context)",
+    )
+    return any(marker in line for marker in markers) or (
+        line.startswith(" - ") and "/" in line and ": " in line
+    )

@@ -1,11 +1,15 @@
 # Developer Guide
 
-这页回答“怎么继续开发明仓”。普通用户先读 [User Guide](USER_GUIDE.md)，查功能先读 [Feature Map](FEATURE_MAP.md)。
+这页回答“怎么继续开发明仓”。具体顺序和启用条件由仓内 `docs/ROADMAP.md` 管理，本页维护实现方法与验收要求，不另设任务队列。普通用户先读 [User Guide](USER_GUIDE.md)，查功能先读 [Feature Map](FEATURE_MAP.md)。
+
+本轮开发可由 GPT-6 或 Claude 负责总体审查，GPT-5.5 承担有明确文件边界的实现和测试。
+开发模型与实验治疗臂模型必须分别记录；不得占用现有日跑的模型预算。
+`AGENTS.md` 被现有 Claude CLI 自动引用，本轮保持其原文，候选开发细则留在本指南和 Roadmap。
 
 ## 1. 开发原则
 
 - 先明确用户任务，再写页面或接口。
-- 所有会写 DB、调用 provider、跑重任务、改配置的功能都要有确认边界。
+- 区分用户动作确认、已授权隔离开发、生产启用与修库；按当前任务和ROADMAP执行，不为已授权小步骤重复确认。
 - AI/LLM 默认是 shadow，不自动覆盖官方信号。
 - 量化和研究实验默认 non-promoting。
 - 新功能要能被 demo 或小样例解释清楚。
@@ -14,7 +18,7 @@
 
 1. 新增 `frontend/src/page-<name>.tsx` 页面（TypeScript）。
 2. 在 `frontend/src/main.tsx` 增加路由和导航。
-3. 在 `frontend/src/api.ts` 增加 API wrapper。
+3. 在 `frontend/src/services/` 正式入口增加 API wrapper；根目录 `src/api.ts` 保留兼容。
 4. 把“是否写入/是否需确认”写到 UI 行为里。
 5. 给复杂 helper 加测试。
 6. 用 demo 数据跑一遍。
@@ -62,6 +66,74 @@ candidate -> dry-run -> human review -> confirm -> execute -> audit/result
 
 研究模块默认不改官方信号。需要 promotion 时必须有前向证据和用户确认。
 
+### 5.1 条件化建议与用户选择
+
+1. 每个方案标明证据时点、来源、反证、预期持有方式、继续成立条件、失效条件和有效期。
+2. 分开官方信号、模型原建议、风险裁剪、用户接受/修改/拒绝和成交；建议不是成交。
+3. 当前持仓必须来自明确账户/时点/来源；旧DecisionRun目标不是现仓证明。unknown不当空仓，
+   不依据未知状态输出增加风险的数值比例；确认空仓后才适用已有试错政策。
+4. 用户偏好有标的/范围/生效时间，不自动写成公司负面事实；无回复保持pending。
+5. 复用现有候选、持仓、人工确认和复盘入口；待办须去重、过期和记录最终处理。
+6. 新方法先做显式候选；改变默认prompt/Skill也算行为变更，不因文件是Markdown而绕过One Loop门。
+
+### 5.2 增加模型治疗臂或验证明仓增益
+
+**问题先固定**：同模型raw/desk测明仓帮助；同desk Claude/GPT-6测模型代理路径；
+同模型同数据、仅改一个流程测开发效果。每轮只选一个问题，默认两臂。
+
+1. 复用现有evidence登记与P0-R执行能力，不为模型分别复制业务引擎或生产账本。
+2. 首次决定前冻结输入、版本、模型、工具、风险、成本、基准、预算、评价窗口与停止规则。
+3. 各臂的现金、持仓、订单、决定、记忆和恢复目录独立；公共事实只读。实际查询可不同，
+   但须记录所见内容和工具成功率；固定packet模式禁止额外查询。
+4. 同时记录requested/resolved模型身份，禁止静默fallback；模型自述和外层开发宿主不算回执。
+5. 保存实际可见输入和逐次工具请求/返回/hash/cutoff/错误/用量；不以完整允许包代替实际所见。
+6. 用FakeProvider和合成账本先测未来信息、混臂、超预算、事后freeze、模型替换、失败和恢复。
+   纯校验器不能证明资料真伪或OS隔离；未实现的运行器不能写“已运行”。
+7. 前向主结果使用完整冻结窗口，失败日按统一政策保留，成功日子集只辅助；版本变化新开窗口。
+8. AI-only shadow可在事前批准虚拟政策内模拟，不需逐笔再确认；human-assisted模式单独记录
+   人工影响，无回复不新增风险。用户看过另一臂后的修改不归因给单一模型。
+9. 生产路径保持不变；价格、公司行动、数据更新、模型身份、预算和启动范围未就绪时只做离线准备。
+
+历史回测分清“旧决定重新核算”和“模型重新作历史决定”；后者不能排除训练知识污染。
+前复权代理数量不能标为真实股数/NAV。5日记录检查、20日运行门或60日观察都不自动证明盈利。
+收益评价同时报告基准、暴露、成本、回撤、贡献集中、失败及不确定性，不能只挑上涨窗口。
+
+### 5.3 本轮已实现的候选入口与接手方式
+
+| 入口 | 能做什么 | 当前边界 |
+|---|---|---|
+| `backend.data.context_builder.build_stock_context_pack(..., strict_research_inputs=True)` | 同一显式 cutoff 读取已披露财务、可用标签，保留缺口 | 必须传研究 DB 和 datetime；不会自动补源，未证明日内可见或历史修订 |
+| `backend.data.context_builder.render_context_text(..., strict_research_inputs=True)` | 先保留股票/时点/风险和缺口，正文截断有标记 | 必需内容装不下抛 `StrictContextBudgetError`，不能吞错后照常判断 |
+| `backend.research.decision_draft.build_decision_draft(...)` | 分开实际持仓、原始提议、历史目标与禁买约束 | 所有比例为 0–1；永远 pending、不能执行；不替代组合风控 |
+| `backend.research.copilot.prepare_candidate_copilot(...)` | 将严格上下文和草稿组合成只读研究预览，返回实际文本 SHA-256 | 显式 DB、带时区 cutoff、账户、提议和限制；不调用模型或写 ResearchState；原默认 copilot 未接线 |
+| `backend.evidence.decision_desk_validation.validate_experiment_spec(...)` | 检查已冻结声明与运行后回执的结构、两臂条件、预算及失败日保留 | 最高仅 evidence_structure_valid；不证明事前冻结、源事实、隔离或盈利 |
+
+研究预览的 `partial` 表示有数据缺口，不是数据合格；`unavailable` 不给数值目标。
+单股草稿只约束显式提议，账户持仓“已知”只表示通过本地输入检查，不认证券商事实。
+新入口目前没有 API、scheduler、UI 或默认消费者；合并代码不等于日跑已经采用修复。
+调用样例和不触发 provider/flush 的集成测试见 `tests/test_candidate_review_boundaries.py`；
+各字段和有效/无效规格见 `tests/test_decision_draft.py`、
+`tests/evidence/test_decision_desk_validation.py`。这些 fixture 都是合成测试，不可当真实模型证据。
+
+实验 JSON 可显式离线检查：
+
+```bash
+python -m backend.evidence.decision_desk_validation "$EXPERIMENT_JSON" --artifacts-root "$EXPERIMENT_ARTIFACTS"
+```
+
+命令不写文件；blocked 返回退出码 1，结构通过返回 0。退出码 0 也可能只允许 diagnostic/smoke，
+调用者必须读 capability。`artifacts` 是观察内容 SHA-256 到根目录内相对文件的映射；
+附加检查会读取原始输入、工具返回、请求/响应和每日观察文件，拒绝缺文件、字节变化和路径越界。
+它只证明保存的字节与声明一致，仍不能证明模型确实看到这些字节。未传 artifacts-root 时
+`observation_bytes_verified=false`。注入式单次记录器已提供 `backend.evidence.decision_desk_recording.record_model_observation(...)`：
+必须给仓库外输出根、实验/臂/attempt身份、请求原文、带时区cutoff、期望模型、显式预算及provider callable。
+它把同一份已保存请求bytes传入provider，保存响应/模型身份/用量/异常；重复attempt不覆盖，
+模型不符或用量超限留下failed回执。工具原文只标调用者提供，不假称模型看到。
+FakeProvider及字节校验对接测试已覆盖；它没有默认模型客户端、没有自动fallback，也不负责
+整个实验的累计预算或OS隔离。单次成本只在回执后检查，不是远端API费用硬限额。
+真实provider接入、冻结登记、累计预算/超时/恢复控制、隔离权限和前向启动仍须另行验收；
+不要把本 CLI 当成完整实验 runner，也不要用假回执让待启动实验“通过”。
+
 ## 6. 加一个量化模块
 
 1. 写清假设和失败条件。
@@ -81,6 +153,16 @@ candidate -> dry-run -> human review -> confirm -> execute -> audit/result
 3. 接入 provider registry 或 explicit route。
 4. 对可选外部源做 health/probe。
 5. 默认不要悄悄进入正式信号。
+
+### 7.1 决策资料的读取与展示
+
+- 财报期末、披露、抓取、版本和生成时间分开；历史原值与衍生指标使用同一as_of。
+  披露未知不凭期末自动认定可见，事后修订不倒灌，比较期/口径不可比须明确缺口。
+- 未知、不适用与真实负面分开。总分、有效分母、覆盖率和available互相解释；不填零制造完整。
+- 标签同时检查日期、有效期和质量；未来/过期记录只能作为有标注的历史参考。
+- 文本预算先保留时点、风险和缺口；报告省略内容。预算小到装不下必需信息时明确不可判断。
+- 严格候选显式接收数据库/时点；不得默认读生产SessionLocal、联网回填或写研究状态。
+- 覆盖检查按当时官方池与持仓并集，不硬编码历史25/27数量；生产回填单独评估影响、备份和回滚。
 
 ## 8. 加文档
 
@@ -107,6 +189,20 @@ make verify
 
 ```bash
 git diff --check
+make doc-check
 ```
 
 涉及前端体验时，还要启动本地服务并看 demo 页面。
+
+### 9.1 每个行为微批的收活格式
+
+按以下五项交付，证据放仓库外，当前状态只回写对应权威文档：
+
+1. **事实复核**：基准、问题反例、owner、唯一消费者；已修或前提变更先核验再调整。
+2. **最小改动**：文件、默认行为不变量、候选预期差异和回滚方法；不混结构与策略。
+3. **测试证据**：修复前失败/修复后通过、正常对照、聚焦检查；适用完整门在收口执行，skip逐项解释。
+4. **产物核验**：实际表/JSON字段、hash、账户守恒；旧/新冻结输入比较，默认输出和写路径不得漂移。
+5. **未决与权限**：分别写实现、测试、合入、启用、运行和经济证据，缺哪一门就保留哪一门。
+
+隔离worktree只解决源码冲突；DB/cache/memory/log/artifact/子进程还需独立路径与写保护。
+不得用正式日跑验证候选或重复成功日，不重置起算日，不为消除失败而改生产数据。
