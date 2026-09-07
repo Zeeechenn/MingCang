@@ -131,8 +131,44 @@ python -m backend.evidence.decision_desk_validation "$EXPERIMENT_JSON" --artifac
 模型不符或用量超限留下failed回执。工具原文只标调用者提供，不假称模型看到。
 FakeProvider及字节校验对接测试已覆盖；它没有默认模型客户端、没有自动fallback，也不负责
 整个实验的累计预算或OS隔离。单次成本只在回执后检查，不是远端API费用硬限额。
-真实provider接入、冻结登记、累计预算/超时/恢复控制、隔离权限和前向启动仍须另行验收；
 不要把本 CLI 当成完整实验 runner，也不要用假回执让待启动实验“通过”。
+
+#### 离线实验会话控制
+
+`backend.evidence.decision_desk_session` 在单次记录器上增加三个显式入口：
+
+| 入口 | 行为 |
+|---|---|
+| `freeze_plan(output_root, experiment_id, plan)` | 在仓库外独占创建实验目录，写机器生成时间及校验hash；已有目录一律拒绝，不能补写事前冻结 |
+| `run_frozen_attempt(...)` | 从冻结计划取得模型和逐臂预算；先加锁、落盘预留，再调用注入provider；重复attempt拒绝 |
+| `inspect_session(output_root, experiment_id)` | 只读汇总每臂预留费用/次数及成功、失败、缺失回执；不是可执行的“启动许可” |
+
+`plan` 必须完整给出以下字段，未知字段会被拒绝；它不是完整版实验规格的替代：
+
+- `problem`：沿用上文三个验证问题；同模型问题必须同requested_model，模型比较必须不同。
+- `date_window: {start, end}`：ISO日期，固定以`Asia/Shanghai`解释带时区cutoff；未来cutoff拒绝。
+- `shared_input_hash`、`risk_hash`、`execution_hash`：SHA-256声明；仍须原字节及完整版规格验证。
+- `budget_policy`：`matched`要求两臂预算相同；`declared_per_arm`只声明各自预算，不宣称预算可比。
+- `arms`：恰好两项，各有独立`arm_id`、`account_id`、`requested_model`，以及
+  `budget: {total_model_calls, total_cost_cny, max_attempt_cost_cny}`；预算为正且单次上限不超过总额。
+
+接手顺序：先用完整P2规格明确prompt、工具、基准及失败政策，再冻结上述小型控制计划，
+然后按日期/治疗臂给新的attempt_id，向`run_frozen_attempt`传显式cutoff、请求bytes和provider。
+请求记录位于`output_root/experiment_id/arm_id/attempt_id`；不允许自定义另一套输出namespace。
+回执附带计划hash和账户标识，原始请求/响应沿用单次记录器。样例和合成计划见
+`tests/evidence/test_decision_desk_session.py`，进程退出/恢复反例见
+`tests/evidence/test_decision_desk_session_process.py`。不要将测试中的虚构hash或FakeProvider用于正式证据。
+
+每次预留一调用和`max_attempt_cost_cny`，即使实际费用更少、provider失败或进程中断也不自动退回。
+重启后先inspect并核对原始记录，未知结果保留为缺失；不能删预留文件来重试或事后修改原计划。
+已知任一臂超限或预留/回执损坏将阻止整个实验后续调用，在途调用不能由本层撤销。
+文件锁用于同一Unix主机的协作进程；fsync不保证磁盘损坏或恶意文件篡改后的恢复。
+`freeze_signature`只是本地完整性hash，不是身份签名/可信时间戳，也不认证完整事前登记。
+inspect不锁定跨进程一致快照，执行前仍会加锁复核；读到部分/损坏文件应停止并核查。
+
+本层不带真实模型客户端、超时取消、账单硬限额、调度器或第二交易总账。外部provider必须另行
+验证模型身份、费用、工具/记忆权限及进程隔离；默认provider链、One Loop及原治疗轨迹不接线。
+真实治疗臂尚未启动，完整runner与收益认证仍受数据、价格、隔离及预算/窗口启动门约束。
 
 ## 6. 加一个量化模块
 

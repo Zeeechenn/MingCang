@@ -62,9 +62,13 @@ instructions in `docs_public/DEVELOPER_GUIDE.md`.
 
 Implemented research-only entries now include strict financial/label/context
 reads, account-aware decision drafts, a non-persistent copilot preview, experiment
-record validation and injected-provider observation recording. Default consumers
+record validation, injected-provider observation recording, and an offline frozen
+budget session with durable pre-call reservations and restart inspection. Default consumers
 remain unchanged. No real model treatment arm was started; these are preparatory
-capabilities, not evidence of improved investment returns.
+capabilities, not evidence of improved investment returns. The session freezes only
+a small budget/input plan, not the complete research protocol. Failed or interrupted
+attempts retain reservations; a known overrun in either arm blocks new calls.
+Real-provider timeouts, process isolation, billing caps, and treatment launch remain open.
 
 The fresh immutable snapshot shows 20 symbols blocked by price-source or
 adjustment provenance in P0-R; the corporate-action ledger is still unavailable.
@@ -96,15 +100,23 @@ strict reads alone cannot manufacture newer data.
 
 ## Verification
 
-The canonical code-quality gate is `make verify`. On 2026-09-08 the isolated
-candidate passed every constituent target: Ruff, release hygiene (782 tracked
-files), documentation authority, mypy (369 source files), 2,186 backend tests
-(14 skipped), 37 frontend tests, production build, ESLint, and desktop/mobile
-browser smoke. One existing Starlette deprecation warning remains non-blocking.
+The canonical code-quality gate is `make verify`. On 2026-09-08 the latest isolated
+session-control batch passed Ruff, release hygiene (785 tracked files), documentation
+authority, mypy (370 source files), and 2,228 backend tests (14 skipped), including
+42 new session tests. Coverage includes actual subprocess exit/restart, concurrent
+budget reservation, cross-arm overrun, record corruption, frozen experiment identity, and cutoff timezone boundaries.
+One existing Starlette deprecation warning remains non-blocking.
 
-The same immutable DB produced byte-identical default context/render/factor
+The earlier batch at `df9cf9d0` passed 37 frontend tests, production build, ESLint,
+and desktop/mobile browser smoke. These frontend checks were not repeated: the
+latest batch leaves all 451 previously tracked backend/frontend/script and selected
+configuration/instruction files byte-identical and has no existing production imports.
+The new module is available only through explicit offline Python calls.
+
+In the earlier batch, the same immutable DB produced byte-identical default context/render/factor
 outputs across 1,128 symbol/date pairs. Existing copilot function definitions
-were unchanged. The full One Loop audit was identical except `generated_at`;
+were unchanged. This session batch rechecked the full One Loop audit: it was
+identical except `generated_at`;
 AGENTS/CLAUDE instructions, production DB and 293 paper/live artifacts were
 unchanged. This is code compatibility evidence, not a real-model equivalence
 experiment or return certification. Historical release checks remain in Git.
