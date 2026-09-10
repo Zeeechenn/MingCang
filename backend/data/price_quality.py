@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from statistics import median
@@ -423,6 +423,7 @@ def summarize_source_mixing(
 
 def summarize_basis_drift_events(
     payloads: Sequence[Mapping[str, Any]],
+    cleared_symbols: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Split one day's drift events into "operator must clear" vs "spliced history".
 
@@ -434,6 +435,13 @@ def summarize_basis_drift_events(
     because rebasing on whichever provider answered today would just move the
     seam.  ``unknown`` (no provider recorded on the stored rows) gates too: we
     cannot prove it benign, and fail-closed is the house rule.
+
+    ``cleared_symbols`` are the symbols an operator has explicitly acknowledged
+    for this day (see ``backend.tools.acknowledge_basis_drift``).  They stay in
+    ``same_source``/``unknown_source`` — the drift still happened and that
+    evidence is never rewritten — but they no longer gate the day.  Until this
+    existed the function had no clearance path at all, so a single re-basing
+    event blocked the One Loop window permanently.
     """
     same: list[str] = []
     cross: list[str] = []
@@ -447,13 +455,16 @@ def summarize_basis_drift_events(
             same.append(symbol)
         else:
             unknown.append(symbol)
-    uncleared = sorted(set(same) | set(unknown))
+    gating = set(same) | set(unknown)
+    cleared = {str(symbol) for symbol in cleared_symbols}
+    uncleared = sorted(gating - cleared)
     return {
         "status": "available",
         "events": len(payloads),
         "same_source": sorted(set(same)),
         "cross_source": sorted(set(cross)),
         "unknown_source": sorted(set(unknown)),
+        "cleared_symbols": sorted(gating & cleared),
         "uncleared_symbols": uncleared,
         "uncleared": len(uncleared),
         "clean": not uncleared,

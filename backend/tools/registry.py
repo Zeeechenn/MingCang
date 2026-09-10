@@ -209,6 +209,14 @@ _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
         "still_runnable": True,
     },
     {
+        "module": "backend.tools.acknowledge_basis_drift",
+        "category": "maintenance",
+        "purpose": "Record an operator's explicit clearance of a gating adjustment-basis drift event so the One Loop auditor stops blocking that day.",
+        "read_write_boundary": "Dry-run by default; --apply appends one attributable clearance row and never edits or deletes the degradation_events evidence it refers to. Refuses to clear an event that is not actually gating, and requires a non-empty operator and reason.",
+        "recommended_entrypoint": "python3 -m backend.tools.acknowledge_basis_drift --symbol 603993 --date YYYY-MM-DD --operator <who> --reason <why>",
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.m67_multimarket_replay",
         "category": "evidence",
         "purpose": "Run the M67 close-confirmed next-open replay with market-specific rules and same-pool baseline.",

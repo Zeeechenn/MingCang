@@ -1,4 +1,81 @@
 {
+  "adjustment_basis_clearances": {
+    "columns": [
+      {
+        "default": null,
+        "name": "id",
+        "notnull": 1,
+        "pk": 1,
+        "type": "INTEGER"
+      },
+      {
+        "default": null,
+        "name": "symbol",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR"
+      },
+      {
+        "default": null,
+        "name": "event_date",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR(10)"
+      },
+      {
+        "default": null,
+        "name": "operator",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR(100)"
+      },
+      {
+        "default": null,
+        "name": "reason",
+        "notnull": 1,
+        "pk": 0,
+        "type": "VARCHAR(500)"
+      },
+      {
+        "default": null,
+        "name": "ts",
+        "notnull": 1,
+        "pk": 0,
+        "type": "DATETIME"
+      }
+    ],
+    "indexes": [
+      {
+        "columns": [
+          "event_date"
+        ],
+        "name": "ix_adjustment_basis_clearances_event_date",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol"
+        ],
+        "name": "ix_adjustment_basis_clearances_symbol",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "ts"
+        ],
+        "name": "ix_adjustment_basis_clearances_ts",
+        "unique": 0
+      },
+      {
+        "columns": [
+          "symbol",
+          "event_date"
+        ],
+        "name": "sqlite_autoindex_adjustment_basis_clearances_1",
+        "unique": 1
+      }
+    ]
+  },
   "ai_memory": {
     "columns": [
       {

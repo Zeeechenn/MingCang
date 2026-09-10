@@ -36,6 +36,7 @@ WIRING_MAP: dict[str, WiringEntry] = {
     "backend.tools.m67_gray_bootstrap": {"bucket": "manual_only", "reason": "M67港美股小池初始化与补数,仅显式灰度操作"},
     "backend.tools.m67_gray_price_resync": {"bucket": "manual_only", "reason": "M67灰度价格口径重同步,需显式--apply"},
     "backend.tools.rebase_price_history": {"bucket": "manual_only", "reason": "M69复权基准漂移审计;审计只读,重基需显式--apply并同步重述台账"},
+    "backend.tools.acknowledge_basis_drift": {"bucket": "manual_only", "reason": "复权基准漂移的operator已处置留痕;必须人工判读后显式--apply,不可由workflow自动清理"},
     "backend.tools.m67_multimarket_replay": {"bucket": "manual_only", "reason": "M67分市场回放与晋升证据,人工触发只读"},
     "backend.tools.coverage_snapshot": {"bucket": "manual_only", "reason": "数据覆盖快照由人工或外层验收触发,不由 M63 workflow 直接导入"},
     "backend.tools.check_sensitive_paths": {"bucket": "manual_only", "reason": "提交前敏感路径检查,人工触发"},

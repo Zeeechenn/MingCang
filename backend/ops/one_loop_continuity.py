@@ -548,7 +548,27 @@ def _daily_panel_date(payload: dict[str, Any]) -> str:
     return str(payload.get("as_of") or payload.get("day") or payload.get("date") or "")[:10]
 
 
-def _daily_panel_work_metrics(payload: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], list[str]]:
+def _basis_clearances(conn: sqlite3.Connection, day: str) -> frozenset[str]:
+    """Symbols an operator explicitly cleared for *day*'s basis drift.
+
+    Read defensively: snapshots taken before the clearance table existed simply
+    have no clearances, which must read as "nothing cleared" rather than as an
+    audit crash.
+    """
+    try:
+        rows = conn.execute(
+            "SELECT symbol FROM adjustment_basis_clearances WHERE event_date = ?",
+            (day,),
+        ).fetchall()
+    except sqlite3.Error:
+        return frozenset()
+    return frozenset(str(row[0]) for row in rows if row[0])
+
+
+def _daily_panel_work_metrics(
+    payload: dict[str, Any],
+    cleared_symbols: frozenset[str] = frozenset(),
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
     source = payload.get("work_metrics")
     if not isinstance(source, dict):
         source = _as_dict(_as_dict(payload.get("metrics")).get("work_metrics"))
@@ -571,12 +591,29 @@ def _daily_panel_work_metrics(payload: dict[str, Any]) -> tuple[dict[str, dict[s
     basis = source.get("price_basis_integrity")
     if isinstance(basis, dict) and basis.get("status") == "available":
         metrics["price_basis_integrity"] = basis
-        if not basis.get("clean", True):
+        # A clearance is an operator fact recorded *after* the panel was
+        # written, so it is applied here at audit time rather than by
+        # rewriting the artifact: the panel stays an immutable record of what
+        # was observed that day, and a late acknowledgement still resolves the
+        # day without regenerating evidence (which would also mint a second
+        # job run for that day and make it ambiguous).
+        # Fail closed: a clearance may only retire drift we can positively
+        # account for symbol by symbol.  A payload that says "not clean" but
+        # lists nothing still blocks -- otherwise a malformed metric would be
+        # silently waved through by an unrelated clearance.
+        listed = [str(symbol) for symbol in _as_list(basis.get("uncleared_symbols"))]
+        outstanding = [symbol for symbol in listed if symbol not in cleared_symbols]
+        if not basis.get("clean", True) and (not listed or outstanding):
             blockers.append("uncleared_adjustment_basis_drift")
     return metrics, blockers
 
 
-def _daily_panel_matches_run(path: Path, envelope: dict[str, Any], day: str) -> tuple[bool, list[str], dict[str, dict[str, Any]]]:
+def _daily_panel_matches_run(
+    path: Path,
+    envelope: dict[str, Any],
+    day: str,
+    cleared_symbols: frozenset[str] = frozenset(),
+) -> tuple[bool, list[str], dict[str, dict[str, Any]]]:
     """Verify that a JSON artifact is the Stage5 daily_panel.v1 contract."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -610,7 +647,7 @@ def _daily_panel_matches_run(path: Path, envelope: dict[str, Any], day: str) -> 
         blockers.append("daily_panel_ledger_commit_state_not_committed")
     if _as_dict(payload.get("artifact_contract")).get("close_confirmed") is False:
         blockers.append("daily_panel_not_close_confirmed")
-    work_metrics, metric_blockers = _daily_panel_work_metrics(payload)
+    work_metrics, metric_blockers = _daily_panel_work_metrics(payload, cleared_symbols)
     blockers.extend(metric_blockers)
     return not blockers, blockers, work_metrics
 
@@ -620,6 +657,7 @@ def _artifact_status(
     envelope: dict[str, Any],
     day: str,
     repo_root: Path,
+    cleared_symbols: frozenset[str] = frozenset(),
 ) -> tuple[str, list[str], list[str], dict[str, dict[str, Any]]]:
     blockers: list[str] = []
     artifacts: list[str] = []
@@ -645,7 +683,9 @@ def _artifact_status(
         artifact_match = False
         artifact_blockers: list[str] = []
         for item in json_existing:
-            matched, item_blockers, item_metrics = _daily_panel_matches_run(Path(item), envelope, day)
+            matched, item_blockers, item_metrics = _daily_panel_matches_run(
+                Path(item), envelope, day, cleared_symbols
+            )
             artifact_match = artifact_match or matched
             artifact_blockers.extend(item_blockers)
             if matched:
@@ -764,6 +804,7 @@ def _audit_day(conn: sqlite3.Connection, day: str, repo_root: Path) -> dict[str,
             panel_envelope,
             day,
             repo_root,
+            _basis_clearances(conn, day),
         )
         checks["artifact_panel"] = artifact_check
         blockers.extend(artifact_blockers)

@@ -349,7 +349,10 @@ def _build_price_basis_integrity(db, *, as_of: str) -> dict[str, Any]:
     try:
         from sqlalchemy import func
 
-        from backend.data.models.degradation import DegradationEvent
+        from backend.data.models.degradation import (
+            AdjustmentBasisClearance,
+            DegradationEvent,
+        )
         from backend.data.price_quality import summarize_basis_drift_events
 
         rows = (
@@ -370,7 +373,16 @@ def _build_price_basis_integrity(db, *, as_of: str) -> dict[str, Any]:
                 continue
             if isinstance(parsed, dict):
                 payloads.append(parsed)
-        return summarize_basis_drift_events(payloads)
+        # Clearances are keyed by the day they clear, not the day someone got
+        # around to recording them, so a late acknowledgement still lands on the
+        # right panel when that day is regenerated.
+        cleared = [
+            symbol
+            for (symbol,) in db.query(AdjustmentBasisClearance.symbol)
+            .filter(AdjustmentBasisClearance.event_date == as_of[:10])
+            .all()
+        ]
+        return summarize_basis_drift_events(payloads, cleared)
     except Exception as exc:  # noqa: BLE001 - never let evidence collection break the panel.
         return _metric_unavailable(f"price_basis_query_failed:{exc.__class__.__name__}")
 

@@ -106,10 +106,53 @@ class TestSummarizeBasisDriftEvents:
             "same_source": [],
             "cross_source": [],
             "unknown_source": [],
+            "cleared_symbols": [],
             "uncleared_symbols": [],
             "uncleared": 0,
             "clean": True,
         }
+
+    def test_an_acknowledged_symbol_stops_gating_but_keeps_its_evidence(self):
+        # 2026-09-09 / 603993: before the clearance channel existed a same-source
+        # event blocked its day forever, and because the continuity auditor fails
+        # the whole window on any incomplete day, the 20-day gate could never pass.
+        result = summarize_basis_drift_events(
+            [{"symbol": "603993", "cross_source": False}], ["603993"]
+        )
+        assert result["clean"] is True
+        assert result["uncleared_symbols"] == []
+        # The drift is still reported — acknowledging it does not rewrite history.
+        assert result["same_source"] == ["603993"]
+        assert result["cleared_symbols"] == ["603993"]
+
+    def test_clearing_one_symbol_does_not_clear_the_others(self):
+        result = summarize_basis_drift_events(
+            [
+                {"symbol": "603993", "cross_source": False},
+                {"symbol": "600547", "cross_source": False},
+            ],
+            ["603993"],
+        )
+        assert result["uncleared_symbols"] == ["600547"]
+        assert result["cleared_symbols"] == ["603993"]
+        assert result["clean"] is False
+
+    def test_unknown_source_can_also_be_acknowledged(self):
+        result = summarize_basis_drift_events(
+            [{"symbol": "601899", "cross_source": None}], ["601899"]
+        )
+        assert result["clean"] is True
+        assert result["unknown_source"] == ["601899"]
+        assert result["cleared_symbols"] == ["601899"]
+
+    def test_clearing_a_symbol_that_was_never_gating_is_a_no_op(self):
+        # A cross-source event never gated, so "clearing" it must not invent a
+        # cleared_symbols entry that suggests an operator resolved something.
+        result = summarize_basis_drift_events(
+            [{"symbol": "000858", "cross_source": True}], ["000858"]
+        )
+        assert result["cleared_symbols"] == []
+        assert result["clean"] is True
 
     def test_mixed_batch_deduplicates_symbols(self):
         result = summarize_basis_drift_events([
@@ -248,3 +291,50 @@ class TestDriftEventRecordsStoredProvider:
             fetched=self._fetched(close=30.0), source="tickflow_cn",
         )
         assert self._events(test_db) == []
+
+
+class TestAuditorAppliesClearances:
+    """The gate decision lives in the auditor, not in the panel artifact.
+
+    A clearance is an operator fact recorded after the fact, so applying it at
+    audit time keeps the panel an immutable record of what was observed and
+    lets a late acknowledgement resolve a historical day without regenerating
+    evidence (which would also mint a second job run for that day).
+    """
+
+    @staticmethod
+    def _basis(clean: bool, uncleared: list[str] | None):
+        metric = {"status": "available", "clean": clean}
+        if uncleared is not None:
+            metric["uncleared_symbols"] = uncleared
+        return _panel({"price_basis_integrity": metric})
+
+    def test_uncleared_drift_still_blocks(self):
+        _, blockers = _daily_panel_work_metrics(self._basis(False, ["603993"]))
+        assert blockers == ["uncleared_adjustment_basis_drift"]
+
+    def test_a_matching_clearance_retires_the_blocker(self):
+        _, blockers = _daily_panel_work_metrics(
+            self._basis(False, ["603993"]), frozenset({"603993"})
+        )
+        assert blockers == []
+
+    def test_a_clearance_for_a_different_symbol_does_not_help(self):
+        _, blockers = _daily_panel_work_metrics(
+            self._basis(False, ["603993"]), frozenset({"600547"})
+        )
+        assert blockers == ["uncleared_adjustment_basis_drift"]
+
+    def test_partial_clearance_still_blocks(self):
+        _, blockers = _daily_panel_work_metrics(
+            self._basis(False, ["603993", "600547"]), frozenset({"603993"})
+        )
+        assert blockers == ["uncleared_adjustment_basis_drift"]
+
+    def test_not_clean_but_nothing_listed_fails_closed(self):
+        # A malformed metric must not be waved through by an unrelated
+        # clearance just because there is no symbol to match against.
+        _, blockers = _daily_panel_work_metrics(self._basis(False, None), frozenset({"603993"}))
+        assert blockers == ["uncleared_adjustment_basis_drift"]
+        _, blockers = _daily_panel_work_metrics(self._basis(False, []), frozenset({"603993"}))
+        assert blockers == ["uncleared_adjustment_basis_drift"]
