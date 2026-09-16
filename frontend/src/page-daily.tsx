@@ -3,6 +3,7 @@
 // ============================================================
 import React from 'react';
 import { DailyPanelCards, DailyPanelHeader } from './features/daily/DailyPanel';
+import { HumanReviewPanel } from './features/daily/HumanReview';
 import { getLatestM63Report } from './services/api';
 import { getDailyPanelLatest, type DailyPanel } from './services/daily';
 import { Badge, Markdown, PageHead, navigate } from './shared';
@@ -91,7 +92,7 @@ export function DailyPage() {
       <PageHead
         eyebrow="Daily Workflow"
         title="日常"
-        desc="一个入口看清当天发生了什么、为什么、还缺什么确认；每张卡都暴露 lifecycle、status、RunEnvelope 和 evidence refs。"
+        desc="查看当天变化与证据，记录自己的研究选择，并追踪后续观察。"
         right={<button type="button" className="btn btn-sm" onClick={() => navigate('/reports')}>复盘案卷</button>}
       />
 
@@ -100,7 +101,7 @@ export function DailyPage() {
           <div>
             <div className="t-eyebrow">Human confirmation</div>
             <div className="t-dim" style={{ fontSize: 12.5, marginTop: 3 }}>
-              研究目标和观点仍通过研究副驾驶确认；本页只读展示，不触发写库或交易动作。
+              在此核对证据并保存个人研究意见。接受或修改意见只留下记录，不执行交易或改动仓位。
             </div>
           </div>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -108,6 +109,7 @@ export function DailyPage() {
             <button type="button" className="btn" onClick={() => navigate('/chat')}>记录观点</button>
           </div>
         </div>
+        <HumanReviewPanel asOf={panel?.as_of || null} />
       </section>
 
       <div className="row pop" role="tablist" aria-label="daily lifecycle tabs" style={{ gap: 6, flexWrap: 'wrap' }}>

@@ -7,7 +7,7 @@ manuals, or live operations and are not yet fully encoded in code/tests.
 Closed plans, experiment narratives, generated research reports, and review
 outputs belong in the external One Loop governance archive, which lives on the
 owner's machine outside this repository. Per `docs/ROADMAP.md` §1 its absolute
-path is deliberately not recorded here; ask the owner for the location.
+path is deliberately not recorded here; use `docs/evidence/document_archive_digest.md` for archive identity/hash, then the local LEADER handoff for its machine-specific location.
 
 Current allowlist:
 
@@ -26,3 +26,7 @@ in `docs/data-sources/`; provenance and hashes live in
 When one of these contracts becomes fully encoded in code/tests or is retired,
 move it to the external archive first, update all references, and keep
 `make doc-check` green.
+
+2026-09-17 refresh: M50/M55 old implementation queues were archived after retaining
+referenced semantic sections. M54 preregistration and the local live-track contract
+remain intact: a past experiment result does not make its original preregistration disposable.

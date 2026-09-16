@@ -101,3 +101,11 @@ def test_fetch_tickflow_daily_success_resets_counter(monkeypatch):
     )
     tickflow.fetch_tickflow_daily("600519", "CN", days=5)
     assert tickflow._consecutive_429 == 0
+
+
+@pytest.mark.parametrize('base', [5.0, 12.0, 60.0])
+@pytest.mark.parametrize('failures', [0, 1, 3, 10])
+def test_explicit_slow_floor_is_never_reduced_by_backoff_cap(monkeypatch, base, failures):
+    monkeypatch.setenv('TICKFLOW_MIN_REQUEST_INTERVAL', str(base))
+    monkeypatch.setattr(tickflow, '_consecutive_429', failures)
+    assert tickflow._effective_request_interval() >= base

@@ -1,89 +1,24 @@
-# MingCang — Project Index
+# MingCang — Architecture and Navigation
 
-由用户掌控、供人和不同 AI 使用的投资决策台；组织有来源和时点的资料，支持条件化判断、用户选择及结果复盘。核心目标不是造一个更聪明的 AI，而是建立一个可审计的判断循环：进口假设 → 证伪 → 归因 → 记忆更新。
+用户掌控的研究决策台：数据/证据 → 研究 → 决策/风险 → 组合/复盘，由稳定 workflow 和
+RunEnvelope 连接到唯一日常面板。Research Lab 单独过晋升门；Archive 只作历史查询。
+规则 AGENTS；当前运行 STATUS；唯一计划 ROADMAP；实现合同 Developer Guide；历史 CHANGELOG。
+本页是路径/所有权地图，代码存在和分组名称不证明运行活跃。
 
-人和 AI 都可以提出研究假设与条件化行动建议；是否有增量收益由独立实验验证，最终取舍和交易决定始终由用户负责。
-
-**核心约束**：止盈止损由 ATR 公式计算；默认用 ATR 2.5 移动止损保护浮盈；LLM 不做价格预测，不做自动交易；记忆促进需要 outcome 结果和人工确认，且当前 `MEMORY_DECISION_CONTEXT_ENABLED=false`，只记录、显式查询和影子回测。
-
----
-
-## 快速导航
-
-| 文件 | 何时读取 |
-|------|------|
-| [AGENTS.md](AGENTS.md) | 默认 agent 规则、任务路由和安全边界 |
-| [STATUS.md](STATUS.md) | 当前状态、生产权重、验证快照和下一步入口 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 唯一活跃的 MingCang One Loop 治理与执行计划 |
-| [CHANGELOG.md](CHANGELOG.md) | 版本、历史变更、历史验证记录；不要默认读取 |
-| [README.md](README.md) | GitHub 门面、安装、配置和公开说明 |
-| [docs/ATLAS_MERGE.md](docs/ATLAS_MERGE.md) | Atlas dormant merge 的详细核验记录 |
-| [docs/dev/](docs/dev/) | 尚未归口到代码/测试的活维护契约；关闭计划将迁出仓库 |
-
----
-
-## Agent-Ready Boundary
-
-MingCang can be used as regular software and as an agent-ready codebase. Public
-agent instructions belong in `AGENTS.md`; private local notes, generated
-reports, runtime databases and personal trading records stay outside Git
-tracking.
-
----
-
-## 项目级计划
-
-当前唯一活跃计划是 **MingCang One Loop**。执行顺序、阶段门、六个外部项目的处理决定、
-能力生命周期与文档治理见 `docs/ROADMAP.md`；已完成历史见 `CHANGELOG.md`；生产权重、
-运行新鲜度和当前结论见 `STATUS.md`。
-
-旧 M 编号只作为历史、证据标签和兼容入口，不再组织新模块、新工作线或产品概念。
-
-## One Loop Operating Model
-
-MingCang uses one modular-monolith production core, one daily orchestration
-surface, one operator-facing daily panel, and an isolated research lab:
-
-```text
-data/evidence → research → decision/risk → portfolio/review
-       │              one complete RunEnvelope              │
-       └────────────── daily orchestration ──────────────────┘
-                              │
-                    authoritative daily panel
-
-research lab ── explicit promotion gate ──▶ production core
-archive ── no imports / no default context ──▶ history only
-```
-
-Capabilities use the lifecycle states `proposed`, `experimental`, `shadow`,
-`stable`, `dormant`, `rejected`, and `archived`. A module is not active merely
-because code exists; active use requires a canonical owner, real consumer,
-tracked run, fresh output, evidence status, and rollback path.
-
-## Documentation Authority
-
-| Truth | Authority |
+| Authority | Owner |
 |---|---|
-| agent rules, safety, governance | `AGENTS.md` |
-| architecture, ownership, canonical paths | `PROJECT.md` |
-| current runtime and production truth | `STATUS.md` |
-| active ordering, gates, blockers | `docs/ROADMAP.md` |
-| completed releases and historical verification | `CHANGELOG.md` |
-| public documentation site | `docs_public/` |
-| data-source live manuals | `docs/data-sources/` |
-| reproducibility evidence | `docs/evidence/` |
-| active maintainer contracts not yet encoded in code/tests | `docs/dev/` allowlist only |
+| `AGENTS.md` / local CLAUDE/Pi wrappers | 共享行为规则；wrapper 只路由 |
+| `STATUS.md` | 当前有日期的状态与证据限制 |
+| `docs/ROADMAP.md` | 下一步、依赖、开工/验收/晋升门 |
+| `docs_public/` | 公开唯一文档源；README 中英只导航 |
+| `docs_public/DEVELOPER_GUIDE.md` | 实现与验证合同 |
+| `docs/data-sources/`, `docs/evidence/` | 活来源手册、证据摘要/归档 hash 索引 |
+| `docs/dev/` allowlist | 尚被代码/测试引用的维护契约，按需读 |
+| `CHANGELOG.md` | 已完成/发布历史；非默认上下文 |
 
-The same topic must not have independent authority in both `docs/` and
-`docs_public/`. Local research, reviews, logs, generated reports, and historical
-planning archives stay outside the repository directory.
-
-Current public docs authority lives in `docs_public/`; `docs/ARCHITECTURE.md`
-and `docs/WHY_NOT_AI_STOCK_PICKER.md` are one-release compatibility stubs only.
-Historical `docs/research/`, `docs/reviews/`, and closed `docs/dev/` plans are
-kept in the external One Loop governance archive, not in the repo.
-
----
+研究/复盘/日志/历史规划原文存仓库外，不能靠 gitignore 当作归档。
+`docs/ARCHITECTURE.md` / `docs/WHY_NOT_AI_STOCK_PICKER.md` 是一个发布周期的兼容 stub。
+`docs/ATLAS_MERGE.md` 只保留 dormant 边界；详版见历史与外部档案。
 
 ## Repository Map
 
@@ -126,7 +61,8 @@ be used by CLI commands or external callers.
 | M68 news mirror | `backend.data.news_shadow` | `backend.tools.m68_news_shadow` (CLI) |
 | test2-compatible replay | `backend.backtest.test2_replay`, `backend.backtest.test2_models` | `backend.tools.m68_test2_compare` (derived A/B/C evaluator) |
 | completed-run contract | `backend.ops.run_envelope`, `backend.ops.job_ledger` | scheduler/manual/test2 entrypoint adapters |
-| daily panel evidence | `backend.evidence.daily_panel`, `backend.api.routes.daily`, `frontend/src/features/daily/` | `backend.portfolio.daily_panel` compatibility facade |
+| human research choices | `backend.research.daily_review`, `backend.api.routes.daily`, `frontend/src/features/daily/HumanReview.tsx` | existing `pending_ai_actions`; non-executable reviewed records only |
+| daily panel evidence | `backend.evidence.daily_panel`, `backend.evidence.daily_panel_sources`, `backend.api.routes.daily`, `frontend/src/features/daily/` | `backend.portfolio.daily_panel` compatibility facade |
 | continuity acceptance | `backend.ops.one_loop_continuity`, `scripts/audit_one_loop_continuity.py` | none; explicit immutable DB path is required |
 | independent cash NAV evidence | `backend.backtest.nav_replay` | `backend.tools.p0r_nav_replay` manual-only snapshot CLI; no scheduler or production-ledger consumer |
 | price-history rebase/write safety | none; maintenance-only | `backend.tools.rebase_price_history` dry-run plus opt-in strict write guard; routine callers keep the guard disabled until separately activated |
@@ -136,14 +72,30 @@ be used by CLI commands or external callers.
 精确消费者和调用关系容易随代码变化，不在本文件维护逐文件长表；架构任务应先查
 CodeGraph，再以 `rg`/AST 和 registry 复核。稳定分组如下：
 
-| 分组 | Canonical paths | 状态与边界 |
+| 分组 | Canonical paths | 用途与边界（不宣称实时活跃） |
 |---|---|---|
-| 深研入口 | `backend/research/deep_research.py`, `dossier.py`, `copilot.py` | active；日常经 `backend.tools.m63_research` 路由 |
-| 论点与证据门 | `case.py`, `thesis_ledger.py`, `review_loop.py`, `research_report_gate.py` | gate-guarded；主观清单不直接改短线分数 |
-| 前瞻观察 | `forward_thesis.py`, `watchlist.py`, `watchtower_confirm.py` | active/gate-guarded；事件和确认结果只进入受控证据路径 |
+| 深研入口 | `backend/research/deep_research.py`, `dossier.py`, `copilot.py` | 日常入口；日常经 `backend.tools.m63_research` 路由 |
+| 论点与证据门 | `case.py`, `thesis_ledger.py`, `review_loop.py`, `daily_review.py`, `research_report_gate.py` | gate-guarded；主观清单不直接改短线分数 |
+| 前瞻观察 | `forward_thesis.py`, `watchlist.py`, `watchtower_confirm.py` | 受证据门约束；事件和确认结果只进入受控证据路径 |
 | 主题与压力测试 | `theme_hypothesis_engine.py`, `stress_test.py`, `universe_guard.py` | gate-guarded；必须保留 PIT/universe provenance |
 | dormant 模板 | `ai_supply_chain_template.py`, `serenity_chokepoint.py` | dormant 或 type-only；新功能不得依赖 |
-| 多智能体决策 | `backend/agents/` | active；由 pipeline 编排，RiskManager 保持最终机械风险边界 |
+| 多智能体决策 | `backend/agents/` | 日常入口；由 pipeline 编排，RiskManager 保持最终机械风险边界 |
 
 新增、移除或晋升研究模块时，更新本分组、`backend.tools.registry`、对应测试和
 `CHANGELOG.md`；不要恢复动态消费者清单作为长期手工维护负担。
+
+## Post-loop ownership
+
+| Capability | Owner / canonical entry | Consumer and boundary |
+|---|---|---|
+| Daily source binding | evidence, `daily_panel_sources` | existing JobRun/finalizer/panel; new-date contract only |
+| Human choices | research, `daily_review` | daily-page research section via `/api/daily/reviews` and outcomes route; existing PendingAIAction, `daily.research_review`, reviewed/non-executable; no new table |
+| Four gates/window/memory filter | evidence, `decision_desk_readiness` | explicit `run_decision_desk_checks.py` and module window CLI; no scheduler/default memory consumer |
+| Model observation/session | evidence, `decision_desk_recording`, `decision_desk_session`, `decision_desk_manifest` | injected provider and explicit offline freeze/reservation/folds/holdout; no second trading ledger or production activation |
+| Bounded diagnostic process | evidence, `decision_desk_process` | only explicit `run_decision_desk_model_smoke.py`; local byte/time/filesystem bounds, not billing/remote cancellation guarantees |
+| Warmup/write safety | data, `market_persistence.backfill_if_needed` | opt-in `factor_warmup_rows`, strict provenance and preceding rows; routine caller defaults preserved |
+
+Human opinions/outcomes preserve panel bytes and are separate from queue completion,
+positions and memory promotion. Remote writes retain the agent guard. Removing the
+page/API entry stops new writes while keeping records. These boundaries do not certify
+future quality, full isolation, correct data or returns; exact acceptance is in ROADMAP.

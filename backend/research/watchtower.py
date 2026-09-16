@@ -752,6 +752,7 @@ def build_watchtower_report_from_entries(
 
         triggers: list[dict[str, Any]] = []
         fund_flow_insufficient_history_symbols: list[str] = []
+        flow_coverage: dict[str, str] = {}
 
         # a. price/volume anomaly + new high, per symbol
         for symbol in all_symbols:
@@ -827,6 +828,7 @@ def build_watchtower_report_from_entries(
                         }
                     )
             flow = compute_flow_anomaly(con, symbol, resolved_as_of)
+            flow_coverage[symbol] = flow.get("coverage", "unknown")
             if flow.get("coverage") == "insufficient_history":
                 fund_flow_insufficient_history_symbols.append(symbol)
             if flow.get("triggered") and not _has_recent_flow_anomaly(con, symbol, resolved_as_of):
@@ -908,7 +910,15 @@ def build_watchtower_report_from_entries(
     triggers.sort(key=lambda t: (t["symbol"], t["trigger_type"]))
     triggered_symbols = sorted({t["symbol"] for t in triggers})
     no_trigger_symbols = [s for s in all_symbols if s not in triggered_symbols]
+    price_gaps = {symbol: [*pv.get("flags", []), *(["stale_price"] if pv.get("as_of_date") != resolved_as_of else [])]
+                  for symbol, pv in per_symbol_pv.items()
+                  if pv.get("flags") or pv.get("as_of_date") != resolved_as_of}
+    flow_gaps = {symbol: status for symbol, status in flow_coverage.items() if status != "ok"}
     coverage = {
+        "status": "complete" if all_symbols and not watchlist_errors and not price_gaps and not flow_gaps else "partial",
+        "scope": "configured_watchlist_price_volume_and_fund_flow_scan; not_all_event_or_notification_coverage",
+        "price_gaps": price_gaps,
+        "fund_flow_gaps": flow_gaps,
         "fund_flow_insufficient_history_count": len(fund_flow_insufficient_history_symbols),
         "fund_flow_insufficient_history_symbols": fund_flow_insufficient_history_symbols,
         "thesis_conditions": thesis_condition_coverage,

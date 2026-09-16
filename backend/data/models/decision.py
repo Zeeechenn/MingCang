@@ -75,12 +75,12 @@ class ReviewRun(Base):
 
 
 class PendingAIAction(Base):
-    """AI 对话生成、等待用户确认的项目内操作。"""
+    """AI 操作，以及只留记录、不执行的人工研究复核（reviewed）。"""
     __tablename__ = "pending_ai_actions"
     action_id: Mapped[str] = mapped_column(String, primary_key=True)
     action: Mapped[str] = mapped_column(String, index=True)
     payload_json: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String, default="pending")  # pending / executed / cancelled / failed
+    status: Mapped[str] = mapped_column(String, default="pending")  # pending / reviewed / executed / cancelled / failed
     result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

@@ -8,6 +8,7 @@ import os
 import re
 import sqlite3
 from collections.abc import Callable, Sequence
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -401,15 +402,29 @@ def _step_result(name: str, func: Callable[[], Any]) -> dict[str, Any]:
         return {"name": name, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
-def _run_backfill_drip(as_of: str) -> dict[str, Any]:
+@contextmanager
+def _workflow_db(db_path: str | Path | None):
+    """Use the explicitly supplied DB throughout a custom workflow."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from backend.data.database import SessionLocal
+
+    engine = create_engine(f"sqlite:///{Path(db_path).expanduser().resolve()}") if db_path is not None else None
+    db = Session(engine) if engine is not None else SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        if engine is not None:
+            engine.dispose()
+
+
+def _run_backfill_drip(as_of: str, *, db_path: str | Path | None = None) -> dict[str, Any]:
     from backend.data import category_backfill
 
-    db = None
-    try:
-        from backend.data.database import SessionLocal
+    with _workflow_db(db_path) as db:
         from backend.data.orm import Base
-
-        db = SessionLocal()
         Base.metadata.create_all(bind=db.get_bind())
         start = date.fromisoformat(as_of)
         stocks = []
@@ -422,17 +437,15 @@ def _run_backfill_drip(as_of: str) -> dict[str, Any]:
         inserted, degradations = category_backfill._backfill_overseas(db)
         results["overseas"] = {"inserted": inserted, "degradations": degradations[:5]}
         return results
-    finally:
-        if db is not None:
-            db.close()
 
 
-def _run_accrual(as_of: str, *, no_llm: bool) -> dict[str, Any]:
+def _run_accrual(as_of: str, *, no_llm: bool, db_path: str | Path | None = None) -> dict[str, Any]:
     from backend.evidence.daily_accrual import compute_progress, run_daily_accrual
 
-    if no_llm:
-        return {"skipped": True, "reason": "--no-llm:跳过会消耗LLM的accrual scoring", "progress": compute_progress()}
-    return run_daily_accrual(date=as_of)
+    with _workflow_db(db_path) as db:
+        if no_llm:
+            return {"skipped": True, "reason": "--no-llm:跳过会消耗LLM的accrual scoring", "progress": compute_progress(db=db)}
+        return run_daily_accrual(date=as_of, db=db)
 
 
 def _run_watchtower(db_path: str | Path | None, as_of: str) -> dict[str, Any]:
@@ -537,7 +550,7 @@ def run_m68_test2_followup(
 
     accrual_step = _step_result(
         "m54_daily_accrual",
-        overrides.get("m54_daily_accrual", lambda: _run_accrual(day, no_llm=no_llm)),
+        overrides.get("m54_daily_accrual", lambda: _run_accrual(day, no_llm=no_llm, db_path=db_path)),
     )
     steps.append(accrual_step)
     accrual_result = (
@@ -576,17 +589,15 @@ def run_m68_test2_followup(
     }
 
 
-def _run_exit_shadow() -> dict[str, Any]:
+def _run_exit_shadow(db_path: str | Path | None = None) -> dict[str, Any]:
     from backend.portfolio.exit_shadow import build_shadow_report
-    from paper_trading.test2_ab_data import DEFAULT_UNIVERSE
-
-    return build_shadow_report(db_path=default_sqlite_path(), universe_path=DEFAULT_UNIVERSE)
+    return build_shadow_report(db_path=Path(db_path) if db_path is not None else default_sqlite_path(), universe_path=DEFAULT_UNIVERSE_PATH)
 
 
-def _run_panel(as_of: str) -> dict[str, Any]:
+def _run_panel(as_of: str, *, db_path: str | Path | None = None) -> dict[str, Any]:
     from backend.portfolio.daily_panel import build_panel
 
-    return build_panel(as_of=as_of)
+    return build_panel(as_of=as_of, db_path=db_path)
 
 
 def _run_trade_journal(db_path: str | Path | None, as_of: str) -> dict[str, Any]:
@@ -956,13 +967,8 @@ def run_trigger_router(
             if auto_refresh_fn is not None:
                 auto_refresh_fn(symbol)
             else:
-                from backend.data.database import SessionLocal
-
-                db = SessionLocal()
-                try:
+                with _workflow_db(db_path) as db:
                     _auto_refresh_label(symbol, db=db)
-                finally:
-                    db.close()
             auto_refreshed.append(symbol)
         for symbol in queue_slice:
             if _enqueue(
@@ -1129,7 +1135,7 @@ def build_postmarket_report(
     day = _now_date(as_of)
     overrides = step_overrides or {}
     steps: list[dict[str, Any]] = []
-    steps.append(_step_result("m61_backfill_drip", overrides.get("m61_backfill_drip", lambda: _run_backfill_drip(day))))
+    steps.append(_step_result("m61_backfill_drip", overrides.get("m61_backfill_drip", lambda: _run_backfill_drip(day, db_path=db_path))))
     steps.append(_step_result("m60_watchtower", overrides.get("m60_watchtower", lambda: _run_watchtower(db_path, day))))
     steps.append(_step_result("m60_second_entry", overrides.get("m60_second_entry", lambda: _run_second_entry_ledger(db_path, day))))
     steps.extend(
@@ -1140,8 +1146,8 @@ def build_postmarket_report(
             step_overrides=overrides,
         )["steps"]
     )
-    steps.append(_step_result("m58_exit_shadow", overrides.get("m58_exit_shadow", _run_exit_shadow)))
-    steps.append(_step_result("m59_panel", overrides.get("m59_panel", lambda: _run_panel(day))))
+    steps.append(_step_result("m58_exit_shadow", overrides.get("m58_exit_shadow", lambda: _run_exit_shadow(db_path))))
+    steps.append(_step_result("m59_panel", overrides.get("m59_panel", lambda: _run_panel(day, db_path=db_path))))
     steps.append(_step_result("m63_trade_journal", overrides.get("m63_trade_journal", lambda: _run_trade_journal(db_path, day))))
     panel = next((step["result"] for step in steps if step["name"] == "m59_panel" and step["ok"]), None)
     if panel is not None:

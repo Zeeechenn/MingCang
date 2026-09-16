@@ -207,6 +207,7 @@ def _attach_m63_daily_panel_artifact(db, row: JobRun, result: Any, artifact_path
             db,
             row,
             markdown_artifact_path=markdown_artifact,
+            workflow_result=result,
         )
     except Exception as exc:  # noqa: BLE001 - must fail closed for authoritative scheduler runs.
         raise JobRunFinalizationError(

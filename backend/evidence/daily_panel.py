@@ -14,6 +14,12 @@ from typing import Any
 from urllib.parse import unquote
 
 from backend.data.news_event_risk import build_news_event_risk_from_db
+from backend.evidence.daily_panel_sources import (
+    EFFECTIVE_SINCE,
+    apply_daily_sources,
+    bind_daily_sources,
+    previous_committed_panel,
+)
 from backend.evidence.run_card import build_run_card
 from backend.notification.contract import evaluate_notification_contract
 from backend.ops.run_envelope import select_complete_daily_run, stored_run_envelope_from_row
@@ -519,7 +525,15 @@ def _build_cards(
     structured_delta = (postmarket or {}).get("daily_delta")
     if not isinstance(structured_delta, dict):
         structured_delta = None
-    delta_ready = bool(structured_delta and structured_delta.get("current_as_of") and structured_delta.get("previous_as_of"))
+    delta_ready = bool(structured_delta and structured_delta.get("current_as_of") and structured_delta.get("previous_as_of")
+                       and structured_delta.get("status", "ready") in {"ready", "ready_zero"})
+    bound_watch = bool(run_verified and watchtower_followups.get("run_id") == (selected_run_ref or {}).get("run_id")
+                       and watchtower_followups.get("as_of") == as_of)
+    watch_status = (watchtower_followups.get("status", "missing") if bound_watch else
+                    ("degraded" if watchtower_followups.get("items") or not run_verified else "missing"))
+    event_status = news_event_risk.get("status")
+    event_not_applicable = bool(run_verified and as_of and as_of >= EFFECTIVE_SINCE
+                                and event_status == "not_applicable" and news_event_risk.get("reason"))
     report_as_of = (m63_report or {}).get("as_of")
     report_stale = bool(_date_only(report_as_of) and as_of and _date_only(report_as_of) != as_of)
     enriched_discretion_cards = []
@@ -533,6 +547,7 @@ def _build_cards(
     stale_discretion_count = sum(1 for item in enriched_discretion_cards if item.get("stale"))
     daily_delta_payload = {
         "structured_delta": structured_delta,
+        "reason": (structured_delta or {}).get("reason"),
         "m63_report": {
             "mode": (m63_report or {}).get("mode") or mode,
             "as_of": report_as_of,
@@ -596,8 +611,8 @@ def _build_cards(
         _card(
             "event_risk",
             lifecycle="shadow",
-            status="ready" if run_verified and news_event_risk.get("status") == "ready" else ("degraded" if news_event_risk.get("status") == "ready" else "missing"),
-            summary=f"事件风险 {event_risk_payload.get('attention_count', 0)} 项需关注；方向权重 blocked",
+            status="not_applicable" if event_not_applicable else ("ready" if run_verified and event_status == "ready" else ("degraded" if event_status == "ready" else "missing")),
+            summary=news_event_risk["reason"] if event_not_applicable else f"事件风险 {event_risk_payload.get('attention_count', 0)} 项需关注；方向权重 blocked",
             payload={
                 **news_event_risk,
                 "direction_weights": {
@@ -613,24 +628,26 @@ def _build_cards(
         _card(
             "watchtower",
             lifecycle="shadow",
-            status="degraded" if watchtower_followups.get("items") or not run_verified else "missing",
+            status=watch_status,
             summary=_summary_count("观察哨触发", len(watchtower_followups.get("items") or [])),
             payload={
                 "followups": watchtower_followups,
+                "reason": watchtower_followups.get("reason"),
                 "confirm": watchtower_confirm,
                 "notification_contract": notification_contract,
                 "suppression_history_status": "missing",
-                "degradation_reason": "notification history ledger not supplied; suppression coverage is not proven",
+                "degradation_reason": None if bound_watch else "notification history ledger not supplied; suppression coverage is not proven",
+                "notification_scope": "scan evidence only; notification delivery and suppression are not certified",
             },
-            evidence_refs=[_ref("watchtower", "latest_watchtower_output", as_of=as_of, status=("degraded" if watchtower_followups.get("items") else "missing"))],
+            evidence_refs=[_ref("watchtower", "job_run.daily_panel_sources" if bound_watch else "latest_watchtower_output", as_of=as_of, status=watch_status)],
             run_ref=selected_run_ref,
             drilldown={"kind": "route", "href": "/daily?tab=shadow", "label": "查看观察哨"},
         ),
         _card(
             "daily_delta",
             lifecycle="stable",
-            status="ready" if run_verified and delta_ready else ("degraded" if delta_ready else "missing"),
-            summary=(structured_delta or {}).get("summary") or "缺少结构化 current-vs-previous delta",
+            status=(structured_delta or {}).get("status", "ready") if run_verified and delta_ready else ("degraded" if delta_ready else "missing"),
+            summary=(structured_delta or {}).get("summary") or (structured_delta or {}).get("reason") or "缺少结构化 current-vs-previous delta",
             payload=daily_delta_payload,
             evidence_refs=[_ref("m63_report", "latest_report", as_of=report_as_of, status="stale" if report_stale else ("ready" if run_verified and m63_report else ("unverified" if m63_report else "missing")))],
             run_ref=selected_run_ref,
@@ -694,6 +711,10 @@ def build_daily_panel_payload(
         m63_queue=m63_queue,
         discretion_cards=discretion_cards or [],
     )
+    if resolved_as_of and resolved_as_of >= EFFECTIVE_SINCE:
+        for card in cards:
+            card["product_group"] = ("运行控制" if card["card_type"] == "batch_integrity" else
+                                     "治理闭环" if card["card_type"] in {"human_confirmation", "review_attribution"} else "决策证据")
     card_map = {card["card_type"]: card for card in cards}
     ordered_cards = [card_map[card_type] for card_type in CARD_TYPES]
     return {
@@ -736,6 +757,12 @@ def build_latest_daily_panel(
     postmarket, source_flags = _build_postmarket_source(selected_as_of, resolved_db_path)
     resolved_as_of = _date_only(selected_as_of or (postmarket or {}).get("header", {}).get("as_of"))
     news = _build_news_source(db, as_of=resolved_as_of)
+    selected_row = selection.get("job_run")
+    try:
+        stored = json.loads(getattr(selected_row, "output_summary_json", None) or "{}")
+    except (ValueError, TypeError):
+        stored = {}
+    postmarket, news = apply_daily_sources(postmarket, news, stored.get("daily_panel_sources"), selection.get("run_envelope") or {})
     return build_daily_panel_payload(
         mode=mode,
         as_of=resolved_as_of,
@@ -772,6 +799,7 @@ def build_and_write_daily_panel_artifact_for_job_run(
     row,
     *,
     markdown_artifact_path: str | Path,
+    workflow_result: dict | None = None,
 ) -> dict[str, Any]:
     """Persist a daily_panel.v1 artifact for one selected scheduler JobRun.
 
@@ -819,6 +847,12 @@ def build_and_write_daily_panel_artifact_for_job_run(
     resolved_db_path = _sqlite_file_path_from_session(db)
     postmarket, source_flags = _build_postmarket_source(as_of, resolved_db_path)
     news = _build_news_source(db, as_of=as_of)
+    sources = None
+    if as_of >= EFFECTIVE_SINCE:
+        previous, previous_reason = previous_committed_panel(db, as_of)
+        sources = bind_daily_sources(envelope=final_envelope, workflow_result=workflow_result,
+                                     postmarket=postmarket, previous=previous, no_previous_reason=previous_reason)
+        postmarket, news = apply_daily_sources(postmarket, news, sources, final_envelope)
     payload = build_daily_panel_payload(
         mode="postmarket",
         as_of=as_of,
@@ -861,6 +895,8 @@ def build_and_write_daily_panel_artifact_for_job_run(
     if not isinstance(output_summary, dict):
         output_summary = {}
     output_summary["run_envelope"] = final_envelope
+    if sources is not None:
+        output_summary["daily_panel_sources"] = sources
     row.output_summary_json = json.dumps(output_summary, ensure_ascii=False, default=_json_default, sort_keys=True)
     row.artifact_path = panel_ref
     return {

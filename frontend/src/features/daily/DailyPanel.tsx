@@ -14,10 +14,43 @@ const CARD_LABEL: Record<string, string> = {
 
 const STATUS_TONE: Record<string, string> = {
   ready: 'badge-up',
+  ready_zero: 'badge-up',
+  not_applicable: 'badge-dim',
   degraded: 'badge-warn',
   missing: 'badge-dim',
   blocked: 'badge-down',
 };
+
+const STATUS_LABEL: Record<string, string> = {
+  ready: '已就绪', ready_zero: '已核对 · 无新增', not_applicable: '本次未启用',
+  degraded: '证据不完整', missing: '缺少证据', blocked: '待处理',
+};
+const PAYLOAD_LABEL: Record<string, string> = {
+  items: '明细', vetoed_items: '排除项', shadow_discretion_cards: '影子研究',
+  stale_discretion_count: '过期研究数', verification: '核对状态',
+  risk_budget: '风险预算', stop_loss_buffer: '止损余量', followups: '扫描结果',
+  confirm: '确认记录', notification_contract: '通知规则', suppression_history_status: '通知历史',
+  direction_weights: '方向权重', panel_payload: '事件概览', pending_queue: '待确认项',
+  queue_stale_count: '历史待办数', queue_status: '队列状态', panel_as_of: '交易日',
+  structured_delta: '名单变化', m63_report: '盘后报告', missing_reason: '缺失原因',
+  selector_status: '批次状态', candidate_count: '完整批次数', source_flags: '来源提示',
+  no_synthetic_batch: '仅使用真实批次',
+};
+
+function SourceExplanation({ card }: { card: DailyPanelCard }) {
+  const payload = card.payload || {};
+  const delta = payload.structured_delta;
+  const reason = payload.reason || payload.followups?.reason || delta?.reason;
+  const oldCount = payload.queue_stale_count || 0;
+  if (!reason && !delta && !oldCount) return null;
+  return <div className="glass-inset" style={{ padding: 10, fontSize: 13, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
+    {reason && <div>{reason}</div>}
+    {delta && <div>当前 {delta.current_as_of || '未知'} · 对比 {delta.previous_as_of || '暂无已提交记录'}</div>}
+    {delta?.candidate_added?.length > 0 && <div>新增候选：{delta.candidate_added.join('、')}</div>}
+    {delta?.candidate_removed?.length > 0 && <div>移出候选：{delta.candidate_removed.join('、')}</div>}
+    {oldCount > 0 && <div>{oldCount} 项来自历史交易日，仍待人工处理；未回复的事项继续保留。</div>}
+  </div>;
+}
 
 const LIFE_TONE: Record<string, string> = {
   stable: 'badge-accent',
@@ -64,7 +97,7 @@ function EvidenceRefs({ card }: { card: DailyPanelCard }) {
 
 function PayloadPreview({ card }: { card: DailyPanelCard }) {
   const payload = card.payload || {};
-  const entries = Object.entries(payload).filter(([key]) => key !== 'run_card').slice(0, 4);
+  const entries = Object.entries(payload).filter(([key]) => key !== 'run_card' && key !== 'reason').slice(0, 4);
   if (!entries.length) return <div className="t-faint" style={{ fontSize: 12 }}>暂无结构化 payload。</div>;
   return (
     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
@@ -75,7 +108,7 @@ function PayloadPreview({ card }: { card: DailyPanelCard }) {
             data-payload-key={key}
             style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}
           >
-            {key}
+            {PAYLOAD_LABEL[key] || key}
           </div>
           <div className="t-dim" style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{compactValue(value)}</div>
         </div>
@@ -88,18 +121,19 @@ export function DailyCard({ card }: { card: DailyPanelCard }) {
   const href = card.drilldown?.href;
   return (
     <Card
-      eyebrow={card.card_type}
+      eyebrow={card.product_group || card.card_type}
       title={CARD_LABEL[card.card_type] || card.card_type}
       className="pop"
       right={(
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Badge tone={tone(LIFE_TONE, card.lifecycle)}>{card.lifecycle}</Badge>
-          <Badge tone={tone(STATUS_TONE, card.status)}>{card.status}</Badge>
+          <Badge tone={tone(STATUS_TONE, card.status)}>{STATUS_LABEL[card.status] || card.status}</Badge>
         </div>
       )}
     >
       <div className="grid" style={{ gap: 12 }}>
         <p className="t-dim" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6 }}>{card.summary || '暂无摘要'}</p>
+        <SourceExplanation card={card} />
         <PayloadPreview card={card} />
         <EvidenceRefs card={card} />
         {href && (

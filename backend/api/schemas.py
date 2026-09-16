@@ -298,6 +298,7 @@ class DailyPanelDrilldownOut(BaseModel):
 
 class DailyPanelCardOut(BaseModel):
     card_type: str
+    product_group: str | None = None
     lifecycle: str
     status: str
     summary: str = ""

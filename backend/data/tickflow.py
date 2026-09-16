@@ -31,7 +31,7 @@ def _min_request_interval_base() -> float:
 
 
 def _effective_request_interval() -> float:
-    """429 自适应退避：有效间隔 = base * 2**min(连续429次数,3)，上限 4.0 秒。
+    """429 自适应退避，上限 4 秒，但绝不缩短显式配置的更慢基础间隔。
 
     这是缓解而非根治——2026-07-16 晚实测首轮 45 支仅 10 支新鲜，补救轮仍触发
     429，同时段 eastmoney 代理也故障；退避只能压低 tickflow 自身触发 429 的
@@ -42,7 +42,7 @@ def _effective_request_interval() -> float:
         return 0.0
     with _throttle_lock:
         n = _consecutive_429
-    return min(base * (2 ** min(n, 3)), 4.0)
+    return max(base, min(base * (2 ** min(n, 3)), 4.0))
 
 
 def _note_response_status(status_code: int | None) -> None:

@@ -511,3 +511,57 @@ def test_inspect_session_summarizes_freeze_reservations_and_receipts_without_led
         "os_isolation_proven": False,
         "profitability_certified": False,
     }
+
+
+def manifest_fixture():
+    from hashlib import sha256
+    requests = {arm: json.dumps({'instructions': f'research {arm}', 'memory': []}).encode() for arm in ('raw', 'desk')}
+    manifest = {
+        'schema_version': 'decision_desk_manifest.v1', 'registration_ref': 'M29:offline-candidate',
+        'hypothesis': 'Desk evidence improves gap recall', 'primary_metric': 'gap_recall',
+        'benchmark_hash': HASH_A, 'data_snapshot_hash': HASH_A, 'provider_version_hash': HASH_A,
+        'risk_hash': HASH_B, 'execution_hash': HASH_C, 'price_basis': 'mixed_or_unknown',
+        'failure_policy': {'automatic_retries': 0, 'fallback': False, 'retain_failures': True, 'timeout_seconds': 120},
+        'arms': [{'arm_id': arm, 'requested_model': 'gpt-6',
+                  'prompt_hash': sha256(f'research {arm}'.encode()).hexdigest(),
+                  'request_hash': sha256(requests[arm]).hexdigest(), 'memory_hash': sha256(b'[]').hexdigest(),
+                  'tools': [], 'memory_root': f'{arm}/memory', 'output_root': arm} for arm in ('raw', 'desk')],
+    }
+    return manifest, requests
+
+
+def test_manifest_is_frozen_and_switching_requests_cannot_consume_budget(tmp_path):
+    manifest, requests = manifest_fixture()
+    frozen = freeze_plan(tmp_path, 'manifest-test', plan(), manifest=manifest)
+    provider = FakeProvider()
+    with pytest.raises(ValueError, match='request bytes mismatch'):
+        run_frozen_attempt(output_root=tmp_path, experiment_id='manifest-test', arm_id='raw',
+                           attempt_id='wrong-arm', cutoff=cutoff(), provider=provider, request_bytes=requests['desk'])
+    assert provider.calls == 0
+    assert inspect_session(tmp_path, 'manifest-test')['arms']['raw']['reserved_model_calls'] == 0
+    receipt = run_frozen_attempt(output_root=tmp_path, experiment_id='manifest-test', arm_id='raw',
+                                attempt_id='correct', cutoff=cutoff(), provider=provider, request_bytes=requests['raw'])
+    assert receipt['session']['manifest_hash'] == frozen['manifest_hash']
+    assert receipt['claims']['profitability_certified'] is False
+    with pytest.raises(FileExistsError):
+        freeze_plan(tmp_path, 'manifest-test', plan(), manifest=manifest)
+
+
+@pytest.mark.parametrize('field', ['fallback', 'mixed_roots', 'model', 'tools', 'policy', 'missing_prompt'])
+def test_manifest_rejects_inconsistent_protocol_before_freeze(tmp_path, field):
+    manifest, _ = manifest_fixture()
+    if field == 'fallback':
+        manifest['failure_policy']['fallback'] = True
+    elif field == 'mixed_roots':
+        manifest['arms'][1]['memory_root'] = 'raw/memory'
+    elif field == 'model':
+        manifest['arms'][0]['requested_model'] = 'claude-other'
+    elif field == 'tools':
+        manifest['arms'][0]['tools'] = ['shell']
+    elif field == 'policy':
+        manifest['risk_hash'] = HASH_A
+    else:
+        del manifest['arms'][0]['prompt_hash']
+    with pytest.raises(ValueError):
+        freeze_plan(tmp_path, 'invalid-manifest', plan(), manifest=manifest)
+    assert not (tmp_path / 'invalid-manifest').exists()

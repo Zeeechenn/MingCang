@@ -1,19 +1,15 @@
-# M55 Serenity 收敛进 ATLAS 研究脊柱 + s-skill 优点归口
+# Serenity convergence — retained research contract (legacy M55 path)
 
-状态：planned 2026-07-02 / observe-only / non-promoting
-关联：`docs/ROADMAP.md` M55 段、M50（`docs/dev/m50_research_report_gate_spec.md`）、已归档的 M51 external-borrowing 计划。
+Updated 2026-09-17. The old planned/Phase 1–3 queue is archived, not an active M
+milestone. This path remains because review_loop and the retired analyzer reference
+mapping #1/#8 and sections ③/④. Current work is only ROADMAP.
 
-本文档是 M55 Phase 0 spec 交付物：给出 serenity 收敛与三份外部 skill（ZadAnthony / muxuuu / fadewalk）优点归口的完整判断依据，供 Phase 1-3 落地时直接执行。本文档本身不改动代码。
-
----
-
-## ① 背景
-
-- **serenity 事实休眠**：`backend/research/serenity_chokepoint.py` 的 `analyze()` 满足"default-off + 零生产入口"的休眠条件——`long_term_serenity_enabled` 默认 `False`，全仓 grep 只命中它自身与 `research_report_gate.py` 里一个可选、从未被任何 CLI/web/pipeline 传入非 `None` 值的 `serenity` 参数（`_check_serenity_layer`）。它是纯 tests + 类型注解引用，生产影响 ≈ 0。
-- **ATLAS 脊柱重叠**：`backend/research/` 已有成熟脊柱——`theme_hypothesis_engine.py`（假设落库）、`ai_supply_chain_template.py`（供应链分层字段）、`forward_thesis.py`（可证伪假设 + 置信区间 + 复核节奏）、`thesis_ledger.py`（append-only 置信度序列 + kill_conditions）、`review_loop.py`（独立复核）、`dossier.py`（输出规范）、`research_evidence_defs.py` / `research_report_gate.py`（证据分层 + 门检查，M50 共享地基）。serenity 六步方法论与这套脊柱在字段级高度同构，但 `analyze()` 自己维护一套平行、更弱（无 DB、无 idempotent create、无 kill_conditions 状态机）的 dataclass，正踩 M51「graft-not-parallel」红线。
-- **三份外部 s-skill**（ZadAnthony `zad`、`muxuuu`、`fadewalk`）各自沉淀了一些方法论优点，需要逐条判定：合并进 ATLAS 现有模块（strengthen-existing / graft）、保留独立方法论文档（keep-standalone）、隔离（isolate）、还是整体丢弃（drop，通常因为触碰 observe-only 或层纯度红线）。
-
----
+`backend/research/serenity_chokepoint.py::analyze()` is already retired: returns None,
+warns, and never calls LLM/DB. The file/type/methodology loader remain for compatibility;
+physical deletion is not a pending task inferred from the old plan. The report gate
+retains its optional type-based layer; general research structures remain the reuse target.
+Historical design choices below describe boundaries and mapping, not proof all proposed
+extensions are implemented or permission to add new production dependencies.
 
 ## ② s-skill 优点 → ATLAS 归口映射表
 
@@ -56,58 +52,22 @@
 
 ## ④ analyze() 归宿决定
 
-**决定：退役（retire）**，仅限 `serenity_chokepoint.py` 这个 322 行的 LLM 结构化器文件本身。
+已退役独立 LLM 结构化执行；保留兼容函数（只返回 None）、无 score/vote 的报告类型和方法论
+加载入口。不得把文件存在描述成仍在运行，也不为“完成旧清单”直接删类型/兼容引用。
+新研究复用 theme_hypothesis_engine、forward_thesis、thesis_ledger、review_loop；
+方法论 source playbook 仍留 `.pi/skills/serenity-chokepoint/SKILL.md`。
 
-判定依据：
-1. **事实休眠**：`long_term_serenity_enabled` 默认 `False`，全仓无 CLI/web/pipeline 入口调用 `analyze()`（仅 tests + gate 类型注解引用）。
-2. **全面重复**：其 `SerenityChokepointReport` 冻结 dataclass 的字段（chain_layers/scarce_layer/quick_filter_by_layer/evidence_tier/source_refs/bayesian/bear_case/falsification_questions/research_priority_band）逐字段对照，六步中五步已在 `theme_hypothesis_engine` + `ai_supply_chain_template` + `forward_thesis` + `thesis_ledger` + `review_loop` 中有对应的、真正接了 DB/audit/idempotency 的存储原语；只有第 4 步（source playbook）无代码对应，但那本来就该是纯文档。
-3. `analyze()` 现在做的事——调 LLM、按自定义 tool schema 结构化、装进一个从不落盘的 dataclass——是给已存在的 ATLAS 模块做了一份平行、更弱的重复实现，正踩 M51「graft-not-parallel」红线。
-4. "thin-wrapper 复用 ATLAS plumbing"技术上可行，但零调用方情况下，包一层 wrapper 除保留接口名外无增量收益；任何未来想用 serenity 六步的调用方，直接调 ATLAS 五个模块的公开函数即可，不需要再翻译一层 serenity 专属 schema。
+## ⑤ 持续有效边界
 
-**真正保留的资产**：
-- `.pi/skills/serenity-chokepoint/SKILL.md`（六步方法论 + A 股 source playbook 文档，Phase 2 转为方法论透镜文档）
-- `research_evidence_defs.py` / `research_report_gate.py`（M50 共享地基，继续做，不动对外契约）
+observe-only / non-promoting：不改官方信号、仓位、止盈止损、scheduler、test2 或生产权重，
+不接 LongTermTeam / 长期标签聚合；只给定性研究判定，不产出可聚合分数、价格目标或买卖档。
+资金流/筹码/机构评级/估值分位不得被这套方法引入研究评分/候选准入；未来事件线索也须
+source-gating，只作文字、不计分。复用既有 evidence defs/report gate，不新建 analyzer 或平行账本。
+blocked 报告不落盘，研究层不反向 import decision；共享代码改动需生产输出对照。
+代码、测试和实时消费证据优先，旧材料不授予改动其他未提交 Skill/prompt 的权限。
 
-**退役范围仅限**：`backend/research/serenity_chokepoint.py`。退役时必须保持 `test_serenity_chokepoint` 的隔离不变量（no score/vote 字段、不 import `backend.decision`/`LongTermTeam`、非 `LongTermReport` 子类）在新落地位置同等成立；`research_report_gate.py` 里的 `serenity` 可选参数与 `_check_serenity_layer` 应整体移除或改为直接读 `ai_supply_chain`/`kill_conditions` 字段——这是 Phase 2/3 的具体实现工作。
+## ⑥ 历史清单与接手
 
----
-
-## ⑤ observe-only / 层纯度 / 生产 diff=0 边界
-
-- **observe-only / non-promoting**：本里程碑不改 official signal / 仓位 / 止盈止损 / scheduler / test2 / production weights；不进 `LongTermTeam` / `_aggregate_score` 长期标签聚合；serenity 及归口后的检查项一律不产出可聚合分数或价格目标，只产出定性判定（pass/revise、够查/暂缓/证据不足档位）。
-- **层纯度红线**：龙虎榜/主力净流入/北向/融资融券/筹码/机构评级/估值分位（fadewalk 全部资金流相关项 + zad 估值引擎）**整体不进入研究层**，判 `isolate` 或 `drop`；唯一记录的例外路径是未来可能的 observe-only 纯文字事件线索（本次不落地），且强制 source-gating，不给分、不进档、不作为候选纳入/排除判定依据。
-- **不新增平行轨**：所有归口目标（`atlas_home`）均落在 `backend/research/` 现有模块内，不新建平行文件；`analyze()` 退役后不建替代 analyzer。
-- **blocked 报告不落盘**：沿用 M50 既有约束，不因本里程碑改变。
-- **生产 signal diff=0**：本里程碑全部改动为 additive（新增检查项/字段/枚举值）或代码删除（退役 `serenity_chokepoint.py`），不修改任何已生产路径的入参默认值或输出 schema 语义；Phase 3 验收须跑现有生产信号回归确认 diff=0。
-- **不碰 `.pi/skills/track-analyst/`**（他人未提交改动），不 import `backend.decision`。
-
----
-
-## ⑥ Phase 1-3 落地清单
-
-### Phase 1（additive 检查项落地，unblock 前先做）
-- [ ] `research_report_gate.py`：新增"发现硬门"检查（≥1 跳非共识关系，否则信念档降一档）——映射表 #3
-- [ ] `research_report_gate.py` / `research_evidence_defs.py`：补充 `quant_claim_requires_primary_source` 校验枚举——映射表 #4
-- [ ] `research_evidence_defs.py`：合并精度降级规则（[推断]/[推测] → 数量级/方向）为唯一共享定义——映射表 #7
-- [ ] `research_evidence_defs.py`：补充"官方产业指引类文件"作为 official 级来源子类型——映射表 #17
-- [ ] `research_report_gate._check_serenity_layer`：改为直接读 `hypothesis.ai_supply_chain` 字段，脱离对 `serenity` 参数非 None 的依赖——比对表步骤 2
-- [ ] `dossier.py`：吸收中文表达规范（术语三分/禁英式句法/加粗上限），与禁词表共用词表模块——映射表 #2
-
-### Phase 2（模块级合并 + review/thesis 强化）
-- [ ] `review_loop.py`：合并 zad 五类复核检查项 + "用户暗示方向时反向加压"触发条件——映射表 #1、#8
-- [ ] `theme_hypothesis_engine.py` / `forward_thesis.py`：吸收非估值类判据/红旗清单（剔除市值门槛、机构持股分档）——映射表 #5
-- [ ] `theme_hypothesis_engine.py`：吸收"先层级后标的"排序纪律（不设固定数量硬门）——映射表 #11
-- [ ] `theme_hypothesis_engine.py`：吸收 fadewalk 真伪瓶颈排除规则中非资金面的 4 条——映射表 #13
-- [ ] `thesis_ledger.py`：`kill_conditions` 吸收 muxuuu what-could-go-wrong 八分类作为提示词表——映射表 #12
-- [ ] `forward_thesis.py` + `thesis_ledger.py`：serenity 贝叶斯字段迁移为 `update_confidence_band` / `attach_evidence_manifest` / `append_confidence` 调用路径——比对表步骤 5
-- [ ] `thesis_ledger.create_thesis(kill_conditions=...)`：接入 bear_case/falsification_questions 前置校验，门检查通用化读 `kill_conditions`——比对表步骤 6
-- [ ] `.pi/skills/serenity-chokepoint/SKILL.md`：转为方法论透镜文档（六步方法论 + A 股 source playbook 保留原样），移除对 `analyze()` 独立入口的引用——比对表步骤 4
-- [ ] ATLAS 测试套件：吸收 muxuuu trigger/behavior evals 转化为 pytest 用例（不落地独立 scorecard 打分脚本）——映射表 #10
-
-### Phase 3（退役 + 回归验收）
-- [ ] 移除 `backend/research/serenity_chokepoint.py`；迁移/保留 `test_serenity_chokepoint` 隔离不变量断言到新落地位置（不含 score/vote 字段、不 import `backend.decision`/`LongTermTeam`、非 `LongTermReport` 子类）
-- [ ] `research_report_gate.py`：移除或改造 `serenity` 可选参数与 `_check_serenity_layer` 对 `SerenityChokepointReport` 类型的依赖
-- [ ] 全量跑 ATLAS 相关测试（`backend/tests/research/` 等）+ M50/M51 既有测试，确认 green
-- [ ] 生产信号回归：对比改动前后 official signal 输出，确认 diff=0
-- [ ] README / STATUS.md 诚实口径检查：确保不暗示 serenity 独立分析器仍在驱动生产信号
-- [ ] `docs/ROADMAP.md` M55 行更新为 complete，归档判定依据链接回本文档
+原 Phase 1–3 未勾选列表已外部归档，其中包含后来已交付或改变为兼容保留的事项。
+不逐项重新执行，也不把未逐项复核者批量标成完成。维护本契约时读现有代码/测试，
+新增或退役能力依 ROADMAP 重新明确范围；档案索引见 `docs/evidence/document_archive_digest.md`。

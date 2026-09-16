@@ -13,6 +13,7 @@ import json
 import math
 import os
 import re
+import stat
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
@@ -21,6 +22,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from backend.evidence.decision_desk_manifest import validate_manifest, validate_manifest_request
 from backend.evidence.decision_desk_recording import record_model_observation
 
 try:
@@ -57,12 +59,13 @@ BUDGET_KEYS = frozenset({"total_model_calls", "total_cost_cny", "max_attempt_cos
 HASH_FIELDS = ("shared_input_hash", "risk_hash", "execution_hash")
 
 
-def freeze_plan(output_root: Path, experiment_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+def freeze_plan(output_root: Path, experiment_id: str, plan: dict[str, Any], *, manifest: dict | None = None) -> dict[str, Any]:
     """Freeze an offline experiment plan once under an exclusive experiment directory."""
     root = _resolve_output_root(output_root)
     _validate_identifier(experiment_id)
     _validate_no_symlink(root)
     normalized = _validate_plan(plan)
+    bound_manifest = validate_manifest(manifest, normalized) if manifest is not None else None
     experiment_dir = _child(root, experiment_id)
     experiment_dir.mkdir(parents=True, exist_ok=False)
     _fsync_dir(experiment_dir.parent)
@@ -84,6 +87,9 @@ def freeze_plan(output_root: Path, experiment_id: str, plan: dict[str, Any]) -> 
         "claims": _claims(),
         "durability_boundary": "local_filesystem_fsync_not_disk_failure_proof",
     }
+    if bound_manifest is not None:
+        payload["manifest"] = bound_manifest
+        payload["manifest_hash"] = _sha256_json(bound_manifest)
     payload["freeze_signature"] = _freeze_signature(payload)
     _write_json_atomic(_child(experiment_dir, "freeze.json"), payload)
     return payload
@@ -119,6 +125,11 @@ def run_frozen_attempt(
     if attempt_dir.exists():
         raise FileExistsError(f"attempt already exists: {attempt_dir}")
 
+    if freeze.get("manifest") is not None:
+        if request_payload is not None:
+            raise ValueError("manifest attempts require exact request_bytes")
+        validate_manifest_request(freeze["manifest"], arm_id, request_bytes, tool_observations)
+
     reservation = _reserve_budget(
         experiment_dir=experiment_dir,
         arm_id=arm_id,
@@ -144,6 +155,8 @@ def run_frozen_attempt(
         "freeze_signature": freeze["freeze_signature"],
         "account_id": arm["account_id"],
     }
+    if freeze.get("manifest_hash"):
+        receipt["session"]["manifest_hash"] = freeze["manifest_hash"]
     receipt["reservation"] = reservation
     receipt["claims"] = {**receipt["claims"], **_claims()}
     _write_json_atomic(_child(attempt_dir, "receipt.json"), receipt)
@@ -180,7 +193,7 @@ def inspect_session(output_root: Path, experiment_id: str) -> dict[str, Any]:
             "reservation_files": [item["path"] for item in reservations],
             "receipts": receipt_counts,
         }
-    return {
+    result = {
         "schema_version": "decision_desk_session_inspection.v1",
         "experiment_id": experiment_id,
         "freeze": {
@@ -194,6 +207,9 @@ def inspect_session(output_root: Path, experiment_id: str) -> dict[str, Any]:
         "arms": arms,
         "claims": _claims(),
     }
+    if (freeze.get("manifest") or {}).get("schema_version") == "decision_desk_manifest.v2":
+        result["research"] = _research_state(experiment_dir, freeze)[0]
+    return result
 
 
 def _validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
@@ -309,6 +325,10 @@ def _reserve_budget(
         # A known overrun or corrupt record in either arm blocks new calls in
         # the whole experiment. Already in-flight providers cannot be cancelled here.
         freeze = _load_and_verify_freeze(experiment_dir)
+        if (freeze.get("manifest") or {}).get("schema_version") == "decision_desk_manifest.v2":
+            state, _ = _research_state(experiment_dir, freeze)
+            if state["lifecycle"] not in {"experimental", "shadow"} or state["holdout_access_reserved"]:
+                raise RuntimeError("research lifecycle or holdout access blocks new attempts")
         reservations: list[dict[str, Any]] = []
         for frozen_arm in freeze["plan"]["arms"]:
             other_id = frozen_arm["arm_id"]
@@ -379,6 +399,10 @@ def _load_and_verify_freeze(experiment_dir: Path) -> dict[str, Any]:
         raise ValueError("freeze hash mismatch")
     if freeze.get("freeze_signature") != _freeze_signature(freeze):
         raise ValueError("freeze hash mismatch")
+    if freeze.get("manifest") is not None:
+        manifest = validate_manifest(freeze["manifest"], plan)
+        if freeze.get("manifest_hash") != _sha256_json(manifest):
+            raise ValueError("manifest hash mismatch")
     frozen_at = _parse_aware_datetime(freeze.get("frozen_at"))
     if frozen_at is None or frozen_at > _now().astimezone(frozen_at.tzinfo):
         raise ValueError("freeze timestamp invalid")
@@ -667,3 +691,138 @@ def _claims() -> dict[str, bool]:
         "os_isolation_proven": False,
         "profitability_certified": False,
     }
+
+
+_RESEARCH_TRANSITIONS = {
+    "experimental": {"shadow", "dormant", "rejected", "archived"},
+    "shadow": {"dormant", "rejected", "archived"},
+    "dormant": {"experimental", "rejected", "archived"},
+    "rejected": {"archived"},
+    "archived": set(),
+}
+
+
+def _research_state(experiment_dir: Path, freeze: dict) -> tuple[dict, list[dict]]:
+    if (freeze.get("manifest") or {}).get("schema_version") != "decision_desk_manifest.v2":
+        raise ValueError("research lifecycle requires a v2 manifest")
+    path = _child(experiment_dir, "budget", "research.events.json")
+    payload = _read_json(path) if path.exists() else {"events": []}
+    events = payload.get("events")
+    if not isinstance(events, list):
+        raise RuntimeError("research events corrupt")
+    state: dict[str, Any] = {"lifecycle": "experimental", "holdout_access_reserved": False,
+                              "holdout_result": None, "event_count": len(events)}
+    previous = freeze["manifest_hash"]
+    previous_at = _parse_aware_datetime(freeze["frozen_at"])
+    for seq, event in enumerate(events):
+        if not isinstance(event, dict) or set(event) != {"seq", "kind", "at", "details", "previous_hash", "sha256"}:
+            raise RuntimeError("research events corrupt")
+        unsigned = {key: value for key, value in event.items() if key != "sha256"}
+        if event["seq"] != seq or event["previous_hash"] != previous or event["sha256"] != _sha256_json(unsigned):
+            raise RuntimeError("research event chain mismatch")
+        at = _parse_aware_datetime(event["at"])
+        if at is None or previous_at is None or not previous_at <= at <= _now():
+            raise RuntimeError("research event timestamp invalid")
+        previous_at = at
+        details = event["details"]
+        if not isinstance(details, dict):
+            raise RuntimeError("research event details invalid")
+        if event["kind"] == "lifecycle":
+            target = details.get("to")
+            if target not in _RESEARCH_TRANSITIONS[state["lifecycle"]] or not details.get("reason"):
+                raise RuntimeError("research lifecycle transition invalid")
+            state["lifecycle"] = target
+        elif event["kind"] == "holdout_reserved":
+            if state["holdout_access_reserved"] or details.get("sha256") != freeze["manifest"]["evaluation"]["holdout_sha256"]:
+                raise RuntimeError("holdout reservation invalid")
+            state["holdout_access_reserved"] = True
+        elif event["kind"] == "holdout_result":
+            if not state["holdout_access_reserved"] or state["holdout_result"] is not None or details.get("status") not in {"read", "hash_mismatch", "read_failed"}:
+                raise RuntimeError("holdout result invalid")
+            state["holdout_result"] = details["status"]
+        else:
+            raise RuntimeError("unknown research event")
+        previous = event["sha256"]
+    return state, events
+
+
+def _append_research_event(experiment_dir: Path, freeze: dict, events: list[dict], kind: str, details: dict) -> None:
+    event = {"seq": len(events), "kind": kind, "at": _now().isoformat(), "details": details,
+             "previous_hash": events[-1]["sha256"] if events else freeze["manifest_hash"]}
+    event["sha256"] = _sha256_json(event)
+    directory = _child(experiment_dir, "budget")
+    directory.mkdir(exist_ok=True)
+    _write_json_atomic(_child(directory, "research.events.json"), {"events": [*events, event]})
+
+
+def set_research_lifecycle(output_root: Path, experiment_id: str, *, lifecycle: str, reason: str) -> dict:
+    """Record a manual research transition. Stable/production promotion is unavailable."""
+    if not isinstance(reason, str) or not reason.strip() or len(reason) > 4000:
+        raise ValueError("lifecycle reason required")
+    root = _resolve_output_root(output_root)
+    _validate_identifier(experiment_id)
+    directory = _existing_child(root, experiment_id)
+    lock = _child(directory, "budget.lock")
+    lock.touch(exist_ok=True)
+    with _exclusive_lock(lock):
+        freeze = _load_and_verify_freeze(directory)
+        state, events = _research_state(directory, freeze)
+        if lifecycle not in _RESEARCH_TRANSITIONS[state["lifecycle"]]:
+            raise ValueError("research lifecycle transition not allowed")
+        _append_research_event(directory, freeze, events, "lifecycle", {"to": lifecycle, "reason": reason.strip()})
+        return _research_state(directory, freeze)[0]
+
+
+def read_frozen_holdout(output_root: Path, experiment_id: str, *, artifact: Path) -> bytes:
+    """Reserve the only controlled holdout read before opening it; block further model attempts.
+
+    Failed reads remain consumed. This cannot prevent reads outside this function
+    and is not proof that a local operator had never seen the source artifact.
+    """
+    root = _resolve_output_root(output_root)
+    _validate_identifier(experiment_id)
+    directory = _existing_child(root, experiment_id)
+    lock = _child(directory, "budget.lock")
+    lock.touch(exist_ok=True)
+    with _exclusive_lock(lock):
+        freeze = _load_and_verify_freeze(directory)
+        state, events = _research_state(directory, freeze)
+        if state["lifecycle"] not in {"experimental", "shadow"} or state["holdout_access_reserved"]:
+            raise RuntimeError("holdout access unavailable or already reserved")
+        design = freeze["manifest"]["evaluation"]
+        if design["holdout_sessions"][-1] >= _now().astimezone(ZoneInfo(DATE_WINDOW_TIMEZONE)).date().isoformat():
+            raise RuntimeError("holdout sessions must have completed before today")
+        for arm in freeze["plan"]["arms"]:
+            cost = _decimal_from_number(arm["budget"]["max_attempt_cost_cny"])
+            if cost is None:
+                raise RuntimeError("invalid frozen budget")
+            reservations = _read_reservations(directory, arm["arm_id"], expected_attempt_cost=cost)
+            _assert_attempt_dirs_have_reservations(directory, arm["arm_id"], reservations)
+            for reservation in reservations:
+                receipt_path = _child(directory, arm["arm_id"], reservation["attempt_id"], "receipt.json")
+                receipt = _read_json(receipt_path) if receipt_path.exists() else {}
+                if (receipt.get("status") not in {"passed", "failed"}
+                        or receipt.get("session", {}).get("manifest_hash") != freeze["manifest_hash"]
+                        or receipt.get("session", {}).get("freeze_signature") != freeze["freeze_signature"]
+                        or receipt.get("experiment_id") != experiment_id
+                        or receipt.get("arm_id") != arm["arm_id"]
+                        or receipt.get("attempt_id") != reservation["attempt_id"]):
+                    raise RuntimeError("unfinished local attempt blocks holdout access")
+        _append_research_event(directory, freeze, events, "holdout_reserved", {"sha256": design["holdout_sha256"]})
+        state, events = _research_state(directory, freeze)
+        try:
+            # Nonblocking open plus fstat rejects FIFOs/devices before a read
+            # can wait forever. The descriptor check avoids a path-swap race.
+            fd = os.open(artifact, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as handle:
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    raise OSError("holdout artifact must be a regular file")
+                data = handle.read(64 * 1024 * 1024 + 1)
+            status = "read" if len(data) <= 64 * 1024 * 1024 and hashlib.sha256(data).hexdigest() == design["holdout_sha256"] else "hash_mismatch"
+        except OSError:
+            _append_research_event(directory, freeze, events, "holdout_result", {"status": "read_failed"})
+            raise
+        _append_research_event(directory, freeze, events, "holdout_result", {"status": status})
+        if status != "read":
+            raise ValueError("holdout artifact size or hash mismatch; access remains reserved")
+        return data

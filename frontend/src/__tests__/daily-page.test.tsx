@@ -32,6 +32,7 @@ const cards = [
 }));
 
 vi.mock('../services/daily', () => ({
+  getDailyReviews: vi.fn(() => Promise.resolve({ items: [], history: [], history_limit: 100 })),
   getDailyPanelLatest: vi.fn(() => Promise.resolve({
     schema_version: 'daily_panel.v1',
     mode: 'postmarket',
@@ -99,4 +100,18 @@ describe('DailyPage Stage5 panel', () => {
     expect(screen.queryByText('candidate')).not.toBeInTheDocument();
     window.location.hash = '';
   });
+});
+
+it('shows explicit zero and disabled reasons without hiding missing evidence', async () => {
+  const { DailyCard } = await import('../features/daily/DailyPanel');
+  render(<DailyCard card={{...cards[3], status: 'not_applicable',
+    payload: { reason: '本次关闭新闻影子分析；不能解释为没有事件风险。' }}} />);
+  expect(screen.getByText('本次未启用')).toBeInTheDocument();
+  expect(screen.getByText('本次关闭新闻影子分析；不能解释为没有事件风险。')).toBeInTheDocument();
+  render(<DailyCard card={{...cards[5], status: 'ready_zero', payload: {
+    reason: '候选名单核对完成，无新增。', structured_delta: {
+      current_as_of: '2026-09-16', previous_as_of: '2026-09-15', candidate_added: [], candidate_removed: [],
+    }}}} />);
+  expect(screen.getByText('已核对 · 无新增')).toBeInTheDocument();
+  expect(screen.getByText('当前 2026-09-16 · 对比 2026-09-15')).toBeInTheDocument();
 });

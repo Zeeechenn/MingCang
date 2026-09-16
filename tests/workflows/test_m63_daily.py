@@ -268,7 +268,7 @@ def test_m68_test2_followup_reuses_shared_order_and_collection_outcomes(monkeypa
     monkeypatch.setattr(
         m63_daily,
         "_run_accrual",
-        lambda as_of, *, no_llm: {
+        lambda as_of, *, no_llm, db_path=None: {
             "collection_outcomes": {"603986": "success"},
         },
     )
@@ -824,3 +824,24 @@ def test_glossary_footnote_only_lists_terms_present():
     assert "- 影子出场:" in text
     assert "- accrual:" in text
     assert "- EPS:" not in text
+
+
+def test_custom_db_passes_to_panel_exit_accrual_and_backfill(monkeypatch, tmp_path):
+    from backend.data import category_backfill
+    from backend.evidence import daily_accrual
+    from backend.portfolio import daily_panel, exit_shadow
+    target = tmp_path / 'custom.db'
+    calls = []
+    monkeypatch.setattr(daily_panel, 'build_panel', lambda **kw: calls.append(('panel', kw['db_path'])))
+    monkeypatch.setattr(exit_shadow, 'build_shadow_report', lambda **kw: calls.append(('exit', kw['db_path'])))
+    monkeypatch.setattr(daily_accrual, 'compute_progress', lambda **kw: calls.append(('accrual', kw['db'].get_bind().url.database)))
+    monkeypatch.setattr(category_backfill, '_load_universe', lambda *a, **kw: [])
+    monkeypatch.setattr(category_backfill, '_backfill_stock_category', lambda category, stocks, start, end, db: (0, []))
+    monkeypatch.setattr(category_backfill, '_backfill_corporate_events', lambda stocks, start, end, db: (0, []))
+    monkeypatch.setattr(category_backfill, '_backfill_overseas', lambda db: (calls.append(('backfill', db.get_bind().url.database)) or 0, []))
+    monkeypatch.setattr('backend.data.database.SessionLocal', lambda: pytest.fail('default DB touched'))
+    m63_daily._run_panel('2026-09-16', db_path=target)
+    m63_daily._run_exit_shadow(target)
+    m63_daily._run_accrual('2026-09-16', no_llm=True, db_path=target)
+    m63_daily._run_backfill_drip('2026-09-16', db_path=target)
+    assert calls == [('panel', target), ('exit', target), ('accrual', str(target)), ('backfill', str(target))]

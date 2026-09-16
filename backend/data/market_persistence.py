@@ -228,6 +228,7 @@ def backfill_if_needed(
     backfill_threshold_days: int = BACKFILL_THRESHOLD_DAYS,
     refresh_window_days: int = REFRESH_WINDOW_DAYS,
     strict_basis_write_guard: bool = False,
+    factor_warmup_rows: int | None = None,
 ) -> int:
     """
     检查该股历史数据是否充足。若最新记录距今超过阈值（或无记录），
@@ -236,6 +237,10 @@ def backfill_if_needed(
     refresh_today=True 时绕过阈值短路，强制重抓最近 REFRESH_WINDOW_DAYS 天并
     覆盖写入，用于盘前/盘后任务校正当日已有价格（避免被 provider 修正前的脏数据
     污染下游技术分/ATR/止损止盈）。
+
+    factor_warmup_rows is an explicit, strict research/maintenance candidate.
+    It requests enough same-provider history before the write window and rejects
+    incomplete context. Routine callers retain the existing fetch/write behavior.
 
     返回新写入或更新的记录条数。
     """
@@ -248,6 +253,16 @@ def backfill_if_needed(
         normalize_symbol,
     )
 
+    if factor_warmup_rows is not None:
+        if type(factor_warmup_rows) is not int or not 14 <= factor_warmup_rows <= 2000:
+            raise ValueError("factor_warmup_rows must be an integer in [14, 2000]")
+        if not strict_basis_write_guard:
+            raise ValueError("factor warmup requires strict_basis_write_guard")
+        if expected_latest is None:
+            raise ValueError("factor warmup requires expected_latest")
+        if date.fromisoformat(expected_latest).isoformat() != expected_latest:
+            raise ValueError("factor warmup requires a canonical expected_latest date")
+
     market = normalize_market(market)
     symbol = normalize_symbol(symbol, market)
     asset_key = instrument_key(market, symbol)
@@ -255,6 +270,8 @@ def backfill_if_needed(
 
     latest = db.query(Price.date).filter(Price.asset_key == asset_key).order_by(Price.date.desc()).first()
     latest_date_str = latest[0] if latest else None
+    if factor_warmup_rows is not None and latest_date_str is None:
+        raise PriceBasisWriteBlocked("factor warmup requires existing history; seed full history separately")
 
     if latest_date_str:
         days_old = (date.today() - date.fromisoformat(latest_date_str)).days
@@ -263,6 +280,11 @@ def backfill_if_needed(
         fetch_days = max(days_old + 10, refresh_window_days + 2 if refresh_today else 0)
     else:
         fetch_days = (years or backfill_years) * 365 + 10
+
+    if factor_warmup_rows is not None:
+        # Providers differ between calendar-day and row-count limits. Request a
+        # conservative span, then verify the actual preceding-row coverage.
+        fetch_days = max(fetch_days, 2 * (factor_warmup_rows + refresh_window_days + 2) + 10)
 
     if expected_latest is not None:
         df = fetch_daily_fn(symbol, market, days=fetch_days, expected_latest=expected_latest)
@@ -274,6 +296,24 @@ def backfill_if_needed(
 
     if df.empty:
         return 0
+
+    if factor_warmup_rows is not None:
+        if not df.index.is_unique or not df.index.is_monotonic_increasing:
+            raise PriceBasisWriteBlocked("factor warmup requires unique ascending dates")
+        try:
+            valid_dates = all(isinstance(day, str) and date.fromisoformat(day).isoformat() == day for day in df.index)
+        except ValueError:
+            valid_dates = False
+        if not valid_dates or df.index[-1] != expected_latest:
+            raise PriceBasisWriteBlocked("factor warmup requires canonical dates through expected_latest")
+        if expected_latest is not None and any(str(day) > expected_latest for day in df.index):
+            raise PriceBasisWriteBlocked("factor warmup contains rows after expected_latest")
+        values = df[["open", "high", "low", "close"]]
+        import numpy as np
+        if not np.isfinite(values.to_numpy(dtype=float)).all() or (values <= 0).any().any():
+            raise PriceBasisWriteBlocked("factor warmup requires finite positive OHLC")
+        if (df.high < df[["open", "low", "close"]].max(axis=1)).any() or (df.low > df[["open", "high", "close"]].min(axis=1)).any():
+            raise PriceBasisWriteBlocked("factor warmup requires valid OHLC ordering")
 
     df_factors = add_all_factors(df)
 
@@ -316,6 +356,13 @@ def backfill_if_needed(
 
     if df_factors.empty:
         return 0
+
+    if factor_warmup_rows is not None:
+        first_position = df.index.get_indexer([df_factors.index[0]])[0]
+        if first_position < factor_warmup_rows:
+            raise PriceBasisWriteBlocked(
+                f"factor warmup insufficient: {first_position} preceding rows; requires {factor_warmup_rows}"
+            )
 
     if refresh_today:
         dates_to_replace = list(df_factors.index)

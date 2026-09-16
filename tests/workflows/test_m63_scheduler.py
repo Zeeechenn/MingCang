@@ -478,3 +478,63 @@ def test_m63_panel_work_metrics_use_day_scope_queue_cohort(monkeypatch, tmp_path
     pending_ids = {item["id"] for item in human_card["payload"]["pending_queue"]}
     assert "today-future-done" in pending_ids
     assert "future-done" not in pending_ids
+
+
+def test_post_loop_sources_survive_job_commit_and_latest_api(monkeypatch, tmp_path):
+    from sqlalchemy import text
+
+    from backend import scheduler
+    from backend.config import settings
+    from backend.data.database import Base
+    from backend.data.models.job import JobRun
+    from backend.evidence import daily_panel
+    from backend.workflows import m63_daily
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'isolated.db'}")
+    Session = sessionmaker(bind=engine)
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(settings, "job_ledger_enabled", True)
+    monkeypatch.setattr("backend.data.database.SessionLocal", Session)
+    queue = tmp_path / 'queue.json'
+    _write_queue(queue)
+    monkeypatch.setattr(m63_daily, "DEFAULT_QUEUE_PATH", queue)
+    monkeypatch.setattr(daily_panel, "build_postmarket_panel", lambda **kw: _panel_payload(kw['as_of']))
+    monkeypatch.setattr(daily_panel, "build_news_event_risk_from_db", lambda *a, **kw: {'status': 'missing'})
+    for day in ('2026-09-15', '2026-09-16'):
+        with Session() as db:
+            db.execute(text("INSERT INTO prices(symbol,date,market,open,high,low,close,volume) VALUES ('600001',:day,'CN',10,10,10,10,100)"), {'day': day})
+            db.commit()
+        markdown = tmp_path / f'postmarket_{day}.md'
+        markdown.write_text('isolated fixture')
+        steps = _complete_steps() + [{'name': 'm60_watchtower', 'ok': True, 'result': {
+            'as_of': day, 'summary': {'n_symbols_scanned': 1}, 'coverage': {'status': 'complete'},
+            'watchlist_errors': [], 'triggers': []}}]
+        scheduler.run_tracked_job('m63_postmarket', lambda day=day, steps=steps, markdown=markdown: {
+            'ok': True, 'mode': 'postmarket', 'date': day, 'steps': steps, 'output_path': str(markdown)},
+            trigger_source='manual_cli', as_of=day,
+            input_coverage={'workflow': 'm63_daily', 'mode': 'postmarket', 'llm_enabled': False,
+                            'required_steps': ['m59_panel', 'trigger_router', 'task_capsule']})
+    with Session() as db:
+        rows = db.query(JobRun).order_by(JobRun.as_of).all()
+        assert 'daily_panel_sources' not in json.loads(rows[0].output_summary_json)
+        source = json.loads(rows[1].output_summary_json)['daily_panel_sources']
+        assert source['daily_delta']['previous_as_of'] == '2026-09-15'
+        assert source['watchtower']['status'] == 'ready_zero'
+        artifact = json.loads(Path(rows[1].artifact_path).read_text())
+        assert artifact['ledger_commit_state'] == 'committed'
+        api = daily_panel.build_latest_daily_panel(db, as_of='2026-09-16')
+        cards = {c['card_type']: c for c in api['cards']}
+        assert cards['watchtower']['status'] == 'ready_zero'
+        assert cards['event_risk']['status'] == 'not_applicable'
+        assert cards['daily_delta']['status'] == 'ready_zero'
+        assert cards['daily_delta']['payload']['reason']
+        assert [c['product_group'] for c in api['cards']].count('决策证据') == 5
+        from backend.api.schemas import DailyPanelOut
+        assert DailyPanelOut.model_validate(api).model_dump()['cards'][0]['product_group'] == '运行控制'
+        previous_path = Path(rows[0].artifact_path)
+        previous = json.loads(previous_path.read_text())
+        previous['ledger_commit_state'] = 'pending'
+        previous_path.write_text(json.dumps(previous))
+        from backend.evidence.daily_panel_sources import previous_committed_panel
+        assert previous_committed_panel(db, '2026-09-16') == (None, 'previous_panel_binding_invalid')
+    engine.dispose()

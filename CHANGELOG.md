@@ -8,6 +8,53 @@
 
 ## [Unreleased]
 
+- Archived historical AI handoffs/checkpoints and completed implementation narratives
+  outside the repository with a SHA-256 manifest and verified compressed originals.
+  Refreshed AGENTS/Claude/Pi routing, STATUS and the sole ROADMAP to separate the
+  frozen 20-day baseline, 21-day continued operation and still-blocked output/data/
+  economic gates. Retained live contracts, private ledgers and released history.
+
+- Added an explicit saved-collection quality-window reader in the existing readiness
+  module. It retains due/missing/failed/not-yet-due dates, verifies five input hashes,
+  recomputes single-day gates and reports fixed denominators. Human completion,
+  model quality and return certification remain unevaluated; no daily reruns or writes.
+
+- Added manifest v2 candidate-family/trial binding, nested forward-fold and exclusion
+  checks, research lifecycle and one controlled holdout read in existing session metadata.
+  Unfinished local attempts block access; failed reads remain consumed and access blocks
+  future model attempts. Local hashes do not certify source/calendar truth or profitability.
+- Bounded diagnostic child-process input, combined output and wall time; retained partial
+  bytes and explicit unknown-completion receipts. macOS diagnostic writes stay in the
+  work directory and runtime API-key variables are excluded from the child environment.
+- Reproduced short-window ATR reinitialization and added explicit same-source factor warmup
+  with pre-write coverage checks; default callers remain unchanged. Prepared all 25 public
+  test-pool price candidates and snapshot-only ATR/NAV sensitivity without production repair.
+- Fixed TickFlow backoff so an explicit request interval above four seconds is respected;
+  the default 0.5-second configuration keeps its existing behavior.
+
+- Added manual accept/modify/reject and follow-up observations to the existing daily
+  research section. Records retain original committed-panel evidence, dates and hashes;
+  duplicate submissions are idempotent and concurrent observations use version checks.
+  Expired proposals allow rejection only. Existing reviewed-action storage is reused;
+  recording an opinion does not execute trades, complete research tasks or promote memory.
+
+- Added post-loop row-bound watchtower evidence, previous committed-panel changes,
+  explicit zero-LLM shadow states and human-readable reasons, effective 2026-09-16.
+  Old dated artifacts remain frozen; scan evidence does not certify notifications.
+- Propagated custom DB paths through panel, exit, backfill, accrual and label refresh.
+- Bound optional research manifests to the existing experiment freeze and reservations;
+  wrong-arm request bytes, unbound prompts/memory and extra tools fail before calls.
+  Initial memory remains empty and no economic trial is activated.
+
+- Completed and externally froze the 20-close-confirmed-day One Loop v1 baseline
+  through 2026-09-15; output quality, price provenance and economic gates remain open.
+- Added manual-only four-gate evidence collection, matched factual-quality input
+  requests, strict arm-local evaluation-memory filtering and bounded CLI diagnostics.
+  Missing resolved-model/cost receipts remain failed evidence; no production
+  strategy, memory route, scheduler or historical prices are changed.
+- Froze the clock in timestamp-signal regression fixtures so their July sample
+  does not silently leave the rolling 60-day test window as wall time advances.
+
 ---
 
 ## [v0.8.2] 决策台研究与实验控制 / Decision-desk research and experiment control（2026-09-08）

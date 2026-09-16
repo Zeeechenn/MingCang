@@ -3,6 +3,24 @@
 否则时间戳信号永远匹配不到日线（见 backend/api/routes/signals.py、system.py）。"""
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def fixed_evaluation_clock(monkeypatch):
+    """Keep the timestamp fixture inside the 60-day window on any run date."""
+    from backend.api.routes import signals
+
+    class FixtureDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = cls(2026, 7, 16, 12, tzinfo=UTC)
+            return value.astimezone(tz) if tz is not None else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(signals, "datetime", FixtureDateTime)
+
 
 def test_eval_signals_matches_timestamp_signal_to_plain_date_price(test_db, sample_stocks):
     from backend.api.routes.signals import eval_signals

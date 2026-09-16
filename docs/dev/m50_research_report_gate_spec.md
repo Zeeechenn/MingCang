@@ -1,26 +1,15 @@
-# M50 Phase 0 设计 spec：ResearchReportGate + 共享定义
+# ResearchReportGate — retained contract (legacy M50 path)
 
-状态：Phase 0 文档（零代码）。本文件是 M50（见 `docs/ROADMAP.md`）的设计契约，供 Phase 1 实现对照。
-配套产物：`.pi/skills/serenity-chokepoint/SKILL.md`（方法论）。
-定位：observe-only / source-gated / non-promoting。不改 official signal / 仓位 / 止盈止损 / scheduler / test2 / production weights。
-
----
-
-## 0. 三份产物的关系（为什么必须协同设计）
-
-| 产物 | 角色 | 本文件 |
-|---|---|---|
-| `serenity-chokepoint/SKILL.md` | 产出检查项（证据等级、来源、证伪、反方） | 已交付 |
-| ResearchReportGate | 强制执行：检查不过的报告物理上发不出 | §2-§4 |
-| 共享定义 | 两者共用的枚举/词表/口径，定义一次 | §1 |
-
-Serenity 产检查项，Gate 负责强制执行。先有结构化输出，门才有东西可查。
-
----
+Updated 2026-09-17. Gate/shared definitions and the deep-research pre-write hook
+exist; the original “Phase 0 / zero code” and uncompleted implementation checklist
+are archived. This is a live contract, not a new milestone. Independent Serenity
+analyze() is retired; its optional report shape does not imply a running analyzer.
+Scope remains observe-only/source-gated/non-promoting; no official signal/risk/
+scheduler/test2/weight changes. Methodology reference: `.pi/skills/serenity-chokepoint/SKILL.md`.
 
 ## 1. 共享定义（只定义一次，Serenity 与 Gate 同 import）
 
-Phase 1 落点建议：`backend/research/research_evidence_defs.py`（新文件，纯常量，无副作用）。
+现有共享实现：`backend/research/research_evidence_defs.py`（共享枚举/词表）。
 
 ### 1.1 `SOURCE_TIER`（证据来源等级枚举）
 
@@ -66,7 +55,7 @@ strong buy / must rise / guaranteed / load up / price target
 
 **作用域（S7）：所有 deep research 报告**，以 `DeepResearchReport` + `audits` 为基线；Serenity 字段（若该次跑过结构化器）作可选加严层，**不假设 Serenity 一定跑过**。
 
-下表"基线字段来源"列均为 Phase 1 写前挂点已存在的真实对象（见 §3）。
+下表保留设计约束；具体判定以现有实现及对应反例测试为准（见 §3）。
 
 | 检查 | blocked 条件 | warning 条件 | 基线字段来源 |
 |---|---|---|---|
@@ -90,63 +79,22 @@ schema 用 `quick_filter_by_layer: list[{layer, forced_demand, size_mismatch, no
 
 ---
 
-## 3. Gate 挂点（已对代码核实）
+## 3. 写前挂点与调用方合同
 
-当前 `backend/research/deep_research.py` 顺序：
+既有 `deep_research` 先构造报告、运行 gate，再决定是否写 Markdown/persist。
+blocked 时不 write_text、不 record_decision_run/remember_deep_research、不创建 memory candidate。
+warning 允许输出但文本和持久化 snapshot 带 warning；pass 保留原行为。
 
-```
-769  text = _render_report(...)          # 渲染文本
-782  path.write_text(text)               # ← 文件落盘
-784  report = DeepResearchReport(...)    # 构造结构化报告
-795  if persist: _persist_report(...)    # → record_decision_run + remember_deep_research
-```
+- 使用 `report.gate_status` / `gate_reasons` 判断 pass/warning/blocked/gate_disabled。
+  blocked 的 path 可以是“将写未写”的路径，不能靠 path 非空或 path.exists() 判断 gate。
+- 数据覆盖缺失只 warning，不单独 blocked；无 symbols 的纯主题研究跳过此项。
+  实际 prices/financials 优先，没传才使用 sections 代理；证据全空仍由来源完整性硬门拦住。
+- 可选 Serenity 加严层是类型/显式数据消费，不恢复旧独立分析器，不进入长期标签聚合。
+- 具体回归维护 `tests/test_research_report_gate.py`、深研写前门和 Serenity 隔离测试；
+  不用旧行号或旧 Phase 清单驱动代码改动，先核对实际函数/测试。
 
-问题：若把 Gate 放在 `_persist_report` 前、`write_text` 后，blocked 报告**已经落盘**，达不到"物理上发不出"。
+## 4. 验收边界
 
-**Phase 1 改法**：把 `report = DeepResearchReport(...)` 的构造**上移到 `write_text` 之前**，然后：
-
-```
-text   = _render_report(...)
-report = DeepResearchReport(...)                 # 上移
-verdict = run_research_report_gate(report, audits, text, serenity=<opt>)
-if verdict.status == "blocked":
-    return report_with_gate_diagnostic(verdict)  # 不 write_text / 不 persist / 不建 candidate
-if verdict.status == "warning":
-    text = _annotate_warnings(text, verdict)     # 文本带 warnings
-path.write_text(text)
-if persist: _persist_report(db, report, audits, gate=verdict)  # snapshot 带 verdict
-```
-
-blocked 时连锁不发生：不 `write_text`、不 `record_decision_run`、不 `remember_deep_research`、不建 memory candidate。
-
-**Phase 1 收尾两点（已解决）**：
-1. **数据覆盖 = warning，永不 blocked（最终决定，非 Phase 2 TODO）**。gate 现接收 hook 传入的真实 `prices`/`financials`，当 symbols 指定且二者全不可用时出 warning；纯主题报告（symbols=[]）跳过不罚。撤销 spec 原义的 blocked，理由：①"证据全空"已由「来源完整性」`source_count==0` 硬 blocked 兜底；②缺价/财对**有可靠来源**的定性供应链研究不构成不可信（`test_gate_pass_preserves_original_behavior`：300308 无价/财 + 1 源 → pass 即证）。无 prices/financials 传入时回退 sections 代理。
-2. **blocked 可区分（已实现）**：`DeepResearchReport` 新增 `gate_status`（pass/warning/blocked/gate_disabled）+ `gate_reasons`。blocked 时 `gate_status="blocked"`、不写文件、不 persist；`path` 仍保留为"将写未写"路径（既有测试 `test_gate_blocked_does_not_write_markdown` 断言 `path is not None`）。**调用方一律用 `report.gate_status` 区分，不要靠 `path.exists()`。**
-
----
-
-## 4. Phase 1 验收清单（供实现回填）
-
-- [ ] `research_evidence_defs.py`：`SOURCE_TIER` + `FORBIDDEN_REPORT_WORDING`，Serenity 与 Gate 同 import。
-- [ ] Serenity 结构化器：schema 单测确认**不生成** `score`/`label_vote`/trading fields；不返回 `LongTermReport`；不调用 `LongTermTeam` 聚合路径（`aggregate`/`aggregate_v2`/`run_pipeline`/`apply_research_constraints`/`_aggregate_score`）。flag 默认 False，不写 DB。
-- [ ] `research_report_gate.py`：返回 `pass/warning/blocked` + reasons；单测覆盖——direct source 通过、媒体-only blocked、证据晚于 as_of blocked、越界措辞 blocked、warning 可输出但携带 warning。
-- [ ] `deep_research` 写前挂点单测：blocked 时不写 Markdown、不调用 `_persist_report`。
-- [ ] 隔离单测：Serenity/Gate 不影响 official signal / production profile / 长期标签。
-- [ ] `make verify` 无回归。
-
----
-
-## 5. 不在本批
-
-research_priority 数字分（用档位）、TradingAgents 多 agent/checkpoint、QuantDinger action scope 细分（audit 字段加厚/可复现快照留 P2）、UZI 评委团人格、前端 evidence cards（P2）、Buffett 质量门（P1 下一批，须与 piotroski 交叉引用防双重扣分）。
-
----
-
-## 6. Phase 0 人工试跑验收
-
-拿 1 个历史主题 + 1 个新主题，过 SKILL.md 六步 + 本文 Gate 清单，确认：
-
-- 输出能把证据 / 叙事 / 风险 / 待核验分干净。
-- 零买卖语气。
-- 故意塞一个"只有媒体叙事、无公告"的论题 → Gate 清单判 blocked（叙事证据 + 来源完整性）。
-- 不要求写 DB。
+维护时覆盖来源缺失/不可用、未来证据、越界措辞、warning 可输出、blocked 零写入、
+正常输入保持原行为和研究/正式信号隔离。本文不宣称研究结论真实或投资增益。
+历史设计取舍/人工预演原文见 `docs/evidence/document_archive_digest.md`，新工作回 ROADMAP。

@@ -2,9 +2,9 @@
 
 这页回答“怎么继续开发明仓”。具体顺序和启用条件由仓内 `docs/ROADMAP.md` 管理，本页维护实现方法与验收要求，不另设任务队列。普通用户先读 [User Guide](USER_GUIDE.md)，查功能先读 [Feature Map](FEATURE_MAP.md)。
 
-本轮开发可由 GPT-6 或 Claude 负责总体审查，GPT-5.5 承担有明确文件边界的实现和测试。
-开发模型与实验治疗臂模型必须分别记录；不得占用现有日跑的模型预算。
-`AGENTS.md` 被现有 Claude CLI 自动引用，本轮保持其原文，候选开发细则留在本指南和 Roadmap。
+开发使用当前会话配置，不从旧交接文档自动切换模型或派工。开发模型与实验治疗臂分别记录，
+不占现有日跑预算。AGENTS 是共享规则；本页保留可调用接口、参数和验证边界，已完成实施过程
+只见 CHANGELOG/归档。AGENTS/CLAUDE/Pi 文档整理不授权改变运行 prompt、交易规则或默认消费者。
 
 ## 1. 开发原则
 
@@ -166,9 +166,39 @@ FakeProvider及字节校验对接测试已覆盖；它没有默认模型客户�
 `freeze_signature`只是本地完整性hash，不是身份签名/可信时间戳，也不认证完整事前登记。
 inspect不锁定跨进程一致快照，执行前仍会加锁复核；读到部分/损坏文件应停止并核查。
 
-本层不带真实模型客户端、超时取消、账单硬限额、调度器或第二交易总账。外部provider必须另行
-验证模型身份、费用、工具/记忆权限及进程隔离；默认provider链、One Loop及原治疗轨迹不接线。
+session 本身不带默认真实模型客户端、账单硬限额、调度器或第二交易总账。显式诊断脚本现已
+使用 `decision_desk_process` 实现本地时间/字节/进程组和 macOS 文件保护，不能保证远端取消。
+外部 provider 仍须验证实际身份/已计费用量、工具/记忆权限与跨账户隔离；默认链与原轨迹不接线。
 真实治疗臂尚未启动，完整runner与收益认证仍受数据、价格、隔离及预算/窗口启动门约束。
+
+### 5.4 已保存质量窗口的只读汇总
+
+日采集后可复用 `backend.evidence.decision_desk_readiness` 汇总整个预定窗口。
+显式 schedule JSON 必须包含 `timezone`、`contract_start` 和按日期排序、每天唯一且带时区的
+`scheduled_at` 数组，例如：
+
+```json
+{"timezone":"Asia/Singapore","contract_start":"2026-09-16","scheduled_at":["2026-09-16T23:30:00+08:00","2026-09-17T23:30:00+08:00"]}
+```
+
+按已批准安排传入完整日期集合；此文件是调用方声明，工具不认证交易日历或事前冻结。
+不重写原实验协议，不能删除失败日期来缩小分母。
+
+```bash
+python -m backend.evidence.decision_desk_readiness --runs-root "$SAVED_RUNS" --schedule "$WINDOW_SCHEDULE"
+```
+
+只向 stdout 输出 JSON，派生报告保存在仓库外。可传带时区的 `--evaluated-at` 复现某个
+检查时点；默认当前 UTC。尚未到期的目录不读；到期无目录为 missing，已有但不完整/损坏
+为 failed，合法证据未过运行/产出门为 blocked。分门通过率以全部到期日为分母，零到期为
+null，任何未到期日都阻止整个窗口宣布完成。退出 0 只表示完整窗口的运行/产出合同检查
+通过；pending/blocked 返回 1，调用参数错误返回 2，数据/经济门必须分别查看。
+
+每个 collection 核对 manifest 与 continuity/panel/nav/readiness/snapshot 五份文件，
+拒绝符号链接、snapshot sidecar、错日、重复当天记录、非当日采集与检查过程中变化。
+报告列出已核对文件的 hash；不核对模型请求/响应等其他文件，也不证明文件作者、底层
+来源正确、用户实际完成或收益。人工完成和模型质量明确为 not_evaluated。
+此入口不读生产 DB、不调用模型、不补跑，也不影响原单日分类或已有五日日程。
 
 ## 6. 加一个量化模块
 

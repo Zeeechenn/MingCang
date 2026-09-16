@@ -133,6 +133,7 @@ const routes = [
   if (!skipFocused) throw new Error('keyboard focus should start at the skip link');
 
   let coverageFails = false;
+  let dailyPanelFixture = null;
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/system/data-coverage') && coverageFails) {
@@ -146,6 +147,8 @@ const routes = [
     else if (url.pathname.endsWith('/memory/list')) body = { rows: [] };
     // runtime identity 门：live 模式要求 /system/status 返回兼容的运行身份
     else if (url.pathname.endsWith('/system/status')) body = { version: require('./package.json').version, build_commit: 'unknown', db_role: 'primary', db_latest_date: '2026-07-16', scheduler_mode: 'manual', database_exists: true };
+    else if (url.pathname.endsWith('/daily/reviews')) body = { items: [], history: [], history_limit: 100, warning: null };
+    else if (url.pathname.endsWith('/daily/panel/latest') && dailyPanelFixture) body = dailyPanelFixture;
     else if (url.pathname.endsWith('/system/data-coverage')) body = { checks: {}, warnings: [], stocks: [], provider_fallback_chains: { chains_by_market: {} } };
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -159,6 +162,35 @@ const routes = [
   await page.goto(urlFor('/'), { waitUntil: 'networkidle' });
   await page.getByText('部分实时', { exact: true }).waitFor({ timeout: 10000 });
   results.push({ name: 'partial-live-source-truth', path: '/', ok: true });
+
+  coverageFails = false;
+  const dailyTypes = ['batch_integrity', 'candidate', 'position_health', 'event_risk', 'watchtower', 'daily_delta', 'human_confirmation', 'review_attribution'];
+  dailyPanelFixture = {
+    schema_version: 'daily_panel.v1', mode: 'postmarket', as_of: '2026-09-16', status: 'ready',
+    lifecycle_visibility: { stable: dailyTypes.filter(x => !['event_risk', 'watchtower'].includes(x)), shadow: ['event_risk', 'watchtower'] },
+    cards: dailyTypes.map(card_type => ({
+      card_type, lifecycle: ['event_risk', 'watchtower'].includes(card_type) ? 'shadow' : 'stable',
+      status: card_type === 'event_risk' ? 'not_applicable' : card_type === 'watchtower' ? 'ready_zero' : 'ready',
+      summary: '浏览器验证用合成面板',
+      payload: card_type === 'event_risk' ? { reason: '本次关闭 LLM，不能解释为没有事件风险。' }
+        : card_type === 'watchtower' ? { reason: '扫描完成，清单内无触发。' }
+        : card_type === 'daily_delta' ? { reason: '比较已提交面板名单。', structured_delta: { current_as_of: '2026-09-16', previous_as_of: '2026-09-15', candidate_added: ['600001'] } }
+        : card_type === 'human_confirmation' ? { queue_stale_count: 3 } : {},
+      evidence_refs: [], run_ref: { run_id: 'browser-fixture', status: 'complete' },
+      drilldown: { kind: 'none', href: null, label: '' },
+    })),
+  };
+  for (const [label, width, height] of [['desktop', 1440, 960], ['mobile', 390, 844]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto(urlFor('/#/daily'), { waitUntil: 'networkidle' });
+    await page.getByText('本次关闭 LLM，不能解释为没有事件风险。', { exact: true }).waitFor();
+    await page.getByText('扫描完成，清单内无触发。', { exact: true }).waitFor();
+    await page.getByText('新增候选：600001', { exact: true }).waitFor();
+    await page.getByText('3 项来自历史交易日，仍待人工处理；未回复的事项继续保留。', { exact: true }).waitFor();
+    if (!await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)) throw new Error('daily reason overflow');
+    await page.screenshot({ path: path.join(shotsDir, `daily-sources-${label}.png`), fullPage: true });
+    results.push({ name: `daily-sources-${label}`, path: '/#/daily', ok: true });
+  }
 
   await browser.close();
   if (staticServer) await new Promise((resolve) => staticServer.close(resolve));
