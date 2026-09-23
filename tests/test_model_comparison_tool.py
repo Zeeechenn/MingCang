@@ -6,12 +6,13 @@ import pytest
 
 from backend.evidence.model_comparison import content_hash
 from backend.tools.model_comparison import (
+    inspect_candidate_v3_registration,
     inspect_registered_channel,
     inspect_trial,
     main,
     read_json,
 )
-from tests.test_model_comparison import fixture_bundle
+from tests.test_model_comparison import candidate_v3_inputs, fixture_bundle
 
 
 def test_cli_replays_bundle_and_never_overwrites(tmp_path):
@@ -134,3 +135,75 @@ def test_v2_registry_hash_and_shared_budget_checked_without_provider(tmp_path):
     (tmp_path / "trial_canonical_v2.py").write_text("changed")
     with pytest.raises(ValueError, match="registered code changed"):
         inspect_registered_channel(tmp_path, protocol)
+
+
+def test_v3_cli_preflight_is_read_only_and_never_exposes_full_request(tmp_path, monkeypatch):
+    import backend.tools.model_comparison as tool
+
+    bundle = fixture_bundle()
+    params = candidate_v3_inputs(bundle)
+    inventory = {
+        "registered_channel": {"maximum_sessions": 60},
+        "sessions": [{"day": "2026-09-20"}],
+        "reserved_sessions": 1,
+        "remaining_session_capacity": 59,
+    }
+    monkeypatch.setattr(
+        tool, "inspect_candidate_v3_registration",
+        lambda _: (params["registration"], params["protocol"], params["authorization"], inventory),
+    )
+    files = {}
+    for name, value in (
+        ("input", bundle), ("shared", params["shared_input"]),
+        ("review", params["source_review"]),
+    ):
+        files[name] = tmp_path / (name + ".json")
+        files[name].write_text(json.dumps(value))
+    output = tmp_path / "preflight.json"
+    argv = [
+        "--input", str(files["input"]), "--output", str(output),
+        "--candidate-v3-root", str(tmp_path), "--session-id", params["session_id"],
+        "--account-at", params["cutoff"], "--arm", params["arm"],
+        "--shared-input", str(files["shared"]), "--source-review", str(files["review"]),
+    ]
+    assert main(argv) == 0
+    report = json.loads(output.read_text())
+    assert report["status"] == "prepared_not_activated"
+    assert report["model_calls"] == report["reservations_created"] == 0
+    assert "own_prior_decisions" not in output.read_text()
+    files["review"].write_text(json.dumps({**params["source_review"], "bundle_sha256": "0" * 64}))
+    assert main([*argv[:3], str(tmp_path / "bad.json"), *argv[4:]]) == 2
+    assert not (tmp_path / "bad.json").exists()
+
+
+def test_v3_registration_hash_binds_candidate_code(tmp_path, monkeypatch):
+    import backend.tools.model_comparison as tool
+
+    params = candidate_v3_inputs(fixture_bundle())
+    trial = tmp_path / "trial"
+    trial.mkdir()
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    for name, value in (
+        ("protocol.json", params["protocol"]),
+        ("authorization-20260920.json", params["authorization"]),
+        ("canonical-v2-registration.json", {"dummy": True}),
+    ):
+        (trial / name).write_text(json.dumps(value))
+    inventory = {"registered_channel": {"maximum_sessions": 60}}
+    monkeypatch.setattr(tool, "inspect_trial", lambda _: inventory)
+    source = Path(tool.__file__).resolve().parents[2]
+    names = ("backend/evidence/model_comparison.py", "backend/tools/model_comparison.py")
+    registration = params["registration"] | {
+        "ledger_root": str(trial.resolve()),
+        "v2_registration_sha256": content_hash({"dummy": True}),
+        "code_hashes": {
+            name: hashlib.sha256((source / name).read_bytes()).hexdigest() for name in names
+        },
+    }
+    (candidate / "registration.json").write_text(json.dumps(registration))
+    assert inspect_candidate_v3_registration(candidate)[0] == registration
+    registration["code_hashes"][names[0]] = "0" * 64
+    (candidate / "registration.json").write_text(json.dumps(registration))
+    with pytest.raises(ValueError, match="candidate code changed"):
+        inspect_candidate_v3_registration(candidate)

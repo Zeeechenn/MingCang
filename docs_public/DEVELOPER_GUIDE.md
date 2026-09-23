@@ -335,6 +335,27 @@ Add `--request-context` to the account-cutoff command to emit one arm's closed-s
 cash, positions and own history for a separately registered runner. The output remains
 execution-blocked: no live model call or continuous-account activation is performed.
 
+The default-off v3 candidate path now has an offline fake-only consumer for that context.
+Its explicit read-only preflight requires `--candidate-v3-root`, `--input`, `--account-at`,
+`--arm`, `--session-id`, `--shared-input`, `--source-review` and a new `--output` file. It verifies the
+`prepared_not_activated` candidate registration against protocol/auth, v2 registration,
+shared ledger and source-code hashes. The authorized universe must match the fixed
+25-symbol pool exactly; a missing or extra symbol is rejected before reservation or provider
+invocation. `assemble_candidate_v3_request` applies scope/cutoff/capacity gates;
+`run_candidate_v3_offline` freezes canonical request bytes and their hash before the fake
+reservation, then passes those bytes to the injected fake provider. The preflight creates
+no reservation, model call or database connection; it writes only the explicitly requested
+new output JSON and refuses to overwrite an existing file. Its status remains
+`prepared_not_activated`, and `economic_trial_activated` remains false. The combined v3
+candidate/architecture suite has 71 passing tests; Ruff passes.
+
+`source_review` and its hashes are caller-supplied evidence, not independent authentication
+of raw prices, calendars, corporate actions or source receipts. This offline wiring does not
+establish real provider availability, resolved model identity, billed costs, account-isolation
+receipts or economic validity. Those require actual receipts and independent source review;
+economic activation remains behind its separate gates. The v2 frozen runner, its per-period
+cash reset, and the shared 60-slot ledger remain unchanged.
+
 The replay bundle (`matched_model_replay.v1`) supplies `report_at` (aware time),
 `models` (two distinct model identities), `universe`, `sectors`, sorted `calendar`,
 complete `bars` (one raw CNY/share-volume bar per stock/session; explicit halted
@@ -382,11 +403,13 @@ future bars/actions/answers cannot change the visible account. Valuation ends at
 the latest closed session and does not claim intraday state. Full source review
 is still required before deriving the bounded input.
 
-Do not reuse an always-empty collection account for an activated trading trial.
-A subsequent reviewed version must wire each model request to this bounded
-prior simulated account, verify real receipts and execution sources, register
-its protocol and obtain the existing activation gates. Rollback: stop this CLI;
-no production or frozen-record rollback is needed.
+Do not reuse an always-empty collection account for an activated trading trial. The v3
+candidate now wires each fake-only request to the bounded prior simulated account; this is
+offline engineering validation, not an activated trial or real-provider run. Before any real
+activation, independently verify execution sources and real receipts, validate provider
+identity/billing and account isolation, register the applicable protocol, and pass the existing
+activation gates. Rollback: stop the opt-in candidate CLI path; no production or frozen-record
+rollback is needed.
 
 
 ## Manual research capacity preflight

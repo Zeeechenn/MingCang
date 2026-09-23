@@ -494,3 +494,209 @@ def build_model_trial_request_context(bundle: dict, *, arm: str, cutoff: str) ->
         "cutoff": context["cutoff"],
         "limits": context["limits"],
     }
+
+
+def _candidate_shared_symbols(shared_input: dict) -> list[str]:
+    allowed = {
+        "as_of", "cutoff", "symbols", "common", "desk", "gaps", "limitations",
+        "source_snapshot_sha256", "official_batch", "official_run_id",
+    }
+    if set(shared_input) - allowed:
+        raise ValueError("v3 shared input contains unreviewed top-level fields")
+    forbidden = {
+        "account", "accounts", "holdings", "own_prior_decisions", "own_fills",
+        "opponent", "other_arm", "outcomes", "positions", "broker_credentials",
+        "private_notes", "decision", "decisions", "model_response",
+    }
+
+    def check(value: Any, path: tuple[str, ...] = ()) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    raise ValueError("v3 shared input has non-string field")
+                if key.lower() in forbidden:
+                    if path == ("common",) and key == "holdings" and item == "synthetic account supplied separately":
+                        continue
+                    raise ValueError("v3 shared input contains account or cross-arm fields")
+                check(item, (*path, key))
+        elif isinstance(value, list):
+            for item in value:
+                check(item, path)
+
+    check(shared_input)
+    if "symbols" in shared_input:
+        symbols = shared_input["symbols"]
+    else:
+        stocks = shared_input.get("desk", {}).get("stocks")
+        if not isinstance(stocks, list) or any(not isinstance(s, dict) for s in stocks):
+            raise ValueError("v3 shared input lacks a stock universe")
+        symbols = [s.get("symbol") for s in stocks]
+    if (
+        not isinstance(symbols, list)
+        or any(not isinstance(s, str) or len(s) != 6 or not s.isdigit() for s in symbols)
+        or len(symbols) != len(set(symbols))
+    ):
+        raise ValueError("v3 shared input has duplicate stock symbols")
+    return symbols
+
+
+def assemble_candidate_v3_request(
+    bundle: dict,
+    *,
+    arm: str,
+    session_id: str,
+    cutoff: str,
+    shared_input: dict,
+    protocol: dict,
+    authorization: dict,
+    registration: dict,
+    ledger: dict,
+    source_review: dict,
+) -> dict:
+    """Gate a versioned, offline candidate request before any reservation or call.
+
+    The review and ledger objects are caller-supplied evidence, not independent
+    proof. The returned payload is only for an injected fake provider until a
+    separate version and source/transport acceptance activates real calls.
+    """
+    if (
+        registration.get("schema_version") != "matched_model_candidate_registration.v3"
+        or registration.get("status") != "prepared_not_activated"
+        or registration.get("execution_mode") != "injected_fake_only"
+        or registration.get("parent_protocol_sha256") != content_hash(protocol)
+        or registration.get("authorization_sha256") != content_hash(authorization)
+        or not _sha(registration.get("v2_registration_sha256"))
+        or registration.get("maximum_total_sessions") != protocol.get("maximum_sessions")
+        or registration.get("same_budget_and_ledger_root") is not True
+    ):
+        raise ValueError("v3 registration, parent protocol or shared budget mismatch")
+    if (
+        authorization.get("authorized") is not True
+        or "real account" not in authorization["scope"]["excluded"]
+        or "real holdings" not in authorization["scope"]["excluded"]
+        or arm not in protocol["models"]
+        or bundle["models"] != protocol["models"]
+        or len(authorization["scope"]["symbols"])
+        != len(set(authorization["scope"]["symbols"]))
+        or len(bundle["universe"]) != len(authorization["scope"]["symbols"])
+        or set(bundle["universe"]) != set(authorization["scope"]["symbols"])
+        or bundle["execution_config"] != protocol["execution_config"]
+        or bundle["cost_model"] != protocol["cost_model"]
+        or protocol["initial_cash_per_arm"] != bundle["execution_config"]["initial_cash"]
+    ):
+        raise ValueError("v3 authorization, account, risk or cost scope mismatch")
+    instant = _instant(cutoff)
+    if (
+        _date(session_id) != instant.date()
+        or instant.weekday() > 4
+        or (instant.hour, instant.minute) < (23, 0)
+        or session_id in {s["session_id"] for s in bundle["sessions"]}
+        or session_id > protocol["expires_at"]
+    ):
+        raise ValueError("v3 session cutoff, expiry or retry mismatch")
+    if (
+        ledger.get("root") != registration.get("ledger_root")
+        or not _nonempty(ledger.get("root"))
+        or ledger.get("maximum_sessions") != protocol["maximum_sessions"]
+        or ledger.get("reserved_session_ids") != sorted(set(ledger["reserved_session_ids"]))
+        or session_id in ledger["reserved_session_ids"]
+        or len(ledger["reserved_session_ids"]) >= protocol["maximum_sessions"]
+    ):
+        raise ValueError("v3 shared ledger capacity or no-retry check failed")
+    last_closed = [
+        day for day in bundle["calendar"]
+        if datetime.combine(_date(day), time(15), ZONE) <= instant
+    ]
+    if (
+        not last_closed
+        or shared_input.get("as_of") != last_closed[-1]
+        or shared_input.get("as_of") != session_id
+    ):
+        raise ValueError("v3 input is not the latest closed session")
+    if (
+        _instant(shared_input["cutoff"]) > instant
+        or _instant(shared_input["cutoff"])
+        < datetime.combine(_date(shared_input["as_of"]), time(15), ZONE)
+        or _candidate_shared_symbols(shared_input) != bundle["universe"]
+    ):
+        raise ValueError("v3 shared input cutoff or universe mismatch")
+    context = build_model_account_context(bundle, arm=arm, cutoff=cutoff)
+    proposal = build_model_trial_request_context(bundle, arm=arm, cutoff=cutoff)
+    if (
+        context["arm_id"] != arm
+        or context["account_id"] != registration["account_ids"][arm]
+        or context["valuation_as_of"] != shared_input["as_of"]
+        or context["cutoff"] != instant.isoformat()
+        or proposal["status"] != "diagnostic_request_context_execution_blocked"
+        or proposal["account_context_sha256"] != content_hash(context)
+        or proposal["visible_replay_input_sha256"] != context["visible_replay_input_sha256"]
+    ):
+        raise ValueError("v3 arm account or visible context mismatch")
+    if (
+        source_review.get("status") != "candidate_source_reviewed"
+        or not _nonempty(source_review.get("reviewed_by"))
+        or source_review.get("bundle_sha256") != content_hash(bundle)
+        or source_review.get("provenance_sha256") != content_hash(bundle["provenance"])
+        or source_review.get("source_receipt_sha256") != bundle["provenance"]["source_receipt_sha256"]
+        or source_review.get("shared_input_sha256") != content_hash(shared_input)
+        or source_review.get("account_context_sha256") != content_hash(context)
+    ):
+        raise ValueError("v3 source or account context review hash mismatch")
+    if any(
+        _instant(item["completed_at"]) >= instant or item["session_id"] >= session_id
+        for item in context["own_prior_decisions"]
+    ) or any(fill["date"] > shared_input["as_of"] for fill in context["own_fills"]):
+        raise ValueError("v3 future or current-session account history")
+    # Reconstruct a fresh envelope; the blocked diagnostic object itself is never sent.
+    return {
+        "schema_version": "matched_model_candidate_request.v3",
+        "candidate_status": "prepared_not_activated",
+        "session_id": session_id,
+        "arm_id": arm,
+        "account_id": context["account_id"],
+        "requested_model": protocol["models"][arm],
+        "cutoff": instant.isoformat(),
+        "shared": shared_input,
+        "shared_input_sha256": content_hash(shared_input),
+        "account": proposal["account"],
+        "own_prior_decisions": proposal["own_prior_decisions"],
+        "own_fills": proposal["own_fills"],
+        "account_context_sha256": content_hash(context),
+        "visible_replay_input_sha256": context["visible_replay_input_sha256"],
+        "risk": protocol["execution_config"],
+        "costs": protocol["cost_model"],
+        "economic_trial_activated": False,
+    }
+
+
+def run_candidate_v3_offline(
+    bundle: dict,
+    *,
+    reserve: Any,
+    provider: Any,
+    **candidate_inputs: Any,
+) -> dict:
+    """Consume the gated request once through injected offline fakes only."""
+    if getattr(reserve, "offline_fake", False) is not True or getattr(
+        provider, "offline_fake", False
+    ) is not True:
+        raise ValueError("v3 requires explicitly marked offline fake adapters")
+    request = assemble_candidate_v3_request(bundle, **candidate_inputs)
+    request_bytes = json.dumps(
+        request, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+    ).encode()
+    request_sha256 = hashlib.sha256(request_bytes).hexdigest()
+    reservation = reserve(request["session_id"], request["arm_id"])
+    if not isinstance(reservation, dict) or reservation.get("status") != "fake_reserved":
+        raise ValueError("v3 offline fake reservation failed")
+    response = provider(request_bytes)
+    return {
+        "schema_version": "matched_model_candidate_run.v3",
+        "status": "offline_fake_consumed_not_activated",
+        "request_sha256": request_sha256,
+        "reservation": reservation,
+        "response": response,
+        "provider_receipt_validated": False,
+        "billing_validated": False,
+        "economic_trial_activated": False,
+    }

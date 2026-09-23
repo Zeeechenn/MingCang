@@ -167,13 +167,15 @@ P0-C 后续接线仍需默认旧输出对照和当前窗口保护；未来财报
 3. **第二实现批已完成**：同一 CLI 提供冻结试验只读清点，验证协议/股票池/代码 hash，报告预约、
    回执及缺口；文件存在不代表模型成功。同一入口补齐截止时点的逐臂现金/持仓/自身历史，
    剔除未来价格、行动、回答及对手臂回答。JSON 重复键、非有限数、覆盖旧报告均拒绝。
-4. **下一项与停点**：09-20 已明确批准 25 股/两目的地/虚拟账户/最多 60 期出站范围；
+4. **候选实现与停点**：09-20 已明确批准 25 股/两目的地/虚拟账户/最多 60 期出站范围；
    首次补充验收已预留并计入总次数，GPT-6 本机 initialize 失败，Claude 按约未调用。
    原因已在禁网对照中定位为 macOS 临时路径别名，真实路径候选能初始化且读写保护仍有效；
-   不重试 09-20，不再询问同一出站授权。修复版本已另登记为 `trial_canonical_v2.py`，共用原 60 期计数/回执，
-   周日 preflight 零调用且旧失败记录保留；下步在后续合格日做真实验收，
-   成功前自动化保持暂停；原始成交价、交易日历、公司行动和单位通过
-   独立核验后，将已实现的逐臂账户上下文接入另登记的新执行版本，再审定启动。旧 runner 和两项自动化不自动替换。
+   不重试 09-20，不再询问同一出站授权。修复版本另登记为 `trial_canonical_v2.py`，共用原 60 期计数/回执，
+   周日 preflight 零调用且旧失败记录保留。现有 v3 候选已实现逐臂闭市账户上下文的不可变请求组装、
+   前置授权/容量门和显式 fake-only 消费；必须保持正式固定 25 股同集同数量，缺股在预约/provider 前拒绝。
+   v3 仍默认关闭，状态 `prepared_not_activated`；登记/hash预检不产生预约、模型调用或 DB 连接。
+   后续真实非经济通道验收仍按合格工作日和既有授权单独执行；真实来源真实性、provider/usage回执与身份、
+   账单和经济门未验收。旧 runner 和两项自动化不自动替换。
    当前没有可信收益样本，不能进行策略晋升或模型优劣结论。
 
 输入为显式 `matched_model_replay.v1` 包；输出为带输入 hash 的诊断净值、成交/拒单、失败率和费用
@@ -181,11 +183,13 @@ P0-C 后续接线仍需默认旧输出对照和当前窗口保护；未来财报
 样本沿新试验最多 60 期、20 期运行检查，2026-12-31 到期；20/60 不是 alpha 统计门槛。
 回滚为停止调用新增 CLI 并移除适配文件，无数据库迁移、生产维护或旧协议重述。
 
-**09-24 更新**：model-comparison v2 核验登记/授权与代码 hash，共用旧 60 槽 ledger，目前
-1 已预约、59 剩余；离线 CLI 48 项通过。`--request-context` 只生成一臂闭市账户上下文，
-不会调用模型。冻结 runner 仍按期重置现金；若要连续账户，须核 raw 价格与公司行动后另登记版本。
-下一步可在后续合格工作日 23:00 按原已批 25 池/两目的地范围做非经济真实通道验收，价基准
-经济门不阻止这项验收；provider identity/真实账单由实际回执获得，不要求预先猜定。
+**09-24 更新**：model-comparison v2 仍核验登记/授权与代码 hash，共用旧 60 槽 ledger，目前
+1 已预约、59 剩余；v2 冻结 runner 和失败分母不变。v3 候选现已实现逐臂闭市账户上下文组装为不可变
+request bytes，并在显式 fake reserve/provider 注入下消费；正式固定 25 股必须同集同数量，缺股前置拒绝。
+`--candidate-v3-root` 只读核验 prepared registration、protocol/auth/v2/ledger 和候选代码 hash，不预约、不调用模型。
+状态仍为 `prepared_not_activated`，默认关闭；候选/架构专项 71 项通过，Ruff 通过，仅证明离线工程路径。
+source_review/hash 是调用方证据，不独立验证真实数据源。真实非经济通道验收仍可在后续合格工作日 23:00
+按原已批 25 池/两目的地范围进行，价基准经济门不阻止该验收；provider identity/真实账单须从实际回执取得。
 09-22 五日 heartbeat 仍是 missing 且已暂停，不回填、不重试。一次/阶段失败按已冻结分母留痕；
 认证/额度失败即停 attempt。当前无真实模型响应、账单或经济激活；经济 replay 仍必须通过价格、行动、
 账户隔离及单独经济启动门。
@@ -199,10 +203,13 @@ P0-C 后续接线仍需默认旧输出对照和当前窗口保护；未来财报
   非经济性真实通道验收可在后续合格工作日 23:00 按原授权执行，不需价格门或重复授权。
   调用前冻结问题、输入/基准版本与 hash、prompt/工具、cutoff、窗口、预留槽位和失败政策；
   provider requested/resolved 身份及实际用量在调用回执中记录，不要求预先猜中 identity，也不静默 fallback。
-- model-comparison v2 离线检查已绑定 registration/authorization/code hashes，ledger 当前
-  `1 reserved / 59 remaining`；48 项 CLI 测试通过。`--request-context` 只生成指定一臂
-  截止时点账户上下文，不发模型请求。原冻结 runner 每期重置现金；连续账户不得暗中接入，
-  需要 raw 价格/公司行动独立验收、另一版本登记和明确替换审批。
+- model-comparison v2 离线检查仍绑定 registration/authorization/code hashes，ledger 当前
+  `1 reserved / 59 remaining`。v3 候选消费闭市账户上下文的工程路径已实现并通过 71 项候选/架构测试、Ruff：
+  固定 25 股同集同数量校验、缺股前置拒绝、immutable request bytes、fake-only reserve/provider 注入，
+  以及 `--candidate-v3-root` 零预约/调用的只读登记和源码 hash 预检。其状态为 `prepared_not_activated`、
+  默认关闭；不证明独立来源真实性、真实 provider/账单，也不改变 v2、冻结 runner 或 ledger。
+  原冻结 runner 每期重置现金；真实连续账户和经济启用仍需可靠 raw 价格/公司行动、来源与账户隔离验收、
+  实际 provider/usage/billing 回执及独立版本/经济门。
 - 保存实际可见输入和每次请求/返回原字节、hash、cutoff、失败与用量；允许包不等于实际看到。
   失败/中断不退款、不覆盖 attempt；不对失败期重试。原生 Claude 历史轨迹保持独立。
 - 记忆按每次 cutoff 和臂过滤，未来 outcome 不可见。过期五日 raw/desk heartbeat 已暂停，

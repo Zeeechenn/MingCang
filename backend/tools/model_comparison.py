@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.evidence.model_comparison import (
+    assemble_candidate_v3_request,
     build_model_account_context,
     build_model_comparison_report,
     build_model_trial_request_context,
@@ -91,6 +92,49 @@ def inspect_registered_channel(root: Path, protocol: dict) -> dict | None:
         "billing_validated": False,
         "economic_trial_activated": False,
     }
+
+
+def inspect_candidate_v3_registration(candidate_root: Path) -> tuple[dict, dict, dict, dict]:
+    """Verify only the prepared v3 candidate; never import trial transports."""
+    if candidate_root.is_symlink() or not candidate_root.is_dir():
+        raise ValueError("v3 candidate root must be a regular directory")
+    registration = read_json(candidate_root / "registration.json")
+    trial_root = Path(registration["ledger_root"])
+    if trial_root.is_symlink() or not trial_root.is_dir() or not trial_root.is_absolute():
+        raise ValueError("v3 ledger root must be an absolute regular directory")
+    inventory = inspect_trial(trial_root)
+    protocol = read_json(trial_root / "protocol.json")
+    authorization = read_json(trial_root / "authorization-20260920.json")
+    v2_registration = read_json(trial_root / "canonical-v2-registration.json")
+    if (
+        registration.get("schema_version") != "matched_model_candidate_registration.v3"
+        or registration.get("status") != "prepared_not_activated"
+        or registration.get("execution_mode") != "injected_fake_only"
+        or registration.get("parent_protocol_sha256") != content_hash(protocol)
+        or registration.get("authorization_sha256") != content_hash(authorization)
+        or registration.get("v2_registration_sha256") != content_hash(v2_registration)
+        or registration.get("ledger_root") != str(trial_root.resolve())
+        or registration.get("same_budget_and_ledger_root") is not True
+        or registration.get("maximum_total_sessions") != protocol["maximum_sessions"]
+        or registration.get("account_ids") != {
+            arm: arm + "-synthetic" for arm in protocol["models"]
+        }
+        or inventory["registered_channel"] is None
+    ):
+        raise ValueError("v3 registration, authorization or ledger linkage mismatch")
+    source = Path(__file__).resolve().parents[2]
+    expected = {
+        "backend/evidence/model_comparison.py",
+        "backend/tools/model_comparison.py",
+    }
+    hashes = registration.get("code_hashes")
+    if not isinstance(hashes, dict) or set(hashes) != expected:
+        raise ValueError("v3 candidate code inventory mismatch")
+    for name, digest in hashes.items():
+        path = source / name
+        if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError(f"v3 candidate code changed: {name}")
+    return registration, protocol, authorization, inventory
 
 
 def inspect_trial(root: Path) -> dict:
@@ -213,13 +257,57 @@ def main(argv: list[str] | None = None) -> int:
         "--request-context", action="store_true",
         help="emit blocked, one-arm account fields for a separately registered runner",
     )
+    parser.add_argument(
+        "--candidate-v3-root", type=Path,
+        help="opt-in read-only v3 preflight using a prepared candidate registration",
+    )
+    parser.add_argument("--session-id", help="prospective candidate session date")
+    parser.add_argument("--shared-input", type=Path, help="reviewed public 25-stock shared input")
+    parser.add_argument("--source-review", type=Path, help="separate source/context hash review record")
     args = parser.parse_args(argv)
     if bool(args.account_at) != bool(args.arm) or (args.account_at and not args.input):
         parser.error("--account-at and --arm must be used together with --input")
     if args.request_context and not args.account_at:
         parser.error("--request-context requires --input, --account-at and --arm")
+    if args.candidate_v3_root and (
+        not args.input or not args.account_at or not args.session_id
+        or not args.shared_input or not args.source_review or args.request_context
+    ):
+        parser.error("v3 preflight requires --input, --account-at, --arm, --session-id, --shared-input and --source-review")
+    if not args.candidate_v3_root and (args.session_id or args.shared_input or args.source_review):
+        parser.error("v3 input flags require --candidate-v3-root")
     try:
-        if args.request_context:
+        if args.candidate_v3_root:
+            registration, protocol, authorization, inventory = inspect_candidate_v3_registration(
+                args.candidate_v3_root
+            )
+            ledger = {
+                "root": registration["ledger_root"],
+                "maximum_sessions": inventory["registered_channel"]["maximum_sessions"],
+                "reserved_session_ids": [s["day"] for s in inventory["sessions"]],
+            }
+            request = assemble_candidate_v3_request(
+                read_json(args.input), arm=args.arm, session_id=args.session_id,
+                cutoff=args.account_at, shared_input=read_json(args.shared_input),
+                protocol=protocol, authorization=authorization, registration=registration,
+                ledger=ledger, source_review=read_json(args.source_review),
+            )
+            report = {
+                "schema_version": "matched_model_candidate_preflight.v3",
+                "status": "prepared_not_activated",
+                "request_sha256": content_hash(request),
+                "account_context_sha256": request["account_context_sha256"],
+                "candidate_registration_sha256": content_hash(registration),
+                "reserved_sessions": inventory["reserved_sessions"],
+                "remaining_session_capacity": inventory["remaining_session_capacity"],
+                "reservations_created": 0,
+                "model_calls": 0,
+                "source_authenticity_independently_verified": False,
+                "provider_identity_validated": False,
+                "billing_validated": False,
+                "economic_trial_activated": False,
+            }
+        elif args.request_context:
             report = build_model_trial_request_context(
                 read_json(args.input), arm=args.arm, cutoff=args.account_at
             )

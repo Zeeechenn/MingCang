@@ -65,7 +65,7 @@ be used by CLI commands or external callers.
 | daily panel evidence | `backend.evidence.daily_panel`, `backend.evidence.daily_panel_sources`, `backend.api.routes.daily`, `frontend/src/features/daily/` | `backend.portfolio.daily_panel` compatibility facade |
 | continuity acceptance | `backend.ops.one_loop_continuity`, `scripts/audit_one_loop_continuity.py` | none; explicit immutable DB path is required |
 | independent cash NAV evidence | `backend.backtest.nav_replay` | `backend.tools.p0r_nav_replay` manual-only snapshot CLI; no scheduler or production-ledger consumer |
-| matched-model diagnostic adapter | `backend.evidence.model_comparison` | `backend.tools.model_comparison` explicit offline bundle/inventory CLI; reuses NAV engine, no provider or production activation |
+| matched-model diagnostic adapter | `backend.evidence.model_comparison` | explicit offline bundle/inventory CLI plus default-off `prepared_not_activated` v3 candidate assembly and fake-only account-context consumer; fixed 25-symbol pool, immutable request bytes and read-only registration/hash preflight; no real provider/source verification, billing, economic activation or production change |
 | price-history rebase/write safety | none; maintenance-only | `backend.tools.rebase_price_history` dry-run plus opt-in strict write guard; routine callers keep the guard disabled until separately activated |
 
 ## 研究模块地图

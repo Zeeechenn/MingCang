@@ -65,20 +65,25 @@ model quality from the successful 09-23 production pipeline.
 
 Separate GPT-6 / Claude model-agent work remains `experimental`, not economic activation.
 The already approved non-economic channel-check scope is 25 public-pool inputs, two
-destinations and at most 60 periods. The candidate is `trial_canonical_v2.py`; the
-`backend.tools.model_comparison` v2 verifies registration and authorization hashes,
-reports 1 reserved / 59 remaining under the shared 60-period scope, and has an explicit
-`--request-context` mode that emits only the selected arm's close-time account context.
-Its 48 focused CLI/account-adaptation tests prove local behavior, not a provider result.
-The frozen runner still resets cash each period; continuous-account wiring needs raw
-price/action gates and a separately registered version. A real-channel acceptance may
-run at 23:00 on a later eligible workday within the prior scope; it does not require the
+destinations, the exact fixed 25-symbol universe and at most 60 periods. The v2 frozen
+runner and shared ledger remain unchanged (1 reserved / 59 remaining); `--request-context`
+emits one arm's close-time account context. A separately registered v3 candidate now
+assembles that context into immutable request bytes and consumes it only through explicit
+fake reserve/provider injection. Its `--candidate-v3-root` preflight checks the prepared
+registration, protocol/auth/v2/ledger bindings and code hashes without reserving a slot,
+calling a model or connecting to a database. The candidate is `prepared_not_activated`,
+default-off, and strictly offline fake-only. The combined candidate/architecture suite
+has 71 passing tests and Ruff passes; these verify local behavior, not source authenticity,
+a real provider result or billing. Caller-supplied source-review hashes are not independent
+verification. The frozen runner still resets cash each period. A real non-economic channel
+acceptance may run at 23:00 on a later eligible workday under the prior scope, without the
 price-basis gate that blocks economic NAV evaluation. Freeze the exact input and cutoff,
 then capture actual requested/resolved provider and usage receipts during the call.
 Preserve failures in the fixed denominator. Do not require provider identity before the
 call, ask for the same scope again, or retry a failed period. Economic replay requires
-trusted prices/actions, account isolation and separate owner/economic approval. The
-09-23 OAuth recovery shows only that local login was available for that daily run.
+trusted raw prices/actions, account isolation and separate owner/economic approval; economic
+activation remains false. The 09-23 OAuth recovery shows only that local login was available
+for that daily run.
 
 ## Retained historical constraints
 
@@ -94,14 +99,18 @@ trusted prices/actions, account isolation and separate owner/economic approval. 
 
 ## Verification boundary
 
-Release verification on 2026-09-24 passed isolated `make verify`: 2,492 backend tests
-passed / 14 optional tests skipped, 51 frontend tests passed, Ruff, mypy (379 source
-files), build, ESLint and desktop/mobile Chromium smoke passed. One new announcement
-quota regression was added after collection; its targeted run passed 19 tests (18
-already counted), giving 2,493 distinct passing tests. The sole warning is an existing
-Starlette/httpx test-client deprecation. Version/lock consistency, release hygiene,
-document authority and strict MkDocs build passed. Browser smoke covered questions,
-judgment/observation saving, reload and stale-selection handling, not every API error.
+Release verification on 2026-09-24 used a fresh environment with the final locked
+AnyIO 4.14.2 and Soup Sieve 2.9 security fixes. `make dependency-audit` found no known
+vulnerabilities. Full `make verify` passed: 2,493 backend tests / 14 optional skips,
+51 frontend tests, Ruff, mypy (379 files), build, ESLint and desktop/mobile Chromium
+smoke. The subsequently completed v3 candidate/architecture suite passed 71 tests,
+including 14 additional model cases, for 2,507 distinct passing cases across both
+runs. Final lint/typecheck and document checks passed after those additions. The three
+full-suite warnings are third-party Starlette/httpx and backtrader deprecations.
+Version/lock consistency, release hygiene, document authority and strict MkDocs build
+passed. Browser smoke covered questions, judgment/observation saving, reload and
+stale-selection handling, not every API error. Hosted CI supplies the final combined
+full-suite and coverage receipt for the published commit.
 
 The 09-23 daily report remains the separate runtime evidence. These checks do not
 clear source/model identity, billing, human-completion or economic gates. Current

@@ -322,6 +322,148 @@ def test_account_blocks_unverified_action_coverage():
         build_model_account_context(b, arm="gpt6", cutoff="2026-09-21T16:00:00+08:00")
 
 
+def candidate_v3_inputs(bundle):
+    from backend.evidence.model_comparison import build_model_account_context
+
+    cutoff = "2026-09-21T23:00:00+08:00"
+    protocol = {
+        "models": bundle["models"],
+        "execution_config": bundle["execution_config"],
+        "cost_model": bundle["cost_model"],
+        "initial_cash_per_arm": 100000,
+        "maximum_sessions": 60,
+        "expires_at": "2026-12-31",
+    }
+    authorization = {"authorized": True, "scope": {
+        "symbols": list(bundle["universe"]), "excluded": ["real account", "real holdings"]
+    }}
+    registration = {
+        "schema_version": "matched_model_candidate_registration.v3",
+        "status": "prepared_not_activated",
+        "execution_mode": "injected_fake_only",
+        "parent_protocol_sha256": content_hash(protocol),
+        "authorization_sha256": content_hash(authorization),
+        "v2_registration_sha256": "a" * 64,
+        "maximum_total_sessions": 60,
+        "same_budget_and_ledger_root": True,
+        "ledger_root": "/synthetic/frozen-root",
+        "account_ids": {"gpt6": "gpt6-synthetic", "claude": "claude-synthetic"},
+    }
+    shared = {"as_of": "2026-09-21", "cutoff": cutoff, "symbols": list(bundle["universe"])}
+    context = build_model_account_context(bundle, arm="gpt6", cutoff=cutoff)
+    review = {
+        "status": "candidate_source_reviewed",
+        "reviewed_by": "synthetic-test-only",
+        "bundle_sha256": content_hash(bundle),
+        "provenance_sha256": content_hash(bundle["provenance"]),
+        "source_receipt_sha256": bundle["provenance"]["source_receipt_sha256"],
+        "shared_input_sha256": content_hash(shared),
+        "account_context_sha256": content_hash(context),
+    }
+    return {
+        "arm": "gpt6", "session_id": "2026-09-21", "cutoff": cutoff,
+        "shared_input": shared, "protocol": protocol, "authorization": authorization,
+        "registration": registration,
+        "ledger": {"root": "/synthetic/frozen-root", "maximum_sessions": 60,
+                   "reserved_session_ids": ["2026-09-20"]},
+        "source_review": review,
+    }
+
+
+def authorize_extra_v3_symbol_without_bundle(params):
+    params["authorization"]["scope"]["symbols"].append("600547")
+    params["registration"]["authorization_sha256"] = content_hash(params["authorization"])
+
+
+def test_v3_fake_provider_consumes_continuous_own_account_without_future_or_opponent():
+    import json
+
+    from backend.evidence.model_comparison import run_candidate_v3_offline
+
+    bundle = fixture_bundle()
+    bundle["sessions"][0]["arms"]["claude"]["answer"]["private"] = "OPPONENT_MARKER"
+    params = candidate_v3_inputs(bundle)
+    calls = []
+
+    def reserve(day, arm):
+        calls.append(("reserve", day, arm))
+        return {"status": "fake_reserved", "day": day, "arm": arm}
+
+    def provider(request_bytes):
+        assert isinstance(request_bytes, bytes)
+        request = json.loads(request_bytes)
+        calls.append(("provider", copy.deepcopy(request)))
+        request["account"]["cash"] = -1  # Parsed copy cannot mutate submitted bytes.
+        return {"fake": True}
+
+    reserve.offline_fake = provider.offline_fake = True
+    result = run_candidate_v3_offline(bundle, reserve=reserve, provider=provider, **params)
+    request = calls[1][1]
+    assert calls[0] == ("reserve", "2026-09-21", "gpt6")
+    assert request["account"]["cash"] < 100000
+    assert len(request["account"]["holdings"]) == 1
+    assert request["own_fills"][0]["date"] == "2026-09-21"
+    assert request["own_prior_decisions"][0]["session_id"] == "2026-09-19"
+    assert "OPPONENT_MARKER" not in json.dumps(request)
+    assert "diagnostic_request_context_execution_blocked" not in json.dumps(request)
+    assert result["status"] == "offline_fake_consumed_not_activated"
+    assert result["provider_receipt_validated"] is False
+    assert result["request_sha256"] == content_hash(request)
+
+
+@pytest.mark.parametrize("tamper,error", [
+    (lambda p: p["registration"].update(status="activated"), "registration"),
+    (lambda p: p["protocol"]["cost_model"].update(tax_sell=0), "registration"),
+    (lambda p: p["source_review"].update(account_context_sha256="0" * 64), "review hash"),
+    (lambda p: p["shared_input"].update(as_of="2026-09-22"), "latest closed"),
+    (lambda p: p["shared_input"].update(opponent={"cash": 1}), "unreviewed top-level"),
+    (lambda p: p["shared_input"].update(desk={"stocks": [{"symbol": "600036", "account": 1}]}), "cross-arm"),
+    (authorize_extra_v3_symbol_without_bundle, "authorization"),
+    (lambda p: p["ledger"]["reserved_session_ids"].append("2026-09-21"), "ledger"),
+    (lambda p: p.update(cutoff="2026-09-21T16:00:00+08:00"), "cutoff"),
+    (lambda p: p.update(arm="unknown"), "authorization"),
+])
+def test_v3_preflight_failure_never_reserves_or_calls_provider(tamper, error):
+    from backend.evidence.model_comparison import run_candidate_v3_offline
+
+    bundle = fixture_bundle()
+    params = candidate_v3_inputs(bundle)
+    tamper(params)
+    calls = []
+
+    def reserve(*args):
+        calls.append("reserve")
+
+    def provider(*args):
+        calls.append("provider")
+
+    reserve.offline_fake = provider.offline_fake = True
+    with pytest.raises(ValueError, match=error):
+        run_candidate_v3_offline(bundle, reserve=reserve, provider=provider, **params)
+    assert calls == []
+
+
+def test_v3_failed_fake_provider_keeps_reservation_without_retry():
+    from backend.evidence.model_comparison import run_candidate_v3_offline
+
+    bundle = fixture_bundle()
+    params = candidate_v3_inputs(bundle)
+    calls = []
+
+    def reserve(*args):
+        calls.append("reserved")
+        return {"status": "fake_reserved"}
+
+    def provider(*args):
+        calls.append("failed")
+        raise RuntimeError("fake provider failed")
+
+    reserve.offline_fake = provider.offline_fake = True
+    with pytest.raises(RuntimeError, match="fake provider failed"):
+        run_candidate_v3_offline(bundle, reserve=reserve, provider=provider, **params)
+    assert calls == ["reserved", "failed"]
+
+
 @pytest.mark.parametrize("answer", [[], "bad", {"as_of": "2026-09-18", "decisions": [None]}])
 def test_malformed_recorded_answer_is_retained_as_invalid_attempt(answer):
     b = fixture_bundle()
