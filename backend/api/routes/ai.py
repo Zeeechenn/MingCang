@@ -190,6 +190,13 @@ def archive_chat_session(session_id: str, db: Session = Depends(get_db)):
 )
 def chat(request: AIChatRequest, db: Session = Depends(get_db)):
     """Chat with the project-scoped AI assistant."""
+    if request.research_context is not None:
+        from backend.research.daily_review import ReviewError
+        from backend.research.page_context import answer_page_question
+        try:
+            return AIChatResponse(**answer_page_question(db, request))
+        except ReviewError as exc:
+            raise HTTPException(exc.status, detail=str(exc)) from exc
     session = _ensure_session(db, request.session_id, request.mode, title=request.message[:24])
     _save_message(db, session, "user", request.message, {"mode": request.mode})
 
@@ -239,11 +246,28 @@ def chat_stream(request: AIChatRequest, db: Session = Depends(get_db)):
       done     — final payload mirrors /ai/chat response JSON
       error    — if an exception occurs; carries {"message": "..."}
     """
+    if request.research_context is not None:
+        # Validate before opening SSE so stale selections return an ordinary 409.
+        from backend.research.daily_review import ReviewError
+        from backend.research.page_context import validate_binding
+        try:
+            validate_binding(db, request.research_context)
+        except ReviewError as exc:
+            raise HTTPException(exc.status, detail=str(exc)) from exc
+
     def generate():
         # Stage 1 – immediate acknowledgement before any I/O
         yield _sse("prepare", {"mode": request.mode})
 
         try:
+            if request.research_context is not None:
+                from backend.research.page_context import answer_page_question
+                result = answer_page_question(db, request)
+                yield _sse("meta", result)
+                for chunk in _text_chunks(result["answer"]):
+                    yield _sse("token", {"text": chunk})
+                yield _sse("done", result)
+                return
             session = _ensure_session(
                 db, request.session_id, request.mode,
                 title=request.message[:24],

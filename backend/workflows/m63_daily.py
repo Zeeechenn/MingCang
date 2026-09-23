@@ -1154,12 +1154,20 @@ def build_postmarket_report(
         from backend.decision.discretion import m59_discretion_enabled
 
         if m59_discretion_enabled():
-            steps.append(
-                _step_result(
-                    "m59_discretion",
-                    overrides.get("m59_discretion", lambda: _run_discretion(panel, db_path, day)),
+            if no_llm:
+                steps.append(
+                    _step_result(
+                        "m59_discretion",
+                        lambda: {"skipped": True, "reason": "--no-llm:跳过会消耗LLM的裁量参考"},
+                    )
                 )
-            )
+            else:
+                steps.append(
+                    _step_result(
+                        "m59_discretion",
+                        overrides.get("m59_discretion", lambda: _run_discretion(panel, db_path, day)),
+                    )
+                )
     watchtower = next((step["result"] for step in steps if step["name"] == "m60_watchtower" and step["ok"]), None)
     steps.append(
         _step_result(

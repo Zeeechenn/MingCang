@@ -845,3 +845,57 @@ def test_custom_db_passes_to_panel_exit_accrual_and_backfill(monkeypatch, tmp_pa
     m63_daily._run_accrual('2026-09-16', no_llm=True, db_path=target)
     m63_daily._run_backfill_drip('2026-09-16', db_path=target)
     assert calls == [('panel', target), ('exit', target), ('accrual', str(target)), ('backfill', str(target))]
+
+
+@pytest.mark.parametrize("no_llm", [True, False])
+@pytest.mark.parametrize("use_override", [True, False])
+def test_postmarket_no_llm_blocks_enabled_discretion(tmp_path, monkeypatch, no_llm, use_override):
+    calls = []
+
+    def discretion(*args, **kwargs):
+        calls.append("model")
+        return {"cards": [], "skipped": False}
+
+    monkeypatch.setattr("backend.decision.discretion.m59_discretion_enabled", lambda: True)
+    monkeypatch.setattr(m63_daily, "_run_discretion", discretion)
+    overrides = {
+        "m61_backfill_drip": lambda: {},
+        "m60_watchtower": lambda: {"summary": {}, "triggers": []},
+        "m60_second_entry": lambda: {},
+        "m54_daily_accrual": lambda: {"skipped": True, "reason": "fixture"},
+        "m68_news_shadow": lambda: {"skipped": True, "reason": "fixture"},
+        "m68_test2_compare": lambda: {"skipped": True, "reason": "fixture"},
+        "m58_exit_shadow": lambda: {},
+        "m59_panel": lambda: {"summary": {}, "position_health": {"items": []}},
+        "m63_trade_journal": lambda: {},
+        "trigger_router": lambda: {"pending": []},
+        "task_capsule": lambda: {},
+    }
+    if use_override:
+        overrides["m59_discretion"] = discretion
+    report = m63_daily.build_postmarket_report(
+        db_path=_db(tmp_path), as_of="2026-09-21", no_llm=no_llm,
+        queue_path=tmp_path / "queue.json", history_path=tmp_path / "history.json",
+        step_overrides=overrides,
+    )
+    assert calls == ([] if no_llm else ["model"])
+    step = next(step for step in report["steps"] if step["name"] == "m59_discretion")
+    assert step["ok"] is True
+    if no_llm:
+        assert step["result"]["skipped"] is True
+        assert "--no-llm" in step["result"]["reason"]
+
+
+def test_postmarket_cli_passes_no_llm_through_tracked_job(monkeypatch, tmp_path):
+    seen = []
+
+    def report(**kwargs):
+        seen.append(kwargs)
+        return {"date": kwargs["as_of"], "text": "离线测试"}
+
+    monkeypatch.setattr(m63_daily, "build_postmarket_report", report)
+    monkeypatch.setattr(m63_daily, "write_report", lambda *args: tmp_path / "postmarket.md")
+    monkeypatch.setattr("backend.scheduler.run_tracked_job", lambda name, fn, **kwargs: fn())
+
+    assert m63_daily.main(["--mode", "postmarket", "--date", "2026-09-21", "--no-llm"]) == 0
+    assert seen == [{"db_path": None, "as_of": "2026-09-21", "no_llm": True}]

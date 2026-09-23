@@ -21,6 +21,10 @@ from __future__ import annotations
 import json
 import sqlite3
 
+import pytest
+
+from backend.config import settings
+from backend.decision.signal_policy import score_to_recommendation
 from backend.portfolio.daily_panel import (
     _build_buy_candidates,
     _resolve_signal_batch,
@@ -218,4 +222,85 @@ def test_database_without_data_timestamp_column_still_renders(tmp_path):
         signals=[("601318", OFFICIAL, "可小仓试错", 62.9, 1.0, 2.0, "run-official")],
         job_runs=[("run-official", {"authoritative": True})],
     )
+    assert [item["symbol"] for item in _build_buy_candidates(con, DAY)["items"]] == ["601318"]
+
+
+@pytest.mark.parametrize("research_first", [False, True])
+def test_same_minute_research_rows_do_not_leak_into_official_batch(tmp_path, research_first):
+    signals = [
+        ("601318", OFFICIAL, "可小仓试错", 51.0, 1.0, 2.0, "run-official"),
+        ("002463", OFFICIAL, "可小仓试错", 91.0, 1.0, 2.0, "run-research"),
+    ]
+    con = _db(
+        tmp_path,
+        signals=list(reversed(signals)) if research_first else signals,
+        job_runs=[
+            ("run-official", {"authoritative": True}),
+            ("run-research", {"run_envelope": {"authoritative": False}}),
+        ],
+    )
+    result = _build_buy_candidates(con, DAY)
+    assert [item["symbol"] for item in result["items"]] == ["601318"]
+    assert not any("superseded" in flag for flag in result["flags"])
+
+
+def test_same_minute_same_run_other_trade_date_is_excluded(tmp_path):
+    con = _db(
+        tmp_path,
+        signals=[
+            ("601318", OFFICIAL, "可小仓试错", 51.0, 1.0, 2.0, "run-official"),
+            ("002463", OFFICIAL, "可小仓试错", 91.0, 1.0, 2.0, "run-official"),
+        ],
+        job_runs=[("run-official", {"authoritative": True})],
+    )
+    con.execute("ALTER TABLE signals ADD COLUMN data_timestamp TEXT")
+    con.execute("UPDATE signals SET data_timestamp = '2026-09-01T15:00:00+08:00' WHERE symbol = '601318'")
+    con.execute("UPDATE signals SET data_timestamp = '2026-08-31' WHERE symbol = '002463'")
+    assert [item["symbol"] for item in _build_buy_candidates(con, DAY)["items"]] == ["601318"]
+    assert [item["symbol"] for item in _build_buy_candidates(con, "2026-08-31")["items"]] == ["002463"]
+
+
+def test_same_minute_two_official_runs_are_ambiguous_not_arbitrarily_merged(tmp_path):
+    con = _db(
+        tmp_path,
+        signals=[
+            ("601318", OFFICIAL, "可小仓试错", 51.0, 1.0, 2.0, "run-a"),
+            ("002463", OFFICIAL, "可小仓试错", 91.0, 1.0, 2.0, "run-b"),
+        ],
+        job_runs=[("run-a", {"authoritative": True}), ("run-b", {"authoritative": True})],
+    )
+    result = _build_buy_candidates(con, DAY)
+    assert result["items"] == []
+    assert f"ambiguous:authoritative_signal_batch:{DAY}" in result["flags"]
+    assert _resolve_signal_batch(con, DAY)[0] == []
+
+
+@pytest.mark.parametrize("recommendation", ["不买", "暂不买入", "禁止买入", "卖出", "买入待核验", ""])
+def test_negated_or_unknown_buy_wording_does_not_become_a_candidate(tmp_path, recommendation):
+    con = _db(
+        tmp_path,
+        signals=[("601318", OFFICIAL, recommendation, 99.0, 1.0, 2.0, "run-official")],
+        job_runs=[("run-official", {"authoritative": True})],
+    )
+    assert _build_buy_candidates(con, DAY)["items"] == []
+
+
+@pytest.mark.parametrize("score,expected", [(24.999, False), (25.0, False), (25.001, True)])
+def test_production_recommendation_threshold_is_strictly_greater_than_25(tmp_path, monkeypatch, score, expected):
+    monkeypatch.setattr(settings, "paper_trading_profile", "new_framework")
+    monkeypatch.setattr(settings, "new_framework_entry_threshold", 25.0)
+    recommendation = score_to_recommendation(score)
+    con = _db(
+        tmp_path,
+        signals=[("601318", OFFICIAL, recommendation, score, 1.0, 2.0, "run-official")],
+        job_runs=[("run-official", {"authoritative": True})],
+    )
+    assert bool(_build_buy_candidates(con, DAY)["items"]) is expected
+
+
+@pytest.mark.parametrize("recommendation", ["买", "买入", "强买", "考虑买入", "watch/考虑买入"])
+def test_explicit_legacy_recommendations_remain_supported(tmp_path, recommendation):
+    con = _db(tmp_path, signals=[("601318", DAY, recommendation, 72.0, 1.0, 2.0, None)])
+    # Legacy databases may have neither run_id nor data_timestamp columns.
+    con.execute("ALTER TABLE signals DROP COLUMN run_id")
     assert [item["symbol"] for item in _build_buy_candidates(con, DAY)["items"]] == ["601318"]

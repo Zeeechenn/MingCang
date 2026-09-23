@@ -50,6 +50,7 @@ export function HumanReviewPanel({ asOf }: { asOf: string | null }) {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState('all');
+  const [period, setPeriod] = useState('current');
   const [count, setCount] = useState(6);
   const [refresh, setRefresh] = useState(0);
   const [editing, setEditing] = useState<{ item: HumanReviewSource; choice: ReviewChoice } | null>(null);
@@ -86,6 +87,10 @@ export function HumanReviewPanel({ asOf }: { asOf: string | null }) {
   function acceptResponse(review: HumanReview) {
     setData(current => current ? { ...current,
       items: current.items.map(item => item.item_id === review.source.item_id ? { ...item, review } : item),
+      summary: current.summary ? { ...current.summary,
+        recorded_choices: current.items.filter(item => item.review || item.item_id === review.source.item_id).length,
+        with_observations: current.items.filter(item => (item.item_id === review.source.item_id ? review : item.review)?.result.outcomes.length).length,
+      } : undefined,
       history: [review, ...current.history.filter(item => item.review_id !== review.review_id)].slice(0, current.history_limit),
     } : current);
   }
@@ -117,18 +122,27 @@ export function HumanReviewPanel({ asOf }: { asOf: string | null }) {
     finally { setBusy(false); }
   }
   if (!asOf) return null;
-  const filtered = (data?.items || []).filter(item => (kind === 'all' || item.card_type === kind)
+  const filtered = (data?.items || []).filter(item => (period === 'all' || (item.source_scope || 'current') === period)
+    && (kind === 'all' || item.card_type === kind)
     && `${item.name} ${item.subject} ${item.summary}`.toLowerCase().includes(query.toLowerCase()));
   return <div className="grid" style={{ gap: 12, marginTop: 14, minWidth: 0 }} aria-label="人工研究复核">
     <div className="spread" style={{ gap: 8, flexWrap: 'wrap' }}>
       <strong>逐条核对，记录我的选择</strong>
       <button type="button" className="btn btn-sm" disabled={busy || loading} onClick={() => { setRefresh(n => n + 1); setError(''); }}>刷新复核记录</button>
     </div>
-    <div className="t-dim" style={{ fontSize: 13 }}>资料截至 {data?.panel_as_of || asOf}。保存的是今天的研究意见；原建议和未回复的事项继续保留，研究待办仍需实际完成。</div>
+    <div className="t-dim" style={{ fontSize: 13 }}>资料截至 {data?.panel_as_of || asOf}。保存的是本次核对的研究意见；原建议和未回复的事项继续保留，研究待办仍需实际完成。</div>
+    {data?.summary && <div className="t-dim" role="status">
+      本期资料 {data.summary.current} 项 · 历史待核 {data.summary.historical} 项 · 日期待核 {data.summary.unverified} 项；
+      当前面板已记录选择 {data.summary.recorded_choices} 项、已追加观察 {data.summary.with_observations} 项。独立结果尚未验证。
+    </div>}
     {loadError && <div role="alert">{loadError}</div>}
     {data?.warning && <div role="status">{ERRORS[data.warning] || '当前面板证据不完整，历史复核记录仍可查看。'}</div>}
     {loading && <div role="status">正在读取复核记录…</div>}
     <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+      <label>资料范围 <select aria-label="资料范围" value={period} onChange={e => { setPeriod(e.target.value); setCount(6); }}>
+        <option value="current">本期资料</option><option value="historical">历史待核</option>
+        <option value="unverified">日期待核</option><option value="all">全部资料</option>
+      </select></label>
       <label>类型 <select aria-label="复核类型" value={kind} onChange={e => { setKind(e.target.value); setCount(6); }}>
         <option value="all">全部</option>{Object.entries(KINDS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
@@ -139,6 +153,8 @@ export function HumanReviewPanel({ asOf }: { asOf: string | null }) {
       <div className="grid" style={{ gap: 8 }}>
         <strong>{KINDS[item.card_type]} · {item.name} {item.name !== item.subject ? item.subject : ''}</strong>
         <div>{item.summary}</div>
+        {item.source_scope === 'historical' && <div className="t-dim">历史事项，创建于 {item.source_date}；本次复核不代表原任务完成。</div>}
+        {item.source_scope === 'unverified' && <div className="t-dim">来源日期尚未核实，请先查看原始证据。</div>}
         <div className="t-faint">{item.validity === 'expired' ? '资料已过期' : item.expires_at ? `有效至 ${item.expires_at}` : '未提供有效期，请核对当前情况'}</div>
         <Original source={item} />
         {item.review ? <Recorded review={item.review} onOutcome={openOutcome} busy={busy} /> :

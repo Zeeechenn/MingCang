@@ -29,7 +29,7 @@ questions, use CodeGraph first; for literal strings, use `rg`.
 |---|---|---|
 | Runtime config | `backend/config.py` | env vars, paths, scheduling, profile knobs |
 | Database/runtime schema | `backend/data/database.py`, `backend/data/schema_runtime.py`, `backend/data/seed.py` | ORM/session/init compatibility, runtime patches, memory seeds |
-| Market data | `backend/data/market*.py`, `backend/data/providers.py`, `backend/data/flow_floor.py`, `backend/data/tavily_news.py` | A/HK/US read-only facades, provider fallback, flow/news acquisition, M41 envelopes, M42 write guard |
+| Market data | `backend/data/market*.py`, `backend/data/providers.py`, `backend/data/flow_floor.py`, `backend/data/tavily_news.py`, `backend/data/ifind_mcp.py`, `backend/data/category_fetchers.py` | A/HK/US facades, provider fallback and source adapters; iFind calls are rate-limited and source/category-specific. See `docs/data-sources/ifind.md`; inventory before probing, and keep backfill writes separate from read-only validation |
 | News pyramid mirror | `backend/data/news_shadow.py`, `backend/data/models/news_shadow.py`, `backend/api/routes/news_shadow.py`, `backend/tools/m68_news_shadow.py`, `backend/tools/m68_test2_compare.py`, `frontend/src/services/news-shadow.ts`, `frontend/src/page-news-shadow.tsx` | M68 production-shaped observe-only dual run, event-risk review queue, independent test2-v2 C comparison, counterfactual API/UI and evidence-bound feedback; never writes official signals or original A/B state |
 | Decision layer | `backend/decision/` | aggregation, harness, signal policy, decision memory |
 | Research and memory | `backend/research/`, `backend/memory/`, `backend/agents/` | dossier/deep research, outcome-backed calibration (`experience.py`), reversible health/compaction (`maintenance.py`), layered memory, multi-agent pipelines |
@@ -65,6 +65,7 @@ be used by CLI commands or external callers.
 | daily panel evidence | `backend.evidence.daily_panel`, `backend.evidence.daily_panel_sources`, `backend.api.routes.daily`, `frontend/src/features/daily/` | `backend.portfolio.daily_panel` compatibility facade |
 | continuity acceptance | `backend.ops.one_loop_continuity`, `scripts/audit_one_loop_continuity.py` | none; explicit immutable DB path is required |
 | independent cash NAV evidence | `backend.backtest.nav_replay` | `backend.tools.p0r_nav_replay` manual-only snapshot CLI; no scheduler or production-ledger consumer |
+| matched-model diagnostic adapter | `backend.evidence.model_comparison` | `backend.tools.model_comparison` explicit offline bundle/inventory CLI; reuses NAV engine, no provider or production activation |
 | price-history rebase/write safety | none; maintenance-only | `backend.tools.rebase_price_history` dry-run plus opt-in strict write guard; routine callers keep the guard disabled until separately activated |
 
 ## 研究模块地图

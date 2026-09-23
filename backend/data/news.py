@@ -112,6 +112,9 @@ def _parse_ifind_items(text: str) -> list[dict[str, Any]]:
     outer = _json.loads(text)
     data = outer.get("data") if isinstance(outer, dict) else outer
     if isinstance(data, dict):
+        answer = data.get("answer")
+        if isinstance(answer, str) and "MCP请求用量已耗尽" in answer:
+            raise IfindQuotaExhausted("iFinD MCP quota exhausted")
         inner = data.get("data", [])
     else:
         inner = data
@@ -120,6 +123,10 @@ def _parse_ifind_items(text: str) -> list[dict[str, Any]]:
     if not isinstance(inner, list):
         return []
     return [item for item in inner if isinstance(item, dict)]
+
+
+class IfindQuotaExhausted(RuntimeError):
+    """The provider returned an answer-only quota notice instead of rows."""
 
 
 def _anspire_has_identity(title: str, content: str, symbol: str, name: str) -> bool:
@@ -662,6 +669,9 @@ def fetch_news_ifind(symbol: str, name: str, days: int = 7, max_results: int = 2
                         provider="ifind",
                     )
                 )
+        except IfindQuotaExhausted as e:
+            logger.warning("iFinD %s content fetch stopped for %s: %s", tool, symbol, e)
+            break
         except Exception as e:
             logger.warning("iFinD %s content fetch failed for %s: %s", tool, symbol, e)
 
@@ -670,7 +680,6 @@ def fetch_news_ifind(symbol: str, name: str, days: int = 7, max_results: int = 2
 
 def fetch_titles_ifind(symbol: str, name: str, days: int = 2, max_results: int = 5) -> list[str]:
     """用 iFinD MCP search_news + search_notice 补充该股标题，仅读取不写库。"""
-    import json as _json
     from datetime import datetime, timedelta
 
     from backend.config import settings
@@ -694,17 +703,15 @@ def fetch_titles_ifind(symbol: str, name: str, days: int = 2, max_results: int =
                 tool,
                 {"query": query, "time_start": time_start, "time_end": time_end, "size": max_results},
             )
-            outer = _json.loads(result.text)
-            inner_str = (outer.get("data") or {}).get("data", "")
-            items = _json.loads(inner_str) if isinstance(inner_str, str) else []
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
+            for item in _parse_ifind_items(result.text):
                 title = item.get("资讯标题") or item.get("公告标题") or item.get("title") or ""
                 if title and len(title) >= 5:
                     titles.append(title)
             if len(titles) >= max_results:
                 break
+        except IfindQuotaExhausted as e:
+            logger.warning("iFinD %s fetch stopped for %s: %s", tool, symbol, e)
+            break
         except Exception as e:
             logger.warning("iFinD %s fetch failed for %s: %s", tool, symbol, e)
 

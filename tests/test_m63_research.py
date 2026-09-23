@@ -69,6 +69,53 @@ def test_symbol_target_resolution():
     assert resolved["symbols"] == ["300604"]
 
 
+def test_preflight_exposes_duplicate_work_and_uncapped_provider_cost():
+    submitted = ["300308", "300308", "300394", "601869", "600487", "603259", "600036", "600900", "000858"]
+    resolved = m63_research.resolve_target("光通信", symbols=submitted)
+    report = m63_research.build_research_preflight(resolved)
+
+    assert report["status"] == "preflight_only_no_execution"
+    assert report["submitted_count"] == 9
+    assert report["unique_count"] == 8
+    assert report["normalized_unique_symbols"] == list(dict.fromkeys(submitted))
+    assert report["duplicate_symbols"] == ["300308"]
+    assert report["default_run_behavior_changed"] is False
+    assert report["stages_on_default_run"]["backfill"]["submitted_symbol_occurrences"] == 9
+    assert report["stages_on_default_run"]["labels"]["per_symbol_attempts_at_most"] == 9
+    assert report["stages_on_default_run"]["copilot"]["per_symbol_attempts_at_most"] == 8
+    assert report["stages_on_default_run"]["copilot"]["omitted_occurrences"] == 1
+    assert report["stages_on_default_run"]["copilot"]["first_eight_occurrences"].count("300308") == 2
+    assert report["budget"]["model_call_upper_bound"] is None
+    assert report["budget"]["billed_cost_upper_bound"] is None
+    assert "duplicate_symbols_default_run_repeats_stage_work" in report["warnings"]
+
+
+def test_preflight_cli_has_no_stage_db_or_network_execution(tmp_path, monkeypatch, capsys):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("preflight must not execute a research stage or DB query")
+
+    monkeypatch.setattr(m63_research, "run_research", forbidden)
+    monkeypatch.setattr(m63_research, "_connect", forbidden)
+    monkeypatch.setattr(m63_research, "_run_backfill", forbidden)
+    monkeypatch.setattr(m63_research, "_run_label_builder", forbidden)
+    monkeypatch.setattr(m63_research, "_run_deep_research_stage", forbidden)
+    monkeypatch.setattr(m63_research, "_run_copilot_stage", forbidden)
+    monkeypatch.setattr(m63_research, "_upsert_watchlist", forbidden)
+    monkeypatch.setattr(m63_research, "OUTPUT_DIR", tmp_path / "never-written")
+
+    code = m63_research.main([
+        "--target", "光通信", "--symbols", "300308,300308,300394",
+        "--no-llm", "--preflight",
+    ])
+    report = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert report["normalized_unique_symbols"] == ["300308", "300394"]
+    assert report["stages_on_default_run"]["labels"]["model_call_upper_bound"] == 0
+    assert report["budget"]["model_call_upper_bound"] == 0
+    assert report["budget"]["external_request_upper_bound"] is None
+    assert not (tmp_path / "never-written").exists()
+
+
 def test_theme_from_watchlist_resolution(tmp_path):
     watchlists = tmp_path / "watchlists"
     _write_watchlist(watchlists)

@@ -42,9 +42,17 @@ function SourceExplanation({ card }: { card: DailyPanelCard }) {
   const delta = payload.structured_delta;
   const reason = payload.reason || payload.followups?.reason || delta?.reason;
   const oldCount = payload.queue_stale_count || 0;
-  if (!reason && !delta && !oldCount) return null;
+  const coverage = card.card_type === 'watchtower' ? payload.followups?.coverage : null;
+  const priceGaps = Object.keys(coverage?.price_gaps || {});
+  const flowGaps = Object.keys(coverage?.fund_flow_gaps || {});
+  if (!reason && !delta && !oldCount && !coverage) return null;
   return <div className="glass-inset" style={{ padding: 10, fontSize: 13, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
     {reason && <div>{reason}</div>}
+    {coverage && <div>扫描覆盖：行情待补 {coverage.price_gaps ? priceGaps.length : '未知'} 项，资金流待补 {coverage.fund_flow_gaps ? flowGaps.length : '未知'} 项；缺失资料不等于没有风险。
+      {(priceGaps.length > 0 || flowGaps.length > 0) && <details><summary>查看覆盖缺口</summary>
+        <div>行情：{priceGaps.join('、') || '无已报告缺口'}</div><div>资金流：{flowGaps.join('、') || '无已报告缺口'}</div>
+      </details>}
+    </div>}
     {delta && <div>当前 {delta.current_as_of || '未知'} · 对比 {delta.previous_as_of || '暂无已提交记录'}</div>}
     {delta?.candidate_added?.length > 0 && <div>新增候选：{delta.candidate_added.join('、')}</div>}
     {delta?.candidate_removed?.length > 0 && <div>移出候选：{delta.candidate_removed.join('、')}</div>}

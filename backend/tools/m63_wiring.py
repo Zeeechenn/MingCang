@@ -21,6 +21,10 @@ class WiringEntry(TypedDict):
 
 
 WIRING_MAP: dict[str, WiringEntry] = {
+    "backend.tools.model_comparison": {
+        "bucket": "manual_only",
+        "reason": "模型对比离线回放与试验清点,仅显式人工触发,不接日常流水线或自动调用模型",
+    },
     "backend.tools.p0r_nav_replay": {
         "bucket": "manual_only",
         "reason": "P0-R真实NAV/撮合/成本独立证据,只读快照且不接One Loop主链",

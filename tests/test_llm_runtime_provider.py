@@ -1,9 +1,20 @@
 import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from backend.agents.analyst import AnalystReport
 from backend.agents.researcher import multi_round_debate
 from backend.decision import aggregator
+
+
+@pytest.fixture(autouse=True)
+def clear_local_cli_breaker():
+    from backend.llm.local_cli_provider import reset_quota_guard
+
+    reset_quota_guard()
+    yield
+    reset_quota_guard()
 
 
 def _reports(scores: list[float]) -> list[AnalystReport]:

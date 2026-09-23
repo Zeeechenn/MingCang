@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.agent.http_guard import agent_write_guard
 from backend.agent.security import agent_mode
+from backend.api.routes.daily import HumanOutcomeIn
 from backend.api.schemas import (
     BeneficiaryTiersRequest,
     CaseViewOut,
@@ -56,8 +57,49 @@ from backend.api.schemas import (
 from backend.config import settings
 from backend.data.database import get_db
 from backend.llm import runtime_readiness
+from backend.research.page_context import PageReviewIn
 
 router = APIRouter()
+
+
+@router.get("/research/{symbol}/page-context")
+def get_page_context(symbol: str, start: str, as_of: str, market: str = "CN", adjustment: str = "stored", db: Session = Depends(get_db)):
+    from pydantic import ValidationError
+
+    from backend.research.daily_review import ReviewError
+    from backend.research.page_context import PageSelection, build_page_context
+    try:
+        return build_page_context(db, PageSelection.model_validate({"symbol": symbol, "start": start, "as_of": as_of, "market": market, "adjustment": adjustment}))
+    except ValidationError as exc:
+        raise HTTPException(422, "invalid_page_selection") from exc
+    except ReviewError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+@router.get("/research/{symbol}/page-reviews")
+def get_page_reviews(symbol: str, db: Session = Depends(get_db)):
+    from backend.research.page_context import page_review_history
+    return page_review_history(db, symbol)
+
+
+@router.post("/research/page-reviews", dependencies=[Depends(agent_write_guard("research.page_review.record"))])
+def save_page_review(payload: PageReviewIn, db: Session = Depends(get_db)):
+    from backend.research.daily_review import ReviewError
+    from backend.research.page_context import record_page_review
+    try:
+        return record_page_review(db, payload)
+    except ReviewError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+@router.post("/research/page-reviews/{review_id}/outcomes", dependencies=[Depends(agent_write_guard("research.page_review.outcome"))])
+def save_page_outcome(review_id: str, payload: HumanOutcomeIn, db: Session = Depends(get_db)):
+    from backend.research.daily_review import ReviewError
+    from backend.research.page_context import record_page_outcome
+    try:
+        return record_page_outcome(db, review_id=review_id, **payload.model_dump())
+    except ReviewError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
 
 
 @router.get("/research/{symbol}/financials")

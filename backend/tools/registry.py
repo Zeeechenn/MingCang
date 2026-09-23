@@ -161,6 +161,23 @@ OWNER_DOMAINS = {
 }
 _TOOL_REGISTRY: tuple[dict[str, Any], ...] = (
     {
+        "module": "backend.tools.model_comparison",
+        "category": "evidence",
+        "lifecycle": "experimental",
+        "canonical_entrypoint": "backend.evidence.model_comparison",
+        "owner_domain": "evidence",
+        "consumers": ["manual_cli"],
+        "purpose": "Inventory a frozen model trial or replay explicit matched-model decisions and bounded per-arm account contexts through the existing NAV engine.",
+        "read_write_boundary": "Reads explicit local JSON and frozen code hashes; exclusively creates a new report. No model/network calls, production DB writes, old-report overwrite or experiment activation.",
+        "recommended_entrypoint": "python3 -m backend.tools.model_comparison --input <bundle.json> --output <new-report.json>",
+        "evidence": "tests/test_model_comparison.py and tests/test_model_comparison_tool.py; synthetic fixtures do not certify real sources or provider receipts.",
+        "success_metric": "Next-open timestamps, fixed failure denominator and per-arm cutoff isolation remain correct; blocked execution inputs never produce returns.",
+        "expiry": "2026-12-31; review source/model/account evidence before prospective activation",
+        "rollback": "Stop the explicit CLI and remove this adapter; no production or frozen-record rollback.",
+        "replacement": None,
+        "still_runnable": True,
+    },
+    {
         "module": "backend.tools.p0r_nav_replay",
         "category": "evidence",
         "purpose": "Build an independent cash-NAV, fill, transaction-cost, and loss-attribution replay from exact authoritative One Loop batches.",

@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "run_daily_tests.sh"
 
@@ -126,6 +128,7 @@ def test_quota_check_full_abort_ignores_budget_marker() -> None:
     quota_end = text.index("\n}\n", quota_start)
     quota_body = text[quota_start:quota_end]
     assert "LLM_QUOTA_EXHAUSTED" in quota_body
+    assert "LLM_AUTH_FAILED" in quota_body
     assert "额度耗尽" in quota_body
     assert "LLM_CALL_BUDGET_EXHAUSTED" not in quota_body
     assert "fail " in quota_body or "fail\t" in quota_body or "fail(" in quota_body
@@ -152,6 +155,7 @@ p.add_argument("--no-llm", action="store_true")
 args = p.parse_args()
 exitcode = int(os.environ.get("STUB_PANEL_EXIT", "0"))
 print(f"面板已写：postmarket_{args.date}.md")
+print("LLM_CALL_TOTAL claude 调用 " + os.environ.get("STUB_PANEL_LLM_CALLS", "0"))
 sys.exit(exitcode)
 '''
 
@@ -165,6 +169,8 @@ if "--universe" not in argv:
     # ① test2 官方批次（无 --date 参数，永远跑"当天"——这里用桩注入的目标日）
     count = os.environ.get("STUB_STEP1_COUNT", "25")
     exitcode = int(os.environ.get("STUB_STEP1_EXIT", "0"))
+    if os.environ.get("STUB_STEP1_AUTH_FAILED") == "1":
+        print("LLM_AUTH_FAILED claude -p: OAuth session expired")
     print(f"产信号 {count} · 跳过 0 · 失败 0")
     print(f"data_date=={target_date}")
     print("LLM_CALL_TOTAL claude 调用 5")
@@ -617,3 +623,30 @@ def test_scenario_one_loop_only_labels_track_b_not_attempted(tmp_path: Path) -> 
     assert state["tracks"]["one_loop"]["outcome"] == "ok"
     assert state["tracks"]["live"]["outcome"] == "not_attempted"
     assert state["tracks"]["live"]["status"] != "complete"
+
+
+@pytest.mark.parametrize("panel_exit", ["0", "9"])
+def test_pipeline_counts_postmarket_calls_even_when_panel_fails(tmp_path, panel_exit):
+    repo = _build_fake_repo(tmp_path)
+    proc = _run(repo, tmp_path / "runtime", STUB_PANEL_EXIT=panel_exit, STUB_PANEL_LLM_CALLS="6")
+    assert proc.returncode == (0 if panel_exit == "0" else 4)
+    assert _state_of(repo)["llm_calls_total"] == 17  # 5 official + 6 panel + 2 broad + 1 label + 3 deep
+    assert "本轮 LLM 调用合计 ≈ 17 次" in proc.stdout
+
+
+def test_auth_failure_stops_both_tracks_and_records_partial_calls(tmp_path):
+    repo = _build_fake_repo(tmp_path)
+    proc = _run(repo, tmp_path / "runtime", STUB_STEP1_AUTH_FAILED="1")
+
+    assert proc.returncode == 1
+    assert "PIPELINE_ABORTED" in proc.stdout
+    assert "PIPELINE_DONE" not in proc.stdout
+    assert "Claude CLI 认证失效" in proc.stdout
+    assert "本轮 LLM 调用合计 ≈ 5 次" in proc.stdout
+    assert "② One Loop 盘后面板" not in proc.stdout
+    assert "④ 实盘广筛" not in proc.stdout
+    state = _state_of(repo)
+    assert state["status"] == "aborted"
+    assert state["current_step"] == "01_test2"
+    assert state["llm_calls_total"] == 5
+    assert state["tracks"]["one_loop"]["status"] == "aborted"

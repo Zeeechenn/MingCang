@@ -1,48 +1,45 @@
 # AI document archive digest
 
-> Archived 2026-09-17. This is provenance and retrieval metadata, not another
-> active plan. Rules: AGENTS; current evidence: STATUS; next work: ROADMAP.
+> Updated 2026-09-24. Provenance and retrieval metadata only, not another active plan.
+> Shared rules: `AGENTS.md`; runtime evidence: `STATUS.md`; next steps: `docs/ROADMAP.md`.
 
 ## Archive identity and recovery
 
-- Archive ID: `mingcang-ai-docs-20260917`.
-- File: `mingcang-ai-docs-20260917-originals.zip` (stored outside the repository).
-- SHA-256: `5aba5719e7e6ace96ae382b463e9a59112c921c2c591b7da38aaf8e2628792c0`.
-- Source Git commit: `17ab0d6b17be9bb49a65dd9dbc482b7122ff8c1c`; the archived files include the
-  working-tree changes present at capture, not just that commit's content.
-- Capture time: `2026-09-17T00:56:10.497368+08:00`.
-- ZIP contains 16 complete originals under `originals/` and a per-file SHA-256,
-  byte/line-count manifest. The companion `archive-manifest.json` also records
-  the ZIP hash. Every original was recovered from the ZIP and hash-verified.
-- Machine-specific location is in the private local `LEADER.md` /
-  `LEADER_ARCHIVE.md`; no private handoff or archive body is published here.
-- Restore by verifying the ZIP and extracting a selected original to a separate
-  directory for comparison. Do not overwrite newer work or treat old instructions
-  as renewed authorization. No DB, runtime ledger, secret or session transcript
-  was added to this archive.
+- Archive ID: `mingcang-release-20260924-ai-docs-originals`.
+- File: `ai-docs-archive.zip` (outside the repository; its machine-local path is recorded
+  in the private `LEADER.md` handoff, not as a repository-relative path).
+- ZIP SHA-256: `e764891dd8b1af49d988ccd6b650d82236e0fb9398a59fda6f1fcebfa0e5e311`.
+- Captured before compression on 2026-09-24. The ZIP contains complete originals of six
+  files under `originals/`, plus `manifest.json` with each original's path, SHA-256,
+  byte count and line count. The six originals total 1,149 lines / 94,220 bytes.
+- Every member was extracted to a fresh temporary directory; per-file SHA-256 and bytes
+  matched the archived manifest and the source files captured before editing.
+- Restore a selected original to a separate directory for comparison. Do not overwrite
+  current documents or treat old wording as renewed authorization. The archive contains
+  documentation only; no DB, runtime ledger, secrets, code or session transcript.
 
 ## Disposition
 
 | Original surface | Current disposition and surviving authority |
 |---|---|
-| `AGENTS.md`, `CLAUDE.md`, `.pi/SYSTEM.md` | Shared rules and small agent wrappers; repeated instructions compacted; safety/API/memory/compatibility contracts retained |
-| `STATUS.md`, `PROJECT.md`, `docs/ROADMAP.md` | Dated runtime truth, architecture and sole queue separated; completed implementation distinguished from unpassed evidence gates |
-| `LEADER.md`, `LEADER_ARCHIVE.md`, `.claude/RESUME.md` | Stale counts, incidents and old dispatch text archived; small local current handoff/pointers retained |
-| `CHANGELOG.md` | Original archived for reversibility; released history retained in place, only an Unreleased entry added |
-| `docs_public/DEVELOPER_GUIDE.md` | Stale implementation/model handoff corrected; current implementation and interface contracts retained |
-| `docs/dev/README.md` | Allowlist retained, archive lookup updated |
-| `docs/dev/M55_SERENITY_CONVERGENCE_PLAN.md` | Old queue archived; referenced mapping/procedure and retired compatibility semantics retained |
-| `docs/dev/m50_research_report_gate_spec.md` | Old implementation queue archived; gate vocabulary and contract retained with current implementation state |
-| `docs/ATLAS_MERGE.md` | Historical integration narrative archived; dormant, isolation and rollback boundaries retained |
-| `REVIEW-2026-05-20.md` | Completed review moved out of the repository; recoverable in this ZIP |
+| `AGENTS.md` | Rules remain canonical; archived only as part of the before-edit receipt, not changed in this documentation pass |
+| `STATUS.md` | Compressed to current runtime truth, 09-23 result, current quota/experiment receipts and unresolved gates; older completed implementation detail removed |
+| `PROJECT.md` | Architecture/ownership map retained; iFinD paths now point to actual source adapters and the handbook |
+| `docs/ROADMAP.md` | Sole active queue. Completed B1 implementation and old handoff narratives compressed; One Loop, data, economic and user-value gates remain. The three 09-24 shares now have explicit owner/consumer/acceptance/rollback contracts; only existing CLI preflight is implemented |
+| `docs/data-sources/ifind.md` | Replaced stale fixed tool-count/account claims with current code-path map, dated historic observations, 09-23 pricing-page snapshot and 09-24 quota-exhaustion receipt. Existing parse errors/failures remain in denominators |
+| `docs/evidence/document_archive_digest.md` | Updated archive identity, hash, contents and restore result; this archived copy is the pre-edit digest |
 
-Still-referenced M54 preregistration and the live-track design contract were left
-intact. Code, tests, agent research skills/prompts, daily scripts, configuration,
-price history, ledgers, frozen experiment inputs and receipts were not compacted.
-Unchecked historical work is not automatically complete: surviving conditional
-maintenance items remain in ROADMAP, and dormant work must pass admission again.
+The 2026-09-17 archive is a separate historical archive of 16 AI handoff/implementation
+originals: Archive ID `mingcang-ai-docs-20260917`, file
+`mingcang-ai-docs-20260917-originals.zip`, SHA-256
+`5aba5719e7e6ace96ae382b463e9a59112c921c2c591b7da38aaf8e2628792c0`; its machine-local
+location is recorded in the private `LEADER.md` handoff. The 09-24 ZIP is a new reversible
+receipt for the current compression. Private local `CLAUDE.md`, `LEADER*.md` and
+`.claude/RESUME.md` are handled by a separate private archive and are not part of this
+public-repository ZIP.
 
-The current dated snapshot distinguishes the frozen 20-day baseline from the
-continued 21-day operational record. Output quality, data provenance and economic
-gates remain separate; no claim of completed user acceptance or profitability is
-created by this archival operation. Consult STATUS for the current evidence.
+Runtime artifacts, frozen inputs and failed attempts remain untouched. The 09-22 formal
+model session is still `missing`; its offline market check is not a backfill. The 09-23
+pipeline is `PIPELINE_PARTIAL` because the One Loop basis-drift gate remains blocked.
+Current iFinD account usage exhaustion is a source failure, not evidence of recovered
+coverage. Current model/source/user/economic gates remain in `STATUS.md` and `ROADMAP.md`.

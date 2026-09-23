@@ -80,6 +80,33 @@ def test_ordinary_bad_json_still_retries(no_codex, monkeypatch):
     assert provider_mod.quota_guard_tripped() is False
 
 
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_expired_oauth_fails_once_and_breaks_later_calls(no_codex, monkeypatch, caplog, stream):
+    calls = []
+    error = "Failed to authenticate: OAuth session expired and could not be refreshed"
+
+    def run(cmd, **kwargs):
+        calls.append(cmd[0])
+        return subprocess.CompletedProcess(
+            cmd, 1,
+            stdout=error if stream == "stdout" else "",
+            stderr=error if stream == "stderr" else "",
+        )
+
+    monkeypatch.setattr(provider_mod.subprocess, "run", run)
+    with caplog.at_level(logging.WARNING, logger=provider_mod.logger.name):
+        p = LocalCLIProvider(timeout=5)
+        for _ in range(5):
+            assert p.complete_structured("打分", TOOL) == {}
+
+    assert calls == ["claude"]
+    assert provider_mod.calls_made() == 1
+    assert provider_mod.quota_guard_reason() == "auth"
+    assert provider_mod.AUTH_MARKER in caplog.text
+    assert provider_mod.QUOTA_MARKER not in caplog.text
+    assert "返回空结果" not in caplog.text
+
+
 def test_force_fast_tier_downgrades_capable(monkeypatch):
     """跑批降档开关：capable → fast，默认关闭。"""
     monkeypatch.delenv("LOCAL_CLI_FORCE_FAST_TIER", raising=False)

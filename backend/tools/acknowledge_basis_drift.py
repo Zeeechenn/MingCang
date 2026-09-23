@@ -31,9 +31,11 @@ Usage::
         --symbol 603993 --date 2026-09-09 \\
         --operator owner --reason "provider cash-dividend re-base, reviewed" [--apply]
 
-Regenerate the affected panel afterwards so the day is re-evaluated::
-
-    python3 -m backend.tools.m63_daily --mode postmarket --date 2026-09-09 --no-llm
+After an approved clearance, create a new consistent SQLite snapshot with
+``scripts/sqlite_consistent_snapshot.py`` and audit that snapshot with
+``scripts/audit_one_loop_continuity.py``. The audit reads clearance rows alongside
+the saved panel. Preserve completed signal batches and panels; do not regenerate
+them just to acknowledge drift. A clearance does not repair historical prices.
 """
 from __future__ import annotations
 
@@ -140,8 +142,8 @@ def main(argv: list[str] | None = None) -> int:
         if not args.apply:
             print(
                 f"[dry-run] 将写入清理记录：{symbol}@{day} · operator={operator} · reason={reason}\n"
-                "          加 --apply 才真正写入；写入后需重跑该日面板："
-                f"python3 -m backend.tools.m63_daily --mode postmarket --date {day} --no-llm"
+                "          仅在获得明确确认后加 --apply；写入后创建新的一致 SQLite 快照并重新审计。\n"
+                "          保留已成功的信号与面板，不为确认漂移重跑；确认记录不修复历史价格。"
             )
             return 0
 
@@ -158,8 +160,9 @@ def main(argv: list[str] | None = None) -> int:
             f"✅ 已写入清理记录：{symbol}@{day} · operator={operator}\n"
             f"   理由：{reason}\n"
             f"   ⚠ degradation_events 原始事件行未改动（证据保留）。\n"
-            f"   下一步重跑该日面板：python3 -m backend.tools.m63_daily "
-            f"--mode postmarket --date {day} --no-llm"
+            "   下一步：使用 scripts/sqlite_consistent_snapshot.py 创建新快照，\n"
+            "   再用 scripts/audit_one_loop_continuity.py --db <新快照> 重新审计。\n"
+            "   保留已成功的信号与面板，不为确认漂移重跑；确认记录不修复历史价格。"
         )
         return 0
     finally:

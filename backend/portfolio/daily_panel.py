@@ -34,7 +34,7 @@ DEFAULT_UNIVERSE_PATH = Path("paper_trading/test2_universe.json")
 # 可小仓试错 / 可关注 / 观望 / 规避,一个都不含"买"。2026-09-02 审计:候选卡因此
 # 连续 10 个 close-confirmed 日为空,而底层权威批次每天有 6~14 支过阈标的。
 # 「可小仓试错」恰好等价于过 NEW_FRAMEWORK_ENTRY_THRESHOLD=25 的那一档——
-# 十天逐日核对 |{composite_score >= 25}| == |{recommendation == 可小仓试错}|,
+# 生产 score_to_recommendation 使用严格 > 25（等于 25 仍为可关注），
 # 所以只有它进候选卡;可关注/观望/规避是阈下档,不是买入候选。
 ENTRY_TIER_RECOMMENDATION = "可小仓试错"
 BUY_RECOMMENDATIONS = {"买", "买入", "强买", "考虑买入", "watch/考虑买入", ENTRY_TIER_RECOMMENDATION}
@@ -394,7 +394,21 @@ def _run_declares_authoritative(con: sqlite3.Connection, run_id: Any) -> bool:
     return flag is not False
 
 
-def _resolve_signal_batch(con: sqlite3.Connection, as_of: str) -> tuple[list[str], list[str]]:
+def _signal_trade_date_predicate(cols: set[str], as_of: str) -> tuple[str, tuple[Any, ...]]:
+    """Apply the same trade-date constraint during discovery and row selection."""
+    day = str(as_of)[:10]
+    if "data_timestamp" in cols:
+        return (
+            "(substr(data_timestamp, 1, 10) = ? OR "
+            "(data_timestamp IS NULL AND (date = ? OR date LIKE ?)))",
+            (day, day, f"{day}T%"),
+        )
+    return "(date = ? OR date LIKE ?)", (day, f"{day}T%")
+
+
+def _resolve_signal_batch_identity(
+    con: sqlite3.Connection, as_of: str
+) -> tuple[str | None, str | None, list[str]]:
     """Resolve the one official signal batch to read for a trade date.
 
     Three properties of ``signals`` make the naive ``date = <trade date>`` wrong,
@@ -412,33 +426,41 @@ def _resolve_signal_batch(con: sqlite3.Connection, as_of: str) -> tuple[list[str
        whose owning run declared authoritative coverage, which is the same
        batch identity the One Loop continuity auditor accepts.
 
-    Earlier authoritative batches on the same trade date are superseded reruns,
-    not ambiguity: the auditor treats the final one as the day's batch and
-    records the rest as ``superseded_signal_batches``. This mirrors that.
+    Earlier authoritative batches on the same trade date are superseded reruns.
+    Retain run_id as well as the timestamp: distinct runs can share a minute.
+    Tied latest authoritative runs cannot be ordered reliably, so report them
+    as ambiguous instead of choosing or merging them.
     """
     day = str(as_of)[:10]
     cols = _columns(con, "signals")
     run_id_expr = "run_id" if "run_id" in cols else "NULL AS run_id"
     run_id_group = "run_id" if "run_id" in cols else "NULL"
-    if "data_timestamp" in cols:
-        where = "(substr(data_timestamp, 1, 10) = ? OR (data_timestamp IS NULL AND (date = ? OR date LIKE ?)))"
-        params: tuple[Any, ...] = (day, day, f"{day}T%")
-    else:
-        where = "(date = ? OR date LIKE ?)"
-        params = (day, f"{day}T%")
+    where, params = _signal_trade_date_predicate(cols, as_of)
     rows = con.execute(
         f"SELECT date, {run_id_expr} FROM signals WHERE {where} GROUP BY date, {run_id_group}",
         params,
     ).fetchall()
     if not rows:
-        return [], [f"missing:no_signal_batch:{day}"]
+        return None, None, [f"missing:no_signal_batch:{day}"]
     authoritative = [row for row in rows if _run_declares_authoritative(con, row["run_id"])]
     if not authoritative:
-        return [], [f"missing:no_authoritative_signal_batch:{day}"]
+        return None, None, [f"missing:no_authoritative_signal_batch:{day}"]
     authoritative.sort(key=lambda row: str(row["date"]))
     selected = str(authoritative[-1]["date"])
+    if sum(str(row["date"]) == selected for row in authoritative) > 1:
+        return None, None, [f"ambiguous:authoritative_signal_batch:{day}"]
     superseded = len(authoritative) - 1
-    return [selected], ([f"superseded_signal_batches:{superseded}"] if superseded else [])
+    return (
+        selected,
+        authoritative[-1]["run_id"],
+        [f"superseded_signal_batches:{superseded}"] if superseded else [],
+    )
+
+
+def _resolve_signal_batch(con: sqlite3.Connection, as_of: str) -> tuple[list[str], list[str]]:
+    """Keep the historical date-list interface for existing read-only callers."""
+    batch_date, _, flags = _resolve_signal_batch_identity(con, as_of)
+    return ([batch_date] if batch_date is not None else []), flags
 
 
 def _build_buy_candidates(con: sqlite3.Connection, as_of: str) -> dict[str, Any]:
@@ -451,26 +473,31 @@ def _build_buy_candidates(con: sqlite3.Connection, as_of: str) -> dict[str, Any]
     if missing:
         return {"items": [], "flags": [f"missing:columns:{','.join(missing)}", *flags]}
 
-    batch_dates, batch_flags = _resolve_signal_batch(con, as_of)
+    batch_date, run_id, batch_flags = _resolve_signal_batch_identity(con, as_of)
     flags = [*batch_flags, *flags]
-    if not batch_dates:
+    if batch_date is None:
         return {"items": [], "flags": flags}
 
     names = _stock_names(con)
-    placeholders = ", ".join("?" * len(batch_dates))
+    day_where, day_params = _signal_trade_date_predicate(cols, as_of)
+    batch_where = "date = ?"
+    batch_params: tuple[Any, ...] = (batch_date,)
+    if "run_id" in cols:
+        batch_where += " AND run_id IS ?"
+        batch_params += (run_id,)
     rows = con.execute(
         f"""
         SELECT symbol, date, recommendation, composite_score, stop_loss, take_profit
         FROM signals
-        WHERE date IN ({placeholders})
+        WHERE {batch_where} AND {day_where}
         ORDER BY composite_score DESC
         """,
-        batch_dates,
+        (*batch_params, *day_params),
     ).fetchall()
     items = []
     for row in rows:
         recommendation = str(row["recommendation"] or "")
-        if recommendation not in BUY_RECOMMENDATIONS and "买" not in recommendation:
+        if recommendation not in BUY_RECOMMENDATIONS:
             continue
         symbol = str(row["symbol"])
         item_missing = []

@@ -82,3 +82,21 @@ describe('daily human review flow', () => {
     expect(screen.queryByLabelText('观察说明')).not.toBeInTheDocument();
   });
 });
+
+it('keeps dated backlog available without presenting it as current material', async () => {
+  data.items.push({ ...source, item_id: 'c'.repeat(64), name: '旧事项', subject: '600002',
+    card_type: 'human_confirmation', summary: '七月遗留研究', source_scope: 'historical', source_date: '2026-07-05', review: null });
+  data.items.push({ ...source, item_id: 'd'.repeat(64), name: '未标日期', subject: '600003',
+    card_type: 'human_confirmation', summary: '日期未知研究', source_scope: 'unverified', source_date: null, review: null });
+  data.summary = { current: 1, historical: 1, unverified: 1, recorded_choices: 0, with_observations: 0, independently_verified_outcomes: null };
+  render(<HumanReviewPanel asOf="2026-09-16" />);
+  await screen.findByText('等待资料');
+  expect(screen.queryByText('七月遗留研究')).not.toBeInTheDocument();
+  expect(screen.queryByText('日期未知研究')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('资料范围'), { target: { value: 'historical' } });
+  expect(screen.getByText('七月遗留研究')).toBeInTheDocument();
+  expect(screen.getByText(/历史事项，创建于 2026-07-05/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('资料范围'), { target: { value: 'unverified' } });
+  expect(screen.getByText('日期未知研究')).toBeInTheDocument();
+  expect(saveDailyReview).not.toHaveBeenCalled();
+});

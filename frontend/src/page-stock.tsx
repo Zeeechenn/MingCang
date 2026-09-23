@@ -2,6 +2,7 @@
 // 单股详情页 — 信号 / 研究 / 证据 / 新闻
 // ============================================================
 import React from 'react';
+import { EvidenceWorkspace } from './features/research/EvidenceWorkspace';
 import { refreshResearchCopilot, reviewLatestSignal } from './services/api';
 import { Badge, CCY, Card, MCStore, MKT, Markdown, McIcon, Metric, PageHead, PoolShell, PriceChart, RefreshButton, ScoreBar, Seg, SortSeg, Spark, applyPoolSort, assetKey, dailyChangePct, fmt, ltTone, navigate, pnlClass, recTone, scopedData, stockPath, toast, useSortCtl, useStockPoolFilter, useStore } from './shared';
 const { useState: useSState, useEffect: useSEffect } = React;
@@ -695,6 +696,7 @@ export function StockPage({ symbol, market }: any) {
     <div className="grid" style={{ gap: 14 }}>
       <StockHeader stock={stock} signal={signal} />
       <MarketRuleStrip stock={stock} signal={signal} />
+      {stock.market === 'CN' && <EvidenceWorkspace key={`${stock.market}:${symbol}`} symbol={symbol} endDate={signal?.date} enabled={MCStore.get().live !== 'demo' && MCStore.get().liveSources['identity'] === 'live'} />}
       {stock.market === 'CN' && <CaseLoopPanel stock={stock} signal={signal} />}
       <Card eyebrow="主图 · 120 个交易日" title="价格与风险参考线" className="pop pop-1" tour="chart"
         right={signal && <span className="t-faint" style={{ fontSize: 12 }}>虚线为系统计算的 ATR 止损 / 盈亏比止盈参考</span>}>

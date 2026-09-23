@@ -14,6 +14,7 @@ import os
 import re
 import sqlite3
 import sys
+from collections import Counter
 from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
@@ -148,6 +149,77 @@ def resolve_target(
     raise TargetResolutionError(
         f"无法解析主题“{clean_target}”: 观察哨主题和 biaodi1/test2 sector 均未匹配。请显式提供 --symbols。"
     )
+
+
+def build_research_preflight(
+    target: dict[str, Any], *, no_llm: bool = False, auto: bool = False
+) -> dict[str, Any]:
+    """Describe the existing manual stages without starting any of them."""
+    submitted = list(target["symbols"])
+    normalized = list(dict.fromkeys(submitted))
+    counts = Counter(submitted)
+    duplicates = [symbol for symbol in normalized if counts[symbol] > 1]
+    invalid = [symbol for symbol in normalized if not re.fullmatch(r"\d{6}", symbol)]
+    copilot_slots = submitted[:8]
+    warnings = []
+    if duplicates:
+        warnings.append("duplicate_symbols_default_run_repeats_stage_work")
+    if len(submitted) > 8:
+        warnings.append("copilot_default_run_covers_only_first_eight_occurrences")
+    if invalid:
+        warnings.append("invalid_symbol_format")
+    if len(normalized) > 8:
+        warnings.append("full_market_or_large_batch_requires_separate_capacity_contract")
+    return {
+        "schema_version": "m63_research_preflight.v1",
+        "status": "preflight_only_no_execution",
+        "scope": "manual_target_not_full_market_scan",
+        "target": target["target"],
+        "target_type": target["target_type"],
+        "source": target["source"],
+        "default_run_behavior_changed": False,
+        "submitted_symbols": submitted,
+        "normalized_unique_symbols": normalized,
+        "submitted_count": len(submitted),
+        "unique_count": len(normalized),
+        "duplicate_symbols": duplicates,
+        "invalid_symbols": invalid,
+        "stages_on_default_run": {
+            "backfill": {
+                "category_invocations": len(BACKFILL_CATEGORIES),
+                "submitted_symbol_occurrences": len(submitted),
+                "external_request_upper_bound": None,
+            },
+            "labels": {
+                "skipped": no_llm,
+                "per_symbol_attempts_at_most": 0 if no_llm else len(submitted),
+                "existing_label_coverage": "unknown_without_database_read",
+                "model_call_upper_bound": 0 if no_llm else None,
+            },
+            "deep_research": {
+                "skipped": no_llm,
+                "stage_invocations_at_most": 0 if no_llm else 1,
+                "requires_confirmation_unless_auto": not no_llm and not auto,
+                "model_call_upper_bound": 0 if no_llm else None,
+            },
+            "copilot": {
+                "skipped": no_llm,
+                "per_symbol_attempts_at_most": 0 if no_llm else len(copilot_slots),
+                "first_eight_occurrences": copilot_slots,
+                "omitted_occurrences": max(0, len(submitted) - 8),
+                "model_call_upper_bound": 0 if no_llm else None,
+            },
+            "watchlist": {"writes_on_default_run": True, "writes_on_preflight": False},
+        },
+        "budget": {
+            "external_request_upper_bound": None,
+            "model_call_upper_bound": 0 if no_llm else None,
+            "billed_cost_upper_bound": None,
+            "billing_status": "unknown",
+            "reason": "Stage attempt counts do not cap provider calls or subscription billing.",
+        },
+        "warnings": warnings,
+    }
 
 
 def _connect(db_path: str | Path | None = None) -> sqlite3.Connection:
@@ -526,9 +598,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--symbols", default="", help="主题成分股,逗号分隔")
     parser.add_argument("--auto", action="store_true", help="直接运行昂贵 LLM 深研,不再二次确认")
     parser.add_argument("--no-llm", action="store_true", help="跳过标签/深研/copilot LLM")
+    parser.add_argument(
+        "--preflight", action="store_true",
+        help="只读预检标的去重建议与阶段容量；不访问 DB、网络、LLM 或写报告",
+    )
     parser.add_argument("--from-queue", default=None, help="从 ~/.mingcang/m63_research_queue.json 读取队列条目")
     args = parser.parse_args(argv)
     try:
+        if args.preflight:
+            target = args.target
+            if args.from_queue:
+                entry = _queue_entry_by_id(load_queue(DEFAULT_QUEUE_PATH), args.from_queue)
+                if entry is None:
+                    raise TargetResolutionError(f"未找到队列条目:{args.from_queue}")
+                target = str(entry.get("target") or target)
+            resolved = resolve_target(target, symbols=_symbols_arg(args.symbols))
+            print(json.dumps(
+                build_research_preflight(resolved, no_llm=args.no_llm, auto=args.auto),
+                ensure_ascii=False, indent=2,
+            ))
+            return 0
         run_research(
             target=args.target,
             symbols=_symbols_arg(args.symbols),

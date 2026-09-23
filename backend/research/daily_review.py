@@ -101,6 +101,27 @@ def _expiry(item: dict) -> tuple[str | None, str]:
     return str(raw), "expired" if expired else "valid"
 
 
+def _source_period(raw: dict, kind: str, panel_as_of: str) -> tuple[str | None, str]:
+    """Queue creation dates never become fresh just by appearing in a new panel."""
+    if kind != "human_confirmation":
+        return panel_as_of, "current"
+    value = raw.get("created_at")
+    try:
+        if not isinstance(value, str):
+            return None, "unverified"
+        if len(value) == 10:
+            day = date.fromisoformat(value)
+        else:
+            timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if timestamp.tzinfo is None:
+                return None, "unverified"
+            day = timestamp.astimezone(ZoneInfo("Asia/Shanghai")).date()
+        current = date.fromisoformat(panel_as_of)
+        return day.isoformat(), "historical" if day < current else "current" if day == current else "unverified"
+    except ValueError:
+        return None, "unverified"
+
+
 def _items(panel: dict, digest: str) -> list[dict]:
     items: dict[str, dict] = {}
     for card in panel["cards"]:
@@ -119,9 +140,11 @@ def _items(panel: dict, digest: str) -> list[dict]:
             # Exact duplicates share one review identity. Changed evidence is a new proposal.
             item_id = _hash(source)
             expires_at, validity = _expiry(raw)
+            source_date, source_scope = _source_period(raw, kind, panel["as_of"])
             items[item_id] = {"item_id": item_id, **source, "name": raw.get("name") or subject,
                               "summary": raw.get("reason") or raw.get("recommendation") or card.get("summary") or "原始研究记录",
                               "expires_at": expires_at, "validity": validity,
+                              "source_date": source_date, "source_scope": source_scope,
                               "source_status": card.get("status"),
                               "reviewable": kind == "human_confirmation" or card.get("status") in {"ready", "ready_zero"}}
     return list(items.values())
@@ -145,7 +168,12 @@ def list_reviews(db, *, as_of: str | None = None) -> dict:
             item["review"] = by_id.get("daily-review:" + item["item_id"])
     except ReviewError as exc:
         items, panel, digest, warning = [], {}, None, str(exc)
-    return {"schema_version": VERSION, "panel_as_of": panel.get("as_of"), "panel_sha256": digest,
+    summary = {scope: sum(item["source_scope"] == scope for item in items)
+               for scope in ("current", "historical", "unverified")}
+    summary["recorded_choices"] = sum(item.get("review") is not None for item in items)
+    summary["with_observations"] = sum(bool((item.get("review") or {}).get("result", {}).get("outcomes")) for item in items)
+    return {"schema_version": VERSION, "summary": {**summary, "independently_verified_outcomes": None},
+            "panel_as_of": panel.get("as_of"), "panel_sha256": digest,
             "items": items, "history": [_serialize(row) for row in history], "warning": warning,
             "history_limit": 100, "can_execute": False, "queue_automatically_completed": False}
 
@@ -192,10 +220,10 @@ def record_review(db, *, as_of: str, panel_sha256: str, item_id: str, choice: st
 
 
 def record_outcome(db, *, review_id: str, expected_version: int, observation_id: str,
-                   status: str, note: str) -> dict:
+                   status: str, note: str, action: str = ACTION) -> dict:
     if status not in OUTCOMES or not note.strip() or len(note) > 4000 or not observation_id or len(observation_id) > 80:
         raise ReviewError("invalid_outcome", 422)
-    row = db.query(PendingAIAction).filter(PendingAIAction.action_id == review_id, PendingAIAction.action == ACTION).first()
+    row = db.query(PendingAIAction).filter(PendingAIAction.action_id == review_id, PendingAIAction.action == action).first()
     if row is None:
         raise ReviewError("review_not_found", 404)
     old = row.result_json
@@ -213,7 +241,7 @@ def record_outcome(db, *, review_id: str, expected_version: int, observation_id:
                                "recorded_at": _now().isoformat(), "source": "human_reported_not_independently_verified"})
     result["version"] += 1
     changed = db.execute(update(PendingAIAction).where(PendingAIAction.action_id == review_id,
-                        PendingAIAction.action == ACTION, PendingAIAction.result_json == old)
+                        PendingAIAction.action == action, PendingAIAction.result_json == old)
                         .values(result_json=_json(result)), execution_options={"synchronize_session": False})
     if changed.rowcount != 1:
         db.rollback()

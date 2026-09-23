@@ -6,6 +6,7 @@ from datetime import date, datetime
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 
 def test_ifind_notice_maps_payload(monkeypatch):
@@ -64,6 +65,25 @@ def test_ifind_notice_maps_payload(monkeypatch):
     assert rows[0]["published_at"] == datetime(2026, 6, 15)
     assert rows[0]["source_url"] == "https://example.test/a.pdf"
     assert rows[0]["provider"] == "ifind_notice"
+
+
+def test_ifind_notice_quota_is_provider_failure_not_empty_coverage(monkeypatch):
+    import backend.data.category_fetchers as fetchers
+    from backend.data.category_registry import FetchRequest
+
+    class QuotaClient:
+        def call_tool(self, mcp_id, name, arguments):
+            return SimpleNamespace(text=json.dumps({
+                "code": 1,
+                "msg": "success",
+                "data": {"answer": "当前账户MCP请求用量已耗尽"},
+            }, ensure_ascii=False))
+
+    monkeypatch.setattr(fetchers, "IfindMcpClient", QuotaClient)
+    with pytest.raises(RuntimeError, match="quota exhausted"):
+        fetchers.fetch_announcements_ifind_notice(FetchRequest(
+            symbol="603986", start=date(2026, 9, 21), end=date(2026, 9, 23)
+        ))
 
 
 def test_eastmoney_reportapi_maps_payload(monkeypatch):

@@ -272,3 +272,130 @@ make doc-check
 
 隔离worktree只解决源码冲突；DB/cache/memory/log/artifact/子进程还需独立路径与写保护。
 不得用正式日跑验证候选或重复成功日，不重置起算日，不为消除失败而改生产数据。
+
+### 人工复核资料范围（09-17）
+
+`/api/daily/reviews` 的条目增加 `source_date`、`source_scope`：候选/持仓资料使用原面板日期，
+队列事项按原 `created_at` 区分 `current` / `historical` / `unverified`；未来、缺失、非法或无时区
+时间戳不冒充本期。分类字段不进入原 item_id 哈希，已有意见身份保持兼容。
+`summary` 统计当前返回面板的三类条目、已记录选择和带观察的条目；独立验证数保持 null，
+不使用最多 100 条 history 推算全部历史完成率。前端默认本期资料，历史/日期待核可显式筛选。
+这些派生读取不改原队列状态、八卡 committed 产物、生产信号或收益指标。
+
+### 股票页证据与判断（experimental，09-17）
+
+research owner 的 `backend/research/page_context.py` 是唯一页面合同入口；CN 股票页
+`EvidenceWorkspace` 是显式消费者。`GET /api/research/{symbol}/page-context` 接收
+`start`、`as_of`、`market=CN`、`adjustment=stored`，窗口最多 366 天，仅闭市日期。
+基于 strict context builder 与同市场源记录返回选择、源 ID/原值、缺口、限制和 SHA-256。
+复权/币种/来源混用、无效 OHLC、最新行情超过 7 天、财报超过 120 天、披露/来源缺失
+均阻止模型请求；这些是本页研究门槛，不改变已有日跑标准。成交量单位和历史修订未认证。
+
+既有 `/api/ai/chat` 与 `/api/ai/chat/stream` 的可选 `research_context` 绑定上述字段/hash。
+服务端重建并校验，变更返回 409；不完整证据返回 422（SSE 已开始后为 error 事件）。
+该分支只向已有 provider 提交本页证据与当前问题，不注入账户、普通会话历史或策略记忆。
+结构化 claims 的 evidence_ids 必须属于原快照；引用 ID 校验不等于事实正确性验证。
+ChatMessage 保存原快照、请求参数与 prompt hash，失败留错误记录，不换源或自动重试；
+沿用 usage 估算，不将其当 resolved-model / billed-cost 回执。未传该字段的调用兼容原路径。
+
+`POST /api/research/page-reviews` 保存判断/依据/验证条件，使用既有 PendingAIAction 的
+`research.context_review` reviewed 身份（不可执行）；同证据相同提交幂等，不同选择 409。
+`GET /api/research/{symbol}/page-reviews` 返回该股票最新最多 100 条，
+`POST /api/research/page-reviews/{id}/outcomes` 复用版本化追加和 observation_id 幂等。
+远程写入分别要求 `research.page_review.record` / `research.page_review.outcome` allowlist。
+这些记录不计入日面板复核完成，不产生实际成交、独立验证收益或策略记忆。
+
+浏览器切换选择时废弃迟到的上下文响应，旧回答保留原快照；历史记录恢复完成前禁止新提交，
+读取失败必须显式重试。当前浏览器按股票记住一个研究会话 ID，完整会话仍在现有聊天存储。
+验证入口为 `tests/test_research_page_context.py`、`research-context.test.tsx` 和
+`frontend/smoke.cjs`；smoke 支持 `MC_SMOKE_PORT` 避免占用已有预览。所有模型与写入测试
+使用隔离夹具，浏览器检查不能证明实际 provider 可用、数据充分或收益提升。
+
+
+## Matched-model offline comparison (experimental)
+
+Owner: `backend.evidence.model_comparison`; sole consumer: explicit
+`backend.tools.model_comparison` CLI. The existing `nav_replay` owns execution.
+No new provider, scheduler, DB, order gateway or trading ledger is introduced.
+
+```bash
+python -m backend.tools.model_comparison --trial-root "$FROZEN_TRIAL" --output "$NEW_INVENTORY_JSON"
+python -m backend.tools.model_comparison --input "$EXPLICIT_BUNDLE_JSON" --output "$NEW_REPORT_JSON"
+python -m backend.tools.model_comparison --input "$EXPLICIT_BUNDLE_JSON" --account-at "$AWARE_CUTOFF" --arm "$ARM_ID" --output "$NEW_ACCOUNT_JSON"
+```
+
+Output must be a new file. Inventory verifies the frozen local protocol, universe
+and recognized code dependencies without importing the runner. It counts file
+presence, not successful calls. When a v2 registration is present, it verifies the
+registered candidate and saved authorization hashes and reports remaining shared
+reservation capacity; it does not grant new permission or change automation state.
+Interrupted and failed reservations stay consumed and visible.
+
+Add `--request-context` to the account-cutoff command to emit one arm's closed-session
+cash, positions and own history for a separately registered runner. The output remains
+execution-blocked: no live model call or continuous-account activation is performed.
+
+The replay bundle (`matched_model_replay.v1`) supplies `report_at` (aware time),
+`models` (two distinct model identities), `universe`, `sectors`, sorted `calendar`,
+complete `bars` (one raw CNY/share-volume bar per stock/session; explicit halted
+rows), `corporate_actions`, common `execution_config`/`cost_model`, a fixed
+`scheduled_sessions` denominator and `sessions`. Future/unclosed bars are invalid.
+Use the synthetic factory in `tests/test_model_comparison.py` as a shape example,
+never as live evidence. The frozen trial runner does not yet emit this bundle.
+
+Each session records its ID/date, aware `cutoff`, `as_of`, `shared_input_sha256`,
+and per-arm attempts. `recorded` attempts need actual `completed_at`, exact
+`resolved_model`, shared input binding, request/response/receipt hashes, a bound
+`answer` hash and one buy/hold/sell decision per symbol. Decisions need finite
+scores, reasons, risks and existing source/desk evidence references. `failed`,
+`not_invoked`, invalid and absent attempts produce no new orders and remain in
+failure denominators. Existing positions continue through their own account.
+Multiple decisions mapping to the same open are rejected explicitly.
+
+The adapter maps completion time to the first supplied calendar open strictly
+later than that time. It queues internally at the preceding calendar close;
+`engine_queue_date` is not the actual decision timestamp. The calendar must
+include this anchor and have independently checked exchange provenance. Delayed
+answers cannot fill an earlier open. A decision after the last available open is
+reported pending, with no fabricated future fill.
+
+`provenance` requires raw price basis, shares, CNY, named price/calendar/action
+sources, reviewer, source receipt hash, exact hashes of calendar/bars/actions/
+sectors, and per-symbol action coverage across the complete range. Empty events
+are not evidence of no actions. These are caller attestations; the evaluator
+checks consistency, **not source authenticity**. Bound receipt/answer hashes also
+need independent byte verification before prospective activation.
+
+Reports include each account's curve, fills, rejects, drawdown, transaction fees,
+slippage, turnover (gross filled notional / initial NAV), fixed-denominator failure
+rates, paired decision count and trading-net return difference. Optional
+`billed_cost_cny` requires `billing_receipt_sha256`; missing costs stay unknown,
+including failed or interrupted calls. Model billing is deducted only in a
+separate terminal wealth measure, not from simulated trading cash. The cash
+baseline assumes zero interest. All output remains diagnostic with
+`certifies_returns=false` and `economic_trial_activated=false`.
+
+`build_model_account_context` / `--account-at ... --arm ...` replays only bars,
+actions and completed responses visible at the cutoff, returning one arm's cash,
+positions, fills and own history. Other-arm answers are stripped before replay;
+future bars/actions/answers cannot change the visible account. Valuation ends at
+the latest closed session and does not claim intraday state. Full source review
+is still required before deriving the bounded input.
+
+Do not reuse an always-empty collection account for an activated trading trial.
+A subsequent reviewed version must wire each model request to this bounded
+prior simulated account, verify real receipts and execution sources, register
+its protocol and obtain the existing activation gates. Rollback: stop this CLI;
+no production or frozen-record rollback is needed.
+
+
+## Manual research capacity preflight
+
+`python -m backend.tools.m63_research --target example --symbols 603986,603986,300394 --preflight`
+prints a read-only plan without DB connections, network/model calls or report writes.
+It shows submitted and unique symbols, duplicates, invalid formats, stage attempt
+counts and the existing first-eight copilot limit. Attempts are not actual provider
+call limits; API/model/billing upper bounds remain unknown. `--no-llm` disables model
+stages in the plan but does not imply the normal research run has no data requests.
+Default execution, duplicate processing and provider order are unchanged. Tests:
+`tests/test_m63_research.py`; removing the optional branch rolls back this capability.

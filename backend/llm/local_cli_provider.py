@@ -56,9 +56,16 @@ _QUOTA_MARKERS = (
     "已达到使用上限",
     "额度已用尽",
 )
+_AUTH_MARKERS = (
+    "failed to authenticate",
+    "oauth session expired",
+    "not logged in",
+    "please run /login",
+)
 
 QUOTA_MARKER = "LLM_QUOTA_EXHAUSTED"
 BUDGET_MARKER = "LLM_CALL_BUDGET_EXHAUSTED"
+AUTH_MARKER = "LLM_AUTH_FAILED"
 
 _quota_tripped_at: float | None = None
 _trip_reason: str | None = None
@@ -101,8 +108,13 @@ def _looks_like_quota_exhaustion(*chunks: str) -> bool:
     return any(marker in blob for marker in _QUOTA_MARKERS)
 
 
+def _looks_like_auth_failure(*chunks: str) -> bool:
+    blob = " ".join(c for c in chunks if c).lower()
+    return any(marker in blob for marker in _AUTH_MARKERS)
+
+
 def quota_guard_tripped() -> bool:
-    """本进程是否已判定 claude CLI 额度耗尽。
+    """本进程是否已判定 Claude CLI 额度、认证或调用预算不可用。
 
     跑批脚本应在每个标的之后检查它：一旦为真，继续跑只会产出降级值污染产物，
     正确做法是停下并如实报告"已完成 N / 未完成 M"。
@@ -119,7 +131,7 @@ def reset_quota_guard() -> None:
 
 
 def quota_guard_reason() -> str | None:
-    """熔断原因："quota"=真额度耗尽 / "budget"=本进程预算用尽 / None=未熔断。"""
+    """熔断原因：quota=额度耗尽 / auth=认证失效 / budget=预算用尽 / None。"""
     return _trip_reason
 
 
@@ -133,6 +145,12 @@ def _trip_quota_guard(source: str, *, reason: str = "quota") -> None:
                 "LLM_CALL_BUDGET_EXHAUSTED 本进程调用预算 %s 次已用尽：后续调用一律短路。"
                 "这是本次跑批自设的预算，不是账号真的没额度了，不要据此中止整轮流水线；"
                 "已产出的结果里可能含降级值。",
+                source,
+            )
+        elif reason == "auth":
+            logger.critical(
+                "LLM_AUTH_FAILED %s：claude CLI 认证失效，本进程后续调用一律短路；"
+                "需要重新登录后再运行。已产出的结果里可能含降级值。",
                 source,
             )
         else:
@@ -218,7 +236,7 @@ class LocalCLIProvider(LLMProvider):
         no_codex_fallback = os.environ.get("LOCAL_CLI_NO_CODEX_FALLBACK", "").strip().lower() in ("1", "true", "yes")
 
         if quota_guard_tripped():
-            # 已知额度耗尽（或已用满预算）：不再 spawn 子进程，也不重试。
+            # 已知额度、认证或预算不可用：不再 spawn 子进程，也不重试。
             raise _FatalResult({}) from None
 
         global _call_count
@@ -240,6 +258,11 @@ class LocalCLIProvider(LLMProvider):
                 logger.warning("LocalCLI Claude stderr: %s", claude.stderr[:300])
             if _looks_like_quota_exhaustion(claude.stdout, claude.stderr):
                 _trip_quota_guard("claude -p")
+                if no_codex_fallback:
+                    raise _FatalResult({}) from None
+                raise _FatalResult(self._complete_with_codex(full_prompt)) from None
+            if _looks_like_auth_failure(claude.stdout, claude.stderr):
+                _trip_quota_guard("claude -p", reason="auth")
                 if no_codex_fallback:
                     raise _FatalResult({}) from None
                 raise _FatalResult(self._complete_with_codex(full_prompt)) from None

@@ -202,3 +202,33 @@ def test_concurrent_outcomes_cannot_overwrite_each_other(environment):
     assert len(latest['result']['outcomes']) == 1
     assert latest['result']['version'] == 2
     assert latest['result']['decision'] == saved['result']['decision']
+
+
+def test_review_queue_separates_old_current_and_undated_without_writes(environment):
+    client, Session, path = environment
+    panel = json.loads(path.read_text())
+    panel['cards'][6]['payload']['pending_queue'] = [
+        {'target': '600003', 'created_at': '2026-07-05', 'reason': '旧资料'},
+        {'target': '600004', 'created_at': '2026-09-16T09:00:00+08:00', 'reason': '本期资料'},
+        {'target': '600005', 'created_at': 'invalid', 'reason': '日期不明'},
+        {'target': '600006', 'created_at': '2026-09-17', 'reason': '未来日期'},
+    ]
+    path.write_text(json.dumps(panel))
+    before = path.read_bytes()
+    result = client.get('/daily/reviews?as_of=2026-09-16').json()
+    by_subject = {item['subject']: item for item in result['items']}
+    assert by_subject['600003']['source_scope'] == 'historical'
+    assert by_subject['600004']['source_scope'] == 'current'
+    assert by_subject['600005']['source_scope'] == 'unverified'
+    assert by_subject['600006']['source_scope'] == 'unverified'
+    assert result['summary'] == {'current': 3, 'historical': 1, 'unverified': 2,
+                                  'recorded_choices': 0, 'with_observations': 0,
+                                  'independently_verified_outcomes': None}
+    assert path.read_bytes() == before
+    with Session() as db:
+        assert db.query(PendingAIAction).count() == 0
+    saved = client.post('/daily/reviews', json=body(by_subject['600004'])).json()
+    assert saved['result']['queue_task_completed'] is False
+    updated = client.get('/daily/reviews').json()['summary']
+    assert updated['recorded_choices'] == 1
+    assert updated['with_observations'] == 0

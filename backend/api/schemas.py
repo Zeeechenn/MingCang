@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from backend.research.page_context import PageBinding
+
 
 class StockOut(BaseModel):
     symbol: str
@@ -402,6 +404,7 @@ class StressTestResponse(BaseModel):
 
 
 class AIChatRequest(BaseModel):
+    research_context: PageBinding | None = None
     message: str
     mode: str = "general"  # general / long_term_team
     history: list[dict] = []
@@ -409,6 +412,9 @@ class AIChatRequest(BaseModel):
 
 
 class AIChatResponse(BaseModel):
+    research_context: dict | None = None
+    research_claims: list[dict] = []
+    session_id: str | None = None
     answer: str
     citations: list[str] = []
     used_resources: list[str] = []

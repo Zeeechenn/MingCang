@@ -6,8 +6,8 @@
 #   Track B（实盘决策线）      = ④⑤⑥⑦，跑前先过它自己的行情数据门
 #     （scripts/live_track_gate.py：0=通过 5=未过→跳过⑤⑥⑦ 其他=用法/IO错误）
 # 两条 track 互不阻塞彼此的中止：一条 aborted/skipped 不会拖累另一条继续跑。
-# 只有真正的 LLM 账号额度熔断（LLM_QUOTA_EXHAUSTED / 额度耗尽）才会让整轮立刻
-# 停手——两条 track 都没有继续的意义。
+# LLM 账号额度耗尽或 Claude CLI 认证失效时，整轮立刻停手——两条 track
+# 都没有继续的意义。
 #
 # --no-shadow、m63 的 --no-llm、标签不带 --force 且先于深评等额度纪律固定在这里。
 #
@@ -56,6 +56,7 @@ LOCK_DIR="$RUNTIME_ROOT/pipeline.lock"
 RUN_DIR=""
 LOCK_HELD=false
 CURRENT_STEP="bootstrap"
+CURRENT_TRACK=""
 ONE_LOOP_STATUS="pending"
 
 export PYTHONPATH=.
@@ -70,7 +71,13 @@ write_state() {
 }
 fail() {
   local message="$*"
-  write_state aborted "$message" >/dev/null 2>&1 || true
+  local total
+  local track_args=()
+  total=$(calls_so_far)
+  [ -n "$CURRENT_TRACK" ] && [ "$CURRENT_STEP" != "done" ] \
+    && track_args=(--track "$CURRENT_TRACK")
+  write_state aborted "$message" --llm-calls "$total" "${track_args[@]}" >/dev/null 2>&1 || true
+  say "本轮 LLM 调用合计 ≈ ${total} 次"
   say "⛔ 中止：$message"
   say "PIPELINE_ABORTED"
   exit 1
@@ -78,6 +85,7 @@ fail() {
 begin_step() {
   # $1=step 名 $2=消息 $3=可选 track（one_loop|live）
   CURRENT_STEP="$1"
+  CURRENT_TRACK="${3:-}"
   local extra=()
   [ -n "${3:-}" ] && extra=(--track "$3")
   write_state running "$2" "${extra[@]}" >/dev/null || fail "无法更新结构化运行状态：$STATE"
@@ -118,10 +126,13 @@ RUN_DIR="$(mktemp -d "$RUNTIME_ROOT/run-${STAMP}.XXXXXX")" || {
   exit 1
 }
 
-# 额度熔断哨兵：真账号额度耗尽时立刻停手全脚本（重跑只会在恢复瞬间再打空一次），
-# 两条 track 都没有继续的意义。只认这两个标记——本进程预算用尽的
+# 致命 LLM 哨兵：真账号额度耗尽或 CLI 认证失效时立刻停手全脚本。
+# 两条 track 都没有继续的意义。本进程预算用尽的
 # LLM_CALL_BUDGET_EXHAUSTED 不在此列，见下面的 budget_check。
 quota_check() {
+  if grep -q "LLM_AUTH_FAILED" "$1" 2>/dev/null; then
+    fail "$2 Claude CLI 认证失效，后续步骤全部跳过；重新登录后再运行"
+  fi
   if grep -q "LLM_QUOTA_EXHAUSTED\|额度耗尽" "$1" 2>/dev/null; then
     fail "$2 触发 LLM 额度熔断，后续步骤全部跳过，不要重跑，等额度恢复"
   fi
@@ -142,6 +153,14 @@ calls_of() {
   value=$(grep -o "LLM_CALL_TOTAL claude 调用 [0-9]*" "$1" 2>/dev/null \
     | grep -o "[0-9]*" | tail -1 || true)
   printf '%s' "${value:-0}"
+}
+calls_so_far() {
+  local total=0 n f
+  for f in "${L1:-}" "${L2:-}" "${L4:-}" "${L6:-}" "${L7:-}"; do
+    n=$(calls_of "$f")
+    total=$((total + ${n:-0}))
+  done
+  printf '%s' "$total"
 }
 
 # 非致命命令执行：记日志、跑真额度/预算哨兵，返回真实退出码——不 fail() 整个脚本。
@@ -233,7 +252,7 @@ run_track_a_123() {
 
   L2="paper_trading/_m63_postmarket_${STAMP}.log"
   begin_step "02_postmarket" "One Loop postmarket panel" "one_loop"
-  say "② One Loop 盘后面板（--no-llm，0 次调用）"
+  say "② One Loop 盘后面板（--no-llm，请求禁用模型）"
   if ! run_step "$L2" "②" "$PY" -m backend.tools.m63_daily \
       --mode postmarket --date "$DAY" --no-llm; then
     abort_track_a "② 命令失败，见 $L2"; return 1
@@ -241,7 +260,7 @@ run_track_a_123() {
   if ! grep -q "postmarket_${DAY}.md" "$L2"; then
     abort_track_a "② 面板未落盘，见 $L2"; return 1
   fi
-  say "   ✅ 面板已写"
+  say "   ✅ 面板已写；本步 LLM 调用 $(calls_of "$L2") 次"
 
   begin_step "03_one_loop" "One Loop continuity audit" "one_loop"
   say "③ One Loop 审计"
@@ -462,7 +481,7 @@ fi  # end: else branch of `if $ONE_LOOP_ONLY` (Track B execution)
 
 # ── 汇总 ────────────────────────────────────────────────────────────────
 TOTAL=0
-for f in "$L1" "$L4" "$L6" "$L7"; do
+for f in "$L1" "$L2" "$L4" "$L6" "$L7"; do
   n=$(calls_of "$f")
   TOTAL=$((TOTAL + ${n:-0}))
 done

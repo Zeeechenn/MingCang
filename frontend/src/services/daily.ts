@@ -40,6 +40,7 @@ export interface HumanReviewSource {
   item_id: string; panel_as_of: string; panel_sha256: string; run_id: string;
   card_type: string; subject: string; name: string; summary: string;
   original: Record<string, unknown>; expires_at: string | null;
+  source_date?: string | null; source_scope?: 'current' | 'historical' | 'unverified';
   validity: 'valid' | 'expired' | 'unknown'; source_status: string; reviewable: boolean;
 }
 export interface HumanReview {
@@ -51,6 +52,7 @@ export interface HumanReview {
   };
 }
 export interface DailyReviews {
+  summary?: { current: number; historical: number; unverified: number; recorded_choices: number; with_observations: number; independently_verified_outcomes: null };
   panel_as_of: string | null; panel_sha256: string | null; warning: string | null;
   items: Array<HumanReviewSource & { review: HumanReview | null }>;
   history: HumanReview[]; history_limit: number; can_execute: false;

@@ -97,3 +97,49 @@ def test_fetch_news_ifind_returns_empty_when_disabled_or_without_token(monkeypat
     monkeypatch.setattr(settings, "ifind_mcp_enabled", True)
     monkeypatch.setattr(settings, "ifind_mcp_token", "")
     assert fetch_news_ifind("603986", "兆易创新") == []
+
+
+def test_ifind_quota_answer_stops_title_and_content_requests(monkeypatch, caplog):
+    from backend.config import settings
+    from backend.data import ifind_mcp
+    from backend.data.news import fetch_news_ifind, fetch_titles_ifind
+
+    calls = []
+
+    class QuotaClient:
+        def call_tool(self, mcp_id, tool, arguments):
+            calls.append(tool)
+            return type("Result", (), {"text": json.dumps({
+                "code": 1,
+                "msg": "success",
+                "data": {"answer": "当前账户MCP请求用量已耗尽"},
+            }, ensure_ascii=False)})()
+
+    monkeypatch.setattr(settings, "ifind_mcp_enabled", True)
+    monkeypatch.setattr(settings, "ifind_mcp_token", "unit-token")
+    monkeypatch.setattr(ifind_mcp, "IfindMcpClient", QuotaClient)
+
+    assert fetch_titles_ifind("603986", "兆易创新") == []
+    assert calls == ["search_news"]
+    assert fetch_news_ifind("603986", "兆易创新") == []
+    assert calls == ["search_news", "search_news"]
+    assert "quota exhausted" in caplog.text
+    assert "Expecting value" not in caplog.text
+
+
+def test_ifind_title_fetch_uses_shared_item_parser(monkeypatch):
+    from backend.config import settings
+    from backend.data import ifind_mcp
+    from backend.data.news import fetch_titles_ifind
+
+    class NewsClient:
+        def call_tool(self, mcp_id, tool, arguments):
+            return _FakeIfindResult([{
+                "资讯标题": "兆易创新获得新增订单",
+                "日期": "2026-09-23",
+            }])
+
+    monkeypatch.setattr(settings, "ifind_mcp_enabled", True)
+    monkeypatch.setattr(settings, "ifind_mcp_token", "unit-token")
+    monkeypatch.setattr(ifind_mcp, "IfindMcpClient", NewsClient)
+    assert fetch_titles_ifind("603986", "兆易创新") == ["兆易创新获得新增订单"]

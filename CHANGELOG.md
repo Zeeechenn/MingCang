@@ -8,6 +8,60 @@
 
 ## [Unreleased]
 
+## [v0.8.3] 证据研究与运行可靠性 / Evidence research and run reliability（2026-09-24）
+
+### Added / 新增
+
+- 手动批量研究增加 `--preflight`：零数据写入、零外部调用，报告重复标的、各阶段覆盖、前 8 项 copilot 限制和未知费用上限，不改变默认执行语义。
+- 模型试验增加冻结登记、授权与候选代码核验，以及按截止时点隔离的逐臂账户请求上下文；失败预约计入总量，未知身份/费用和数据缺口显式保留。
+
+### Changed / 变更
+
+- iFind 新闻/公告识别明确的额度耗尽回执，停止同次函数的后续请求，不再误报为空 JSON；独立新闻兜底仍保留。
+- Claude CLI 认证失效触发熔断；日测中止状态记录所属步骤、track 和已发生调用，盘后 `--no-llm` 禁止裁量模型调用并计入真实汇总。
+- 压缩 AI 接手文档，将完整原文及哈希清单归档在仓库外；三篇外部产品案例的适用方法与不采用项纳入唯一开发计划。
+
+### Safety / 安全边界
+
+- 保留历史价格漂移阻塞、冻结试验和既有账本；本次发布不执行真实交易、不激活经济试验，不把测试通过或连续运行当成收益证据。
+
+### Verification / 验证
+
+- 隔离 `make verify` 全部通过：后端 2,492 passed / 14 skipped；新增公告回归补跑 19 passed（含 18 项重复），共 2,493 个不同通过用例。前端 51 项、构建、ESLint、桌面/手机 Chromium 冒烟通过。mypy 379 文件、版本/锁文件、文档权威、发布卫生和 MkDocs strict 通过。
+- 以下条目汇总本版本自上一公开版本以来已完成的工作。
+
+### Included work / 本版包含
+
+- Add opt-in matched-model replay and frozen-trial inventory. Map actual response
+  completion to the next available open (including weekends), retain failed/missing
+  sessions, separate unknown model billing and reject incomplete execution inputs.
+  Reuse the existing cash NAV engine without changing frozen experiment code,
+  production schedules, price history or historical ledgers.
+
+- Bound panel candidate reads to the selected run ID and trade date as well as the
+  run timestamp. Report tied latest official runs as ambiguous; reject negated or
+  unknown buy wording while preserving supported legacy vocabulary. Added production
+  timestamp/threshold fixtures and verified unchanged output for 21 saved dates.
+- Made the local-only live subset helper derive its root from its own file location;
+  selection, holding inclusion and freshness warnings retain their existing behavior.
+- Narrowed offline CLI initialization failures to required CLI-home state writes.
+  Isolated initialize-only probes do not change frozen tests or certify authenticated
+  model execution, provider identity or billed costs.
+
+- Added an experimental CN stock-page evidence workspace: selected dates and source
+  versions bind the existing AI chat request, answer citations and saved judgments.
+  Preserve original snapshots and append versioned observations; reload restores
+  history, and incomplete/stale evidence blocks model requests. No trading, queue
+  completion, strategy-memory promotion or return certification is implied.
+
+- Separate panel-day, historical and unverified-date research material in the existing
+  human-review view. Add exact current-panel choice/observation counts and visible
+  watchtower coverage gaps; preserve source identities, original panels and research
+  queue state. UI filters never complete tasks or certify independent outcomes.
+- Recheck current price-maintenance coverage and run zero-model-call provider startup
+  probes externally; stale candidates, missing action records and unresolved startup
+  permissions remain blockers rather than being promoted to completed evidence.
+
 - Archived historical AI handoffs/checkpoints and completed implementation narratives
   outside the repository with a SHA-256 manifest and verified compressed originals.
   Refreshed AGENTS/Claude/Pi routing, STATUS and the sole ROADMAP to separate the

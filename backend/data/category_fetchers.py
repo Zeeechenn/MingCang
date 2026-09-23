@@ -603,6 +603,13 @@ def fetch_announcements_ifind_notice(request: FetchRequest) -> list[dict]:
             "size": size,
         },
     )
+    parsed = parse_ifind_mcp_text(result.text).get("json")
+    data = parsed.get("data") if isinstance(parsed, dict) else None
+    answer = data.get("answer") if isinstance(data, dict) else None
+    if isinstance(answer, str) and "MCP请求用量已耗尽" in answer:
+        # Let the existing category registry record a provider failure and try
+        # the next registered source; an exhausted account is not empty coverage.
+        raise RuntimeError("iFinD MCP quota exhausted")
     rows = []
     for item in _extract_ifind_items(result.text):
         row = _announcement_row(item, request)
