@@ -17,7 +17,7 @@ COVERAGE_FILE ?= /tmp/mingcang-coverage
 COVERAGE_XML ?= coverage.xml
 PIP_AUDIT_CACHE_DIR ?= /tmp/mingcang-pip-audit-cache
 
-.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-smoke lint hygiene doc-check security dependency-audit release-check fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down research-test
+.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-smoke lint hygiene doc-check security dependency-audit release-check fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down research-test research-check
 
 help:
 	@echo "MingCang Makefile commands:"
@@ -27,7 +27,8 @@ help:
 	@echo "  python-lock-check 检查 uv.lock 是否与 pyproject 同步"
 	@echo "  precommit-install 安装 Git pre-commit hooks"
 	@echo "  test         跑后端测试套件"
-	@echo "  research-test 跑新闻与全市场股票池联合离线测试；可用 OUT_DIR 指定新的外部输出目录"
+	@echo "  research-test 跑显式行情源与新闻快照的真实历史流程；需要 MARKET_SOURCE NEWS_SNAPSHOT INDUSTRY_METADATA DECISION_DATES OUT_DIR；FACTOR_SOURCE 可选"
+	@echo "  research-check 跑新闻与股票池联合离线回归；可用 OUT_DIR 指定输出目录"
 	@echo "  coverage     跑后端测试并输出覆盖率报告"
 	@echo "  frontend-test 跑前端 node:test 单元测试"
 	@echo "  frontend-lint 跑前端 ESLint（阻塞式，全量输出）"
@@ -77,6 +78,14 @@ test:
 	PYTHONPATH=. $(PYTEST) -q -o cache_dir=$(PYTEST_CACHE_DIR)
 
 research-test:
+	@test -n "$(MARKET_SOURCE)" || { echo "research-test requires MARKET_SOURCE" >&2; exit 2; }
+	@test -n "$(NEWS_SNAPSHOT)" || { echo "research-test requires NEWS_SNAPSHOT" >&2; exit 2; }
+	@test -n "$(INDUSTRY_METADATA)" || { echo "research-test requires INDUSTRY_METADATA" >&2; exit 2; }
+	@test -n "$(DECISION_DATES)" || { echo "research-test requires DECISION_DATES (comma-separated YYYY-MM-DD)" >&2; exit 2; }
+	@test -n "$(OUT_DIR)" || { echo "research-test requires OUT_DIR" >&2; exit 2; }
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/research_checks/historical.py run --market-source "$(MARKET_SOURCE)" --news-snapshot "$(NEWS_SNAPSHOT)" --industry-metadata "$(INDUSTRY_METADATA)" --decision-dates "$(DECISION_DATES)" --out-dir "$(OUT_DIR)" $(if $(FACTOR_SOURCE),--factor-source "$(FACTOR_SOURCE)",)
+
+research-check:
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/research_checks/joint.py check $(if $(OUT_DIR),--out-dir "$(OUT_DIR)",)
 
 coverage:

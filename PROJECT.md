@@ -59,7 +59,8 @@ be used by CLI commands or external callers.
 | M63 report rendering | `backend.workflows.render` | `backend.tools.m63_render` |
 | frontend API/live | `frontend/src/services/api.ts`, `frontend/src/services/live.ts` | `frontend/src/api.ts`, `frontend/src/live.ts` |
 | M68 news mirror | `backend.data.news_shadow` | `backend.tools.m68_news_shadow` (CLI); `backend.evidence.news_event_readiness` implemented experimental explicit offline audit CLI, shadow/not promoting, no production consumer |
-| offline news/universe research checks | `scripts/research_checks/joint.py` | `make research-test`; operator-only offline consumer of registered market preflight and `backend.evidence.news_event_readiness`; no production or scheduler consumer |
+| historical news/universe research | `scripts/research_checks/historical.py` | `make research-test`; explicit real-data technical replay and timestamp-filtered news inputs; model stages report blocked until implemented/authorized; no production or scheduler consumer |
+| research code checks | `scripts/research_checks/joint.py` | `make research-check`; preserved registered offline regression/preparation bundle |
 | test2-compatible replay | `backend.backtest.test2_replay`, `backend.backtest.test2_models` | `backend.tools.m68_test2_compare` (derived A/B/C evaluator) |
 | completed-run contract | `backend.ops.run_envelope`, `backend.ops.job_ledger` | scheduler/manual/test2 entrypoint adapters |
 | human research choices | `backend.research.daily_review`, `backend.api.routes.daily`, `frontend/src/features/daily/HumanReview.tsx` | existing `pending_ai_actions`; non-executable reviewed records only |

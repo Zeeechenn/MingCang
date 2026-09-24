@@ -25,6 +25,9 @@ memory, replay or risk behavior changes.
 
 ## Active queue
 
+Owner priority (09-24): execute the isolated historical research in §4 first,
+rather than waiting for new daily samples. This does not enable production writes.
+
 ### 1. New-date panel quality and human completion — P0-A/P1
 
 Prove the full path: see a change, inspect evidence, accept/modify/reject, then
@@ -90,12 +93,12 @@ approval. The v3 candidate stays default-off, `prepared_not_activated`, and fake
 See the task-scoped [model contract](dev/MODEL_COMPARISON_CONTRACT.md) for the old
 channel experiment.
 
-The proposed **full-market versus fixed-25 GPT-6 universe trial** is a separate
-research item, distinct from the daily run and from that existing authorization.
-Keep its candidate, scope, data authorization, denominator, failure rules and
-acceptance in its own trial record; do not inherit the old 60-period approval or
-change daily behavior. Do not execute until that trial's own frozen contract and
-gates are satisfied.
+Prioritize full-market/fixed-25 historical replay and same-date news/model arms. `make research-test` runs that workflow;
+`make research-check` runs code checks. See the [news contract](dev/NEWS_EVENT_RISK_CONTRACT.md)
+for protocol, budget and rollback. Keep old trials and One Loop. Freeze selection before labels; current metadata is not
+historical membership. Prepared inputs do not complete model arms. Raw-price
+statistics are not NAV; economic replay needs trusted actions/execution inputs.
+Models need forward validation.
 
 ### 5. Trusted attribution and one-variable improvement — P3/P4
 

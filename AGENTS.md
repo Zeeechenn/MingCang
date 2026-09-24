@@ -22,7 +22,7 @@ project plans. Read only the document needed:
 | P0 price/data/NAV maintenance | `docs/dev/P0_DATA_FOUNDATION_CONTRACT.md` |
 | implementation contracts and validation | `docs_public/DEVELOPER_GUIDE.md` |
 | install or public onboarding | `README.md`, then `docs_public/` |
-| generic “跑测试” / “run tests”; joint news/universe checks | `make research-test` (offline news + universe checks) |
+| “跑测试” / “run tests” | Real history: `make research-test`; code checks: `make research-check` |
 | formal daily tests | local `LEADER.md` and `scripts/run_daily_tests.sh` |
 | releases/history | `CHANGELOG.md`, only on demand |
 | archived AI handoff/history | `docs/evidence/document_archive_digest.md`, only on demand |
