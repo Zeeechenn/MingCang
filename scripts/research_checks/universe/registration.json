@@ -1,0 +1,11 @@
+{
+  "schema": "universe_comparison.offline_registration.v1",
+  "registered_date": "2026-09-24",
+  "status": "prepared_not_activated",
+  "files": {
+    "prepare.py": "982263005b49df577193bc793a4453f7aab306f72439f5a1d6efa75eb4fea7d6",
+    "protocol.json": "5a32caecffdf9dc0019c10e9ac4ad4ea6043dffb9cab79476bad23fe01a84528",
+    "baseline-universe.json": "80111d64e2936cd56701e62edc5baeab0e8963ceef9481eb7af3de7e249f085d"
+  },
+  "authorization_boundary": "User requested test writing and assessment. This registration enables offline preparation only, with no original trial reservations, provider calls, model calls, scheduling changes or economic activation."
+}

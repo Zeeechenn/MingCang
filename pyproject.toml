@@ -77,6 +77,9 @@ exclude = ["tests*", "frontend*", "docs*"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+# These upstream Python files are immutable registered blobs. Keep their source hashes stable.
+# The portable runner and its tests remain covered by the full Ruff lint and format hooks.
+extend-exclude = ["scripts/research_checks/universe/prepare.py", "scripts/research_checks/universe/make_fixture.py", "scripts/research_checks/universe/test_prepare.py"]
 
 [tool.ruff.lint]
 select = [

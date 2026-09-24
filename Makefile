@@ -17,7 +17,7 @@ COVERAGE_FILE ?= /tmp/mingcang-coverage
 COVERAGE_XML ?= coverage.xml
 PIP_AUDIT_CACHE_DIR ?= /tmp/mingcang-pip-audit-cache
 
-.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-smoke lint hygiene doc-check security dependency-audit release-check fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down
+.PHONY: help install python-sync python-lock python-lock-check precommit-install test coverage frontend-test frontend-lint frontend-smoke lint hygiene doc-check security dependency-audit release-check fmt typecheck check verify demo reproduce-evidence dev build coverage-snapshot agent-setup agent agent-dev agent-mcp agent-mcp-config clean docker-build docker-up docker-down research-test
 
 help:
 	@echo "MingCang Makefile commands:"
@@ -27,6 +27,7 @@ help:
 	@echo "  python-lock-check 检查 uv.lock 是否与 pyproject 同步"
 	@echo "  precommit-install 安装 Git pre-commit hooks"
 	@echo "  test         跑后端测试套件"
+	@echo "  research-test 跑新闻与全市场股票池联合离线测试；可用 OUT_DIR 指定新的外部输出目录"
 	@echo "  coverage     跑后端测试并输出覆盖率报告"
 	@echo "  frontend-test 跑前端 node:test 单元测试"
 	@echo "  frontend-lint 跑前端 ESLint（阻塞式，全量输出）"
@@ -74,6 +75,9 @@ precommit-install:
 
 test:
 	PYTHONPATH=. $(PYTEST) -q -o cache_dir=$(PYTEST_CACHE_DIR)
+
+research-test:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/research_checks/joint.py check $(if $(OUT_DIR),--out-dir "$(OUT_DIR)",)
 
 coverage:
 	COVERAGE_FILE=$(COVERAGE_FILE) PYTHONPATH=. $(PYTEST) -q -o cache_dir=$(PYTEST_CACHE_DIR) --cov=backend --cov-report=term-missing --cov-report=xml:$(COVERAGE_XML)

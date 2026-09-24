@@ -1,0 +1,19 @@
+{
+  "schema": "mingcang_joint_portable_offline_protocol.v1",
+  "status": "offline_preparation_only",
+  "news_auditor_relative_path": "backend/evidence/news_event_readiness.py",
+  "news_auditor_sha256": "fa5cb24a1e896ed4ceba61f5e2b157104ad097a261ae13fcc753b147c60b79e7",
+  "original_registration_sha256": "b7bc2e7951357686d34e582b04a41150de4dd736ed63900248eb3cac1b6795fa",
+  "market_bundle": "universe/",
+  "news_entrypoint": "registered repository news readiness source with sqlite mode=ro&immutable=1 and PRAGMA query_only=ON",
+  "activation": {
+    "network": false,
+    "model": false,
+    "economic": false,
+    "production_write": false,
+    "schedule_change": false
+  },
+  "news_forward_protocol_frozen": false,
+  "provider_model_cost_savings": null,
+  "provenance_note": "The copied universe baseline files retain their source registration unchanged. This portable registration binds the repo-owned runner, its protocol, and the repository news auditor."
+}

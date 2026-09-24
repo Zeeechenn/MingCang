@@ -1,5 +1,9 @@
 # M54 新闻层 v2 — 干净 OOS 预注册判据（先于跑数落盘）
 
+> 历史预注册/结果记录，保留 §4、§13 的固定阈值和代码引用。M54 不再是
+> 活跃里程碑；本文件本身不授权新调用、重跑、扩样或生产启用。当前新闻与
+> 事件风险边界见 `NEWS_EVENT_RISK_CONTRACT.md`，唯一队列见 `../ROADMAP.md`。
+
 > 2026-06-28 落盘。承接 M52 收口（标题级情感无 IC）与 M54 设计 spec。**先写阈值与窗口，结果出来只对照、不事后挑解释**（守干净 OOS 纪律，防 p-hacking）。
 > 全程 observe-only / 生产 diff=0 / 独立 OOS cache 命名空间 `oos_news_v2` / 不动 live test2 / 不污染 M52 的 legacy+capable 候选判据。
 

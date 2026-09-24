@@ -16,16 +16,22 @@ project plans. Read only the document needed:
 | current runtime, completed implementation, evidence gaps | `STATUS.md` |
 | continuation, ordering, acceptance and next steps | `docs/ROADMAP.md` — sole active plan |
 | architecture, ownership, canonical imports | `PROJECT.md` |
+| M54/M68 event-risk or direction acceptance | `docs/dev/NEWS_EVENT_RISK_CONTRACT.md` |
+| GPT-6/Claude experiment mechanics | `docs/dev/MODEL_COMPARISON_CONTRACT.md` |
+| reviewed external-method microbatches | `docs/dev/EXTERNAL_METHODS_CONTRACT.md` |
+| P0 price/data/NAV maintenance | `docs/dev/P0_DATA_FOUNDATION_CONTRACT.md` |
 | implementation contracts and validation | `docs_public/DEVELOPER_GUIDE.md` |
 | install or public onboarding | `README.md`, then `docs_public/` |
-| owner asks to run daily tests | local `LEADER.md` and `scripts/run_daily_tests.sh` |
+| generic “跑测试” / “run tests”; joint news/universe checks | `make research-test` (offline news + universe checks) |
+| formal daily tests | local `LEADER.md` and `scripts/run_daily_tests.sh` |
 | releases/history | `CHANGELOG.md`, only on demand |
 | archived AI handoff/history | `docs/evidence/document_archive_digest.md`, only on demand |
 
-Do not preload old reports, `docs/dev/*`, archives, CHANGELOG or README_EN for
-routine coding. STATUS + ROADMAP contain the active handoff; no external long
-report is needed to continue. Historical counts or unchecked old plans are not
-current instructions. Consult external-quant evidence only for that proposal.
+Do not preload old reports, task-scoped `docs/dev/*` contracts, archives,
+CHANGELOG or README_EN for routine coding. STATUS + ROADMAP contain the active
+handoff; read a scoped contract only for its named task. Historical counts or
+unchecked old plans are not current instructions. Consult external-quant evidence
+only for that proposal.
 
 ## Local and remote permissions
 

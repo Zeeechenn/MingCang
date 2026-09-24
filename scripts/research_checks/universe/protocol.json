@@ -1,0 +1,38 @@
+{
+  "schema": "universe_comparison.offline.v1",
+  "status": "prepared_not_activated",
+  "question": "同一 GPT-6 和同一筛选规则下，全市场机会集是否优于原固定 25 股机会集",
+  "model_requested": "gpt-6-astra",
+  "reasoning_effort": "high",
+  "scope": "CN_A_SH_SZ_BJ",
+  "timezone": "Asia/Shanghai",
+  "expires_on": "2026-12-31",
+  "pilot_sessions": 5,
+  "economic_sessions_proposed": 60,
+  "candidate_limit": 20,
+  "sector_candidate_limit": 4,
+  "holdings_limit": 5,
+  "minimum_coverage": 0.98,
+  "minimum_listing_sessions": 120,
+  "minimum_history_sessions": 61,
+  "minimum_amount20_cny": 50000000,
+  "score_weights": {"return20": 0.35, "return60": 0.35, "amount20_cny": 0.15, "volatility20": -0.15},
+  "payload_bytes_per_arm": 32000,
+  "future_budget_proposal": {
+    "model_calls_per_arm_per_session": 1,
+    "input_tokens_per_arm": 20000,
+    "output_tokens_per_arm": 3000,
+    "provider_requests_per_session": 100,
+    "wall_seconds_per_session": 1200,
+    "automatic_retries": 0,
+    "model_fallback": false,
+    "paid_model_currency_cap": null,
+    "note": "这里只实施 UTF-8 输入字节上限；token/费用/远端执行上限须在真实适配器验收，不能将字节数冒充 token。金额预算未定不自动运行付费模型。"
+  },
+  "activation": {
+    "network": false,
+    "model": false,
+    "economic": false,
+    "production_write": false
+  }
+}

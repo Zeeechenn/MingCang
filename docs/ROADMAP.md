@@ -1,350 +1,133 @@
-# MingCang One Loop — 当前执行计划
-
-> 更新：2026-09-24。唯一项目级计划；原 20 日连续运行门已完成并封存。
-> 09-23 正式批次 Track B 完成，One Loop 仍被价格基准漂移阻塞。当前证据只见 `STATUS.md`。
-
-## 1. 计划权威与历史边界
-
-本文件只留目标、有效约束、下一步、验收和阻塞项。`AGENTS.md` 管规则，`PROJECT.md`
-管结构，`STATUS.md` 管当前运行，`CHANGELOG.md` 管历史，`docs_public/DEVELOPER_GUIDE.md`
-管实现合同。2026-09-17 已将重复实施过程、旧计数和已完成清单外部归档压缩；原文/hash
-索引见 `docs/evidence/document_archive_digest.md`，归档不是第二份活跃计划。
-旧 M 编号只保留作历史/兼容标签，不新增同名开发线。仓内不记录本机归档绝对路径。
-
-## 2. 北极星
-
-用户掌控的投资决策台：每个完整交易日，以唯一运行批次和有来源/时点的证据，把
-数据、候选、持仓、事件、观察哨、人工判断、复盘和结果反馈连成一份盘后操作面板。
-确定性规则守数据与风险边界；LLM 整理证据、反证和条件化判断。模型原建议、风险处理、
-用户选择及真实成交分别留痕。不连接券商、不自动下单。
-工程可靠、产出实用、研究省时、收益/风险和明仓自身增益分别验收。
-
-## 3. 当前治理结论
-
-基线封存、文档单源、RunEnvelope 合同、领域/编排收口、单一八卡入口和 20 日 v1
-运行证明已交付，停止重复立项。产品内容质量与人工完成不随代码或 committed 状态自动完成。
-保留归属、统一入口和新鲜运行证据要求；未过门不得靠新增框架或切换标签绕过。
-
-## 4. 目标结构
-
-Domain core → stable workflows / RunEnvelope → one daily panel / operator surface。
-Research Lab 通过单独晋升门进入正式路径；Archive 只供历史查询，不进默认上下文或运行依赖。
-正式逻辑归 data/analysis/backtest/evidence/research/memory/decision/portfolio/ops/jobs/workflows；
-`backend.tools` 是 CLI/维护/兼容层，API/scheduler/agent/frontend 消费稳定门面。
-canonical 与 compatibility 路径、保留周期和退役条件由 PROJECT/AGENTS 维护。
-
-## 5. 生命周期与批次合同
-
-| 状态 | 边界 |
-|---|---|
-| proposed | 方案未获开工合同，不进运行时 |
-| experimental | 隔离输入、临时数据、明确样本/指标/到期 |
-| shadow | 真实形状验证，只读或独立落账，不改官方结果 |
-| stable | owner/消费者/入口/job-run/新鲜产物/验收/回滚齐备 |
-| dormant / rejected / archived | 分别为保留关闭、证据否定、只作历史；不默认消费 |
-
-每批记录 owner_domain、单一 consumer、canonical entrypoint、输入/输出/失败/降级、
-safety_level、evidence_status、metric/sample、expires_at、rollback 和 replacement。
-同一时间最多两个实现批次；结构迁移与 provider/交易/调度/DB/API/记忆/风控行为分批。
-先核基准 commit 和依赖事实，保留脏工作区；反例测试、聚焦/架构检查、完整门与真实证据
-均应匹配变更范围。模型/Skill/prompt 改动同样可能改变行为，不能因是 Markdown 而绕门。
-
-## 6. 旧工作线结算与承接
-
-旧编号在 One Loop 中不再是活跃里程碑。未完成的价值按能力归属承接：
-
-| 历史标签 | 当前裁决 | One Loop 承接 |
-|---|---|---|
-| M54 新闻层 v2 | 方向预测未过门；采集、预算和金字塔机制有价值 | 与新闻镜像合并为“新闻与事件风险”能力；方向继续 shadow |
-| M58 出场影子 | 选股用途已证伪；出场实验尚待预注册窗口裁决 | 归入“风险验证实验”，冻结新增变体 |
-| M59 操作面板 | v1 连续产卡已证明；新日期内容质量与人工完成仍待验收 | 归入统一 One Loop 面板，不再独立发展 |
-| M60 观察哨 | 触发器有价值 | 作为 Daily Loop 事件输入 |
-| M63 日常编排 | 入口价值成立，内部职责过重 | 归入“编排收口”，兼容命令保留一个发布周期 |
-| M64 Live Track | 代码完成、默认未启用 | 保持 dormant；只有独立启用门满足才重新提案 |
-| M66 结构治理 | 首批领域/编排与文档收口已完成，兼容维护仍受退役门约束 | 后续随所属能力增量维护，不重复立项 |
-| M67 多市场 | 小池灰度完成、全量晋升 HOLD | 保持 shadow/dormant；公告源、双源、日历和前向证据满足后再提案 |
-| M68 新闻金字塔 | 事件风险价值大于方向价值 | 与 M54 合并，不建立平行新闻系统 |
-| M69 复权漂移 | 已落地 | 变成周期性数据质量守卫 |
-| M57 记忆演化 | 记录和审计有效，决策增益未证明 | `MEMORY_DECISION_CONTEXT_ENABLED=false`；继续显式查询、维护和影子回放 |
-| M65 研究可信度 | 通用 Evidence Gate 有效，Serenity 主效应不成立 | 保留通用门；方法实验归档 |
-| 量化 v2 | 未过 IC/ICIR 门 | 归档候选；新证据达到重新提案门后再评估 |
-| M0–M55 及其他历史线 | 已完成、合并、撤销或证伪 | 只在 CHANGELOG、Git 和外部档案中查询 |
-
-## 7. 六个外部项目的处理决定
-
-原则：借设计，不整套搬框架；合并进现有领域，不建立平行系统。
-
-| 来源 | 仅吸收 | 归属 | 明确不做 |
-|---|---|---|---|
-| FriesTrader | 盘后方案、下一时点重验、机械风险门、dry-run、追加审计 | RunEnvelope / ops / review | 不接 Robinhood，不实现真实订单和美国税务规则 |
-| Vibe-Trading | Run Card、PIT、provenance、Shadow Account 行为复盘 | evidence / trade journal / ReviewCase | 不引入其庞大多智能体和跨市场框架 |
-| stock_monitor | 信号去重、被压制事件留痕、推送频控、受限插件合同 | watchtower / notification / experimental registry | 不把单源行情和简化策略作为正式决策依据 |
-| stock-analyzer | thesis/anti-thesis、管理层/护城河清单、三情景、证伪条件 | ResearchCase / report gate | 不新建第二套 Skill/Agent 研究系统，不把主观清单直接计分 |
-| InStock | “筛选→解释→回测证据”的连贯交互 | daily panel / stock page | 不复制大而全功能和自动交易架构 |
-| EliteQuant | 外部资源索引 | 仓库外技术雷达 | 不形成运行依赖或产品能力 |
-
-## 8. 外部能力准入门
-
-开工前冻结：既有问题与基线、重叠能力及为何不足、借思想/接口/算法/代码的范围、owner/
-确切入口/唯一消费者、输入输出和失败降级合同、安全影响、隔离方式、最小样本/指标/预算/
-绝对到期日、停止/回滚/删除/替代关系、测试/来源/运行证据及用户决策门。
-缺 owner、consumer、metric、expiry、rollback 或 replacement 则不进生产；优先吸收进现有领域。
-
-## 9. 执行顺序与剩余门
-
-### 已完成登记
-
-| 已交付 | 保留边界 |
-|---|---|
-| One Loop v1 20/20 封存；P0-G 唯一起算日 | 继续日常健康；旧 20 日不用于新质量或收益认证 |
-| P0-A producer/同日耐久证据/delta/空态/人工意见记录 | 自 09-16 起验新日期；意见≠任务完成≠成交 |
-| P0-B1 dry-run/strict/warmup 与 ATR 原因复现 | 默认 caller 不启用；25 官方池候选不是修库批准 |
-| P0-R manual_only NAV；P0-C 严格候选读取/草稿 | 价格/公司行动/资料时点不齐仍 diagnostic；默认 copilot 未整体替换 |
-| P1 四门+固定窗口读取；P2 记录器/session/manifest v2/进程保护 | 不证明实际 provider 身份、费用、跨账户权限、源事实或经济试验启动 |
-
-下面的剩余工作是唯一队列，不再执行已归档的阶段 0–6 或旧 M 清单。
-
-### 第一优先：新日期产出与真实用户完成（P0-A/P1）
-
-先验证“看变化 → 查证据 → 接受/修改/拒绝 → 查结果”，再考虑页面增量。
-09-17 已补人工复核资料日期分组与当前面板意见/观察计数、观察哨缺口展示；
-原队列/旧完成率不回写。真实数据覆盖、真实人工完成与独立结果仍是本阶段验收项。
-八卡身份/顺序不变：运行控制 batch_integrity；五张决策证据 candidate、position_health、
-event_risk、watchtower、daily_delta；治理 human_confirmation、review_attribution。
-
-- 同日 watchtower 绑定 as_of/run_id 并存现有 JobRun/committed artifact；不拿临时旧文件顶替。
-  ready_zero 必须有完整扫描覆盖和原因；扫描完成不认证通知送达/被抑制事件。
-- 零 LLM 的 event_risk 为 shadow/not_applicable 并说明原因，不能解释成“没有风险”。
-- daily_delta 对比上一价格日唯一已提交面板，绑定 current/previous as_of、previous run、
-  结构化名单变化或 no_previous_reason；不推断实际成交/NAV。
-- 人工意见保留原面板日期/run/hash、理由和改后判断；重复幂等、过期仅拒绝、观察只追加并校验版本。
-  用户禁买只在明确标的/范围/时间生效，不自动清仓或扩大行业。无回复保持 pending。
-  保存意见不更新原研究任务、仓位、ResearchState、验证后记忆或旧完成指标。
-- 不强制每天新交易或长报告。新日期输出、真实完成与独立结果归因分别交证据。
-  回滚为停用新入口，保留记录及原面板；不重写已封存日期。
-
-显式质量窗口由 evidence 负责，唯一消费者为
-`backend.evidence.decision_desk_readiness` 的离线 CLI。原五次窗口于
-`2026-09-22T23:59:59+08:00` 到期，heartbeat 已暂停；09-22 保持 missing，离线刷新不回填。
-保留 passed/blocked/failed/missing/not_due 固定分母、源 hash 和失败证据，不再消费原预约或重试。
-新日期实验须另有窗口与授权；本条不认证人工完成、模型质量或交易日历/事前冻结。
-
-### 第二优先：数据地基与独立维护（P0-C、P0-B1/B2 → P0-R）
-
-先补官方池与**当前实际持仓**并集的覆盖，不沿用旧日期固定持仓数。
-
-1. 财报原值和因子共用 as_of；报告期、披露、抓取、修订时点分开，披露未知不放行。
-   标签同时检查生成/有效期/质量；未知/不适用/负面分开，分母和缺口可解释。
-2. 文本预算先保留时点/风险/缺口；必需内容装不下则不可判断。账户未知不给增加风险的数值目标，
-   历史 DecisionRun 目标不当现仓；草稿仍 pending，严格候选不能冒充默认路径已修复。
-3. 来源与复权按一致多源/冲突/真实重基/unknown 分类。09-17 已获 26 只公开数据查询授权，
-   单批 72/200 次请求后得到 21/26 只完整 TickFlow 候选、26/26 只未复权日线对照及 1 只独立 qfq
-   候选。21 只临时库维护/恢复通过，不混合不同价格口径。5 只 TickFlow 缺口、财务四接口拒权、
-   公司行动每小时 1 次限制与正式成交量合同仍待解决；本批不重试、不购买升级、不重复成功查询。
-   09-24 经单个获准的 603986 新闻请求核实当前 iFinD MCP 账户用量耗尽；只取到 answer-only
-   配额错误，无 notice/重试。程序已改为显式额度失败并交现有 provider fallback，31 个聚焦测试通过；
-   不恢复额度、新闻覆盖或源权限。套餐、刷新日仍未知，不再发 iFinD 请求。先做离线快照缺口审计，
-   再按账户实际恢复情况决定是否重开一个新范围；查询授权不等于生产写入授权。
-4. P0-B2 **单独批准**备份、维护窗口、回滚和必要账本重述后才能写；strict/warmup 激活也需此门。
-   既有 warmup 必须严格同源、固定 end、有效 OHLC 和充分前置行；不自动改 routine caller。
-5. 价格问题清零、权威公司行动完整后，用既有现金 NAV 验现金/持仓/成本/成交守恒，覆盖下一开盘、
-   T+1、跳空、停牌、量能限价/部分成交、现金不足、分红拆股。不得另建收益引擎或用 qfq 代理数冒充真实股数。
-
-P0-C 后续接线仍需默认旧输出对照和当前窗口保护；未来财报/标签、修订、极小文本预算、
-未知持仓、负面/空资料等反例不能省。候选覆盖/ATR/NAV 敏感性不是写库许可或策略改进证据。
-
-### 09-19 分享审定后的有界推进（experimental）
-
-来源：[9 月 19 日修复及 GPT-6 治疗臂分享](https://chatgpt.com/s/cx_6aae84dca0748191952c0184a48990af)。
-用户要求结合分享继续开发；将“同 desk 的 GPT-6 / Claude”作为新的前向候选准备，不修改旧五日协议。
-
-1. **运行与数据**：17 日行情已刷新，但历史信号/job/panel 缺失如实保留；18 日正式批次齐全，
-   Track B complete，Track A 被 300394/603993 漂移阻塞。两股 2,772 行仅临时演练；单位、权威行动、
-   ATR/历史止损兼容和维护窗口未审定前，不以 clearance 代替价格修复或补造旧记录。
-2. **第一实现批已完成**：owner `evidence`，唯一消费者为显式离线 CLI；新增模型决定到既有
-   `nav_replay` 的适配，按实际回答完成时间安排下一开盘，固定失败分母、两臂现金账户独立、
-   未知账单与扣交易费收益分开。边界测试覆盖周末/延迟/缺数据/错模型/未来时间/行动与现金守恒。
-3. **第二实现批已完成**：同一 CLI 提供冻结试验只读清点，验证协议/股票池/代码 hash，报告预约、
-   回执及缺口；文件存在不代表模型成功。同一入口补齐截止时点的逐臂现金/持仓/自身历史，
-   剔除未来价格、行动、回答及对手臂回答。JSON 重复键、非有限数、覆盖旧报告均拒绝。
-4. **候选实现与停点**：09-20 已明确批准 25 股/两目的地/虚拟账户/最多 60 期出站范围；
-   首次补充验收已预留并计入总次数，GPT-6 本机 initialize 失败，Claude 按约未调用。
-   原因已在禁网对照中定位为 macOS 临时路径别名，真实路径候选能初始化且读写保护仍有效；
-   不重试 09-20，不再询问同一出站授权。修复版本另登记为 `trial_canonical_v2.py`，共用原 60 期计数/回执，
-   周日 preflight 零调用且旧失败记录保留。现有 v3 候选已实现逐臂闭市账户上下文的不可变请求组装、
-   前置授权/容量门和显式 fake-only 消费；必须保持正式固定 25 股同集同数量，缺股在预约/provider 前拒绝。
-   v3 仍默认关闭，状态 `prepared_not_activated`；登记/hash预检不产生预约、模型调用或 DB 连接。
-   后续真实非经济通道验收仍按合格工作日和既有授权单独执行；真实来源真实性、provider/usage回执与身份、
-   账单和经济门未验收。旧 runner 和两项自动化不自动替换。
-   当前没有可信收益样本，不能进行策略晋升或模型优劣结论。
-
-输入为显式 `matched_model_replay.v1` 包；输出为带输入 hash 的诊断净值、成交/拒单、失败率和费用
-缺口。缺价格口径/行动覆盖时不给模拟收益；提供方身份/答案有错时该臂该期不生成订单，保留失败。
-样本沿新试验最多 60 期、20 期运行检查，2026-12-31 到期；20/60 不是 alpha 统计门槛。
-回滚为停止调用新增 CLI 并移除适配文件，无数据库迁移、生产维护或旧协议重述。
-
-**09-24 更新**：model-comparison v2 仍核验登记/授权与代码 hash，共用旧 60 槽 ledger，目前
-1 已预约、59 剩余；v2 冻结 runner 和失败分母不变。v3 候选现已实现逐臂闭市账户上下文组装为不可变
-request bytes，并在显式 fake reserve/provider 注入下消费；正式固定 25 股必须同集同数量，缺股前置拒绝。
-`--candidate-v3-root` 只读核验 prepared registration、protocol/auth/v2/ledger 和候选代码 hash，不预约、不调用模型。
-状态仍为 `prepared_not_activated`，默认关闭；候选/架构专项 71 项通过，Ruff 通过，仅证明离线工程路径。
-source_review/hash 是调用方证据，不独立验证真实数据源。真实非经济通道验收仍可在后续合格工作日 23:00
-按原已批 25 池/两目的地范围进行，价基准经济门不阻止该验收；provider identity/真实账单须从实际回执取得。
-09-22 五日 heartbeat 仍是 missing 且已暂停，不回填、不重试。一次/阶段失败按已冻结分母留痕；
-认证/额度失败即停 attempt。当前无真实模型响应、账单或经济激活；经济 replay 仍必须通过价格、行动、
-账户隔离及单独经济启动门。
-
-### 第三优先：真实回执、隔离与经济前向准备（P2）
-
-三个问题串行：同 GPT-6 raw/desk 测明仓增益；同 desk 的 Claude/GPT-6 测模型路径；
-同模型/同数据、只改一个流程测开发效果。默认两臂，不叠成四臂混合实验。
-
-- 已有用户授权覆盖 25 个公开池输入、两个目的地、虚拟账户和最多 60 期；下一次
-  非经济性真实通道验收可在后续合格工作日 23:00 按原授权执行，不需价格门或重复授权。
-  调用前冻结问题、输入/基准版本与 hash、prompt/工具、cutoff、窗口、预留槽位和失败政策；
-  provider requested/resolved 身份及实际用量在调用回执中记录，不要求预先猜中 identity，也不静默 fallback。
-- model-comparison v2 离线检查仍绑定 registration/authorization/code hashes，ledger 当前
-  `1 reserved / 59 remaining`。v3 候选消费闭市账户上下文的工程路径已实现并通过 71 项候选/架构测试、Ruff：
-  固定 25 股同集同数量校验、缺股前置拒绝、immutable request bytes、fake-only reserve/provider 注入，
-  以及 `--candidate-v3-root` 零预约/调用的只读登记和源码 hash 预检。其状态为 `prepared_not_activated`、
-  默认关闭；不证明独立来源真实性、真实 provider/账单，也不改变 v2、冻结 runner 或 ledger。
-  原冻结 runner 每期重置现金；真实连续账户和经济启用仍需可靠 raw 价格/公司行动、来源与账户隔离验收、
-  实际 provider/usage/billing 回执及独立版本/经济门。
-- 保存实际可见输入和每次请求/返回原字节、hash、cutoff、失败与用量；允许包不等于实际看到。
-  失败/中断不退款、不覆盖 attempt；不对失败期重试。原生 Claude 历史轨迹保持独立。
-- 记忆按每次 cutoff 和臂过滤，未来 outcome 不可见。过期五日 raw/desk heartbeat 已暂停，
-  09-16 失败与 09-22 missing 保持原状、不重跑/补跑；不以早期预演或后来答案替代。
-- 此次获准的真实通道 acceptance 只验调用、身份/用量回执、隔离、记录/失败处理；
-  不做 NAV/策略回测，不因 One Loop 价格门阻塞而停止该非经济验收。最多消耗原授权 60 期，
-  遇到认证/配额失败即留痕并停止该 attempt。经济启动仍先过下述数据、价格、行动、账户和预算门。
-- session 独占冻结、先锁定预留再调用；失败/中断不退款、不覆盖 attempt。任一臂已知超限或损坏阻止新调用。
-  manifest v2 绑定候选族/参数/次数、嵌套前向 folds、标签跨度 purge/embargo、holdout；未完 attempt
-  阻止读取，失败读取仍消耗，一次读取预约后不得新增模型调用，无 stable 晋升入口。
-- 进程保护只证明限定本地行为：输入/输出/时间上限、进程组、背压、保留部分输出；macOS 限定写目录
-  并拒绝受保护读和 runtime key 继承。不能保证远端取消、账单硬上限、整个账户隔离或无人看过 holdout。
-- 09-18 离线 initialize 对照确认 CLI 自身状态也需可写：临时 CODEX_HOME 可启动，禁止其
-  installation_id 写入（含预置合成 ID）复现原权限错误；仅禁止内置 skills 写入不阻止启动。
-  零联网/零模型/不复制登录凭据，尚不证明真实 exec、账户隔离或账单回执。后续适配器须先验
-  隔离登录与状态、重新登记版本，不能静默替换冻结五日窗口的调用路径或重跑失败样本。
-- 下一步补真实 provider 身份/已计费用量、跨账户权限和可信来源。经济启动另验模型/预算/窗口/范围；
-  不新建 DB、scheduler、第二总账，不消耗旧日跑预算。结构通过不等于源事实、PIT或原登记认证。
-
-### 其后：可信归因选一个改进，再做单变量比较（P3/P4）
-
-先用旧决定重放独立验算，不重新问模型或改历史；模型历史回放只能作训练知识可能污染的探索。
-待 P0-R 与数据/启动门通过后先同 GPT-6 raw/desk 经济前向，再在新共同窗口比较 Claude/GPT-6。
-之后按亏损归因选持有/退出、机会发现、组合选择、第二意见或记忆中的**一个**候选；
-不预定放宽止损/延长持有就是答案。若借鉴支撑阻力，先审规格，未读上游实现方可独立实现，勿复制 GPL/AGPL 表达。
-
-同起点、close-confirmed 数据/universe、撮合/费用/风险；固定资料禁额外查询，允许自主查询则说明
-比较的是整条工具路径。冻结现金/可执行买入持有/简单规则基准；整手买不起列入暴露，不称严格等权。
-主结果用完整窗口，失败日按事前规则保留，成功子集仅辅助；报告扣费净主动收益、IR、真实 NAV、
-回撤/尾部/换手/成本、暴露/行业/单票贡献集中和不确定性。20 日只验运行，60 日只作方向检查；
-stock-days 按标的/日期分块，重叠样本不当独立；卖后上涨不能直接加进组合收益。
-各轮交冻结规格、逐次所见/决定、全账本、基准、费用、失败及支持/不支持/证据不足结论。
-
-### 条件性维护余项（保留，不冒充已完成）
-
-09-18 已关闭两项维护验收：本地 `live_trading/live_subset.py` 改用文件位置确定 ROOT，
-换目录/空格路径/异地启动与原行为对照一致；面板候选生产形状测试复现并修复同分钟不同 run、
-跨交易日混入和“含买即候选”，同分钟多个正式批次显式报歧义。严格 `>25`、旧词表/旧 schema
-兼容均验证，29 项候选测试通过；不可变快照的 21 日完整候选输出与旧实现一致，未重写旧产物。
-
-旧交接中以下事项仍未关闭，随所属能力的小批次处理，不另开并行工作线：
-
-- `require_signal_run_context` 当前仍为 false；是否收紧需调用方覆盖、旧输出对照及明确启用评审，不能按旧周检查日期自动打开。
-- 兼容入口退役必须满足零内部消费者、至少一个发布周期和明确批准；Atlas 未启动集成/影子臂保持 dormant，不借归档自动恢复或删除。
-
-### 外部方法与可执行微批
-
-本节只把设计借鉴并入已有 owner 和消费者，不另建 agent、扫描器、交易通道或证据库。
-开发可先用固定 fixture/只读快照完成；真实行情覆盖、模型/来源真实性和用户价值仍各自过门。
-最多两个实现批次并行。所有三项分享于 2026-09-24 审阅，引用只作来源，不把帖子中的数字/业绩当事实。
-
-#### 市场广度到行业/主题解释：来源门未过，暂不实现
-
-来源：[市场广度分享 6ab3975b](https://www.xiaohongshu.com/explore/6ab3975b000000001a027fba "# hygiene-allow: reviewed proposal source URL; provenance only")。
-借鉴“市场广度 → 行业扩散 → 主题映射 → 候选清单”的解释顺序，不借用分享中的 25% 风险阈值。
-owner `data` 核对数据与历史行业映射，`research` 定义解释；唯一可能消费者为既有 `ResearchCase`
-主题上下文及 `backend/research/theme_hypothesis_engine.py`。当前缺少已核实的同步时点行业映射、
-完整 universe/分母及数据源合同，因此状态为 `proposed`，不写成已实现 `experimental`，不先画空壳新面板。
-
-开工门：冻结至少 3 个公开 as-of 截面，逐项核 universe、行业成分生效期、映射版本、分子/分母、
-缺失处理和来源/hash；映射无法回溯则仅作当前观察。工程通过要求所有数字可复算/溯源、混日/混源
-阻断同一总结、缺失明确未知。再由用户对 3 个主题样本判断解释路径是否减少查找步骤。失败或无净增量则不接入；若后续实现，回滚为关闭可选解释入口、保留原 ResearchCase。复审到期 `2026-10-08T23:59:59+08:00`。
-
-#### PanWatch：既有面板复用，先核实真实流程差异
-
-来源：[PanWatch 分享 6ab1e601](https://www.xiaohongshu.com/explore/6ab1e6010000000034015b39 "# hygiene-allow: reviewed proposal source URL; provenance only")。
-现有八卡已包括 `position_health`、`watchtower`、运行批次与人工意见/观察路径；不得重复建 holdings 页、
-九 agent、并行通知系统。owner `portfolio/ops`；唯一消费者继续是 P0-A Daily 面板。
-暂列 `proposed` 的仅是“以当前持仓开始、易懂显示各持仓进度/失败/降级和实际送达回执”的差异核实，
-先用 09-23 成功 Track B 与首轮 OAuth 失败的现有 run/artifact 检查；缺来源回执的送达状态必须显示未知。
-
-如果完整/失败状态和下一步已能从现有卡片定位，就不新增代码；若一个明确差异经用户确认有用，才冻结
-最小 UI/数据合同和 fixture。验收是用户用一项真实成功及一项真实失败案例完成“找持仓 → 看当前 run 和证据 → 确认通知状态/下一步”；扫描成功不认证送达，意见也不认证完成。若后续增量无用，回滚只隐藏新增入口，旧卡片/记录留存。复审到期 `2026-10-08T23:59:59+08:00`。
-
-#### 批量筛选到深研：仅实现既有 CLI 只读预检
-
-来源：[Trade Ideas / TrendSpider / Tickeron 分享 6aa95cdc](https://www.xiaohongshu.com/explore/6aa95cdc000000002b01d50f "# hygiene-allow: reviewed proposal source URL; provenance only")。
-借鉴“批量筛选 → shortlist → 深研”的操作顺序，排除其业绩声称、美国阈值和自动交易。owner `research`；
-唯一消费者为现役手动入口 `backend.tools.m63_research`，不新建 scanner/dossier/agent。
-
-当前已实现可选 `--preflight`（`experimental`）：只读既有 watchlist/universe 输入，输出目标范围、提交/唯一标的数、
-重复项、格式问题、各阶段尝试上限与未知 API/model/billing 容量；仅打印 stdout 报告，不触发默认流水线。
-**31 个 m63/iFind 聚焦检查通过**，包括硬阻断 DB 连接、零网络和零文件写入预检；额度上界未知照实保留。
-重复标的不会因此在默认 run 中自动去重；范围不是全市场扫描；该预检不预留 provider 能力，也不能算用户价值验收。
-代码/离线合同通过，默认 run 输出应完全兼容；未来调整默认重复处理须先核对现役输出与成本影响，不能借预检静默改变。
-
-回测与前向实验需分离版本化策略/参数/universe/as-of/源/hash，并有固定失败分母、成本、无未来数据与独立 NAV；
-未有干净价格/行动证据和新经济登记，不做策略收益验收或晋升。回滚为移除 `--preflight` 可选分支，保留现有
-research CLI / scanner / 历史报告。复审到期 `2026-10-08T23:59:59+08:00`。
-
-#### 保留的数据源和页面质量门
-
-- **新源净增量**（owner `data`，evidence 定验收；唯一消费者为显式离线源验收报告）：先从一致快照审计缺少的字段、标的、日期/报告期、来源、披露时点、口径和已登记失败，不先发 API 请求。iFind 现有来源和 Financial-API 不互为独立源；账号计划未知、额度名词须回到官方页面/账户回执确认。若离线缺口仍需探测，冻结 1 个 source/category/symbol 和必要字段，最多单请求，遵守仓内 QPS=1，临时输出放仓库外；不回填、不写生产。验收需固定边界样本全量留痕、至少一个关键字段有可核实净增量；无增量停止，部分覆盖限定字段使用。回滚撤除实验适配/入口。P0-B2 的生产写权限完全独立。
-- **股票页证据上下文 B1** 已完成工程实现，唯一入口是 CN 股票页可选研究区，状态 `experimental`；不再列作待实现。验收题目已随 v0.8.3 固定为下列 10 项；仍需绑定当前真实行情/财务来源、模型回执和人工核查时间基线，核串股/串日/复权/单位等反例与用户价值。离线结构通过不解除 0/26 严格数据覆盖历史结果或现有价格/财务门。owner `research`；回滚关闭可选分支，保留原 copilot、会话和判断。
-- **认知盲区问题卡 B2** 暂缓实现；owner `research`，唯一消费者现有 ResearchCase。启动前需从 3 家公司的公开报告形成有页码/版本的 8–10 题/公司，经 B1 真实验收且用户确认有用后再实施。客观题必须可对原文；主观题不评分；资料更正暂停旧题。无证据收益或增加负担即撤下；关闭可选入口回滚。
-- **宏观/盈利广度** 保留为研究模板，不单独开工；owner `research`，消费者既有主题情景卡。须等数据时点/分母和上述 B1/B2 复审，再用至少 3 个公开历史截面核负/零基期、未披露、更正与缺失。宏观事实、模型解释、条件判断分开；无 PIT 或无可核分母只可作当前观察，不接权重、情绪否决、调度或交易。
-
-B1 的 10 项固定验收题（题目已准备，实际回答/来源/用户耗时尚未验收；不得用 fixture 填作真实结果）：
-
-| 问题 | 必须检查 |
-|---|---|
-| 截止日最新可见财报是哪一期？ | 披露日期、报告期和来源，未知不推断 |
-| 营收增长是否有利润同步支持？ | 原值/同比口径与对应期，不跨期拼接 |
-| 利润是否有经营现金流支持？ | 同报告期现金流，缺字段明确缺失 |
-| 最近两个可见报告期的盈利质量有何变化？ | 原值、修订与可见时点限制 |
-| 当前资产负债资料支持哪些风险判断？ | 只引用已有字段，不补造比率 |
-| 所选行情区间是否足够描述波动？ | 日期覆盖、缺失和原存储口径 |
-| 价格变化是否可能来自除权或复权差异？ | 没有行动账本不得下确定结论 |
-| 这些资料能否支持“估值便宜”的判断？ | 缺估值/股本输入时拒绝强结论 |
-| 改截止日或问另一只股票时旧回答还能用吗？ | 串日/串股保护和引用版本 |
-| 出现什么新事实会推翻本次判断？ | 条件、可验证来源和后续观察，不预测确定涨跌 |
-
-各微批由第 8 节统一治理：改动前记录样本、基线、预算、绝对到期日、owner、consumer、测试、降级、替代关系与停止条件。测试/代码结构通过不等于来源质量、用户价值、经济收益或生产晋升。
-
-## 10. 全局安全与快照门
-
-- 活动 SQLite 先用 `scripts/sqlite_consistent_snapshot.py` 到临时目录生成一致快照，禁止裸拷活动主文件；
-  以 `mode=ro&immutable=1` 读取，无 WAL/SHM 依赖，前后核 SHA-256。JSON/Markdown 也按显式路径核 hash。
-- 派生报告/测试 DB/cache/output 在仓库外临时区，正式八卡、test2、价格、账本不回写。
-  sidecar、来源混杂、不完整覆盖、hash 变化或连续性日期集合漂移都拒绝放行。
-- 起算日保持唯一，不拼 partial/重跑/修复行制造完整批次。RunEnvelope 绑定 run_id/batch_id、
-  trade_date/as_of/scope/入口、起止/status、expected/completed/failed symbols、freshness/degradations、规则/产物。
-- clearance 只叠加独立 operator 事实，不改原漂移事件，不修价格；成功日不重生成面板。
-- 未授权不发布/下单/启用实验；不以进程退出、代码存在、文档声明或测试全绿代替运行/来源/用户完成证据。
-
-## 11. AI 接手协议
-
-AGENTS → STATUS → 本文件；架构再读 PROJECT，具体合同再读 Developer Guide。
-先检查 dirty worktree，再选最早未阻塞微批；开工前明确 owner/不变量/验收/回滚。
-问题涉及敏感边界就按本计划单独评审，不用平行模块绕过阻塞。完成实现与通过运行/质量门分别登记。
-每批只更新对应权威文档：已完成细节归 CHANGELOG/外部档案，STATUS 留当前快照，计划只留下一步。
-档案只在明确历史查询时加载，旧 unchecked 清单不恢复为新任务。
-
-## 12. 完成定义
-
-运行、产出、数据、经济四门分别出证据；单一面板连接证据、人工选择与可核结果，实验生命周期诚实，
-核心无反向工具依赖，文档单源且档案外置，用户确认治理周期与任何生产晋升。
-已关闭 20 日 v1 运行门，不宣称整个决策台质量或投资增益已完成。
+# MingCang One Loop — Sole Active Queue
+
+> Updated 2026-09-24. The frozen 20-day v1 continuity gate is complete. The
+> 09-23 formal run completed Track B and remains `PIPELINE_PARTIAL` on adjustment-
+> basis drift. Current observed facts are in [STATUS](../STATUS.md); architecture
+> and ownership are in [PROJECT](../PROJECT.md); shared rules are in [AGENTS](../AGENTS.md).
+
+## Product and acceptance boundary
+
+MingCang is a user-controlled research and decision-support system, not an
+automated trader. Its goal is one source-timed daily evidence path from data and
+positions through review to independently checked outcomes. Deterministic code
+owns data/risk bounds; model suggestions, risk handling, human choices and actual
+trades stay separately attributable.
+
+This file alone orders active project work. STATUS records runtime truth;
+PROJECT maps code/owners; CHANGELOG and archived reports are history. M numbers
+are historical labels, not new workstreams. `proposed`, `experimental`, `shadow`,
+`stable`, `dormant`, `rejected`, and `archived` have distinct meanings. A new
+capability needs an owner, one consumer/entry, input/output/failure and safety
+contract, sample/metric/expiry, provenance, tests, stop/rollback and replacement.
+Stable status also needs a fresh run/output receipt. At most two implementation
+batches at once; separate structural work from provider, DB/API, scheduling,
+memory, replay or risk behavior changes.
+
+## Active queue
+
+### 1. New-date panel quality and human completion — P0-A/P1
+
+Prove the full path: see a change, inspect evidence, accept/modify/reject, then
+check the result. Keep the eight-card identity/order and frozen dates unchanged.
+New-date output quality, actual human completion, delivery and outcome attribution
+are separate gates. A saved opinion, scan, or committed panel is not task
+completion, notification delivery, or a trade.
+
+- Bind same-day watchtower to `as_of`/`run_id` and existing JobRun/committed artifact;
+  temporary files cannot substitute. `ready_zero` requires complete coverage and
+  a reason; it does not prove notification delivery or suppressed-event coverage.
+- With zero LLM, event risk is `shadow`/`not_applicable` with reason, not “no risk”.
+  Delta compares the previous price date's unique committed panel and records both
+  dates, prior run, structured changes or `no_previous_reason`; it never infers
+  actual trades or NAV.
+- Human records bind original panel date/run/hash, reason and revised judgment;
+  duplicates are idempotent, stale submissions rejected, observations append-only
+  and version checked. A user “do not buy” applies only to the explicit symbol,
+  scope and time; it does not auto-liquidate or broaden to a sector. No reply stays
+  pending. Records do not rewrite the task, position, `ResearchState`, validated
+  memory or old completion metric.
+- Preserve fixed quality-window outcomes `passed/blocked/failed/missing/not_due`,
+  denominators, source hashes and failures. The original five-session window expired
+  2026-09-22 23:59:59 +08:00; heartbeat is paused. 09-22 remains missing; offline
+  refresh is not backfill. Do not retry or consume the original reservation. New
+  experiments need a new window and authorization. Rollback stops the new entry and
+  retains records/panels; it does not rewrite sealed dates.
+
+### 2. Data foundation and independent maintenance — P0-C, P0-B1/B2, then P0-R
+
+First cover the official pool and **current actual holdings** together, then clear
+price/action evidence before NAV work. See the task-scoped
+[`P0_DATA_FOUNDATION_CONTRACT.md`](dev/P0_DATA_FOUNDATION_CONTRACT.md) for exact
+P0-C point-in-time, P0-B1/B2 write-safety, 09-17 data-scope and 09-24 iFinD
+constraints, and P0-R conservation cases. No clearance, coverage result or
+sensitivity analysis is write permission or strategy evidence.
+
+### 3. Independent shadow branch — news event-risk/direction (no queue reprioritization)
+
+Keep one news capability with two independently evaluated products: event-risk
+facts and direction scores. Direction remains shadow with zero official signal
+weight. Event risk may use only existing `daily_panel.news_event_risk`; no new
+source permission, M-number, parallel system or production switch. The explicit
+offline readiness audit is implemented, but protocol and sample-capacity freeze
+are not; review due 2026-10-23. Follow
+[`NEWS_EVENT_RISK_CONTRACT.md`](dev/NEWS_EVENT_RISK_CONTRACT.md) only for this work.
+It preserves the proposed (not frozen) 20 real run days / 30 verified-event
+minimum, direction thresholds, distinct denominators, unknown-as-unknown, and the
+prohibition on a recall claim without an independent reference universe. Event
+review passing never clears direction scoring. A skipped `no-llm` run is not news
+coverage or evidence of zero risk.
+
+### 4. Bounded model research and universe comparison — P2
+
+Do not merge model research with daily production runs or the existing authorized
+fixed-25 channel check. That older non-economic check covers 25 public-pool inputs,
+two destinations and at most 60 periods; it permits only invocation/identity/usage/
+isolation/recording acceptance, not NAV or strategy claims. Preserve failed and
+missing periods, fixed denominators and exact scope; no retry, substitution, refund
+or silent fallback. Economic replay requires trusted prices/actions, source truth,
+isolated accounts, actual provider/usage/billing receipts and separate owner/economic
+approval. The v3 candidate stays default-off, `prepared_not_activated`, and fake-only.
+See the task-scoped [model contract](dev/MODEL_COMPARISON_CONTRACT.md) for the old
+channel experiment.
+
+The proposed **full-market versus fixed-25 GPT-6 universe trial** is a separate
+research item, distinct from the daily run and from that existing authorization.
+Keep its candidate, scope, data authorization, denominator, failure rules and
+acceptance in its own trial record; do not inherit the old 60-period approval or
+change daily behavior. Do not execute until that trial's own frozen contract and
+gates are satisfied.
+
+### 5. Trusted attribution and one-variable improvement — P3/P4
+
+After the data and economic gates clear, first independently replay old decisions
+without new model calls or rewriting history. Then choose one change based on
+attributed loss (holding/exit, opportunity discovery, portfolio choice, second
+opinion, or memory) and compare one variable in a new shared window. Historical
+model replay may contain training leakage and is exploratory only. Full-window
+failure denominator, fee-net return/IR/NAV, tail-risk, concentration and
+block-bootstrap requirements are in the [model comparison contract](dev/MODEL_COMPARISON_CONTRACT.md#later-economic-comparison-reporting). Use the same
+start, close-confirmed data/universe, fills, costs and risk; freeze cash, executable
+buy-and-hold and a simple-rule baseline. If a whole tool path may query, report that
+as the treatment. Whole-lot affordability stays in exposure and is not strict
+equal-weight. Do not assume relaxing stops or extending holds is the answer.
+
+## Deferred history
+
+The prior 20-day v1 gate, completed M lines, external project reviews and old
+implementation narratives are not queue items. Find their records in CHANGELOG,
+Git or the [archive digest](evidence/document_archive_digest.md). Do not use
+historical counts or old proposals as current runtime evidence or renewed approval.
+
+## Other bounded proposals (not a queue ordering)
+
+The reviewed external-method microbatches retain their own owner, consumer,
+acceptance and rollback contracts in
+[`EXTERNAL_METHODS_CONTRACT.md`](dev/EXTERNAL_METHODS_CONTRACT.md); all share the
+2026-10-08 23:59:59 +08:00 review expiry. Market breadth is `proposed` behind its
+source/mapping gate; PanWatch is `proposed` pending real success/failure workflow
+comparison; existing `m63_research --preflight` is opt-in `experimental`; source
+net-increment remains offline-first and no iFinD probe is authorized; stock-page
+B1 is implemented but real source/user-value gates remain; B2 waits for B1 and
+user confirmation; macro/earnings breadth is a research template only. These do
+not reorder the P0/P1/P2 queue above. `require_signal_run_context` stays false
+pending caller coverage/output review/explicit enablement; Atlas stays dormant.

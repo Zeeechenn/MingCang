@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.check_doc_authority import check_doc_authority
+from scripts.check_doc_authority import (
+    CORE_CONTEXT_MAX_CHARS,
+    check_doc_authority,
+    core_context_char_count,
+)
 
 
 def _write(path: Path, content: str) -> None:
@@ -37,6 +41,22 @@ def _seed_minimal_repo(root: Path) -> None:
         "docs_dir: docs_public\nnav:\n  - 宁德活样本: ningde_live_sample.md\n",
     )
     _write(root / "docs/dev/M54_OOS_PREREGISTER.md", "live contract\n")
+    contract_paths = (
+        "docs/dev/NEWS_EVENT_RISK_CONTRACT.md",
+        "docs/dev/MODEL_COMPARISON_CONTRACT.md",
+        "docs/dev/EXTERNAL_METHODS_CONTRACT.md",
+        "docs/dev/P0_DATA_FOUNDATION_CONTRACT.md",
+    )
+    for path in contract_paths:
+        _write(root / path, "task scoped contract\n")
+    routes = "\n".join(contract_paths)
+    _write(root / "AGENTS.md", routes)
+    _write(root / "STATUS.md", "runtime truth\n")
+    _write(root / "docs/ROADMAP.md", "sole active queue\n")
+    _write(
+        root / "docs/dev/M54_OOS_PREREGISTER.md",
+        "历史预注册/结果记录；不授权新调用\n",
+    )
 
 
 def test_doc_authority_accepts_minimal_valid_repo(tmp_path: Path) -> None:
@@ -75,6 +95,26 @@ def test_doc_authority_rejects_restored_data_audit_narratives(tmp_path: Path) ->
     assert any("restored archived audit narratives" in error for error in errors)
 
 
+def test_core_context_budget_is_enforced(tmp_path: Path) -> None:
+    _seed_minimal_repo(tmp_path)
+    _write(tmp_path / "STATUS.md", "x" * CORE_CONTEXT_MAX_CHARS)
+
+    errors = check_doc_authority(tmp_path)
+
+    assert any("default core context is" in error for error in errors)
+
+
+def test_scoped_routes_and_historical_boundary_are_required(tmp_path: Path) -> None:
+    _seed_minimal_repo(tmp_path)
+    (tmp_path / "docs/dev/NEWS_EVENT_RISK_CONTRACT.md").unlink()
+    _write(tmp_path / "docs/dev/M54_OOS_PREREGISTER.md", "current proposal\n")
+
+    errors = check_doc_authority(tmp_path)
+
+    assert any("task-scoped contract missing" in error for error in errors)
+    assert any("historical and non-authorizing" in error for error in errors)
+
+
 def test_doc_authority_accepts_current_repo() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     if not (repo_root / "mkdocs.yml").exists():
@@ -83,3 +123,9 @@ def test_doc_authority_accepts_current_repo() -> None:
     errors = check_doc_authority(repo_root)
 
     assert errors == []
+
+
+def test_current_core_context_has_budget_margin() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+
+    assert core_context_char_count(repo_root) <= CORE_CONTEXT_MAX_CHARS

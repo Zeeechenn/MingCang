@@ -22,24 +22,34 @@
 
 | Original surface | Current disposition and surviving authority |
 |---|---|
-| `AGENTS.md` | Rules remain canonical; archived only as part of the before-edit receipt, not changed in this documentation pass |
-| `STATUS.md` | Compressed to current runtime truth, 09-23 result, current quota/experiment receipts and unresolved gates; older completed implementation detail removed |
+| `AGENTS.md` | Rules remain canonical. The archived original predates the later governance pass, which adds task-scoped contract routing and retains task-only loading |
+| `STATUS.md` | Current runtime truth, 09-23 result, source/quota/experiment receipts and unresolved gates; detailed experiment rules route to scoped contracts |
 | `PROJECT.md` | Architecture/ownership map retained; iFinD paths now point to actual source adapters and the handbook |
-| `docs/ROADMAP.md` | Sole active queue. Completed B1 implementation and old handoff narratives compressed; One Loop, data, economic and user-value gates remain. The three 09-24 shares now have explicit owner/consumer/acceptance/rollback contracts; only existing CLI preflight is implemented |
+| `docs/ROADMAP.md` | Sole active queue. One Loop, data, economic, user-value and P2 boundaries remain; scoped contracts hold detailed acceptance. External-method proposals preserve owner/consumer/expiry without changing queue order |
 | `docs/data-sources/ifind.md` | Replaced stale fixed tool-count/account claims with current code-path map, dated historic observations, 09-23 pricing-page snapshot and 09-24 quota-exhaustion receipt. Existing parse errors/failures remain in denominators |
-| `docs/evidence/document_archive_digest.md` | Updated archive identity, hash, contents and restore result; this archived copy is the pre-edit digest |
+| `docs/evidence/document_archive_digest.md` | Records the earlier ZIP identity and this later governance pass. The ZIP itself was not regenerated for this pass |
 
 The 2026-09-17 archive is a separate historical archive of 16 AI handoff/implementation
 originals: Archive ID `mingcang-ai-docs-20260917`, file
 `mingcang-ai-docs-20260917-originals.zip`, SHA-256
 `5aba5719e7e6ace96ae382b463e9a59112c921c2c591b7da38aaf8e2628792c0`; its machine-local
-location is recorded in the private `LEADER.md` handoff. The 09-24 ZIP is a new reversible
-receipt for the current compression. Private local `CLAUDE.md`, `LEADER*.md` and
+location is recorded in the private `LEADER.md` handoff. The 09-24 ZIP is a reversible
+receipt for the earlier six-file compression only. Private local `CLAUDE.md`, `LEADER*.md` and
 `.claude/RESUME.md` are handled by a separate private archive and are not part of this
 public-repository ZIP.
+
+## Later isolated governance pass
+
+The documentation-governance implementation used a separate workspace copy with
+an immutable sibling `baseline/` and `baseline-manifest.json`. It changed
+`AGENTS.md`, `STATUS.md`, `docs/ROADMAP.md`, the task-scoped contracts under
+`docs/dev/`, `docs/dev/README.md`, this digest, and the document-authority checker
+and tests. These changes are not members of the ZIP identified above. No new ZIP
+or checksum is claimed for this pass.
 
 Runtime artifacts, frozen inputs and failed attempts remain untouched. The 09-22 formal
 model session is still `missing`; its offline market check is not a backfill. The 09-23
 pipeline is `PIPELINE_PARTIAL` because the One Loop basis-drift gate remains blocked.
 Current iFinD account usage exhaustion is a source failure, not evidence of recovered
-coverage. Current model/source/user/economic gates remain in `STATUS.md` and `ROADMAP.md`.
+coverage. Current model/source/user/economic gates are in `STATUS.md`, the sole queue
+in `ROADMAP.md`, and task-specific contracts linked there and from `AGENTS.md`.

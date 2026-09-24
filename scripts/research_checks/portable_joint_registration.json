@@ -1,0 +1,11 @@
+{
+  "schema": "mingcang_joint_portable_offline_registration.v1",
+  "registered_date": "2026-09-24",
+  "status": "prepared_not_activated",
+  "files": {
+    "joint.py": "7d47d0a4d25d05a891dd9a2da79b866225d587242537877e91b4ed0c2dd875c5",
+    "portable_joint_protocol.json": "a8d4c40ca926c0ffb1ff8f2d7aaf018f2c33c5794ec5738a48980d9baa6cd2f3",
+    "news_event_readiness.py": "fa5cb24a1e896ed4ceba61f5e2b157104ad097a261ae13fcc753b147c60b79e7"
+  },
+  "authorization_boundary": "Offline checks and synthetic demo only; no provider calls, model calls, scheduling changes, production writes, or economic activation."
+}

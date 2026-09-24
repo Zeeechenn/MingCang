@@ -4,7 +4,9 @@ repos:
     hooks:
       - id: ruff
         args: [--fix]
+        exclude: ^scripts/research_checks/universe/(prepare|make_fixture|test_prepare)\.py$
       - id: ruff-format
+        exclude: ^scripts/research_checks/universe/(prepare|make_fixture|test_prepare)\.py$
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
