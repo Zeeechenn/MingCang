@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 def _add_metric(db, symbol: str, report_date: str, **kwargs):
@@ -23,6 +24,7 @@ def _add_metric(db, symbol: str, report_date: str, **kwargs):
         "gross_margin": None,
         "roe": None,
         "asset_turnover": None,
+        "fetched_at": datetime(2026, 1, 1),
     }
     defaults.update(kwargs)
     row = FinancialMetric(**defaults)
@@ -211,12 +213,11 @@ def test_strict_context_uses_one_visible_financial_as_of_for_latest_and_piotrosk
     assert strict_pack["financials"]["piotroski"]["report_period"] == "2026-03-31"
     assert strict_pack["financials"]["piotroski"]["comparison_period"] == "2025-03-31"
     assert strict_pack["financials"]["piotroski"]["factors"]["no_new_shares"] is None
-    assert strict_pack["financials"]["visibility"] == {
-        "cutoff": "2026-07-04",
-        "granularity": "date_level",
-        "revision_history": "unverified",
-        "note": "FinancialMetric disclosure_date is date-level only; historical revision storage is not available.",
-    }
+    assert strict_pack["financials"]["visibility"]["cutoff"] == "2026-07-04"
+    assert strict_pack["financials"]["visibility"]["granularity"] == "date_level"
+    assert strict_pack["financials"]["visibility"]["revision_history"] == "unverified"
+    assert strict_pack["financials"]["visibility"]["report_period_age_days"] == 95
+    assert strict_pack["financials"]["visibility"]["disclosure_age_days"] == 65
 
 
 def test_strict_context_blocks_unknown_disclosure_and_future_or_expired_labels(test_db):
@@ -348,6 +349,105 @@ def test_strict_context_reads_without_autoflushing_pending_objects(test_db):
     test_db.rollback()
 
 
+def test_strict_pit_excludes_late_fetched_financial_rows(test_db):
+    from backend.data.fundamentals import compute_piotroski_factors_strict
+
+    _add_metric(
+        test_db,
+        "600519",
+        "2025-06-30",
+        disclosure_date="2025-08-20",
+        net_profit=100.0,
+        total_assets=1000.0,
+        fetched_at=datetime(2026, 9, 24, 10),
+    )
+    _add_metric(
+        test_db,
+        "600519",
+        "2026-06-30",
+        disclosure_date="2026-08-20",
+        net_profit=120.0,
+        total_assets=1000.0,
+        fetched_at=datetime(2026, 9, 24, 10),
+    )
+
+    historical = compute_piotroski_factors_strict(
+        "600519", test_db, as_of=datetime(2026, 9, 1)
+    )
+    current = compute_piotroski_factors_strict(
+        "600519", test_db, as_of=datetime(2026, 9, 25)
+    )
+
+    assert historical["available"] is False
+    assert historical["reason"] == "insufficient_visible_periods"
+    assert current["report_period"] == "2026-06-30"
+
+
+def test_financial_pit_uses_cn_calendar_date_and_utc_fetched_cutoff(test_db):
+    from datetime import UTC
+
+    from backend.data.context_builder import build_stock_context_pack
+
+    _add_metric(test_db, "600519", "2024-03-31", disclosure_date="2024-04-30", fetched_at=datetime(2026, 9, 1, 10))
+    _add_metric(test_db, "600519", "2025-03-31", disclosure_date="2025-04-30", fetched_at=datetime(2026, 9, 1, 10))
+    _add_metric(
+        test_db,
+        "600519",
+        "2026-03-31",
+        disclosure_date="2026-04-30",
+        fetched_at=datetime(2026, 9, 24, 15, 59, 59, 999999),
+    )
+    _add_metric(
+        test_db,
+        "600519",
+        "2026-06-30",
+        disclosure_date="2026-08-20",
+        fetched_at=datetime(2026, 9, 24, 16, 0),
+    )
+    _add_holder(test_db, "600519", "2025-03-31", 100.0)
+    _add_holder(test_db, "600519", "2026-03-31", 100.0)
+
+    cn_eod = datetime(2026, 9, 24, 23, 59, 59, 999999, tzinfo=ZoneInfo("Asia/Shanghai"))
+    utc_equivalent = datetime(2026, 9, 24, 15, 59, 59, 999999, tzinfo=UTC)
+    naive_utc = datetime(2026, 9, 24, 15, 59, 59, 999999)
+    packs = [
+        build_stock_context_pack(
+            "600519", as_of=cutoff, sections=["financials"], db=test_db, strict_research_inputs=True
+        )
+        for cutoff in (cn_eod, utc_equivalent, naive_utc)
+    ]
+
+    for pack in packs:
+        financials = pack["financials"]
+        assert financials["latest"]["report_date"] == "2026-03-31"
+        assert financials["piotroski"]["report_period"] == "2026-03-31"
+        assert financials["piotroski"]["comparison_period"] == "2025-03-31"
+        assert financials["visibility"]["cutoff"] == "2026-09-24"
+
+
+def test_default_context_aware_utc_uses_cn_financial_calendar_date_but_naive_stays_utc(test_db):
+    from datetime import UTC
+
+    from backend.data.context_builder import build_stock_context_pack
+
+    _add_metric(
+        test_db,
+        "600519",
+        "2026-09-25",
+        disclosure_date="2026-09-25",
+        fetched_at=datetime(2026, 9, 24, 16, 0),
+    )
+    aware_pack = build_stock_context_pack(
+        "600519", as_of=datetime(2026, 9, 24, 16, 0, tzinfo=UTC), sections=["financials"], db=test_db
+    )
+    naive_pack = build_stock_context_pack(
+        "600519", as_of=datetime(2026, 9, 24, 16, 0), sections=["financials"], db=test_db
+    )
+
+    assert aware_pack["financials"]["latest"]["report_date"] == "2026-09-25"
+    assert naive_pack["financials"]["empty"] is True
+
+
 def test_default_render_context_text_keeps_error_and_empty_text_byte_compatible():
     from backend.data.context_builder import render_context_text
 
@@ -424,3 +524,152 @@ def test_strict_render_does_not_treat_long_news_urls_as_required_risk():
     assert "unavailable reason=no_disclosed_financials_as_of" in text
     assert "(TRUNCATED ordinary context)" in text
     assert "https://example.test" not in text
+
+
+def test_long_term_piotroski_analyst_uses_strict_as_of_inputs(test_db):
+    from backend.agents.long_term.piotroski_analyst import analyze
+
+    _add_metric(
+        test_db,
+        "600519",
+        "2025-06-30",
+        disclosure_date="2025-08-20",
+        net_profit=100.0,
+        total_assets=1000.0,
+    )
+    _add_metric(
+        test_db,
+        "600519",
+        "2026-06-30",
+        disclosure_date="2026-08-20",
+        net_profit=-10.0,
+        total_assets=1000.0,
+        operating_cf=-5.0,
+    )
+
+    report = analyze("600519", test_db, as_of=datetime(2026, 9, 1))
+
+    assert report.raw["strict_research_inputs"] is True
+    assert report.raw["as_of"] == "2026-09-01T00:00:00"
+    assert report.raw["available"] is False
+    assert report.raw["factors"]["roa_positive"] is False
+    assert report.raw["factors"]["cfo_positive"] is False
+    assert report.confidence == 0
+    assert any("未知" in finding or "不足" in finding for finding in report.key_findings)
+
+
+def test_missing_strict_quality_report_degrades_label_eligibility():
+    from backend.agents.long_term.base import LongTermReport
+    from backend.agents.long_term.team import _assess_label_quality
+
+    reports = {
+        "track": LongTermReport("track", 20, 0.8, "观望", ["track evidence"]),
+        "quality": LongTermReport(
+            "quality",
+            0,
+            0,
+            "观望",
+            ["财务数据不足"],
+            raw={"strict_research_inputs": True, "available": False, "reason": "insufficient_usable_factors"},
+        ),
+        "boom": LongTermReport("boom", 15, 0.7, "观望", ["industry evidence"]),
+    }
+
+    quality, eligible, notes = _assess_label_quality(reports)
+
+    assert quality == "degraded"
+    assert eligible is False
+    assert "Piotroski 严格输入不可用" in notes[0]
+
+
+def test_stock_context_entry_builds_strict_financial_and_active_label_pack(test_db, monkeypatch):
+    from backend.agent import context
+    from backend.data.database import LongTermLabel
+
+    _add_metric(
+        test_db,
+        "600519",
+        "2025-06-30",
+        disclosure_date="2025-08-20",
+        net_profit=100.0,
+        total_assets=1000.0,
+    )
+    _add_metric(
+        test_db,
+        "600519",
+        "2026-06-30",
+        disclosure_date="2026-08-20",
+        net_profit=120.0,
+        total_assets=1000.0,
+    )
+    test_db.add(
+        LongTermLabel(
+            symbol="600519",
+            date="2026-08-20",
+            label="观望",
+            score=12,
+            expires_at="2026-10-30",
+            quality="degraded",
+            constraint_eligible=False,
+            quality_notes_json='["strict inputs unavailable"]',
+            created_at=datetime(2026, 8, 20, 10),
+        )
+    )
+    test_db.commit()
+    called = {}
+
+    def fake_pack(symbol, **kwargs):
+        called.update(kwargs)
+        return {"symbol": symbol, "as_of": kwargs["as_of"].isoformat()}
+
+    monkeypatch.setattr(context, "build_stock_context_pack", fake_pack)
+    monkeypatch.setattr(context, "render_context_text", lambda _pack, _limit, **kw: str(kw))
+
+    result = context.mingcang_stock_context(test_db, "600519")
+
+    assert called["strict_research_inputs"] is True
+    assert called["as_of"] is not None
+    assert "long_term_label" in called["sections"]
+    assert result["long_term_label"]["quality_basis"] == "stored_generation_metadata"
+    assert result["long_term_label"]["revalidation_required"] is True
+    assert result["long_term_label"]["current_input_quality_available"] is False
+    assert result["long_term_label"]["current_input_quality_reason"] == "strict_financial_quality_unavailable"
+    assert result["long_term_label"]["current_constraints_eligible"] is False
+    assert result["context_pack"]["as_of"] == called["as_of"].isoformat()
+
+
+def test_stock_context_does_not_recertify_stored_label_when_strict_inputs_available(test_db, monkeypatch):
+    from backend.agent import context
+    from backend.data.database import LongTermLabel
+
+    test_db.add(LongTermLabel(
+        symbol="600519",
+        date="2026-09-20",
+        label="跟踪",
+        score=15,
+        expires_at="2026-10-30",
+        quality="ok",
+        constraint_eligible=True,
+        quality_notes_json="[]",
+        created_at=datetime(2026, 9, 20, 10),
+    ))
+    test_db.commit()
+
+    monkeypatch.setattr(
+        context,
+        "build_stock_context_pack",
+        lambda symbol, **kwargs: {
+            "symbol": symbol,
+            "as_of": kwargs["as_of"].isoformat(),
+            "financials": {"piotroski": {"available": True}},
+        },
+    )
+    monkeypatch.setattr(context, "render_context_text", lambda *_args, **_kwargs: "")
+
+    label = context.mingcang_stock_context(test_db, "600519")["long_term_label"]
+
+    assert label["constraint_eligible"] is True  # historical stored metadata is preserved
+    assert label["revalidation_required"] is False
+    assert label["current_input_quality_available"] is True
+    assert label["current_constraints_eligible"] is None  # current suitability remains unknown
+    assert label["current_input_quality_reason"] == "label_not_recomputed_from_current_inputs"

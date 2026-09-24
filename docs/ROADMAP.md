@@ -25,8 +25,14 @@ memory, replay or risk behavior changes.
 
 ## Active queue
 
-Owner priority (09-24): execute the isolated historical research in §4 first,
-rather than waiting for new daily samples. This does not enable production writes.
+09-24 owner priority: fix routine inputs, price refresh, report quality, stale queue
+and same-input output comparisons, including sector/analyst visibility and source
+gaps. Preserve frozen trials; P0-B2 writes need separate reviewed maintenance approval.
+Comparisons measure output defects, not returns. Continue isolated replay in §4.
+
+09-24 owner已授权第二轮：安全修复刷新启用阻塞，并行开发统一研究任务、证据追查、
+个股工作流、执行控制。两批隔离验证，不改One Loop；保护仍opt-in，历史维护仍需
+P0-B2专门审批。保留旧试验和失败；回执 `mingcang-stage2-20260924/`，结果见STATUS。
 
 ### 1. New-date panel quality and human completion — P0-A/P1
 

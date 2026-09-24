@@ -317,6 +317,7 @@ asyncio.run(main())
         "mingcang_memory_snapshot",
         "mingcang_memory_context",
         "mingcang_stock_context",
+        "mingcang_research_prepare",
         "mingcang_health",
     ]
     assert "stock" + "_sage_health" not in data["tools"]

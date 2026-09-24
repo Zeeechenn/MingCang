@@ -254,14 +254,22 @@ def chat_stream(request: AIChatRequest, db: Session = Depends(get_db)):
             validate_binding(db, request.research_context)
         except ReviewError as exc:
             raise HTTPException(exc.status, detail=str(exc)) from exc
+        if request.request_id is None:
+            request.request_id = uuid4().hex
 
     def generate():
         # Stage 1 – immediate acknowledgement before any I/O
-        yield _sse("prepare", {"mode": request.mode})
+        yield _sse("prepare", {"mode": request.mode, "request_id": request.request_id})
 
         try:
             if request.research_context is not None:
                 from backend.research.page_context import answer_page_question
+                yield _sse("running", {"request_id": request.request_id, "stage": "research_task"})
+                yield _sse("evidence", {
+                    "request_id": request.request_id,
+                    "context_sha256": request.research_context.context_sha256,
+                    "stage": "page_evidence_bound",
+                })
                 result = answer_page_question(db, request)
                 yield _sse("meta", result)
                 for chunk in _text_chunks(result["answer"]):
@@ -320,7 +328,7 @@ def chat_stream(request: AIChatRequest, db: Session = Depends(get_db)):
             yield _sse("done", payload)
 
         except Exception as exc:  # noqa: BLE001
-            yield _sse("error", {"message": str(exc)})
+            yield _sse("error", {"request_id": request.request_id, "message": str(exc)})
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 

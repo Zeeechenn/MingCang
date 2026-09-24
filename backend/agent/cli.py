@@ -159,6 +159,14 @@ def _command_stock_context(args: argparse.Namespace) -> dict:
     )
 
 
+def _command_research_prepare(args: argparse.Namespace) -> dict:
+    _read_guard(args)
+    from backend.research.page_context import ResearchTaskSpec, prepare_research_task
+
+    task = ResearchTaskSpec.model_validate(_parse_payload(args.payload_json))
+    return _with_db(lambda db: prepare_research_task(db, task))
+
+
 def _command_global_data(args: argparse.Namespace) -> dict:
     _read_guard(args)
     from backend.data.global_data import build_global_data_context
@@ -372,6 +380,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stock.add_argument("symbol")
     stock.set_defaults(handler=_command_stock_context)
+
+    research = subparsers.add_parser(
+        "research-prepare", help="prepare one bounded stock research task without model calls"
+    )
+    research.add_argument("--payload-json", required=True)
+    research.set_defaults(handler=_command_research_prepare)
 
     global_data = subparsers.add_parser(
         "global-data",

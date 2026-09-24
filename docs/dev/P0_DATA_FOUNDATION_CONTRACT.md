@@ -14,6 +14,13 @@ distinct with explainable denominators. Required evidence that cannot fit the te
 budget means “cannot judge”. Unknown account state cannot justify a larger numeric
 target. Drafts remain pending; strict candidates do not establish default wiring.
 
+Legacy timezone-naive financial cutoffs retain their UTC timestamp and original
+calendar-date behavior. Aware inputs retain their instant and use Asia/Shanghai
+for report/disclosure dates. All `fetched_at` comparisons use UTC-naive timestamps
+matching SQLite storage.
+The page date ends at Asia/Shanghai 23:59:59.999999. Context factors and the
+source list apply the same visibility filter before selecting the latest rows.
+
 Classify source/price evidence as consistent multi-source, conflict, true rebase,
 or unknown. The 09-17 public-data authorization covered 26 symbols and 200 total
 requests; 72 were used. Results: 21/26 complete TickFlow candidates, 26/26
@@ -77,11 +84,17 @@ one-time rebase is not a durable fix until guarded refresh activation is reviewe
 separate reviewed maintenance operation; do not bypass that restriction or clear
 old failed panels. Review receipts and scripts are external under
 `mingcang-price-resolution-20260924/` in the Codex workspace (source, independent
-checks, rehearsal, ATR impact and recurrence review). Production is unchanged.
+checks, rehearsal, ATR impact and recurrence review). This paragraph describes the
+pre-install rehearsal. The separately approved 09-24 20:39 maintenance subsequently
+updated exactly 2,294 rows; acceptance and unchanged-table evidence are in STATUS.
+No second repair or broader historical write is authorized by that receipt.
 
 ## Write and replay gates
 
-P0-B1 strict/warmup remains opt-in and routine callers unchanged. P0-B2 writes
+P0-B1 strict/warmup remains opt-in and routine caller defaults unchanged.
+`run_premarket(protected_price_refresh=True)` connects existing CN strict/240-row
+warmup checks and requires a fixed cutoff. Scheduler defaults stay off; fixture
+acceptance is not live-provider verification or activation. Strict+warmup rejects known mixed/blank provenance before provider calls and empty/partially-invalid batches before Price writes. Protected results separate complete/partial/blocked; 24/25 mixed histories remain blocked. P0-B2 writes
 require separate explicit approval, immutable backup, reviewed coverage/impact,
 maintenance window, rollback and owner acceptance. Warmup must be same-source,
 fixed-end, valid OHLC and have sufficient preceding rows. Clearance is not price

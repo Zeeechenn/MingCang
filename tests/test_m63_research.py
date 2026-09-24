@@ -62,6 +62,93 @@ def _tmp_db(path: Path) -> Path:
     return path
 
 
+def test_latest_labels_as_of_excludes_created_after_cutoff(tmp_path):
+    path = tmp_path / "labels.db"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE long_term_labels(id INTEGER PRIMARY KEY, symbol TEXT, date TEXT, label TEXT, expires_at TEXT, created_at TEXT)")
+    con.executemany(
+        "INSERT INTO long_term_labels(symbol,date,label,expires_at,created_at) VALUES(?,?,?,?,?)",
+        [
+            ("000858", "2026-09-20", "旧标签", "2026-10-01", "2026-09-20 08:00:00"),
+            ("000858", "2026-09-20", "未来重算", "2026-10-01", "2026-09-25 08:00:00"),
+        ],
+    )
+    con.commit()
+    con.close()
+    assert m63_research._latest_labels(["000858"], db_path=path, as_of="2026-09-24") == {"000858": "旧标签(2026-09-20)"}
+
+
+def test_run_target_local_industry_fallback_is_tracked_subset(tmp_path, monkeypatch):
+    path = tmp_path / "industry.db"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE stocks(asset_key TEXT, symbol TEXT, name TEXT, industry TEXT, market TEXT, active BOOLEAN)")
+    con.executemany(
+        "INSERT INTO stocks VALUES(?,?,?,?,?,?)",
+        [(f"CN:{symbol}", symbol, name, "白酒Ⅱ", "CN", 1) for symbol, name in [("000596", "古井贡酒"), ("000858", "五粮液")]]
+        + [("US:WINE", "WINE", "Wine Co", "白酒", "US", 1), ("CN:INACTIVE", "600000", "Inactive", "白酒", "CN", 0)],
+    )
+    con.commit()
+    con.close()
+    monkeypatch.setattr(m63_research, "default_sqlite_path", lambda: path)
+    resolved = m63_research._resolve_from_local_stock_industry("白酒")
+    assert resolved["symbols"] == ["000596", "000858"]
+    assert resolved["source"] == "local_stock_industry_unversioned"
+    assert resolved["coverage"]["full_market"] is False
+
+
+def test_stage_payload_failure_blocks_queue_completion():
+    assert m63_research._stage_payload_has_failure({"failed": [{"symbol": "000858"}]})
+    assert m63_research._stage_payload_has_failure({"deep": {"gate_status": "blocked"}})
+    assert not m63_research._stage_payload_has_failure({"failed": [], "cards": []})
+
+
+def test_stage_health_does_not_confuse_skipped_or_partial_with_ok():
+    assert "跳过" in m63_research._stage_health_line({"name": "标签", "ok": True, "result": {"skipped": True, "reason": "offline"}})
+    assert "partial" in m63_research._stage_health_line({"name": "深研", "ok": True, "result": {"quality_status": "partial"}})
+    assert "跳过" in m63_research._stage_health_line({"name": "数据", "ok": True, "result": {"news": {"skipped": True}, "quotes": {"skipped": True}}})
+
+
+def test_offline_orchestration_closes_network_models_and_queue_writes(tmp_path, monkeypatch):
+    queue_path = tmp_path / "queue.json"
+    queue = [{"id": "q1", "target": "300308", "status": "pending", "created_at": "2026-09-20"}]
+    queue_path.write_text(json.dumps(queue), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(m63_research, "_latest_labels", lambda symbols, as_of=None: {})
+
+    def backfill(symbols, *, as_of, offline=False):
+        assert offline is True
+        calls.append("no-data-fetch")
+        return {"skipped": True}
+
+    def labels(symbols, *, no_llm, as_of=None):
+        assert no_llm is True and as_of == "2026-09-24"
+        calls.append("no-label-model")
+        return {"skipped": True}
+
+    def deep(target, *, as_of, auto, no_llm, offline=False, output_dir=None):
+        assert no_llm and offline and output_dir == tmp_path / "out"
+        calls.append("offline-local-deep")
+        return {"quality_status": "partial", "model_calls": 0, "offline": True}
+
+    def copilot(symbols, *, no_llm):
+        assert no_llm
+        calls.append("no-copilot")
+        return {"skipped": True}
+
+    monkeypatch.setattr(m63_research, "_run_backfill", backfill)
+    monkeypatch.setattr(m63_research, "_run_label_builder", labels)
+    monkeypatch.setattr(m63_research, "_run_deep_research_stage", deep)
+    monkeypatch.setattr(m63_research, "_run_copilot_stage", copilot)
+    monkeypatch.setattr(m63_research, "_upsert_watchlist", lambda *a, **k: (_ for _ in ()).throw(AssertionError("watchlist write")))
+    result = m63_research.run_research(
+        target="300308", from_queue="q1", queue_path=queue_path, as_of="2026-09-24",
+        offline=True, output_dir=tmp_path / "out",
+    )
+    assert set(calls) == {"no-data-fetch", "no-label-model", "offline-local-deep", "no-copilot"}
+    assert json.loads(queue_path.read_text(encoding="utf-8")) == queue
+    assert Path(result["report_path"]).is_relative_to(tmp_path / "out")
+
+
 def test_symbol_target_resolution():
     resolved = m63_research.resolve_target("300604")
 
@@ -125,6 +212,42 @@ def test_theme_from_watchlist_resolution(tmp_path):
     assert resolved["source"] == "watchlist"
     assert resolved["theme_key"] == "optical"
     assert resolved["symbols"] == ["300308", "300394"]
+    assert resolved["coverage"]["listed_count"] == 2
+    assert resolved["coverage"]["full_market"] is False
+
+
+def test_theme_uses_runtime_watchlist_dir_default(monkeypatch, tmp_path):
+    watchlists = tmp_path / "runtime-watchlists"
+    _write_watchlist(watchlists)
+    monkeypatch.setattr(m63_research, "WATCHLIST_DIR", watchlists)
+
+    resolved = m63_research.resolve_target("光通信", universe_paths=())
+
+    assert resolved["source"] == "watchlist"
+    assert resolved["coverage"]["watchlist_file"].startswith(str(watchlists))
+
+
+def test_long_term_role_summary_displays_saved_findings_and_absence():
+    lines = m63_research._format_long_term_role_lines(
+        ["000858", "600519"],
+        {
+            "000858": {
+                "date": "2026-09-24",
+                "label": "观望",
+                "quality": "degraded",
+                "quality_notes": ["财务项缺失"],
+                "votes": {"track": "观望", "quality": "规避"},
+                "findings": ["[赛道] 供应链议价稳定", "[质量] 财务覆盖不足"],
+                "expires_at": "2026-10-04",
+            }
+        },
+    )
+
+    rendered = "\n".join(lines)
+    assert "赛道/供应链: 投票=观望" in rendered
+    assert "Piotroski质量: 投票=规避" in rendered
+    assert "没有保存该角色的发现" in rendered
+    assert "600519: 当前没有有效的已存长期标签" in rendered
 
 
 def test_theme_from_universe_sector_resolution(tmp_path):
@@ -170,7 +293,7 @@ def test_pipeline_continues_past_failing_stage(tmp_path, monkeypatch):
     result = m63_research.run_research(target="300604", no_llm=True, as_of="2026-07-05")
 
     assert "⚠️ 数据补齐 失败:RuntimeError: boom" in result["text"]
-    assert "标签:OK" in result["text"]
+    assert "标签:跳过" in result["text"]
 
 
 def test_research_final_text_uses_sanitize_language_guard(tmp_path, monkeypatch):
@@ -222,7 +345,7 @@ def test_from_queue_marks_done_on_success(tmp_path, monkeypatch):
     monkeypatch.setattr(
         m63_research,
         "_run_deep_research_stage",
-        lambda target, as_of, auto, no_llm: {"summary": "deep ok"},
+        lambda target, as_of, auto, no_llm: {"summary": "deep ok", "quality_status": "sufficient"},
     )
     monkeypatch.setattr(m63_research, "_run_copilot_stage", lambda symbols, no_llm: {"cards": []})
     monkeypatch.setattr(

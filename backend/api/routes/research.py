@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from backend.agent.http_guard import agent_write_guard
+from backend.agent.http_guard import agent_read_guard, agent_write_guard
 from backend.agent.security import agent_mode
 from backend.api.routes.daily import HumanOutcomeIn
 from backend.api.schemas import (
@@ -57,9 +57,30 @@ from backend.api.schemas import (
 from backend.config import settings
 from backend.data.database import get_db
 from backend.llm import runtime_readiness
-from backend.research.page_context import PageReviewIn
+from backend.research.page_context import PageReviewIn, ResearchTaskSpec
 
 router = APIRouter()
+
+
+@router.post("/research/task/prepare", dependencies=[Depends(agent_read_guard())])
+def prepare_research_task_route(payload: ResearchTaskSpec, db: Session = Depends(get_db)):
+    """Read-only preparation shared with the local CLI and MCP tool."""
+    from backend.research.daily_review import ReviewError
+    from backend.research.page_context import prepare_research_task
+    try:
+        return prepare_research_task(db, payload)
+    except ReviewError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+@router.get("/research/tasks/{request_id}", dependencies=[Depends(agent_read_guard())])
+def research_task_status_route(request_id: str, db: Session = Depends(get_db)):
+    from backend.research.daily_review import ReviewError
+    from backend.research.page_context import get_research_task_status
+    try:
+        return get_research_task_status(db, request_id)
+    except ReviewError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
 
 
 @router.get("/research/{symbol}/page-context")

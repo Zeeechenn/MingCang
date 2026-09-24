@@ -139,6 +139,9 @@ const routes = [
   const crypto = require('node:crypto');
   let researchReviews = [];
   let researchMessages = [];
+  const researchTasks = new Map();
+  let researchPrepareCalls = 0;
+  let researchStreamCalls = 0;
   const researchContext = selection => ({ selection, context_sha256: crypto.createHash('sha256').update(JSON.stringify(selection)).digest('hex'),
     sources: [{ id: 'price-1', kind: 'price', source: 'browser-fixture', date: selection.as_of, adjustment: 'qfq', currency: 'CNY', fetched_at: null, values: { close: 11 } }],
     gaps: [], limitations: ['浏览器合成资料，非真实研究'], can_ask: true });
@@ -155,11 +158,28 @@ const routes = [
       const value = researchContext(selection);
       await route.fulfill({ json: value }); return;
     }
+    if (url.pathname.endsWith('/research/task/prepare')) {
+      researchPrepareCalls += 1;
+      const task = route.request().postDataJSON();
+      const evidence = researchContext({ symbol: task.symbol, market: task.market, start: task.start, as_of: task.as_of, adjustment: task.adjustment });
+      await route.fulfill({ json: { schema_version: 'research_task.v1', task: { ...task, context_sha256: evidence.context_sha256 },
+        evidence, prior_judgments: [], execution: { mode: 'prepare_only', model_calls: 0, max_calls: 1, budget_tokens: task.budget_tokens }, can_ask: true } });
+      return;
+    }
+    if (/\/research\/tasks\/[^/]+$/.test(url.pathname)) {
+      const requestId = decodeURIComponent(url.pathname.split('/').pop());
+      const status = researchTasks.get(requestId);
+      if (!status) { await route.fulfill({ status: 404, json: { detail: 'task_not_found' } }); return; }
+      await route.fulfill({ json: status }); return;
+    }
     if (url.pathname.endsWith('/ai/chat/stream')) {
+      researchStreamCalls += 1;
       const req = route.request().postDataJSON(); const selection = { ...req.research_context }; delete selection.context_sha256;
       const snapshot = researchContext(selection);
       const value = { answer: '合成回答：现金流仍待核验。', research_context: req.research_context, session_id: 'research-smoke',
+        task_execution: { state: 'executed', request_id: req.request_id, logical_provider_invocations: 1, max_calls: 1, remote_outcome: 'completed', retry_allowed: false },
         research_claims: [{ text: '合成回答：现金流仍待核验。', evidence_ids: ['price-1'] }] };
+      researchTasks.set(req.request_id, { request_id: req.request_id, status: 'executed', execution: value.task_execution, response: value });
       researchMessages.push({ role: 'user', context_snapshot: snapshot }, { role: 'assistant', ...value });
       await route.fulfill({ contentType: 'text/event-stream', body: `event: done\ndata: ${JSON.stringify(value)}\n\n` }); return;
     }
@@ -168,7 +188,10 @@ const routes = [
       if (route.request().method() === 'POST') {
         const req = route.request().postDataJSON(); const selection = { ...req.context }; delete selection.context_sha256;
         const record = { review_id: 'research-smoke-review', source: researchContext(selection),
-          result: { version: 1, decision: req, outcomes: [] } };
+          result: { version: 1,
+            decision: { judgment: req.judgment, rationale: req.rationale, watch_for: req.watch_for },
+            human_choice: { choice: req.choice, revised_text: req.revised_text, supporting_evidence_ids: req.supporting_evidence_ids,
+              contradicting_evidence_ids: req.contradicting_evidence_ids, uncertainties: req.uncertainties }, outcomes: [] } };
         researchReviews = [record]; await route.fulfill({ json: record }); return;
       }
       await route.fulfill({ json: { reviews: researchReviews } }); return;
@@ -248,24 +271,31 @@ const routes = [
 
   coverageFails = false;
   for (const [label, width, height] of [['desktop', 1440, 960], ['mobile', 390, 844]]) {
-    researchReviews = []; researchMessages = [];
+    researchReviews = []; researchMessages = []; researchTasks.clear(); researchPrepareCalls = 0; researchStreamCalls = 0;
     await page.goto(urlFor('/'), { waitUntil: 'networkidle' });
     await page.evaluate(() => localStorage.removeItem('mc_research_session_300308'));
+    await page.evaluate(() => localStorage.removeItem('mc_research_request_300308'));
     await page.setViewportSize({ width, height });
     await page.goto(urlFor('/#/stock/CN/300308'), { waitUntil: 'networkidle' });
     await page.getByLabel('证据截止日').fill('2026-09-15');
     await page.getByLabel('证据起始日').fill('2026-09-01');
-    await page.getByRole('button', { name: '基于这些证据提问' }).waitFor();
     await page.getByLabel('本页研究问题').fill('现金流还缺什么资料？');
-    await page.getByRole('button', { name: '基于这些证据提问' }).click();
+    await page.getByRole('button', { name: '准备本次研究' }).click();
+    await page.getByText('准备完成：0 次模型调用').waitFor();
+    if (researchPrepareCalls !== 1 || researchStreamCalls !== 0) throw new Error(`prepare must be read-only: ${JSON.stringify({ researchPrepareCalls, researchStreamCalls })}`);
+    await page.getByRole('button', { name: '开始本次研究' }).click();
     await page.getByText('合成回答：现金流仍待核验。', { exact: true }).waitFor();
+    if (researchPrepareCalls !== 1 || researchStreamCalls !== 1) throw new Error(`one explicit task should produce one stream submission: ${JSON.stringify({ researchPrepareCalls, researchStreamCalls })}`);
     await page.getByLabel('证据截止日').fill('2026-09-14');
     await page.getByText(/不适用于当前选择/).waitFor();
     await page.getByLabel('我的判断').fill(`合成观察 ${label}`);
+    await page.getByLabel('修改后的判断').fill(`修正观察 ${label}`);
     await page.getByLabel('判断依据').fill('现金流仍缺核验');
     await page.getByLabel('后续验证条件').fill('等待新公告');
+    await page.getByRole('button', { name: '保存判断与证据' }).waitFor({ state: 'visible' });
+    if (!await page.getByRole('button', { name: '保存判断与证据' }).isEnabled()) throw new Error('modified choice must require and accept revised judgment before saving');
     await page.getByRole('button', { name: '保存判断与证据' }).click();
-    await page.getByText(`2026-09-14 · 合成观察 ${label}`, { exact: true }).click();
+    await page.getByText(`2026-09-14 · 修改后接受 · 合成观察 ${label}`, { exact: true }).click();
     await page.getByLabel('观察依据').fill('新公告尚未发布');
     await page.getByRole('button', { name: '追加观察' }).click();
     await page.getByText('新公告尚未发布', { exact: true }).waitFor();
@@ -273,9 +303,10 @@ const routes = [
     await page.locator('section').filter({ has: page.getByRole('heading', { name: '基于本页证据研究' }) }).screenshot({ path: path.join(shotsDir, `research-workspace-${label}.png`) });
     if (!await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)) throw new Error('research context overflow');
     await page.reload({ waitUntil: 'networkidle' });
-    await page.getByText(`2026-09-14 · 合成观察 ${label}`, { exact: true }).click();
+    await page.getByText(`2026-09-14 · 修改后接受 · 合成观察 ${label}`, { exact: true }).click();
     await page.getByText('新公告尚未发布', { exact: true }).waitFor();
     await page.getByText('合成回答：现金流仍待核验。', { exact: true }).waitFor();
+    if (researchStreamCalls !== 1) throw new Error(`refresh must restore by request_id without resubmitting: ${researchStreamCalls} submissions`);
     results.push({ name: `research-context-${label}`, path: '/#/stock/CN/300308', ok: true });
   }
 

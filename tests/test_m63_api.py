@@ -84,13 +84,14 @@ def test_m63_queue_empty_and_ordered(client, tmp_path, monkeypatch):
 
     queue_path = tmp_path / "queue.json"
     monkeypatch.setattr(m63, "DEFAULT_QUEUE_PATH", queue_path)
-    assert client.get("/api/m63/queue").json() == {"pending": [], "done": []}
+    assert client.get("/api/m63/queue").json() == {"pending": [], "needs_revalidation": [], "done": []}
 
     queue_path.write_text(
         json.dumps(
             [
                 {"id": "done-old", "target": "A", "status": "done", "done_at": "2026-07-01"},
-                {"id": "pending", "target": "B", "status": "pending", "created_at": "2026-07-02"},
+                {"id": "pending", "target": "B", "status": "pending", "created_at": "2026-09-24"},
+                {"id": "stale", "target": "D", "status": "pending", "created_at": "2026-07-02"},
                 {"id": "done-new", "target": "C", "status": "done", "done_at": "2026-07-03"},
             ],
             ensure_ascii=False,
@@ -100,6 +101,7 @@ def test_m63_queue_empty_and_ordered(client, tmp_path, monkeypatch):
 
     body = client.get("/api/m63/queue").json()
     assert [item["id"] for item in body["pending"]] == ["pending"]
+    assert [item["id"] for item in body["needs_revalidation"]] == ["stale"]
     assert [item["id"] for item in body["done"]] == ["done-new", "done-old"]
 
 

@@ -14,3 +14,4 @@ class RawNews:
     symbol: str | None = None
     content: str | None = None
     provider: str | None = None
+    fetched_at: datetime | None = None

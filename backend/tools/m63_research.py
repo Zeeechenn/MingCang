@@ -16,7 +16,7 @@ import sqlite3
 import sys
 from collections import Counter
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -92,11 +92,12 @@ def resolve_target(
     target: str,
     *,
     symbols: list[str] | None = None,
-    watchlist_dir: Path | str = WATCHLIST_DIR,
+    watchlist_dir: Path | str | None = None,
     universe_paths: tuple[Path, ...] = DEFAULT_UNIVERSE_PATHS,
 ) -> dict[str, Any]:
     clean_target = target.strip()
     explicit_symbols = [s.strip() for s in (symbols or []) if s.strip()]
+    resolved_watchlist_dir = Path(watchlist_dir) if watchlist_dir is not None else WATCHLIST_DIR
     if re.fullmatch(r"\d{6}", clean_target):
         return {
             "target": clean_target,
@@ -105,6 +106,7 @@ def resolve_target(
             "title": clean_target,
             "symbols": [clean_target],
             "source": "symbol",
+            "coverage": {"scope": "single_symbol", "listed_count": 1, "full_market": False},
         }
     if explicit_symbols:
         return {
@@ -114,9 +116,10 @@ def resolve_target(
             "title": clean_target,
             "symbols": explicit_symbols,
             "source": "--symbols",
+            "coverage": {"scope": "explicit_user_list", "listed_count": len(set(explicit_symbols)), "full_market": False},
         }
 
-    entries, _errors = load_watchlists(watchlist_dir, authoritative_thesis=False)
+    entries, _errors = load_watchlists(resolved_watchlist_dir, authoritative_thesis=False)
     target_norm = clean_target.lower()
     for entry in entries:
         theme_key = str(entry.get("theme_key") or "")
@@ -130,10 +133,17 @@ def resolve_target(
                 "symbols": list(entry["symbols"]),
                 "source": "watchlist",
                 "watchlist_entry": entry,
+                "coverage": {
+                    "scope": "watchlist_membership",
+                    "listed_count": len(set(entry["symbols"])),
+                    "full_market": False,
+                    "watchlist_file": str(_watchlist_path(theme_key, resolved_watchlist_dir)),
+                },
             }
 
+    universe_entries = _load_universe_entries(universe_paths)
     matched: list[str] = []
-    for item in _load_universe_entries(universe_paths):
+    for item in universe_entries:
         if clean_target in item.get("sector", ""):
             matched.append(item["symbol"])
     if matched:
@@ -144,11 +154,56 @@ def resolve_target(
             "title": clean_target,
             "symbols": matched,
             "source": "universe_sector",
+            "coverage": {
+                "scope": "local_universe_sector_substring",
+                "listed_count": len(set(matched)),
+                "classified_local_universe_count": len(universe_entries),
+                "source_files": [str(path) for path in universe_paths if path.exists()],
+                "full_market": False,
+            },
         }
 
     raise TargetResolutionError(
         f"无法解析主题“{clean_target}”: 观察哨主题和 biaodi1/test2 sector 均未匹配。请显式提供 --symbols。"
     )
+
+
+def _resolve_from_local_stock_industry(target: str) -> dict[str, Any] | None:
+    """Fallback to tracked Stock.industry metadata; this is not a full universe."""
+    topic = str(target).strip()
+    if len(topic) < 2:
+        return None
+    try:
+        with _connect() as con:
+            required = {"symbol", "name", "industry", "market", "active"}
+            if not _table_exists(con, "stocks") or not required <= _columns(con, "stocks"):
+                return None
+            rows = con.execute(
+                "SELECT symbol, name, industry FROM stocks "
+                "WHERE market='CN' AND active=1 AND industry LIKE ? ORDER BY symbol",
+                (f"%{topic}%",),
+            ).fetchall()
+    except sqlite3.Error:
+        return None
+    members = [dict(row) for row in rows if str(row["symbol"] or "").isdigit()]
+    symbols = list(dict.fromkeys(str(row["symbol"]) for row in members))
+    if not symbols:
+        return None
+    return {
+        "target": topic,
+        "target_type": "theme",
+        "theme_key": _slug(topic),
+        "title": topic,
+        "symbols": symbols,
+        "source": "local_stock_industry_unversioned",
+        "coverage": {
+            "scope": "tracked_stock_industry_subset",
+            "listed_count": len(symbols),
+            "full_market": False,
+            "membership_as_of": "current local metadata; historical membership unverified",
+            "source_files": ["stocks.industry"],
+        },
+    }
 
 
 def build_research_preflight(
@@ -238,21 +293,30 @@ def _columns(con: sqlite3.Connection, table: str) -> set[str]:
     return {str(row[1]) for row in con.execute(f"PRAGMA table_info({table})")}
 
 
-def _latest_labels(symbols: list[str], *, db_path: str | Path | None = None) -> dict[str, str]:
+def _latest_labels(
+    symbols: list[str], *, db_path: str | Path | None = None, as_of: str | None = None,
+) -> dict[str, str]:
     if not symbols:
         return {}
     with _connect(db_path) as con:
         if not _table_exists(con, "long_term_labels") or not {"symbol", "label", "date"} <= _columns(con, "long_term_labels"):
             return {}
         placeholders = ",".join("?" for _ in symbols)
+        where = f"symbol IN ({placeholders})"
+        params = list(symbols)
+        cols = _columns(con, "long_term_labels")
+        if as_of:
+            where += " AND date <= ?"
+            params.append(as_of)
+            if "expires_at" in cols:
+                where += " AND expires_at >= ?"
+                params.append(as_of)
+            if "created_at" in cols:
+                where += " AND created_at IS NOT NULL AND date(created_at) <= ?"
+                params.append(as_of)
         rows = con.execute(
-            f"""
-            SELECT symbol, label, date
-            FROM long_term_labels
-            WHERE symbol IN ({placeholders})
-            ORDER BY date DESC, id DESC
-            """,
-            symbols,
+            f"SELECT symbol, label, date FROM long_term_labels WHERE {where} ORDER BY date DESC, id DESC",
+            params,
         ).fetchall()
     labels: dict[str, str] = {}
     for row in rows:
@@ -278,7 +342,12 @@ def _temporary_env(updates: dict[str, str]):
                 os.environ[key] = value
 
 
-def _run_backfill(symbols: list[str], *, as_of: str) -> dict[str, Any]:
+def _run_backfill(symbols: list[str], *, as_of: str, offline: bool = False) -> dict[str, Any]:
+    if offline:
+        return {
+            category: {"skipped": True, "reason": "--offline:只读已存数据，不发起外部数据请求"}
+            for category in (*BACKFILL_CATEGORIES, "news")
+        }
     from backend.data.database import SessionLocal
     from backend.data.orm import Base
 
@@ -307,12 +376,62 @@ def _run_backfill(symbols: list[str], *, as_of: str) -> dict[str, Any]:
         db.close()
 
 
-def _run_label_builder(symbols: list[str], *, no_llm: bool) -> dict[str, Any]:
-    if no_llm:
-        return {"skipped": True, "reason": "--no-llm:跳过长期标签 LLM"}
+def _run_label_builder(symbols: list[str], *, no_llm: bool, as_of: str | None = None) -> dict[str, Any]:
     from backend.agents.long_term.storage import bulk_get_labels, save_label
     from backend.agents.long_term.team import LongTermTeam
     from backend.data.database import SessionLocal
+
+    def serialize(labels: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        return {
+            symbol: {
+                "date": label.date,
+                "label": label.label,
+                "quality": label.quality,
+                "quality_notes": list(label.quality_notes),
+                "votes": dict(label.votes),
+                "findings": list(label.key_findings),
+                "expires_at": label.expires_at,
+            }
+            for symbol, label in labels.items()
+        }
+
+    if no_llm:
+        db = SessionLocal()
+        try:
+            if as_of:
+                from backend.data.database import LongTermLabel as LabelORM
+
+                rows = (
+                    db.query(LabelORM)
+                    .filter(
+                        LabelORM.symbol.in_(symbols),
+                        LabelORM.date <= as_of,
+                        LabelORM.expires_at >= as_of,
+                        LabelORM.created_at.is_not(None),
+                        LabelORM.created_at <= datetime.fromisoformat(as_of).replace(hour=23, minute=59, second=59),
+                    )
+                    .order_by(LabelORM.date.desc(), LabelORM.id.desc())
+                    .all()
+                ) if symbols else []
+                labels: dict[str, dict[str, Any]] = {}
+                for row in rows:
+                    labels.setdefault(row.symbol, {
+                        "date": row.date,
+                        "label": row.label,
+                        "quality": getattr(row, "quality", "degraded") or "degraded",
+                        "quality_notes": json.loads(row.quality_notes_json or "[]"),
+                        "votes": json.loads(row.votes_json or "{}"),
+                        "findings": json.loads(row.key_findings_json or "[]"),
+                        "expires_at": row.expires_at,
+                    })
+                return {"skipped": True, "reason": f"--no-llm:仅读取截至 {as_of} 有效的已有标签", "details": labels}
+            return {
+                "skipped": True,
+                "reason": "--no-llm:跳过长期标签模型，仅读取已有有效标签",
+                "details": serialize(bulk_get_labels(symbols, db)),
+            }
+        finally:
+            db.close()
 
     names = _name_by_symbol(symbols)
     success: list[str] = []
@@ -335,7 +454,12 @@ def _run_label_builder(symbols: list[str], *, no_llm: bool) -> dict[str, Any]:
                     failed.append({"symbol": symbol, "error": f"{type(exc).__name__}: {exc}"})
         finally:
             db.close()
-    return {"success": success, "skipped": skipped, "failed": failed}
+    db = SessionLocal()
+    try:
+        details = serialize(bulk_get_labels(symbols, db))
+    finally:
+        db.close()
+    return {"success": success, "skipped": skipped, "failed": failed, "details": details}
 
 
 def _confirm_deep_research(auto: bool) -> bool:
@@ -355,10 +479,12 @@ def _run_deep_research_stage(
     as_of: str,
     auto: bool,
     no_llm: bool,
+    offline: bool = False,
+    output_dir: Path | str | None = None,
 ) -> dict[str, Any]:
-    if no_llm:
+    if no_llm and not offline:
         return {"skipped": True, "reason": "--no-llm:跳过深研"}
-    if not _confirm_deep_research(auto):
+    if not offline and not _confirm_deep_research(auto):
         return {"skipped": True, "reason": "未确认昂贵 LLM 深研"}
     from backend.data.database import SessionLocal
     from backend.research.deep_research import run_deep_research
@@ -369,9 +495,11 @@ def _run_deep_research_stage(
             topic=str(target["title"]),
             symbols=list(target["symbols"]),
             db=db,
-            output_dir=OUTPUT_DIR,
+            output_dir=output_dir or OUTPUT_DIR,
             as_of=as_of,
-            persist=True,
+            persist=not offline,
+            long_term_theme=target.get("target_type") == "theme",
+            allow_external_retrieval=not offline,
         )
         return {
             "skipped": False,
@@ -379,6 +507,11 @@ def _run_deep_research_stage(
             "path": str(report.path) if report.path else None,
             "gate_status": report.gate_status,
             "source_count": report.source_count,
+            "quality_status": report.quality_status,
+            "source_relevance": report.source_relevance,
+            "long_term_framework": report.long_term_framework,
+            "offline": offline,
+            "model_calls": 0 if offline else None,
         }
     finally:
         db.close()
@@ -414,10 +547,10 @@ def _upsert_watchlist(
     *,
     as_of: str,
     deep_research: dict[str, Any] | None,
-    watchlist_dir: Path | str = WATCHLIST_DIR,
+    watchlist_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     theme_key = str(target.get("theme_key") or _slug(str(target["target"])))
-    path = _watchlist_path(theme_key, watchlist_dir)
+    path = _watchlist_path(theme_key, watchlist_dir if watchlist_dir is not None else WATCHLIST_DIR)
     existing: dict[str, Any] = {}
     if path.exists():
         try:
@@ -455,6 +588,41 @@ def _stage(name: str, func) -> dict[str, Any]:
         message = f"⚠️ {name} 失败:{type(exc).__name__}: {exc}"
         _stage_line(message)
         return {"name": name, "ok": False, "error": message}
+
+
+def _stage_payload_has_failure(value: Any) -> bool:
+    if isinstance(value, dict):
+        if any(value.get(key) for key in ("failed", "errors", "error", "blocked")):
+            return True
+        if value.get("gate_status") == "blocked":
+            return True
+        return any(_stage_payload_has_failure(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_stage_payload_has_failure(item) for item in value)
+    return False
+
+
+def _stage_health_line(stage: dict[str, Any]) -> str:
+    if not stage.get("ok"):
+        return f"{stage['name']}:失败 ({stage.get('error') or '未提供错误详情'})"
+    result = stage.get("result")
+    if isinstance(result, dict):
+        if result.get("gate_status") == "blocked":
+            return f"{stage['name']}:失败 (报告门禁阻止写出)"
+        if result.get("skipped"):
+            return f"{stage['name']}:跳过 ({result.get('reason') or '按配置跳过'})"
+        if result and all(
+            isinstance(item, dict) and item.get("skipped")
+            for item in result.values()
+        ):
+            return f"{stage['name']}:跳过 (全部子项按配置跳过)"
+        if _stage_payload_has_failure(result):
+            return f"{stage['name']}:部分失败 (结果中含 failed/errors)"
+        if result.get("quality_status") == "partial":
+            return f"{stage['name']}:partial (研究证据未达充分门槛)"
+        if result.get("quality_status") == "blocked":
+            return f"{stage['name']}:失败 (质量门阻止)"
+    return f"{stage['name']}:OK"
 
 
 def _stage_result(stages: list[dict[str, Any]], name: str) -> Any:
@@ -496,6 +664,60 @@ def _format_copilot_lines(copilot: dict[str, Any] | None) -> list[str]:
     return lines or ["copilot 无卡片"]
 
 
+def _format_long_term_role_lines(symbols: list[str], details: dict[str, dict[str, Any]]) -> list[str]:
+    role_names = {"track": "赛道/供应链", "boom": "景气", "quality": "Piotroski质量", "flow": "QFII资金流"}
+    lines: list[str] = []
+    for symbol in symbols:
+        detail = details.get(symbol)
+        if not detail:
+            lines.append(f"{symbol}: 当前没有有效的已存长期标签；本次没有可展示的分析师角色结果。")
+            continue
+        lines.append(
+            f"{symbol}: {detail['label']}，日期 {detail['date']}，质量 {detail['quality']}，到期 {detail['expires_at']}。"
+        )
+        lines.append("  - 注意：quality/投票是生成该标签时保存的历史元数据，不代表本次财务输入已重新验证。")
+        votes = detail.get("votes") or {}
+        findings = detail.get("findings") or []
+        for role, display in role_names.items():
+            prefix = {"track": "[赛道]", "boom": "[景气]", "quality": "[质量]", "flow": "[外资流向]"}[role]
+            role_findings = [text[len(prefix):].strip() for text in findings if str(text).startswith(prefix)]
+            lines.append(
+                f"  - {display}: 投票={votes.get(role, '无结果')}；"
+                f"已存发现={'；'.join(role_findings) if role_findings else '没有保存该角色的发现'}"
+            )
+        if detail.get("quality_notes"):
+            lines.append("  - 质量说明：" + "；".join(detail["quality_notes"]))
+    return lines or ["本次没有可展示的长期分析师角色结果。"]
+
+
+def _format_theme_framework(target: dict[str, Any], deep: dict[str, Any] | None) -> list[str]:
+    coverage = target.get("coverage") or {}
+    lines = [
+        f"解析方式={coverage.get('scope', target.get('source'))}；名单={coverage.get('listed_count', len(target['symbols']))}只；"
+        f"全行业完整覆盖={coverage.get('full_market', False)}。",
+    ]
+    if coverage.get("classified_local_universe_count") is not None:
+        lines.append(
+            f"本地已分类 universe 共 {coverage['classified_local_universe_count']} 只，"
+            f"匹配 {coverage.get('listed_count', 0)} 只；来源文件={','.join(coverage.get('source_files', [])) or '无'}。"
+        )
+    if target.get("source") == "local_stock_industry_unversioned":
+        lines.append(
+            "名单来源=当前本地 stocks.industry 元数据；只代表已跟踪股票子集，不是全市场成分；"
+            "历史 as-of 成分归属无版本快照，不能回溯确认。"
+        )
+    framework = (deep or {}).get("long_term_framework")
+    if not framework:
+        lines.append("长期研究框架未生成：深研被跳过或失败。")
+        return lines
+    lines.append("长期维度状态：")
+    for item in framework.get("framework", []):
+        evidence = "；".join(item.get("evidence", [])) or "暂无直接证据"
+        missing = "；".join(item.get("missing", [])) or "暂无额外缺项"
+        lines.append(f"- {item['dimension']} [{item['status']}]: 证据={evidence}；缺失={missing}")
+    return lines
+
+
 def _render_research_report(
     *,
     target: dict[str, Any],
@@ -503,20 +725,30 @@ def _render_research_report(
     stages: list[dict[str, Any]],
     labels_before: dict[str, str],
     labels_after: dict[str, str],
+    long_term_details: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     backfill = _stage_result(stages, "数据补齐")
     deep = _stage_result(stages, "深研")
     copilot = _stage_result(stages, "copilot")
     watchlist = _stage_result(stages, "观察哨")
-    health = [
-        stage["error"] if not stage.get("ok") else f"{stage['name']}:OK"
-        for stage in stages
-    ]
+    health = [_stage_health_line(stage) for stage in stages]
     sections = [
         ("随时式研究", [f"日期:{as_of}", f"目标:{target['target']}", f"标的:{','.join(target['symbols'])}", f"解析来源:{target['source']}"]),
+        ("名单覆盖范围", [str(line) for line in _format_theme_framework(target, deep)[:2]]),
         ("数据面", _format_data_lines(backfill)),
         ("标签面", _format_label_lines(list(target["symbols"]), labels_before, labels_after)),
-        ("研究结论", [str((deep or {}).get("summary") or (deep or {}).get("reason") or "深研未完成")]),
+        ("长期分析师角色", _format_long_term_role_lines(list(target["symbols"]), long_term_details or {})),
+        ("研究结论", [
+            f"质量状态={(deep or {}).get('quality_status', 'unknown')}",
+            f"文本直相关公司={(deep or {}).get('source_relevance', {}).get('direct_company_count', 0)}；"
+            f"文本直相关主题={(deep or {}).get('source_relevance', {}).get('direct_theme_count', 0)}",
+            str((deep or {}).get("summary") or (deep or {}).get("reason") or "深研未完成"),
+        ]),
+        ("财务复核边界", [
+            "M63 随时研究默认补齐列表不含 financial_metrics；已有季度财务行不代表已刷新到最新季。",
+            "标签生成时保存的质量元数据需与本次严格财务输入覆盖分别阅读。",
+        ]),
+        ("板块长期研究", _format_theme_framework(target, deep) if target.get("target_type") == "theme" else ["单股目标；主题长期框架不适用。"]),
         ("逐股要点", _format_copilot_lines(copilot)),
         ("观察哨", [f"{'更新' if (watchlist or {}).get('updated') else '创建'}:{(watchlist or {}).get('path', '未写入')}"]),
         ("数据健康", health),
@@ -524,9 +756,12 @@ def _render_research_report(
     return enforce_language_guard(strip_raw_json(render_report(sections)), mode="sanitize")
 
 
-def _write_report(target: dict[str, Any], as_of: str, text: str) -> Path:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    path = OUTPUT_DIR / f"research_{_slug(str(target['target']))}_{as_of.replace('-', '')}.md"
+def _write_report(
+    target: dict[str, Any], as_of: str, text: str, *, output_dir: Path | str | None = None,
+) -> Path:
+    destination = Path(output_dir) if output_dir is not None else OUTPUT_DIR
+    destination.mkdir(parents=True, exist_ok=True)
+    path = destination / f"research_{_slug(str(target['target']))}_{as_of.replace('-', '')}.md"
     path.write_text(text, encoding="utf-8")
     return path
 
@@ -558,36 +793,93 @@ def run_research(
     from_queue: str | None = None,
     queue_path: Path = DEFAULT_QUEUE_PATH,
     as_of: str | None = None,
+    watchlist_dir: Path | str | None = None,
+    universe_paths: tuple[Path, ...] = DEFAULT_UNIVERSE_PATHS,
+    offline: bool = False,
+    output_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     day = as_of or _today()
+    if offline and output_dir is None:
+        raise ValueError("--offline 必须指定 --output-dir，确保报告只写入隔离目录")
     if from_queue:
         queue = load_queue(queue_path)
         entry = _queue_entry_by_id(queue, from_queue)
         if entry is None:
             raise SystemExit(f"未找到队列条目:{from_queue}")
         target = str(entry.get("target") or target)
-    resolved = resolve_target(target, symbols=symbols)
-    labels_before = _latest_labels(list(resolved["symbols"]))
+    try:
+        resolved = resolve_target(
+            target,
+            symbols=symbols,
+            watchlist_dir=watchlist_dir,
+            universe_paths=universe_paths,
+        )
+    except TargetResolutionError:
+        industry_resolved = _resolve_from_local_stock_industry(target) if not symbols else None
+        if industry_resolved is None:
+            raise
+        resolved = industry_resolved
+    labels_before = (
+        _latest_labels(list(resolved["symbols"]), as_of=day)
+        if offline else _latest_labels(list(resolved["symbols"]))
+    )
+    if offline:
+        def backfill_call():
+            return _run_backfill(list(resolved["symbols"]), as_of=day, offline=True)
+
+        def deep_call():
+            return _run_deep_research_stage(
+                resolved, as_of=day, auto=auto, no_llm=True, offline=True, output_dir=output_dir,
+            )
+    else:
+        def backfill_call():
+            return _run_backfill(list(resolved["symbols"]), as_of=day)
+
+        def deep_call():
+            return _run_deep_research_stage(resolved, as_of=day, auto=auto, no_llm=no_llm)
     stages = [
-        _stage("数据补齐", lambda: _run_backfill(list(resolved["symbols"]), as_of=day)),
-        _stage("标签", lambda: _run_label_builder(list(resolved["symbols"]), no_llm=no_llm)),
-        _stage("深研", lambda: _run_deep_research_stage(resolved, as_of=day, auto=auto, no_llm=no_llm)),
-        _stage("copilot", lambda: _run_copilot_stage(list(resolved["symbols"]), no_llm=no_llm)),
+        _stage("数据补齐", backfill_call),
+        _stage("标签", lambda: (
+            _run_label_builder(list(resolved["symbols"]), no_llm=True, as_of=day)
+            if offline else _run_label_builder(list(resolved["symbols"]), no_llm=no_llm)
+        )),
+        _stage("深研", deep_call),
+        _stage("copilot", lambda: _run_copilot_stage(list(resolved["symbols"]), no_llm=(no_llm or offline))),
     ]
-    labels_after = _latest_labels(list(resolved["symbols"]))
+    labels_after = (
+        _latest_labels(list(resolved["symbols"]), as_of=day)
+        if offline else _latest_labels(list(resolved["symbols"]))
+    )
+    label_result = _stage_result(stages, "标签") or {}
     deep_result = _stage_result(stages, "深研")
-    stages.append(_stage("观察哨", lambda: _upsert_watchlist(resolved, as_of=day, deep_research=deep_result)))
+    if offline:
+        stages.append(_stage("观察哨", lambda: {"skipped": True, "reason": "--offline:不写观察哨"}))
+    elif watchlist_dir is None:
+        stages.append(_stage(
+            "观察哨",
+            lambda: _upsert_watchlist(resolved, as_of=day, deep_research=deep_result),
+        ))
+    else:
+        stages.append(_stage(
+            "观察哨",
+            lambda: _upsert_watchlist(
+                resolved, as_of=day, deep_research=deep_result, watchlist_dir=watchlist_dir,
+            ),
+        ))
     text = _render_research_report(
         target=resolved,
         as_of=day,
         stages=stages,
         labels_before=labels_before,
         labels_after=labels_after,
+        long_term_details=label_result.get("details") or {},
     )
-    report_path = _write_report(resolved, day, text)
+    report_path = _write_report(resolved, day, text, output_dir=output_dir)
     print(f"wrote {report_path}")
     print(text)
-    if from_queue and all(stage.get("ok") for stage in stages):
+    deep_quality = (deep_result or {}).get("quality_status")
+    payloads_clean = all(not _stage_payload_has_failure(stage.get("result")) for stage in stages)
+    if from_queue and not offline and all(stage.get("ok") for stage in stages) and payloads_clean and deep_quality == "sufficient":
         _mark_queue_done(from_queue, queue_path=queue_path)
     return {"target": resolved, "stages": stages, "report_path": str(report_path), "text": text}
 
@@ -598,6 +890,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--symbols", default="", help="主题成分股,逗号分隔")
     parser.add_argument("--auto", action="store_true", help="直接运行昂贵 LLM 深研,不再二次确认")
     parser.add_argument("--no-llm", action="store_true", help="跳过标签/深研/copilot LLM")
+    parser.add_argument("--offline", action="store_true", help="仅用本地快照生成深研与板块框架；不联网、不调用模型、不回补、不改watchlist/队列")
+    parser.add_argument("--as-of", default=None, help="研究截止日 YYYY-MM-DD")
+    parser.add_argument("--output-dir", default=None, help="报告输出目录（--offline建议指定隔离目录）")
     parser.add_argument(
         "--preflight", action="store_true",
         help="只读预检标的去重建议与阶段容量；不访问 DB、网络、LLM 或写报告",
@@ -624,6 +919,9 @@ def main(argv: list[str] | None = None) -> int:
             auto=args.auto,
             no_llm=args.no_llm,
             from_queue=args.from_queue,
+            as_of=args.as_of,
+            offline=args.offline,
+            output_dir=args.output_dir,
         )
     except TargetResolutionError as exc:
         print(str(exc), file=sys.stderr)

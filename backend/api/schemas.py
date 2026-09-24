@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from backend.research.page_context import PageBinding
+from backend.research.page_context import PageBinding, ResearchTaskBinding
 
 
 class StockOut(BaseModel):
@@ -405,6 +405,8 @@ class StressTestResponse(BaseModel):
 
 class AIChatRequest(BaseModel):
     research_context: PageBinding | None = None
+    research_task: ResearchTaskBinding | None = None
+    request_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,80}$")
     message: str
     mode: str = "general"  # general / long_term_team
     history: list[dict] = []
@@ -414,11 +416,14 @@ class AIChatRequest(BaseModel):
 class AIChatResponse(BaseModel):
     research_context: dict | None = None
     research_claims: list[dict] = []
+    research_task: dict | None = None
+    prior_judgments: list[dict] = []
     session_id: str | None = None
     answer: str
     citations: list[str] = []
     used_resources: list[str] = []
     pending_action: dict | None = None
+    task_execution: dict | None = None
 
 
 # ── M40 Thesis Ledger schemas ─────────────────────────────────────────────────

@@ -77,7 +77,11 @@ CodeGraph，再以 `rg`/AST 和 registry 复核。稳定分组如下：
 
 | 分组 | Canonical paths | 用途与边界（不宣称实时活跃） |
 |---|---|---|
-| 深研入口 | `backend/research/deep_research.py`, `dossier.py`, `copilot.py` | 日常入口；日常经 `backend.tools.m63_research` 路由 |
+| 深研入口 | `backend/research/deep_research.py`, `dossier.py`, `copilot.py` | 日常经 `backend.tools.m63_research` 路由；深研的五段角色是确定性模板，来源可用性、文本相关性和报告质量分别记录 |
+| 长期财务与分析师 | `backend/agents/long_term/`, `backend/data/fundamentals.py` | LongTermTeam 按入口和有效缓存决定是否运行；Piotroski 使用严格时点和未知值语义，旧标签质量属于生成时元数据 |
+| 定向财务维护 | `backend.tools.backfill_coverage --fill-missing-financial --financial-symbols <codes>` | 显式 CN 名单；补新期与旧行 NULL，分别报告新增/更新/缺披露；不扩散到新闻、价格或行业全池抓取 |
+| 板块长期证据 | `backend/research/agents.py`, `deep_research.py` | 主题研究输出覆盖名单及周期、供需竞争、财务、估值、催化风险的证据状态；缺失行业序列不生成长期方向结论，不表示独立分析师已运行 |
+| 本地证据报告 | `backend.tools.m63_research --offline --target <code/theme> --output-dir <directory>` | 只读本地数据和当时有效标签；不调用模型/外部数据，不更新观察哨或完成队列；只输出报告，质量不足保留 partial |
 | 论点与证据门 | `case.py`, `thesis_ledger.py`, `review_loop.py`, `daily_review.py`, `research_report_gate.py` | gate-guarded；主观清单不直接改短线分数 |
 | 前瞻观察 | `forward_thesis.py`, `watchlist.py`, `watchtower_confirm.py` | 受证据门约束；事件和确认结果只进入受控证据路径 |
 | 主题与压力测试 | `theme_hypothesis_engine.py`, `stress_test.py`, `universe_guard.py` | gate-guarded；必须保留 PIT/universe provenance |
@@ -92,7 +96,7 @@ CodeGraph，再以 `rg`/AST 和 registry 复核。稳定分组如下：
 | Capability | Owner / canonical entry | Consumer and boundary |
 |---|---|---|
 | Daily source binding | evidence, `daily_panel_sources` | existing JobRun/finalizer/panel; new-date contract only |
-| Human choices | research, `daily_review` | daily-page research section via `/api/daily/reviews` and outcomes route; existing PendingAIAction, `daily.research_review`, reviewed/non-executable; no new table |
+| Human choices / stock research | `daily_review`, `page_context` | Existing daily/stock UI and PendingAIAction; API/CLI/MCP share research prepare. Page question reservation/status and reviews/outcomes are non-trading records; no new table |
 | Four gates/window/memory filter | evidence, `decision_desk_readiness` | explicit `run_decision_desk_checks.py` and module window CLI; no scheduler/default memory consumer |
 | Model observation/session | evidence, `decision_desk_recording`, `decision_desk_session`, `decision_desk_manifest` | injected provider and explicit offline freeze/reservation/folds/holdout; no second trading ledger or production activation |
 | Bounded diagnostic process | evidence, `decision_desk_process` | only explicit `run_decision_desk_model_smoke.py`; local byte/time/filesystem bounds, not billing/remote cancellation guarantees |

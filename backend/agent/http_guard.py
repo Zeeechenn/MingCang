@@ -37,6 +37,17 @@ def agent_write_guard(action: str) -> Callable[[Request], None]:
     return dependency
 
 
+def agent_read_guard() -> Callable[[Request], None]:
+    """Return a dependency that requires a key for remote read access."""
+    def dependency(request: Request) -> None:
+        try:
+            require_agent_access("read", api_key=_api_key_from_request(request))
+        except AgentSecurityError as exc:
+            raise _to_http_error(exc) from exc
+
+    return dependency
+
+
 def require_http_agent_write(request: Request, action: str) -> None:
     """Validate a dynamic write action inside a route body."""
     require_http_agent_write_key(

@@ -35,6 +35,9 @@ class BackfillStats:
     financial_symbols_attempted: int = 0
     financial_symbols_filled: int = 0
     financial_rows_inserted: int = 0
+    financial_rows_updated: int = 0
+    financial_rows_missing_disclosure: int = 0
+    financial_errors: list[str] = field(default_factory=list)
     disclosure_dates_updated: int = 0
     news_symbols_attempted: int = 0
     news_symbols_filled: int = 0
@@ -59,6 +62,23 @@ def _missing_financial_symbols(db, limit: int | None = None) -> list[Stock]:
             rows.append(stock)
             if limit and len(rows) >= limit:
                 break
+    return rows
+
+
+def _requested_financial_symbols(db, symbols: list[str]) -> list[Stock]:
+    normalized = list(dict.fromkeys(str(symbol).strip() for symbol in symbols if str(symbol).strip()))
+    if not normalized:
+        raise ValueError("fill_missing_financial_requires_explicit_symbols")
+    rows = (
+        db.query(Stock)
+        .filter(Stock.active.is_(True), Stock.market == "CN", Stock.symbol.in_(normalized))
+        .order_by(Stock.symbol)
+        .all()
+    )
+    found = {str(row.symbol) for row in rows}
+    missing = sorted(set(normalized) - found)
+    if missing:
+        raise ValueError(f"financial_symbols_not_active_cn_watchlist:{','.join(missing)}")
     return rows
 
 
@@ -140,9 +160,26 @@ def run_backfill(
     sync_industries: bool = False,
     fast_financial: bool = False,
     use_tavily: bool = False,
+    fill_missing_financial: bool = False,
+    financial_symbols: list[str] | None = None,
 ) -> dict:
+    if financial_symbols and not fill_missing_financial:
+        raise ValueError("financial_symbols_requires_fill_missing_financial")
+    if fill_missing_financial and not financial_symbols:
+        raise ValueError("fill_missing_financial_requires_explicit_symbols")
+    if fill_missing_financial and skip_financial:
+        raise ValueError("fill_missing_financial_conflicts_with_skip_financial")
+    if fill_missing_financial and fast_financial:
+        raise ValueError("fill_missing_financial_conflicts_with_fast_financial")
+    # This option is a targeted financial-only maintenance path. It must not
+    # silently fan out to price, news, industry, or disclosure-calendar providers.
+    if fill_missing_financial:
+        skip_prices = True
+        skip_news = True
+        sync_industries = False
     stats = BackfillStats()
     db = SessionLocal()
+    original_fetch_indicator = None
     try:
         before = build_data_coverage_snapshot(db)
 
@@ -162,26 +199,57 @@ def run_backfill(
 
         if not skip_financial:
             if fast_financial:
+                original_fetch_indicator = fundamentals._fetch_indicator
                 fundamentals._fetch_indicator = lambda _ak, _symbol, years=5: pd.DataFrame()
             if sync_industries:
                 try:
                     stats.industries_updated = sync_industry(db)
                 except Exception as exc:
                     logger.warning("industry backfill failed: %s", exc)
-            for stock in _missing_financial_symbols(db, limit=financial_limit):
+            financial_stocks = (
+                _requested_financial_symbols(db, financial_symbols or [])
+                if fill_missing_financial
+                else _missing_financial_symbols(db, limit=financial_limit)
+            )
+            for stock in financial_stocks:
                 stats.financial_symbols_attempted += 1
                 try:
-                    inserted = sync_financial_metrics(str(stock.symbol), db, years=years)
+                    result = sync_financial_metrics(
+                        str(stock.symbol),
+                        db,
+                        years=years,
+                        fill_missing=fill_missing_financial,
+                        return_counts=fill_missing_financial,
+                    )
+                    if isinstance(result, dict):
+                        inserted = int(result.get("inserted", 0))
+                        updated = int(result.get("updated", 0))
+                    else:
+                        inserted, updated = int(result), 0
                     stats.financial_rows_inserted += inserted
-                    if inserted:
+                    stats.financial_rows_updated += updated
+                    if inserted or updated:
                         stats.financial_symbols_filled += 1
                 except Exception as exc:
                     logger.warning("financial backfill failed %s: %s", stock.symbol, exc)
+                    stats.financial_errors.append(f"{stock.symbol}:{type(exc).__name__}:{exc}")
                 time.sleep(sleep_seconds)
-            try:
-                stats.disclosure_dates_updated = sync_disclosure_dates(db, years=years)
-            except Exception as exc:
-                logger.warning("disclosure date backfill failed: %s", exc)
+            if fill_missing_financial:
+                selected_symbols = [str(stock.symbol) for stock in financial_stocks]
+                stats.financial_rows_missing_disclosure = (
+                    db.query(func.count(FinancialMetric.id))
+                    .filter(
+                        FinancialMetric.symbol.in_(selected_symbols),
+                        FinancialMetric.disclosure_date.is_(None),
+                    )
+                    .scalar()
+                    or 0
+                )
+            if not fill_missing_financial:
+                try:
+                    stats.disclosure_dates_updated = sync_disclosure_dates(db, years=years)
+                except Exception as exc:
+                    logger.warning("disclosure date backfill failed: %s", exc)
 
         if not skip_news:
             for stock in _missing_news_symbols(db, limit=news_symbol_limit):
@@ -199,8 +267,15 @@ def run_backfill(
                 time.sleep(sleep_seconds)
 
         after = build_data_coverage_snapshot(db)
-        return {"before": before["summary"], "after": after["summary"], "stats": asdict(stats)}
+        return {
+            "status": "partial" if stats.financial_errors else "complete",
+            "before": before["summary"],
+            "after": after["summary"],
+            "stats": asdict(stats),
+        }
     finally:
+        if original_fetch_indicator is not None:
+            fundamentals._fetch_indicator = original_fetch_indicator
         db.close()
 
 
@@ -218,6 +293,15 @@ def main() -> None:
     parser.add_argument("--sync-industries", action="store_true")
     parser.add_argument("--fast-financial", action="store_true")
     parser.add_argument("--use-tavily", action="store_true")
+    parser.add_argument(
+        "--fill-missing-financial",
+        action="store_true",
+        help="Only enrich NULL finance fields for explicitly listed active CN stocks",
+    )
+    parser.add_argument(
+        "--financial-symbols",
+        help="Comma-separated CN symbols; required with --fill-missing-financial",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -234,6 +318,8 @@ def main() -> None:
         sync_industries=args.sync_industries,
         fast_financial=args.fast_financial,
         use_tavily=args.use_tavily,
+        fill_missing_financial=args.fill_missing_financial,
+        financial_symbols=(args.financial_symbols.split(",") if args.financial_symbols else None),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 

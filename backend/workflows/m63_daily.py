@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sqlite3
+import tempfile
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
@@ -40,6 +41,7 @@ R6_CHG_1D_PCT = 7.0
 R6_DAMPER_DAYS = 5
 R6_RULE = "R6_price_move"
 QUEUE_DONE_TTL_DAYS = 30
+QUEUE_PENDING_REVALIDATE_DAYS = 30
 POSTMARKET_STEP_MODULES = {
     "backend.backtest.test2_compare",
     "backend.data.category_backfill",
@@ -677,9 +679,11 @@ def load_queue(path: Path = DEFAULT_QUEUE_PATH) -> list[dict[str, Any]]:
         return []
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return []
-    return payload if isinstance(payload, list) else []
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"研究队列 JSON 损坏，拒绝按空队列继续: {path}: {exc}") from exc
+    if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
+        raise ValueError(f"研究队列格式错误，预期为对象数组: {path}")
+    return payload
 
 
 def save_queue(
@@ -690,10 +694,61 @@ def save_queue(
 ) -> None:
     anchor = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(_compact_queue(queue, today=anchor), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    payload = json.dumps(_compact_queue(queue, today=anchor), ensure_ascii=False, indent=2)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as stream:
+            temp_path = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_path, path)
+        temp_path = None
+        try:
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            # Some filesystems do not permit directory fsync; atomic replacement remains.
+            pass
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def revalidate_stale_queue(
+    queue: list[dict[str, Any]],
+    *,
+    as_of: str,
+    max_pending_age_days: int = QUEUE_PENDING_REVALIDATE_DAYS,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Pure conversion for stale pending work; persistence is an explicit caller choice."""
+    anchor = date.fromisoformat(as_of)
+    cutoff = anchor - timedelta(days=max_pending_age_days)
+    converted: list[dict[str, Any]] = []
+    changed: list[str] = []
+    for raw in queue:
+        item = dict(raw)
+        created = _queue_date(item.get("created_at"))
+        if item.get("status") == "pending" and created is not None and created < cutoff:
+            item["status"] = "needs_revalidation"
+            item["revalidation_as_of"] = as_of
+            item["revalidation_reason"] = f"pending 年龄超过 {max_pending_age_days} 天；需人工核对后再运行"
+            changed.append(str(item.get("id") or item.get("target") or "unknown"))
+        converted.append(item)
+    return converted, {
+        "as_of": as_of,
+        "max_pending_age_days": max_pending_age_days,
+        "cutoff_exclusive": cutoff.isoformat(),
+        "marked_count": len(changed),
+        "marked_ids": changed,
+        "persisted": False,
+    }
 
 
 def _queue_date(value: Any) -> date | None:
@@ -716,11 +771,9 @@ def _compact_queue(queue: list[dict[str, Any]], *, today: date | None = None) ->
     # against the machine clock. Runtime routing supplies its explicit as_of day.
     anchor = max([today, *queue_dates] if today is not None else (queue_dates or [date.today()]))
     cutoff = anchor - timedelta(days=QUEUE_DONE_TTL_DAYS)
-    compacted: list[dict[str, Any]] = []
     latest_done_by_key: dict[tuple[str, str], dict[str, Any]] = {}
     for item in queue:
         if item.get("status") != "done":
-            compacted.append(item)
             continue
         done_at = _queue_date(item.get("done_at"))
         if done_at is None or done_at < cutoff:
@@ -730,9 +783,14 @@ def _compact_queue(queue: list[dict[str, Any]], *, today: date | None = None) ->
         if previous is None or done_at >= (_queue_date(previous.get("done_at")) or date.min):
             latest_done_by_key[key] = item
     latest_done_ids = {id(item) for item in latest_done_by_key.values()}
+    compacted: list[dict[str, Any]] = []
     for item in queue:
-        if item.get("status") == "done" and id(item) in latest_done_ids:
+        if item.get("status") != "done" or id(item) in latest_done_ids:
             compacted.append(item)
+        else:
+            archived = dict(item)
+            archived["status"] = "archived"
+            compacted.append(archived)
     return compacted
 
 
@@ -745,7 +803,7 @@ def _enqueue(
     trigger_rule: str,
 ) -> bool:
     for item in queue:
-        if item.get("status") == "pending" and item.get("target") == target and item.get("trigger_rule") == trigger_rule:
+        if item.get("status") in {"pending", "needs_revalidation"} and item.get("target") == target and item.get("trigger_rule") == trigger_rule:
             return False
     queue.append(
         {
@@ -955,6 +1013,7 @@ def run_trigger_router(
 ) -> dict[str, Any]:
     day = _now_date(as_of)
     queue = load_queue(queue_path)
+    display_queue, stale_queue_report = revalidate_stale_queue(queue, as_of=day)
     auto_refreshed: list[str] = []
     enqueued: list[dict[str, Any]] = []
     history = _load_history(history_path)
@@ -1035,13 +1094,17 @@ def run_trigger_router(
             enqueued.append(queue[-1])
     _save_history(history, history_path)
     save_queue(queue, queue_path, as_of=day)
-    pending = [item for item in queue if item.get("status") == "pending"]
+    display_queue, stale_queue_report = revalidate_stale_queue(queue, as_of=day)
+    pending = [item for item in display_queue if item.get("status") == "pending"]
+    needs_revalidation = [item for item in display_queue if item.get("status") == "needs_revalidation"]
     return {
         "queue_path": str(queue_path),
         "history_path": str(history_path),
         "auto_refreshed": auto_refreshed,
         "enqueued": enqueued,
         "pending": pending,
+        "needs_revalidation": needs_revalidation,
+        "stale_queue_report": stale_queue_report,
     }
 
 
@@ -1273,6 +1336,7 @@ def build_postmarket_report(
         (
             "待研究队列",
             [f"待研究({len(pending)}): {item['target']} -- {item['reason']}" for item in pending]
+            + [f"待复核({len(router.get('needs_revalidation', []))}): {item['target']} -- {item.get('revalidation_reason', '需复核')}" for item in (router.get("needs_revalidation", []) if isinstance(router, dict) else [])]
             + ["跑: python3 -m backend." + "tools.m63_research --target <X>"],
         ),
         (
@@ -1315,16 +1379,35 @@ def run_mode(args: argparse.Namespace) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="M63 daily touchpoint reports")
-    parser.add_argument("--mode", required=True, choices=("premarket", "intraday", "postmarket"))
+    parser.add_argument("--mode", choices=("premarket", "intraday", "postmarket"))
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM-burning postmarket steps")
     parser.add_argument("--json", action="store_true", help="Emit JSON envelope instead of text only")
     parser.add_argument("--db", type=Path, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--date", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--revalidate-queue", action="store_true", help="显式检查陈旧待办；需配合 --date 指定截止日")
+    parser.add_argument("--queue-path", type=Path, default=DEFAULT_QUEUE_PATH, help=argparse.SUPPRESS)
+    parser.add_argument("--apply-queue-revalidation", action="store_true", help="把 needs_revalidation 转换明确写回队列文件")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.revalidate_queue:
+        if not args.date:
+            raise SystemExit("--revalidate-queue 需要显式 --date YYYY-MM-DD")
+        original = load_queue(args.queue_path)
+        transformed, receipt = revalidate_stale_queue(original, as_of=args.date)
+        receipt["input_count"] = len(original)
+        receipt["output_count"] = len(transformed)
+        receipt["persisted"] = bool(args.apply_queue_revalidation)
+        if args.apply_queue_revalidation:
+            save_queue(transformed, args.queue_path, as_of=args.date)
+        print(json.dumps(receipt, ensure_ascii=False, indent=2))
+        return 0
+    if args.apply_queue_revalidation:
+        raise SystemExit("--apply-queue-revalidation 仅可与 --revalidate-queue 配合")
+    if not args.mode:
+        raise SystemExit("普通运行需要 --mode；纯队列维护请使用 --revalidate-queue")
     if args.db is not None:
         result = run_mode(args)
         if args.json:

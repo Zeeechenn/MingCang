@@ -74,6 +74,14 @@ def _stock_context(symbol: str, api_key: str | None = None) -> dict:
     return _with_db(lambda db: build_mingcang_stock_context(db, symbol))
 
 
+def _research_prepare(task: dict, api_key: str | None = None) -> dict:
+    require_agent_access("read", api_key=api_key)
+    from backend.research.page_context import ResearchTaskSpec, prepare_research_task
+
+    payload = ResearchTaskSpec.model_validate(task)
+    return _with_db(lambda db: prepare_research_task(db, payload))
+
+
 def _health(api_key: str | None = None) -> dict:
     require_agent_access("read", api_key=api_key)
 
@@ -118,6 +126,12 @@ def mingcang_memory_context(
 def mingcang_stock_context(symbol: str, api_key: str | None = None) -> dict:
     """Read signal, position, long-term label, and memory context for one stock."""
     return _stock_context(symbol, api_key=api_key)
+
+
+@mcp.tool()
+def mingcang_research_prepare(task: dict, api_key: str | None = None) -> dict:
+    """Prepare a bounded stock research task using current local evidence; makes no model call."""
+    return _research_prepare(task, api_key=api_key)
 
 
 @mcp.tool()

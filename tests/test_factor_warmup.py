@@ -95,8 +95,8 @@ def test_short_refresh_reproduces_drift_but_opt_in_warmup_stabilizes_same_write_
     assert fixed_count == default_count
     assert fixed_after[-1][2] == pytest.approx(desired, abs=1e-7)
     assert [(r[0], r[1]) for r in fixed_after] == [(r[0], r[1]) for r in default_after]
-    assert [r for r in fixed_after if r[0] < "2026-09-11"] == [
-        r for r in before if r[0] < "2026-09-11"
+    assert [r for r in fixed_after if r[0] < "2026-09-10"] == [
+        r for r in before if r[0] < "2026-09-10"
     ]
 
 
@@ -149,4 +149,208 @@ def test_warmup_requires_explicit_strict_guard(market_case, monkeypatch):
     before = prices(db)
     with pytest.raises(ValueError, match="strict_basis_write_guard"):
         call(db, frame, monkeypatch, factor_warmup_rows=240)
+    assert prices(db) == before
+
+
+def test_warmup_requires_existing_history_before_provider_call(test_db, monkeypatch):
+    provider_calls = []
+
+    def fail_if_called(*args, **kwargs):
+        provider_calls.append((args, kwargs))
+        raise AssertionError("warmup must not seed a new symbol through the refresh path")
+
+    monkeypatch.setattr(market, "fetch_daily", fail_if_called)
+
+    with pytest.raises(persistence.PriceBasisWriteBlocked, match="requires existing history"):
+        market.backfill_if_needed(
+            "600001",
+            "CN",
+            test_db,
+            refresh_today=True,
+            expected_latest="2026-09-15",
+            strict_basis_write_guard=True,
+            factor_warmup_rows=240,
+        )
+
+    assert provider_calls == []
+    assert prices(test_db) == []
+
+
+def test_provider_failure_leaves_prices_unchanged(market_case, monkeypatch):
+    db, _frame = market_case
+    before = prices(db)
+
+    def fail_provider(*args, **kwargs):
+        raise RuntimeError("fixture provider failure")
+
+    monkeypatch.setattr(market, "fetch_daily", fail_provider)
+    with pytest.raises(RuntimeError, match="fixture provider failure"):
+        market.backfill_if_needed(
+            "600001",
+            "CN",
+            db,
+            refresh_today=True,
+            expected_latest="2026-09-15",
+            strict_basis_write_guard=True,
+            factor_warmup_rows=240,
+        )
+
+    assert prices(db) == before
+
+
+@pytest.mark.parametrize(
+    "field,value,reason",
+    [
+        ("source", "legacy_provider", "stored_sources_mixed"),
+        ("source", "   ", "stored_source_missing"),
+        ("adjustment", "forward_additive", "stored_adjustments_mixed"),
+    ],
+)
+def test_mixed_stored_provenance_blocks_before_provider(
+    market_case, monkeypatch, field, value, reason
+):
+    db, _frame = market_case
+    legacy_row = Price(
+        symbol="600001",
+        asset_key="CN:600001",
+        market="CN",
+        currency="CNY",
+        date="2020-01-02",
+        open=100,
+        high=102,
+        low=98,
+        close=100,
+        volume=1000,
+        source="test_provider",
+        adjustment="qfq",
+    )
+    setattr(legacy_row, field, value)
+    db.add(legacy_row)
+    db.commit()
+    before = prices(db)
+    provider_calls = []
+
+    def fail_if_called(*args, **kwargs):
+        provider_calls.append((args, kwargs))
+        raise AssertionError("mixed stored provenance must fail before provider")
+
+    monkeypatch.setattr(market, "fetch_daily", fail_if_called)
+    with pytest.raises(persistence.PriceBasisWriteBlocked, match=reason):
+        market.backfill_if_needed(
+            "600001",
+            "CN",
+            db,
+            refresh_today=True,
+            expected_latest="2026-09-15",
+            strict_basis_write_guard=True,
+            factor_warmup_rows=240,
+        )
+
+    assert provider_calls == []
+    assert prices(db) == before
+
+
+def test_empty_provider_result_is_explicitly_blocked_for_strict_warmup(market_case, monkeypatch):
+    db, _frame = market_case
+    before = prices(db)
+    empty = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+    empty.attrs.update(source="test_provider", adjustment="qfq")
+    monkeypatch.setattr(market, "fetch_daily", lambda *args, **kwargs: empty)
+
+    with pytest.raises(persistence.PriceBasisWriteBlocked, match="provider returned no rows"):
+        market.backfill_if_needed(
+            "600001",
+            "CN",
+            db,
+            refresh_today=True,
+            expected_latest="2026-09-15",
+            strict_basis_write_guard=True,
+            factor_warmup_rows=240,
+        )
+
+    assert prices(db) == before
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_strict_warmup_jump_rejection_is_atomic(market_case, monkeypatch, partial):
+    db, frame = market_case
+    before = prices(db)
+    rejected_date = "2026-09-14"
+
+    def reject(close, _preceding):
+        if not partial:
+            return True
+        return close == pytest.approx(float(frame.loc[rejected_date, "close"]))
+
+    monkeypatch.setattr("backend.data.price_quality.check_adjustment_basis_jump", reject)
+    with pytest.raises(persistence.PriceBasisWriteBlocked, match="no prices were written"):
+        call(db, frame, monkeypatch, strict_basis_write_guard=True, factor_warmup_rows=240)
+
+    assert prices(db) == before
+
+
+def test_expected_latest_anchors_refresh_window_to_requested_cutoff(market_case, monkeypatch):
+    db, frame = market_case
+    candidate = frame.copy()
+    candidate.loc["2026-09-10", "close"] += 1.0
+    before = {row.date: row.close for row in db.query(Price).all()}
+    call(db, candidate, monkeypatch)
+    after = {row.date: row.close for row in db.query(Price).all()}
+
+    # expected_latest=09-15 gives a 09-10 refresh boundary. date.today() is 09-16,
+    # so anchoring to wall-clock time would incorrectly leave the 09-10 bar stale.
+    assert after["2026-09-10"] == before["2026-09-10"] + 1.0
+
+
+def test_expected_latest_before_stored_latest_fails_before_mutation(market_case, monkeypatch):
+    db, frame = market_case
+    latest = db.query(Price).order_by(Price.date.desc()).first()
+    latest.date = "2026-09-16"
+    db.commit()
+    before = prices(db)
+
+    with pytest.raises(persistence.PriceBasisWriteBlocked, match="precedes newest stored price"):
+        call(db, frame, monkeypatch)
+
+    assert prices(db) == before
+
+
+def test_fully_rejected_refresh_keeps_existing_rows(market_case, monkeypatch):
+    db, frame = market_case
+    before = prices(db)
+    monkeypatch.setattr(
+        "backend.data.price_quality.check_adjustment_basis_jump",
+        lambda *_args, **_kwargs: True,
+    )
+
+    assert call(db, frame, monkeypatch) == 0
+    assert prices(db) == before
+
+
+def test_partially_rejected_refresh_preserves_rejected_date(market_case, monkeypatch):
+    db, frame = market_case
+    rejected_date = "2026-09-14"
+    old_close = db.query(Price).filter(Price.date == rejected_date).one().close
+    monkeypatch.setattr(
+        "backend.data.price_quality.check_adjustment_basis_jump",
+        lambda close, _preceding: close == pytest.approx(float(frame.loc[rejected_date, "close"])),
+    )
+
+    count = call(db, frame, monkeypatch)
+
+    assert count > 0
+    assert db.query(Price).filter(Price.date == rejected_date).one().close == old_close
+
+
+def test_refresh_transaction_rolls_back_delete_when_insert_fails(market_case, monkeypatch):
+    db, frame = market_case
+    before = prices(db)
+
+    def fail_insert(_records):
+        raise RuntimeError("simulated insert failure")
+
+    monkeypatch.setattr(db, "bulk_save_objects", fail_insert)
+    with pytest.raises(RuntimeError, match="simulated insert failure"):
+        call(db, frame, monkeypatch)
+
     assert prices(db) == before

@@ -641,7 +641,7 @@ def test_queue_file_round_trip(tmp_path):
     assert m63_daily.load_queue(path) == queue
 
 
-def test_queue_compaction_keeps_pending_and_recent_done_only_latest(tmp_path):
+def test_queue_compaction_archives_without_losing_or_duplicating_done_rows(tmp_path):
     path = tmp_path / "queue.json"
     queue = [
         {
@@ -680,7 +680,41 @@ def test_queue_compaction_keeps_pending_and_recent_done_only_latest(tmp_path):
     m63_daily.save_queue(queue, path)
 
     saved = m63_daily.load_queue(path)
-    assert [item["id"] for item in saved] == ["pending", "recent-newer"]
+    assert [item["id"] for item in saved] == ["old", "recent-older", "recent-newer", "pending"]
+    assert [item["status"] for item in saved] == ["archived", "archived", "done", "pending"]
+
+
+def test_queue_load_corruption_fails_closed_and_revalidation_is_pure(tmp_path):
+    path = tmp_path / "queue.json"
+    path.write_text("{broken", encoding="utf-8")
+    with pytest.raises(ValueError, match="JSON 损坏"):
+        m63_daily.load_queue(path)
+    original = [{"id": "stale", "created_at": "2026-01-01", "status": "pending"}]
+    converted, receipt = m63_daily.revalidate_stale_queue(original, as_of="2026-09-24")
+    assert original[0]["status"] == "pending"
+    assert converted[0]["status"] == "needs_revalidation"
+    assert receipt["persisted"] is False
+
+
+def test_queue_atomic_save_failure_preserves_original(tmp_path, monkeypatch):
+    path = tmp_path / "queue.json"
+    original = [{"id": "keep", "created_at": "2026-09-20", "status": "pending"}]
+    m63_daily.save_queue(original, path, as_of="2026-09-24")
+    before = path.read_bytes()
+    monkeypatch.setattr(m63_daily.os, "replace", lambda *_: (_ for _ in ()).throw(OSError("replace failed")))
+    with pytest.raises(OSError, match="replace failed"):
+        m63_daily.save_queue([{**original[0], "reason": "new"}], path, as_of="2026-09-24")
+    assert path.read_bytes() == before
+    assert list(tmp_path.glob(".queue.json.*.tmp")) == []
+
+
+def test_revalidate_queue_cli_requires_explicit_date_and_keeps_dry_run_read_only(tmp_path, capsys):
+    path = tmp_path / "queue.json"
+    path.write_text(json.dumps([{"id": "old", "created_at": "2026-01-01", "status": "pending"}]), encoding="utf-8")
+    before = path.read_bytes()
+    assert m63_daily.main(["--revalidate-queue", "--date", "2026-09-24", "--queue-path", str(path)]) == 0
+    assert path.read_bytes() == before
+    assert json.loads(capsys.readouterr().out)["marked_count"] == 1
 
 
 def test_panel_lines_surface_hard_rule_fields():

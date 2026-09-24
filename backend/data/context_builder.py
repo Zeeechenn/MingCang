@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from contextlib import nullcontext
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from statistics import mean
 from typing import Any
 
@@ -24,7 +24,11 @@ from backend.data.database import (
     SessionLocal,
 )
 from backend.data.degradation import emit_degradation, recent_degradations
-from backend.data.fundamentals import compute_piotroski_factors, compute_piotroski_factors_strict
+from backend.data.fundamentals import (
+    compute_piotroski_factors,
+    compute_piotroski_factors_strict,
+    financial_as_of_cutoffs,
+)
 from backend.data.market_features import FAKE_FEATURE_FLAGS
 
 SECTION_ORDER = [
@@ -135,16 +139,16 @@ def _build_price(symbol: str, as_of: datetime, db) -> dict:
 
 
 def _financial_visible_expr(as_of: datetime) -> str:
-    as_of_date = _date_string(as_of)
-    return as_of_date
+    return financial_as_of_cutoffs(as_of)[0]
 
 
 def _financial_disclosed_filter(as_of: datetime) -> tuple:
-    as_of_date = _date_string(as_of)
+    as_of_date, fetched_at_cutoff = financial_as_of_cutoffs(as_of)
     return (
         FinancialMetric.report_date <= as_of_date,
         FinancialMetric.disclosure_date.isnot(None),
         FinancialMetric.disclosure_date <= as_of_date,
+        FinancialMetric.fetched_at <= fetched_at_cutoff,
     )
 
 
@@ -181,6 +185,7 @@ def _build_financials(symbol: str, as_of: datetime, db) -> dict:
 
 
 def _build_financials_strict(symbol: str, as_of: datetime, db) -> dict:
+    as_of_date, _ = financial_as_of_cutoffs(as_of)
     with _no_autoflush(db):
         row = (
             db.query(FinancialMetric)
@@ -190,7 +195,7 @@ def _build_financials_strict(symbol: str, as_of: datetime, db) -> dict:
         )
         piotroski = compute_piotroski_factors_strict(symbol, db, as_of=as_of)
     visibility = {
-        "cutoff": _date_string(as_of),
+        "cutoff": as_of_date,
         "granularity": "date_level",
         "revision_history": "unverified",
         "note": "FinancialMetric disclosure_date is date-level only; historical revision storage is not available.",
@@ -202,8 +207,23 @@ def _build_financials_strict(symbol: str, as_of: datetime, db) -> dict:
             "piotroski": piotroski,
             "visibility": visibility,
         }
+    try:
+        report_period_age_days = (date.fromisoformat(as_of_date) - date.fromisoformat(str(row.report_date)[:10])).days
+    except (TypeError, ValueError):
+        report_period_age_days = None
+    try:
+        disclosure_age_days = (date.fromisoformat(as_of_date) - date.fromisoformat(str(row.disclosure_date)[:10])).days
+    except (TypeError, ValueError):
+        disclosure_age_days = None
+    try:
+        raw_provenance = json.loads(row.raw_json) if row.raw_json else {}
+    except (TypeError, json.JSONDecodeError):
+        raw_provenance = {}
     return {
-        "latest": {field: getattr(row, field, None) for field in _FINANCIAL_FIELDS},
+        "latest": {
+            **{field: getattr(row, field, None) for field in _FINANCIAL_FIELDS},
+            "fetched_at": _iso(row.fetched_at),
+        },
         "piotroski": {
             "factors": piotroski.get("factors", {}),
             "score": piotroski.get("score"),
@@ -213,7 +233,14 @@ def _build_financials_strict(symbol: str, as_of: datetime, db) -> dict:
             "report_period": piotroski.get("report_period"),
             "comparison_period": piotroski.get("comparison_period"),
         },
-        "visibility": visibility,
+        "visibility": {
+            **visibility,
+            "report_period_age_days": report_period_age_days,
+            "disclosure_age_days": disclosure_age_days,
+            "fetched_at": _iso(row.fetched_at),
+            "field_sources": raw_provenance.get("field_sources", {}),
+            "field_observed_at": raw_provenance.get("field_observed_at", {}),
+        },
     }
 
 
@@ -533,7 +560,21 @@ def _build_long_term_label_strict(symbol: str, as_of: datetime, db) -> dict:
         "score": row.score,
         "date": row.date,
         "expires_at": row.expires_at,
+        "quality": row.quality,
+        "constraint_eligible": bool(row.constraint_eligible),
+        "quality_notes": _json_list(row.quality_notes_json),
+        "quality_basis": "stored_generation_metadata",
     }
+
+
+def _json_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
 
 
 def _degradation_matches_symbol(event: dict, symbol: str) -> bool:
@@ -680,6 +721,15 @@ def _section_lines(section: str, value: dict, *, strict_research_inputs: bool = 
                 ]}
             )
         )
+        if strict_research_inputs:
+            visibility = value.get("visibility") or {}
+            lines.append(
+                "时点: "
+                f"披露日={latest.get('disclosure_date')}; "
+                f"抓取时间={latest.get('fetched_at')}; "
+                f"报告期距截止={visibility.get('report_period_age_days')}天; "
+                f"披露距截止={visibility.get('disclosure_age_days')}天"
+            )
         denominator = piotroski.get("score_denominator")
         na_count = 9 - denominator if isinstance(denominator, int) else "NA"
         lines.append(
@@ -710,6 +760,15 @@ def _section_lines(section: str, value: dict, *, strict_research_inputs: bool = 
         lines.append(
             f"{value.get('date')}: {value.get('label')} score={_format_value(value.get('score'))} expires={value.get('expires_at')}"
         )
+        if strict_research_inputs:
+            lines.append(
+                "长期标签质量: "
+                f"quality={value.get('quality', 'unknown')} "
+                f"constraint_eligible={value.get('constraint_eligible', False)} "
+                f"basis={value.get('quality_basis', 'stored_generation_metadata')}"
+            )
+            if value.get("quality_notes"):
+                lines.append("长期标签质量说明: " + "；".join(value["quality_notes"]))
     elif section == "data_health":
         lines.append(f"近期降级 {len(value.get('recent_degradations') or [])} 条")
         for event in value.get("recent_degradations") or []:

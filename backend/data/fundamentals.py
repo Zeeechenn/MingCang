@@ -25,14 +25,16 @@ import logging
 import time
 from collections.abc import Iterable
 from contextlib import nullcontext
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Literal, overload
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 from backend.data.database import FinancialMetric, HolderSnapshot, Stock
 
 logger = logging.getLogger(__name__)
+_CN_TZ = ZoneInfo("Asia/Shanghai")
 
 
 def _akshare_retry(max_attempts: int = 3, delay: float = 1.5):
@@ -171,15 +173,60 @@ def _row_lookup(df: pd.DataFrame, *needles: str) -> pd.Series | None:
     if label_col is None:
         return None
     for needle in needles:
-        mask = df[label_col].astype(str).str.contains(needle, na=False)
+        mask = df[label_col].astype(str).str.contains(needle, na=False, regex=False)
         if mask.any():
             return df[mask].iloc[0]
     return None
 
 
-def sync_financial_metrics(symbol: str, db, years: int = 5) -> int:
+@overload
+def sync_financial_metrics(
+    symbol: str,
+    db,
+    years: int = 5,
+    *,
+    fill_missing: bool = False,
+    return_counts: Literal[False] = False,
+) -> int: ...
+
+
+@overload
+def sync_financial_metrics(
+    symbol: str,
+    db,
+    years: int = 5,
+    *,
+    fill_missing: bool = False,
+    return_counts: Literal[True],
+) -> dict[str, int]: ...
+
+
+@overload
+def sync_financial_metrics(
+    symbol: str,
+    db,
+    years: int = 5,
+    *,
+    fill_missing: bool = False,
+    return_counts: bool,
+) -> int | dict[str, int]: ...
+
+
+def sync_financial_metrics(
+    symbol: str,
+    db,
+    years: int = 5,
+    *,
+    fill_missing: bool = False,
+    return_counts: bool = False,
+) -> int | dict[str, int]:
     """
     同步单股 financial_metrics 表。返回新增行数。
+
+    ``fill_missing`` 是显式安全补齐选项：已有报告期仅补本次来源成功
+    取得的非空字段，不覆盖任何已有值，也不修改披露日。默认为关闭，
+    以免历史调用者在未选择补齐策略时改变既有数据库。
+    ``return_counts=True`` returns separate inserted and updated row counts.
 
     策略：
       1. 一次性拉财务摘要 + 财务指标
@@ -209,6 +256,11 @@ def sync_financial_metrics(symbol: str, db, years: int = 5) -> int:
     revenue_row = _row_lookup(abs_df, "营业总收入", "营业收入")
     net_profit_row = _row_lookup(abs_df, "归母净利润", "净利润")
     gross_margin_row = _row_lookup(abs_df, "毛利率", "销售毛利率")
+    operating_cf_row = _row_lookup(abs_df, "经营现金流量净额", "经营活动产生的现金流量净额")
+    total_equity_row = _row_lookup(abs_df, "股东权益合计")
+    abstract_roe_row = _row_lookup(abs_df, "净资产收益率(ROE)", "净资产收益率")
+    abstract_turnover_row = _row_lookup(abs_df, "总资产周转率")
+    abstract_current_ratio_row = _row_lookup(abs_df, "流动比率")
 
     # 财务指标（必须传 years 才能拿到 stock_financial_analysis_indicator 数据）
     ind_df = _fetch_indicator(ak, symbol, years=years)
@@ -242,6 +294,7 @@ def sync_financial_metrics(symbol: str, db, years: int = 5) -> int:
 
     # 构造每期的 metric dict
     inserted = 0
+    updated = 0
     rows_by_date: dict[str, dict] = {}
     for d in date_cols:
         report_date = f"{d[:4]}-{d[4:6]}-{d[6:]}"
@@ -252,12 +305,77 @@ def sync_financial_metrics(symbol: str, db, years: int = 5) -> int:
         rev = _safe_float(revenue_row[d]) if revenue_row is not None and d in revenue_row.index else None
         np_ = _safe_float(net_profit_row[d]) if net_profit_row is not None and d in net_profit_row.index else None
         gm = _safe_float(gross_margin_row[d]) if gross_margin_row is not None and d in gross_margin_row.index else None
+        operating_cf = (
+            _safe_float(operating_cf_row[d])
+            if operating_cf_row is not None and d in operating_cf_row.index
+            else None
+        )
+        total_equity = (
+            _safe_float(total_equity_row[d])
+            if total_equity_row is not None and d in total_equity_row.index
+            else None
+        )
+        abstract_roe = (
+            _safe_float(abstract_roe_row[d])
+            if abstract_roe_row is not None and d in abstract_roe_row.index
+            else None
+        )
+        abstract_turnover = (
+            _safe_float(abstract_turnover_row[d])
+            if abstract_turnover_row is not None and d in abstract_turnover_row.index
+            else None
+        )
+        abstract_current_ratio = (
+            _safe_float(abstract_current_ratio_row[d])
+            if abstract_current_ratio_row is not None and d in abstract_current_ratio_row.index
+            else None
+        )
 
         ind = ind_by_date.get(d, {})
 
-        # operating_cf 从 ratio 推算：cfo = ratio% × revenue / 100
-        ocf_ratio = ind.get("operating_cf_ratio") if ind else None
-        operating_cf = (ocf_ratio * rev / 100) if (ocf_ratio is not None and rev) else None
+        # AkShare 原始指标的单位/口径并不统一：经营现金流量净额优先使用摘要中的绝对金额，
+        # 不根据“比率(%)”字样猜测应否除以 100。没有绝对金额时保留未知值。
+        normalized_roe = abstract_roe if abstract_roe is not None else ind.get("roe")
+        normalized_turnover = abstract_turnover if abstract_turnover is not None else ind.get("asset_turnover")
+        normalized_current_ratio = (
+            abstract_current_ratio if abstract_current_ratio is not None else ind.get("current_ratio")
+        )
+        normalized_total_equity = total_equity if total_equity is not None else ind.get("total_equity")
+        field_sources = {
+            "revenue": "akshare_financial_abstract" if rev is not None else None,
+            "net_profit": "akshare_financial_abstract" if np_ is not None else None,
+            "gross_margin": "akshare_financial_abstract" if gm is not None else None,
+            "operating_cf": "akshare_financial_abstract" if operating_cf is not None else None,
+            "total_equity": (
+                "akshare_financial_abstract" if total_equity is not None
+                else "akshare_financial_analysis_indicator_derived" if ind.get("total_equity") is not None
+                else None
+            ),
+            "total_assets": "akshare_financial_analysis_indicator" if ind.get("total_assets") is not None else None,
+            "roe": (
+                "akshare_financial_abstract" if abstract_roe is not None
+                else "akshare_financial_analysis_indicator" if ind.get("roe") is not None
+                else "derived_from_net_profit_and_equity" if normalized_roe is None
+                and np_ is not None and normalized_total_equity not in (None, 0)
+                else None
+            ),
+            "asset_turnover": (
+                "akshare_financial_abstract" if abstract_turnover is not None
+                else "akshare_financial_analysis_indicator" if ind.get("asset_turnover") is not None
+                else "derived_from_revenue_and_assets" if normalized_turnover is None
+                and rev is not None and ind.get("total_assets") not in (None, 0)
+                else None
+            ),
+            "current_ratio": (
+                "akshare_financial_abstract" if abstract_current_ratio is not None
+                else "akshare_financial_analysis_indicator" if ind.get("current_ratio") is not None
+                else None
+            ),
+            "long_term_debt": (
+                "akshare_financial_analysis_indicator_derived" if ind.get("long_term_debt") is not None
+                else None
+            ),
+        }
 
         rows_by_date[d] = {
             "report_date": report_date,
@@ -265,14 +383,16 @@ def sync_financial_metrics(symbol: str, db, years: int = 5) -> int:
             "revenue": rev,
             "net_profit": np_,
             "gross_margin": gm,
-            "roe": ind.get("roe"),
-            "asset_turnover": ind.get("asset_turnover"),
+            "roe": normalized_roe,
+            "asset_turnover": normalized_turnover,
             "total_assets": ind.get("total_assets"),
-            "total_equity": ind.get("total_equity"),
+            "total_equity": normalized_total_equity,
             "long_term_debt": ind.get("long_term_debt"),
-            "current_ratio": ind.get("current_ratio"),
+            "current_ratio": normalized_current_ratio,
             "operating_cf": operating_cf,
             "shares_outstanding": ind.get("shares_outstanding"),
+            "field_sources": field_sources,
+            "operating_cf_ratio_observed": ind.get("operating_cf_ratio"),
         }
 
     # 同比计算：取 4 期前的同月数据对比
@@ -291,14 +411,68 @@ def sync_financial_metrics(symbol: str, db, years: int = 5) -> int:
             r["roe"] = compute_roe(r.get("net_profit"), r.get("total_equity"))
         if r.get("asset_turnover") is None:
             r["asset_turnover"] = compute_asset_turnover(r.get("revenue"), r.get("total_assets"))
+        if r.get("roe") is not None and r["field_sources"].get("roe") is None:
+            r["field_sources"]["roe"] = "derived_from_net_profit_and_equity"
+        if r.get("asset_turnover") is not None and r["field_sources"].get("asset_turnover") is None:
+            r["field_sources"]["asset_turnover"] = "derived_from_revenue_and_assets"
 
-    # 写库（幂等）
+    # 写库（幂等）。历史行可显式选择只补 NULL；不覆盖已知值或披露时间。
+    field_names = (
+        "revenue", "revenue_yoy", "net_profit", "net_profit_yoy", "total_assets",
+        "total_equity", "long_term_debt", "current_ratio", "operating_cf",
+        "shares_outstanding", "gross_margin", "roe", "asset_turnover",
+    )
+    source_name = "akshare_financial_abstract+akshare_financial_analysis_indicator"
     for r in rows_by_date.values():
-        exists = db.query(FinancialMetric.id).filter(
+        existing = db.query(FinancialMetric).filter(
             FinancialMetric.symbol == symbol,
             FinancialMetric.report_date == r["report_date"],
         ).first()
-        if exists:
+        if existing:
+            if fill_missing:
+                changed = False
+                filled_fields: list[str] = []
+                for field_name in field_names:
+                    incoming = r.get(field_name)
+                    if getattr(existing, field_name, None) is None and incoming is not None:
+                        setattr(existing, field_name, incoming)
+                        changed = True
+                        filled_fields.append(field_name)
+                if filled_fields and existing.source is None:
+                    existing.source = "legacy_unknown+akshare_enrichment"
+                    changed = True
+                incoming_raw = {k: v for k, v in r.items() if v is not None}
+                if incoming_raw:
+                    try:
+                        raw_value = json.loads(existing.raw_json) if existing.raw_json else {}
+                    except (TypeError, json.JSONDecodeError):
+                        raw_value = {"previous_raw_json": existing.raw_json}
+                    raw = raw_value if isinstance(raw_value, dict) else {"previous_raw_json": raw_value}
+                    observed_at = datetime.now(UTC).replace(tzinfo=None).isoformat()
+                    field_observed_at = raw.setdefault("field_observed_at", {})
+                    if not isinstance(field_observed_at, dict):
+                        field_observed_at = {}
+                        raw["field_observed_at"] = field_observed_at
+                    for field_name in filled_fields:
+                        field_observed_at[field_name] = observed_at
+                        incoming_value = incoming_raw.get(field_name)
+                        if raw.get(field_name) is None and incoming_value is not None:
+                            raw[field_name] = incoming_value
+                        source_for_field = r.get("field_sources", {}).get(field_name)
+                        if source_for_field:
+                            field_sources = raw.setdefault("field_sources", {})
+                            if not isinstance(field_sources, dict):
+                                field_sources = {}
+                                raw["field_sources"] = field_sources
+                            field_sources[field_name] = source_for_field
+                    if changed or filled_fields:
+                        existing.raw_json = json.dumps(raw, ensure_ascii=False)
+                if changed:
+                    # Strict PIT reads treat a late backfill as newly observed at this time.
+                    # Since row-level fetched_at cannot timestamp fields individually, the
+                    # complete row stays invisible to earlier as_of cutoffs.
+                    existing.fetched_at = datetime.now(UTC).replace(tzinfo=None)
+                    updated += 1
             continue
         db.add(FinancialMetric(
             symbol=symbol,
@@ -317,11 +491,12 @@ def sync_financial_metrics(symbol: str, db, years: int = 5) -> int:
             gross_margin=r.get("gross_margin"),
             roe=r.get("roe"),
             asset_turnover=r.get("asset_turnover"),
+            source=source_name,
             raw_json=json.dumps({k: v for k, v in r.items() if v is not None}, ensure_ascii=False),
         ))
         inserted += 1
     db.commit()
-    return inserted
+    return {"inserted": inserted, "updated": updated} if return_counts else inserted
 
 
 def sync_financial_metrics_for_market(symbol: str, market: str, db, years: int = 5) -> int:
@@ -354,6 +529,25 @@ def _parse_report_datetime(value: str | datetime) -> datetime:
     if isinstance(value, datetime):
         return value.replace(tzinfo=None)
     return datetime.strptime(value[:10], "%Y-%m-%d")
+
+
+def financial_as_of_cutoffs(as_of: datetime | str) -> tuple[str, datetime]:
+    """Return Shanghai calendar date and UTC-naive fetched_at cutoff.
+
+    Naive datetimes keep the existing UTC-naive contract, including their
+    calendar date. Aware datetimes retain their instant; the date-level
+    disclosure cutoff uses its Asia/Shanghai date and fetched_at uses UTC.
+    Date strings retain the existing date-at-UTC-midnight interpretation.
+    """
+    if isinstance(as_of, str):
+        day = datetime.strptime(as_of[:10], "%Y-%m-%d").date().isoformat()
+        return day, datetime.strptime(as_of[:10], "%Y-%m-%d")
+    if as_of.tzinfo is not None and as_of.utcoffset() is not None:
+        return (
+            as_of.astimezone(_CN_TZ).date().isoformat(),
+            as_of.astimezone(UTC).replace(tzinfo=None),
+        )
+    return as_of.date().isoformat(), as_of
 
 
 def _add_months(value: datetime, months: int) -> datetime:
@@ -399,16 +593,19 @@ def _no_new_shares_from_holders(symbol: str, as_of: datetime, db) -> bool | None
     return bool(latest.total_shares <= earlier.total_shares * 1.02)
 
 
-def _financial_visible_as_of_filter(as_of: datetime):
-    as_of_date = as_of.strftime("%Y-%m-%d")
+def _financial_visible_as_of_filter(as_of: datetime | str):
+    as_of_date, fetched_at_cutoff = financial_as_of_cutoffs(as_of)
     return (
         FinancialMetric.report_date <= as_of_date,
         FinancialMetric.disclosure_date.isnot(None),
         FinancialMetric.disclosure_date <= as_of_date,
+        FinancialMetric.fetched_at <= fetched_at_cutoff,
     )
 
 
-def _metric_rows_for_piotroski(symbol: str, db, *, as_of: datetime | None = None) -> list[FinancialMetric]:
+def _metric_rows_for_piotroski(
+    symbol: str, db, *, as_of: datetime | str | None = None
+) -> list[FinancialMetric]:
     query = db.query(FinancialMetric).filter(FinancialMetric.symbol == symbol)
     if as_of is not None:
         query = query.filter(*_financial_visible_as_of_filter(as_of))
@@ -526,9 +723,9 @@ def compute_piotroski_factors_strict(
         raise ValueError("strict_piotroski_requires_explicit_as_of")
     if isinstance(min_usable_factors, bool) or not isinstance(min_usable_factors, int) or not 1 <= min_usable_factors <= 9:
         raise ValueError("min_usable_factors_must_be_between_1_and_9")
-    as_of_dt = _parse_report_datetime(as_of)
+    as_of_input = as_of
     with _no_autoflush(db):
-        rows = _metric_rows_for_piotroski(symbol, db, as_of=as_of_dt)
+        rows = _metric_rows_for_piotroski(symbol, db, as_of=as_of_input)
     if len(rows) < 2:
         return _piotroski_unavailable("insufficient_visible_periods")
 

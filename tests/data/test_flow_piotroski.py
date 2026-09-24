@@ -286,8 +286,8 @@ def test_piotroski_analyst_denominator_9_behavior_is_unchanged(monkeypatch):
     monkeypatch.setattr(analyst, "lookup_caveat", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         analyst,
-        "compute_piotroski_factors",
-        lambda symbol, db: {
+        "compute_piotroski_factors_strict",
+        lambda symbol, db, **kwargs: {
             "available": True,
             "score": 7,
             "score_denominator": 9,
@@ -316,8 +316,8 @@ def test_piotroski_analyst_uses_normalized_denominator_for_vote_score_and_text(m
     monkeypatch.setattr(analyst, "lookup_caveat", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         analyst,
-        "compute_piotroski_factors",
-        lambda symbol, db: {
+        "compute_piotroski_factors_strict",
+        lambda symbol, db, **kwargs: {
             "available": True,
             "score": 5,
             "score_denominator": 8,
@@ -333,7 +333,7 @@ def test_piotroski_analyst_uses_normalized_denominator_for_vote_score_and_text(m
     assert report.label_vote == "观望"
     assert report.score == 25.0
     assert "5/8" in report.key_findings[0]
-    assert "股本历史缺失" in report.key_findings[0]
+    assert "部分因子未知" in report.key_findings[0]
 
 
 def test_piotroski_analyst_zero_denominator_degrades_to_watch(monkeypatch):
@@ -345,8 +345,8 @@ def test_piotroski_analyst_zero_denominator_degrades_to_watch(monkeypatch):
     monkeypatch.setattr(analyst, "lookup_caveat", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         analyst,
-        "compute_piotroski_factors",
-        lambda symbol, db: {
+        "compute_piotroski_factors_strict",
+        lambda symbol, db, **kwargs: {
             "available": True,
             "score": 0,
             "score_denominator": 0,

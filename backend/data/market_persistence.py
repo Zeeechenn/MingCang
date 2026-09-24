@@ -55,6 +55,43 @@ def _price_write_provenance_conflicts(
     return conflicts
 
 
+def _strict_warmup_stored_provenance_conflicts(db, *, asset_key: str) -> list[str]:
+    """Reject known mixed history before spending a provider call on strict refresh."""
+    from backend.data.database import Price
+
+    rows = (
+        db.query(Price.source, Price.adjustment)
+        .filter(Price.asset_key == asset_key)
+        .distinct()
+        .all()
+    )
+    if not rows:
+        return ["stored_price_provenance_missing"]
+
+    sources = {
+        str(row.source) if row.source and str(row.source).strip() else "missing"
+        for row in rows
+    }
+    adjustments = {
+        str(row.adjustment)
+        if row.adjustment and str(row.adjustment).strip()
+        else "missing"
+        for row in rows
+    }
+    conflicts: list[str] = []
+    if "missing" in sources:
+        conflicts.append("stored_source_missing")
+    if len(sources - {"missing"}) > 1:
+        conflicts.append("stored_sources_mixed:" + ",".join(sorted(sources - {"missing"})))
+    if "missing" in adjustments:
+        conflicts.append("stored_adjustment_missing")
+    if len(adjustments - {"missing"}) > 1:
+        conflicts.append(
+            "stored_adjustments_mixed:" + ",".join(sorted(adjustments - {"missing"}))
+        )
+    return conflicts
+
+
 def _check_adjustment_basis_drift(db, *, symbol: str, asset_key: str,
                                   fetched: pd.DataFrame, source: str | None) -> bool | None:
     """Warn (and record) when stored history sits on a stale adjustment basis.
@@ -263,6 +300,16 @@ def backfill_if_needed(
         if date.fromisoformat(expected_latest).isoformat() != expected_latest:
             raise ValueError("factor warmup requires a canonical expected_latest date")
 
+    reference_date = date.today()
+    if expected_latest is not None:
+        try:
+            parsed_expected_latest = date.fromisoformat(expected_latest)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("expected_latest must be an ISO date") from exc
+        if parsed_expected_latest.isoformat() != expected_latest:
+            raise ValueError("expected_latest must be a canonical ISO date")
+        reference_date = parsed_expected_latest
+
     market = normalize_market(market)
     symbol = normalize_symbol(symbol, market)
     asset_key = instrument_key(market, symbol)
@@ -272,9 +319,20 @@ def backfill_if_needed(
     latest_date_str = latest[0] if latest else None
     if factor_warmup_rows is not None and latest_date_str is None:
         raise PriceBasisWriteBlocked("factor warmup requires existing history; seed full history separately")
+    strict_warmup_refresh = strict_basis_write_guard and factor_warmup_rows is not None
+    if strict_warmup_refresh:
+        stored_conflicts = _strict_warmup_stored_provenance_conflicts(db, asset_key=asset_key)
+        if stored_conflicts:
+            raise PriceBasisWriteBlocked(
+                f"strict warmup refresh blocked before provider: {', '.join(stored_conflicts)}; "
+                "repair full stored history before enabling this symbol"
+            )
 
     if latest_date_str:
-        days_old = (date.today() - date.fromisoformat(latest_date_str)).days
+        latest_date = date.fromisoformat(latest_date_str)
+        if expected_latest is not None and latest_date > reference_date:
+            raise PriceBasisWriteBlocked("expected_latest precedes newest stored price")
+        days_old = (reference_date - latest_date).days
         if days_old < backfill_threshold_days and not refresh_today:
             return 0
         fetch_days = max(days_old + 10, refresh_window_days + 2 if refresh_today else 0)
@@ -295,6 +353,10 @@ def backfill_if_needed(
     adjustment = df.attrs.get("adjustment")
 
     if df.empty:
+        if strict_warmup_refresh:
+            raise PriceBasisWriteBlocked(
+                "strict warmup refresh blocked: provider returned no rows; no prices were written"
+            )
         return 0
 
     if factor_warmup_rows is not None:
@@ -349,12 +411,16 @@ def backfill_if_needed(
         )
 
     if refresh_today and latest_date_str:
-        window_start = (date.today() - timedelta(days=refresh_window_days)).isoformat()
+        window_start = (reference_date - timedelta(days=refresh_window_days)).isoformat()
         df_factors = df_factors[df_factors.index >= window_start]
     elif latest_date_str:
         df_factors = df_factors[df_factors.index > latest_date_str]
 
     if df_factors.empty:
+        if strict_warmup_refresh:
+            raise PriceBasisWriteBlocked(
+                "strict warmup refresh blocked: no rows remain in the refresh window; no prices were written"
+            )
         return 0
 
     if factor_warmup_rows is not None:
@@ -364,12 +430,7 @@ def backfill_if_needed(
                 f"factor warmup insufficient: {first_position} preceding rows; requires {factor_warmup_rows}"
             )
 
-    if refresh_today:
-        dates_to_replace = list(df_factors.index)
-        db.query(Price).filter(
-            Price.asset_key == asset_key,
-            Price.date.in_(dates_to_replace),
-        ).delete(synchronize_session=False)
+    candidate_dates = list(df_factors.index) if refresh_today else []
 
     # M42/M58: build a rolling window of the last 10 *committed* closes for
     # each candidate row so the write-time adjustment-jump guard (up-splice
@@ -379,9 +440,9 @@ def backfill_if_needed(
     #   - First N rows of a brand-new symbol have < 10 preceding closes →
     #     guard returns False (passes through) as documented in
     #     check_adjustment_basis_jump.
-    #   - For refresh_today the deleted rows are gone before this loop runs,
-    #     so the baseline comes from rows *outside* the refresh window — exactly
-    #     the rows that were not contaminated.
+    #   - For refresh_today the seed is strictly before the first candidate,
+    #     so no stale row inside the replacement window can leak into the
+    #     write-time baseline.
     from backend.data.price_quality import (  # local import avoids circular at module level
         HFQ_JUMP_RATIO_THRESHOLD,
         check_adjustment_basis_jump,
@@ -390,13 +451,13 @@ def backfill_if_needed(
     preceding_window = 10
     # Seed the window from existing DB closes (up to preceding_window rows),
     # ordered ascending so we keep the most-recent ones at the end.
-    seed_rows = (
-        db.query(Price.close)
-        .filter(Price.asset_key == asset_key)
-        .order_by(Price.date.desc())
-        .limit(preceding_window)
-        .all()
-    )
+    seed_query = db.query(Price.close).filter(Price.asset_key == asset_key)
+    if candidate_dates:
+        # Only rows strictly before the first candidate are valid seed context.
+        # Later stored rows may lie inside the refreshed window and must not
+        # influence acceptance of earlier candidate bars.
+        seed_query = seed_query.filter(Price.date < min(candidate_dates))
+    seed_rows = seed_query.order_by(Price.date.desc()).limit(preceding_window).all()
     # rows come back newest-first; reverse so list is oldest→newest
     preceding_closes: list[float] = [float(r.close) for r in reversed(seed_rows) if r.close]
 
@@ -448,6 +509,31 @@ def backfill_if_needed(
             symbol,
         )
 
-    db.bulk_save_objects(records)
-    db.commit()
+    if strict_warmup_refresh and rejected:
+        raise PriceBasisWriteBlocked(
+            f"strict warmup refresh blocked: {rejected} candidate rows failed the jump guard; "
+            "no prices were written"
+        )
+
+    # A refresh may only replace rows after at least one candidate has passed
+    # validation. Keep delete+insert in one transaction so rejected/empty input
+    # cannot erase a usable stored window.
+    if not records:
+        if strict_warmup_refresh:
+            raise PriceBasisWriteBlocked(
+                "strict warmup refresh blocked: no candidate rows passed validation; no prices were written"
+            )
+        return 0
+    dates_to_replace = [record.date for record in records] if refresh_today else []
+    try:
+        if dates_to_replace:
+            db.query(Price).filter(
+                Price.asset_key == asset_key,
+                Price.date.in_(dates_to_replace),
+            ).delete(synchronize_session=False)
+        db.bulk_save_objects(records)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return len(records)

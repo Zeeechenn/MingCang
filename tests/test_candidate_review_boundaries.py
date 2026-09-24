@@ -21,7 +21,8 @@ def test_strict_comparison_requires_previous_year_not_any_same_quarter(test_db):
     for year in [2024, 2026]:
         test_db.add(FinancialMetric(symbol="600519", report_date=f"{year}-03-31",
                                    disclosure_date=f"{year}-04-30", net_profit=10,
-                                   total_assets=100, operating_cf=11))
+                                   total_assets=100, operating_cf=11,
+                                   fetched_at=datetime(2026, 1, 1)))
     test_db.commit()
     result = compute_piotroski_factors_strict("600519", test_db, as_of="2026-09-07")
     assert result["comparison_period"] is None

@@ -196,9 +196,11 @@ MingCang encodes mature research methods as reusable analyst modules, each readi
 | 📊 **Piotroski F-Score** | Classic academic 9-factor framework | Financial quality: profitability, leverage, operating efficiency |
 | 📈 **Prosperity analyst** | Prosperity-investing framework | Marginal changes in profit, revenue, ROE, and related indicators |
 | 🔗 **Supply-chain analyst** | Industry-chain and supply-chain checks | Leading indicators, cycle position, and hype filtering for tech/hardware sectors |
-| 🧭 **Serenity chokepoint framework** | Serenity chokepoint skill / report-gate methodology | Supply-chain bottlenecks, evidence tiers, non-consensus leads, and falsification questions; currently a research checklist and stricter report-gate layer, not a production signal driver |
+| 🧭 **Serenity chokepoint framework** | Serenity chokepoint skill / report-gate methodology | Independent analyzer retired; checklist and optional gate interface retained. Stricter checks run only when a Serenity result is explicitly supplied; no long-term vote or production signal contribution. |
 
 These belong to the long-term research layer. They do not directly change daily signals, which remain constrained by explicit rules, risk lines, and evidence gates.
+
+Actual execution depends on the entrypoint, valid cached results and feature switches. The five sections in a topic report are deterministic templates, not proof that these analysts or a multi-round LLM debate ran. Reports distinguish cached votes, missing evidence and execution status. Run `python -m backend.tools.m63_research --offline --target 000858 --output-dir /tmp/mingcang-research` to generate a report from local data only.
 
 ### LLM Debate And Discretion Arm
 

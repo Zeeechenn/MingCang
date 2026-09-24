@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.data.database import get_db
-from backend.workflows.m63_daily import DEFAULT_QUEUE_PATH, OUTPUT_DIR, load_queue
+from backend.workflows.m63_daily import (
+    DEFAULT_QUEUE_PATH,
+    OUTPUT_DIR,
+    load_queue,
+    revalidate_stale_queue,
+)
 
 router = APIRouter()
 
@@ -108,12 +114,14 @@ def _sort_key(item: dict[str, Any]) -> str:
 
 @router.get("/m63/queue")
 def get_m63_queue() -> dict[str, list[dict[str, Any]]]:
-    """Return pending research queue entries and the latest completed entries."""
+    """Return pending, stale-for-review, and latest completed entries."""
     queue = load_queue(DEFAULT_QUEUE_PATH)
-    pending = [item for item in queue if item.get("status", "pending") == "pending"]
+    display_queue, _ = revalidate_stale_queue(queue, as_of=date.today().isoformat())
+    pending = [item for item in display_queue if item.get("status", "pending") == "pending"]
+    needs_revalidation = [item for item in display_queue if item.get("status") == "needs_revalidation"]
     done = [item for item in queue if item.get("status") == "done"]
     done = sorted(done, key=_sort_key, reverse=True)[:10]
-    return {"pending": pending, "done": done}
+    return {"pending": pending, "needs_revalidation": needs_revalidation, "done": done}
 
 
 @router.get("/m59/discretion/latest")

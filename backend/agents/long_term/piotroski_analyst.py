@@ -20,11 +20,12 @@ Score → Vote 映射（settings 可调）：
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from backend.agents.long_term.base import LongTermReport, VoteLabel
 from backend.config import settings
 from backend.data.context_builder import build_stock_context_pack, render_context_text
-from backend.data.fundamentals import compute_piotroski_factors
+from backend.data.fundamentals import compute_piotroski_factors_strict
 from backend.memory.bias_override import lookup_caveat
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ def _score_to_signal_score(normalized_score: float) -> float:
 def _score_summary(score: int, denominator: int) -> str:
     summary = f"Piotroski F-Score {score}/{denominator}"
     if denominator < 9:
-        summary += " (股本历史缺失,N/A 因子已从分母剔除)"
+        summary += " (部分因子未知，未计入分母)"
     return summary
 
 
@@ -79,11 +80,19 @@ def _template_findings(factors: dict[str, bool | None], raw: dict) -> list[str]:
     return findings[:3]
 
 
-def analyze(symbol: str, db) -> LongTermReport:
+def analyze(symbol: str, db, *, as_of: datetime | None = None) -> LongTermReport:
     """主入口"""
+    cutoff = as_of or datetime.now(UTC).replace(tzinfo=None)
     context_text = render_context_text(
-        build_stock_context_pack(symbol, sections=["financials", "holders"], db=db),
+        build_stock_context_pack(
+            symbol,
+            as_of=cutoff,
+            sections=["financials", "holders"],
+            db=db,
+            strict_research_inputs=True,
+        ),
         1800,
+        strict_research_inputs=True,
     )
     if not settings.long_term_piotroski_enabled:
         return LongTermReport(
@@ -92,7 +101,9 @@ def analyze(symbol: str, db) -> LongTermReport:
             raw={"context_text": context_text},
         )
 
-    result = compute_piotroski_factors(symbol, db)
+    result = compute_piotroski_factors_strict(symbol, db, as_of=cutoff)
+    result["strict_research_inputs"] = True
+    result["as_of"] = cutoff.isoformat()
     if not result.get("available"):
         result["context_text"] = context_text
         return LongTermReport(
@@ -133,6 +144,12 @@ def analyze(symbol: str, db) -> LongTermReport:
         "factors": factors,
         "report_period": result.get("report_period"),
         "comparison_period": result.get("comparison_period"),
+        "factor_reasons": result.get("factor_reasons", {}),
+        "strict_research_inputs": True,
+        "as_of": cutoff.isoformat(),
+        "available": result.get("available"),
+        "reason": result.get("reason"),
+        "raw": raw,
         "context_text": context_text,
     }
 

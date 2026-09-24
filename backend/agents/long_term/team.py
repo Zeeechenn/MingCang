@@ -102,6 +102,15 @@ def _assess_label_quality(reports: dict[str, LongTermReport]) -> tuple[LabelQual
     if not valid_reports:
         return "failed", False, ["没有有效长期分析师报告"]
 
+    quality_report = reports.get("quality")
+    if (
+        quality_report is not None
+        and quality_report.raw.get("strict_research_inputs") is True
+        and quality_report.raw.get("available") is False
+    ):
+        reason = quality_report.raw.get("reason") or "可用财务因子不足"
+        return "degraded", False, [f"Piotroski 严格输入不可用: {reason}"]
+
     track = reports.get("track")
     if settings.long_term_track_enabled:
         if track is None:

@@ -5,9 +5,10 @@ from unittest.mock import patch
 
 
 def _mock_piotroski_raw(score: int) -> dict:
-    """Minimal `compute_piotroski_factors` payload that drives a given F-score."""
+    """Minimal strict Piotroski payload that drives a given F-score."""
     return {
         "score": score,
+        "score_denominator": 9,
         "factors": {
             "roa_positive": True,
             "cfo_positive": True,
@@ -17,6 +18,7 @@ def _mock_piotroski_raw(score: int) -> dict:
         "report_period": "2024-Q3",
         "comparison_period": "2023-Q3",
         "available": True,
+        "factor_reasons": {},
     }
 
 
@@ -39,7 +41,7 @@ def test_piotroski_injects_caveat_on_weak_vote(test_db):
     seed_default_overrides(test_db)
 
     with patch(
-        "backend.agents.long_term.piotroski_analyst.compute_piotroski_factors",
+        "backend.agents.long_term.piotroski_analyst.compute_piotroski_factors_strict",
         return_value=_mock_piotroski_raw(score=3),
     ):
         report = piotroski_analyst.analyze("000001", test_db)
@@ -54,7 +56,7 @@ def test_piotroski_no_caveat_when_no_seed(test_db):
     from backend.agents.long_term import piotroski_analyst
 
     with patch(
-        "backend.agents.long_term.piotroski_analyst.compute_piotroski_factors",
+        "backend.agents.long_term.piotroski_analyst.compute_piotroski_factors_strict",
         return_value=_mock_piotroski_raw(score=3),
     ):
         report = piotroski_analyst.analyze("000001", test_db)
@@ -72,7 +74,7 @@ def test_piotroski_no_caveat_on_strong_vote_even_with_weak_seed(test_db):
     seed_default_overrides(test_db)
 
     with patch(
-        "backend.agents.long_term.piotroski_analyst.compute_piotroski_factors",
+        "backend.agents.long_term.piotroski_analyst.compute_piotroski_factors_strict",
         return_value=_mock_piotroski_raw(score=8),
     ):
         report = piotroski_analyst.analyze("000001", test_db)
@@ -96,7 +98,7 @@ def test_caveat_survives_team_merge(test_db, monkeypatch):
     monkeypatch.setattr(settings, "long_term_piotroski_enabled", True)
 
     with patch(
-        "backend.agents.long_term.piotroski_analyst.compute_piotroski_factors",
+        "backend.agents.long_term.piotroski_analyst.compute_piotroski_factors_strict",
         return_value=_mock_piotroski_raw(score=3),
     ):
         label = LongTermTeam().run("000001", "测试电力", test_db)

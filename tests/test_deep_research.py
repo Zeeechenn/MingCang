@@ -10,6 +10,7 @@ def test_run_deep_research_creates_report_and_decision_run(test_db, tmp_path, sa
         title="中际旭创披露高速光模块订单增长",
         url="https://finance.eastmoney.com/a/202605171111.html",
         published_at=datetime(2026, 5, 17, 10, 0, 0),
+        fetched_at=datetime(2026, 5, 17, 10, 5, 0),
         source="东方财富",
     ))
     test_db.commit()
@@ -21,6 +22,7 @@ def test_run_deep_research_creates_report_and_decision_run(test_db, tmp_path, sa
         output_dir=tmp_path,
         as_of="2026-05-17",
         persist=True,
+        allow_external_retrieval=False,
     )
 
     assert report.topic == "AI算力产业链"
@@ -112,9 +114,164 @@ def test_deep_research_agent_templates_return_named_sections():
     ]
     assert "AI算力产业链" in sections[0].content
     assert "weak_source" in sections[2].content
-    assert sections[0].catalysts
+    assert sections[0].catalysts == ()
+    assert sections[0].stance == "证据不足"
+    assert "不能据此判断行业周期" in sections[0].content
     assert sections[1].evidence_snippets
     assert sections[2].risks == ("weak_source",)
+    assert sections[-1].catalysts == ()
+    assert sections[-1].stance == "中性"
+
+
+def test_long_term_theme_framework_marks_unsupported_dimensions_unknown():
+    from backend.research.agents import build_long_term_theme_framework
+
+    result = build_long_term_theme_framework(
+        topic="白酒",
+        symbols=["600519", "000858"],
+        names={"600519": "贵州茅台", "000858": "五粮液"},
+        financials=[{"symbol": "600519", "available": True, "report_date": "2026-06-30", "roe": 18.0}],
+        source_count=2,
+        weak_source_count=59,
+        risk_flags=["stale_source"],
+    )
+
+    dimensions = {item["dimension"]: item for item in result["framework"]}
+    assert result["coverage"]["financial_metric_coverage"] == "1/8"
+    assert dimensions["产业周期"]["status"] == "unknown"
+    assert dimensions["供需与竞争"]["status"] == "unknown"
+    assert dimensions["成分公司财务"]["status"] == "partial"
+    assert dimensions["估值"]["status"] == "unknown"
+    assert "不能据此给出行业长期看多/看空判断" in result["limitations"][1]
+
+
+def test_source_relevance_does_not_trust_symbol_association_alone():
+    from datetime import datetime
+
+    from backend.data.news_audit import audit_news_items
+    from backend.data.news_models import RawNews
+    from backend.research import deep_research
+
+    audit = audit_news_items(
+        [RawNews(
+            title="白酒板块资金净流出",
+            url="https://example.com/sector",
+            published_at=datetime(2026, 5, 17, 10),
+            source="证券时报",
+            symbol="000858",
+        )],
+        now=datetime(2026, 5, 17, 12),
+    )
+    relevance = deep_research._source_relevance(
+        audit, topic="五粮液", symbols=["000858"], names={"000858": "五粮液"},
+    )
+    evaluation = deep_research._evaluate_evidence(
+        topic="五粮液",
+        symbols=["000858"],
+        names={"000858": "五粮液"},
+        audits=audit,
+        financials=[{"symbol": "000858", "available": True}],
+        window_days=14,
+        min_usable=1,
+        theme_research=False,
+    )
+
+    assert relevance["direct_company_count"] == 0
+    assert relevance["associated_without_text_match_count"] == 1
+    assert evaluation.quality == "insufficient"
+    assert evaluation.next_plan["action"] == "expand_news_window"
+
+
+def test_company_name_in_article_body_counts_as_direct_company_evidence():
+    from datetime import datetime
+
+    from backend.data.news_audit import audit_news_items
+    from backend.data.news_models import RawNews
+    from backend.research import deep_research
+
+    audit = audit_news_items(
+        [RawNews(
+            title="白酒行业专题",
+            url="https://example.com/company",
+            published_at=datetime(2026, 5, 17, 10),
+            source="证券时报",
+            symbol="000858",
+            content="五粮液公司经营情况与渠道库存分析",
+        )],
+        now=datetime(2026, 5, 17, 12),
+    )
+    result = deep_research._source_relevance(
+        audit, topic="五粮液", symbols=["000858"], names={"000858": "五粮液"},
+    )
+
+    assert result["direct_company_count"] == 1
+
+
+def test_financial_snapshot_excludes_future_disclosure_and_late_fetch(test_db):
+    from datetime import datetime
+
+    from backend.data.database import FinancialMetric
+    from backend.research.deep_research import _latest_financial_context
+
+    test_db.add_all([
+        FinancialMetric(
+            symbol="000858", report_date="2026-06-30", disclosure_date="2026-09-25",
+            fetched_at=datetime(2026, 9, 25, 10), revenue_yoy=18.0,
+        ),
+        FinancialMetric(
+            symbol="000858", report_date="2025-12-31", disclosure_date="2026-03-15",
+            fetched_at=datetime(2026, 3, 16, 10), revenue_yoy=9.0,
+        ),
+        FinancialMetric(
+            symbol="000858", report_date="2025-09-30", disclosure_date="2026-03-01",
+            fetched_at=datetime(2026, 9, 25, 10), revenue_yoy=99.0,
+        ),
+    ])
+    test_db.commit()
+
+    result = _latest_financial_context(test_db, "000858", as_of="2026-09-24")
+
+    assert result["report_date"] == "2025-12-31"
+    assert result["revenue_yoy"] == 9.0
+    assert result["quality"] == "partial"
+    assert "roe" in result["missing_fields"]
+
+
+def test_price_snapshot_respects_as_of_cutoff(test_db):
+    from backend.data.database import Price
+    from backend.research.deep_research import _latest_price_context
+
+    test_db.add_all([
+        Price(symbol="000858", date="2026-09-23", open=10, high=11, low=9, close=10.5, volume=100),
+        Price(symbol="000858", date="2026-09-25", open=12, high=13, low=11, close=12.5, volume=100),
+    ])
+    test_db.commit()
+
+    result = _latest_price_context(test_db, "000858", as_of="2026-09-24")
+
+    assert result["latest_date"] == "2026-09-23"
+    assert result["latest_close"] == 10.5
+
+
+def test_run_deep_research_can_force_theme_framework_for_single_member(test_db, tmp_path, sample_stocks):
+    from backend.research.deep_research import run_deep_research
+
+    report = run_deep_research(
+        topic="白酒",
+        symbols=["600519"],
+        db=test_db,
+        output_dir=tmp_path,
+        as_of="2026-05-17",
+        persist=False,
+        long_term_theme=True,
+    )
+
+    text = report.path.read_text(encoding="utf-8")
+    assert report.long_term_framework is not None
+    assert "板块长期研究框架（证据状态）" in text
+    assert "供需与竞争（unknown）" in text
+    assert "不表示本次分别调用了五个独立模型" in text
+    assert "Deep Research 入口不调用多轮辩论" in text
 
 
 def test_run_deep_research_renders_structured_sections(test_db, tmp_path, sample_stocks):
@@ -127,6 +284,7 @@ def test_run_deep_research_renders_structured_sections(test_db, tmp_path, sample
         url="https://www.cninfo.com.cn/test",
         published_at=datetime(2026, 5, 17, 10, 0, 0),
         source="巨潮资讯",
+        fetched_at=datetime(2026, 5, 17, 10, 5, 0),
     ))
     test_db.commit()
 
@@ -143,7 +301,7 @@ def test_run_deep_research_renders_structured_sections(test_db, tmp_path, sample
     assert "结构化 IC Memo" in text
     assert "催化剂" in text
     assert report.sections
-    assert report.sections[0]["catalysts"]
+    assert report.sections[0]["catalysts"] == []
 
 
 def test_execute_plan_web_search_uses_tavily_memory_only(monkeypatch):
@@ -183,6 +341,7 @@ def test_run_deep_research_seed_queries_inject_tavily_evidence(
     monkeypatch,
 ):
     from backend.research import deep_research
+    today = datetime.now().strftime("%Y-%m-%d")
 
     def fake_search(queries):
         assert queries == ["光模块订单兑现"]
@@ -190,7 +349,7 @@ def test_run_deep_research_seed_queries_inject_tavily_evidence(
             "title": "中际旭创订单兑现跟踪",
             "url": "https://example.com/order",
             "snippet": "订单兑现继续推进",
-            "published_date": "2026-05-17",
+            "published_date": today,
             "source": "tavily_web",
         }]
 
@@ -201,7 +360,7 @@ def test_run_deep_research_seed_queries_inject_tavily_evidence(
         symbols=["300308"],
         db=test_db,
         output_dir=tmp_path,
-        as_of="2026-05-17",
+        as_of=today,
         persist=False,
         seed_queries=["光模块订单兑现"],
         min_usable_sources=1,
@@ -221,6 +380,7 @@ def test_run_deep_research_counts_tavily_found_on_final_default_iteration(
 ):
     from backend.config import settings
     from backend.research import deep_research
+    today = datetime.now().strftime("%Y-%m-%d")
 
     monkeypatch.setattr(settings, "anspire_api_key", "unit-anspire")
     monkeypatch.setattr(settings, "tavily_api_key", "unit-tavily")
@@ -237,7 +397,7 @@ def test_run_deep_research_counts_tavily_found_on_final_default_iteration(
             "title": "中际旭创发布高速光模块订单进展",
             "url": "https://example.com/tavily-final",
             "snippet": "高速光模块订单仍在兑现。",
-            "published_date": "2026-05-17",
+            "published_date": today,
             "source": "tavily_web",
         }]
 
@@ -248,7 +408,7 @@ def test_run_deep_research_counts_tavily_found_on_final_default_iteration(
         symbols=["300308"],
         db=test_db,
         output_dir=tmp_path,
-        as_of="2026-05-17",
+        as_of=today,
         persist=False,
     )
 
@@ -267,6 +427,7 @@ def test_run_deep_research_retries_tavily_after_empty_seed_queries(
 ):
     from backend.config import settings
     from backend.research import deep_research
+    today = datetime.now().strftime("%Y-%m-%d")
 
     monkeypatch.setattr(settings, "anspire_api_key", "")
     monkeypatch.setattr(settings, "tavily_api_key", "unit-tavily")
@@ -290,7 +451,7 @@ def test_run_deep_research_retries_tavily_after_empty_seed_queries(
             "title": "通用 Tavily 查询补到光模块证据",
             "url": "https://example.com/tavily-retry",
             "snippet": "通用查询补到可追溯来源。",
-            "published_date": "2026-05-17",
+            "published_date": today,
             "source": "tavily_web",
         }]
 
@@ -301,7 +462,7 @@ def test_run_deep_research_retries_tavily_after_empty_seed_queries(
         symbols=["300308"],
         db=test_db,
         output_dir=tmp_path,
-        as_of="2026-05-17",
+        as_of=today,
         persist=False,
         seed_queries=["不会命中的 seed query"],
     )
@@ -559,6 +720,7 @@ def test_collect_news_upper_bound_excludes_future_items(test_db, tmp_path, sampl
         url="https://finance.eastmoney.com/a/old.html",
         published_at=datetime(2026, 5, 9, 10, 0, 0),
         source="东方财富",
+        fetched_at=datetime(2026, 5, 9, 10, 1, 0),
     ))
     test_db.add(NewsItem(
         symbol="300308",
@@ -566,6 +728,7 @@ def test_collect_news_upper_bound_excludes_future_items(test_db, tmp_path, sampl
         url="https://finance.eastmoney.com/a/future.html",
         published_at=datetime(2026, 5, 15, 10, 0, 0),   # > as_of 2026-05-10
         source="东方财富",
+        fetched_at=datetime(2026, 5, 9, 10, 1, 0),
     ))
     test_db.commit()
 
@@ -577,6 +740,19 @@ def test_collect_news_upper_bound_excludes_future_items(test_db, tmp_path, sampl
     assert "在as_of之后的未来新闻" not in titles, (
         "F4: item published after as_of must be excluded by upper bound filter"
     )
+
+
+def test_collect_news_excludes_late_fetched_backdated_row(test_db, sample_stocks):
+    from backend.data.database import NewsItem
+    from backend.research.deep_research import _collect_news
+
+    test_db.add(NewsItem(
+        symbol="300308", title="回填发布日期但晚于cutoff抓取", url="https://example.com/late-fetch",
+        published_at=datetime(2026, 5, 9, 10), fetched_at=datetime(2026, 5, 11, 0), source="测试",
+    ))
+    test_db.commit()
+    items, _ = _collect_news(test_db, ["300308"], datetime(2026, 5, 10), window_days=14)
+    assert all(item.title != "回填发布日期但晚于cutoff抓取" for item in items)
 
 
 def test_collect_news_memory_items_also_upper_bounded(test_db, tmp_path, sample_stocks):
@@ -593,6 +769,7 @@ def test_collect_news_memory_items_also_upper_bounded(test_db, tmp_path, sample_
         published_at=datetime(2026, 5, 8, 10, 0, 0),
         source="tavily_web",
         symbol=None,
+        fetched_at=datetime(2026, 5, 9, 10, 1, 0),
     )
     after_as_of = RawNews(
         title="内存未来新闻",
@@ -600,6 +777,7 @@ def test_collect_news_memory_items_also_upper_bounded(test_db, tmp_path, sample_
         published_at=datetime(2026, 5, 17, 10, 0, 0),
         source="tavily_web",
         symbol=None,
+        fetched_at=datetime(2026, 5, 17, 10, 1, 0),
     )
 
     items, _ = _collect_news(

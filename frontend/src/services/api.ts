@@ -68,6 +68,7 @@ export const chatWithAI = (payload) =>
   })
 
 export interface ChatStreamHandlers {
+  signal?: AbortSignal
   onPrepare?: (data: any) => void
   onRunning?: (data: any) => void
   onEvidence?: (data: any) => void
@@ -88,26 +89,27 @@ function parseSseBlock(block: string) {
   return { event, data: data.join('\n') }
 }
 
-export async function chatWithAIStream(payload: any, handlers: ChatStreamHandlers = {}) {
+export async function chatWithAIStream(payload: any, handlers: ChatStreamHandlers = {}): Promise<any> {
   const res = await fetch(apiBase + '/ai/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    signal: handlers.signal,
   })
   if (!res.ok) {
     const text = await res.text()
     throw new ApiError(`${res.status}: ${text}`, { status: res.status, kind: classifyStatus(res.status), path: '/ai/chat/stream' })
   }
   if (!res.body?.getReader) {
-    const fallback = await chatWithAI(payload)
-    handlers.onToken?.(fallback.answer || '')
-    handlers.onDone?.(fallback)
-    return fallback
+    throw new ApiError('Streaming response unavailable; check the request status before retrying.', {
+      kind: 'unknown',
+      path: '/ai/chat/stream',
+    })
   }
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  let finalPayload = null
+  let finalPayload: any = null
   while (true) {
     const { value, done } = await reader.read()
     if (done) break

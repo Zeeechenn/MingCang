@@ -9,10 +9,11 @@ def test_stock_context_includes_unified_context_pack_and_text(test_db, sample_st
 
     captured = {}
 
-    def fake_build(symbol, *, sections, db):
+    def fake_build(symbol, *, sections, db, **kwargs):
         captured["symbol"] = symbol
         captured["sections"] = sections
         captured["db"] = db
+        captured.update(kwargs)
         return {
             "symbol": symbol,
             "as_of": "2026-07-04T15:00:00",
@@ -31,7 +32,7 @@ def test_stock_context_includes_unified_context_pack_and_text(test_db, sample_st
     monkeypatch.setattr(
         agent_context,
         "render_context_text",
-        lambda pack, max_chars: f"text:{pack['symbol']}:{max_chars}",
+        lambda pack, max_chars, **kwargs: f"text:{pack['symbol']}:{max_chars}",
     )
 
     payload = agent_context.mingcang_stock_context(test_db, "603986")
@@ -41,6 +42,7 @@ def test_stock_context_includes_unified_context_pack_and_text(test_db, sample_st
         "sections": [
             "price",
             "financials",
+            "long_term_label",
             "research_reports",
             "announcements",
             "corporate_events",
@@ -50,6 +52,8 @@ def test_stock_context_includes_unified_context_pack_and_text(test_db, sample_st
             "data_health",
         ],
         "db": test_db,
+        "as_of": captured["as_of"],
+        "strict_research_inputs": True,
     }
     assert "news" not in payload["context_pack"]
     assert payload["context_pack"]["price"]["last_close"] == 100

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ DEFAULT_MEMORY_DIR = _MINGCANG_MEMORY_DIR
 STOCK_CONTEXT_PACK_SECTIONS = [
     "price",
     "financials",
+    "long_term_label",
     "research_reports",
     "announcements",
     "corporate_events",
@@ -223,14 +225,17 @@ def _research_copilot(db: Session, symbol: str) -> dict | None:
         return None
 
 
-def _stock_context_pack(db: Session, symbol: str) -> tuple[dict, str]:
+def _stock_context_pack(db: Session, symbol: str, *, as_of: datetime | None = None) -> tuple[dict, str]:
     try:
+        cutoff = as_of or datetime.now(UTC).replace(tzinfo=None)
         pack = build_stock_context_pack(
             symbol,
+            as_of=cutoff,
             sections=STOCK_CONTEXT_PACK_SECTIONS,
             db=db,
+            strict_research_inputs=True,
         )
-        return pack, render_context_text(pack, 3000)
+        return pack, render_context_text(pack, 3000, strict_research_inputs=True)
     except Exception as exc:
         logger.warning("context._stock_context_pack: building stock context pack failed: %s", exc)
         return {"error": str(exc)}, ""
@@ -238,6 +243,7 @@ def _stock_context_pack(db: Session, symbol: str) -> tuple[dict, str]:
 
 def mingcang_stock_context(db: Session, symbol: str) -> dict:
     """Return the project context most useful before discussing one stock."""
+    context_as_of = datetime.now(UTC).replace(tzinfo=None)
     try:
         from backend.config import settings
         from backend.memory.stock_memory import build_decision_memory_context
@@ -261,7 +267,12 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
         )
         label = (
             db.query(LongTermLabel)
-            .filter(LongTermLabel.symbol == symbol)
+            .filter(
+                LongTermLabel.symbol == symbol,
+                LongTermLabel.date <= context_as_of.strftime("%Y-%m-%d"),
+                LongTermLabel.expires_at >= context_as_of.strftime("%Y-%m-%d"),
+                LongTermLabel.created_at <= context_as_of,
+            )
             .order_by(LongTermLabel.date.desc(), LongTermLabel.id.desc())
             .first()
         )
@@ -291,7 +302,17 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
     else:
         tracked = True
         hint = None
-    context_pack, context_text = _stock_context_pack(db, symbol)
+    context_pack, context_text = _stock_context_pack(db, symbol, as_of=context_as_of)
+    strict_financials = context_pack.get("financials", {}) if isinstance(context_pack, dict) else {}
+    strict_piotroski = strict_financials.get("piotroski", {}) if isinstance(strict_financials, dict) else {}
+    current_financials_available = strict_piotroski.get("available") is True
+    current_financial_reason = (
+        strict_piotroski.get("reason")
+        if not current_financials_available
+        else "label_not_recomputed_from_current_inputs"
+    )
+    if not current_financial_reason:
+        current_financial_reason = "strict_financial_quality_unavailable"
     return {
         "symbol": symbol,
         "tracked": tracked,
@@ -315,6 +336,16 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
             "label": label.label,
             "score": label.score,
             "expires_at": label.expires_at,
+            "quality": label.quality,
+            "constraint_eligible": bool(label.constraint_eligible),
+            "quality_notes": _parse_json_list(label.quality_notes_json),
+            "quality_basis": "stored_generation_metadata",
+            "revalidation_required": not current_financials_available,
+            "current_input_quality_available": current_financials_available,
+            "current_input_quality_reason": current_financial_reason,
+            # Current strict financial availability is only a prerequisite; it
+            # does not re-run or re-certify the stored label's constraints.
+            "current_constraints_eligible": False if not current_financials_available else None,
         } if label else None,
         "copilot": _research_copilot(db, symbol),
         "layered_memory": [
@@ -330,6 +361,18 @@ def mingcang_stock_context(db: Session, symbol: str) -> dict:
         "context_pack": context_pack,
         "context_text": context_text,
     }
+
+
+def _parse_json_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    import json
+
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
 
 
 def _open_positions(db: Session) -> dict:
