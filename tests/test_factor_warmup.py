@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from backend.analysis.factors import calc_atr
+from backend.data import market
 from backend.data import market_persistence as persistence
 from backend.data.database import Price
 
@@ -52,14 +53,21 @@ def market_case(test_db, monkeypatch):
     return test_db, frame
 
 
-def call(db, frame, **kwargs):
-    return persistence.backfill_if_needed(
+def call(db, frame, monkeypatch, **kwargs):
+    def fetch_daily(symbol, market_name, days=365, expected_latest=None):
+        assert symbol == "600001"
+        assert market_name == "CN"
+        if expected_latest is not None:
+            assert expected_latest == "2026-09-15"
+        return frame.tail(days)
+
+    monkeypatch.setattr(market, "fetch_daily", fetch_daily)
+    return market.backfill_if_needed(
         "600001",
         "CN",
         db,
         refresh_today=True,
         expected_latest="2026-09-15",
-        fetch_daily_fn=lambda *a, days, **k: frame.tail(days),
         **kwargs,
     )
 
@@ -70,15 +78,19 @@ def prices(db):
     ]
 
 
-def test_short_refresh_reproduces_drift_but_opt_in_warmup_stabilizes_same_write_dates(market_case):
+def test_short_refresh_reproduces_drift_but_opt_in_warmup_stabilizes_same_write_dates(
+    market_case, monkeypatch
+):
     db, frame = market_case
     before = prices(db)
-    default_count = call(db, frame)
+    default_count = call(db, frame, monkeypatch)
     default_after = prices(db)
     default_atr = default_after[-1][2]
     desired = float(calc_atr(frame).iloc[-1])
     assert abs(default_atr - desired) > 0.01  # Actual existing refresh path reproduced.
-    fixed_count = call(db, frame, strict_basis_write_guard=True, factor_warmup_rows=240)
+    fixed_count = call(
+        db, frame, monkeypatch, strict_basis_write_guard=True, factor_warmup_rows=240
+    )
     fixed_after = prices(db)
     assert fixed_count == default_count
     assert fixed_after[-1][2] == pytest.approx(desired, abs=1e-7)
@@ -103,7 +115,7 @@ def test_short_refresh_reproduces_drift_but_opt_in_warmup_stabilizes_same_write_
         "invalid_date",
     ],
 )
-def test_strict_warmup_failures_precede_price_mutation(market_case, failure):
+def test_strict_warmup_failures_precede_price_mutation(market_case, monkeypatch, failure):
     db, original = market_case
     frame = original.copy()
     if failure == "too_short":
@@ -128,11 +140,13 @@ def test_strict_warmup_failures_precede_price_mutation(market_case, failure):
         frame.index = [*frame.index[:-1], "2026-09-17"]
     before = prices(db)
     with pytest.raises(persistence.PriceBasisWriteBlocked):
-        call(db, frame, strict_basis_write_guard=True, factor_warmup_rows=240)
+        call(db, frame, monkeypatch, strict_basis_write_guard=True, factor_warmup_rows=240)
     assert prices(db) == before
 
 
-def test_warmup_requires_explicit_strict_guard(market_case):
+def test_warmup_requires_explicit_strict_guard(market_case, monkeypatch):
     db, frame = market_case
+    before = prices(db)
     with pytest.raises(ValueError, match="strict_basis_write_guard"):
-        call(db, frame, factor_warmup_rows=240)
+        call(db, frame, monkeypatch, factor_warmup_rows=240)
+    assert prices(db) == before

@@ -180,7 +180,8 @@ def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
                        refresh_today: bool = False,
                        expected_latest: str | None = None,
                        *,
-                       strict_basis_write_guard: bool = False) -> int:
+                       strict_basis_write_guard: bool = False,
+                       factor_warmup_rows: int | None = None) -> int:
     return _backfill_if_needed(
         symbol,
         market,
@@ -193,4 +194,5 @@ def backfill_if_needed(symbol: str, market: str, db, years: int | None = None,
         backfill_threshold_days=BACKFILL_THRESHOLD_DAYS,
         refresh_window_days=REFRESH_WINDOW_DAYS,
         strict_basis_write_guard=strict_basis_write_guard,
+        factor_warmup_rows=factor_warmup_rows,
     )
